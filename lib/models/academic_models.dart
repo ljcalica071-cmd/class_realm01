@@ -1,0 +1,445 @@
+enum AttendanceStatus { present, late, absent, excused }
+
+enum SyncStatus { online, offline, pendingSync, syncing, synced, syncError }
+
+enum ActivityStatus { pending, submitted, graded, lateSubmission }
+
+enum QuestionType { multipleChoice, trueFalse, identification, matching }
+
+class AttendanceRecord {
+  final String id;
+  final String studentId;
+  final String studentName;
+  final String section;
+  final DateTime date;
+  final String timeIn;
+  final AttendanceStatus status;
+  final String method; // 'RFID (ESP32)' or 'Manual'
+  final bool isSynced;
+
+  AttendanceRecord({
+    required this.id,
+    required this.studentId,
+    required this.studentName,
+    required this.section,
+    required this.date,
+    required this.timeIn,
+    required this.status,
+    this.method = 'Manual',
+    this.isSynced = true,
+  });
+
+  AttendanceRecord copyWith({
+    String? id,
+    String? studentId,
+    String? studentName,
+    String? section,
+    DateTime? date,
+    String? timeIn,
+    AttendanceStatus? status,
+    String? method,
+    bool? isSynced,
+  }) {
+    return AttendanceRecord(
+      id: id ?? this.id,
+      studentId: studentId ?? this.studentId,
+      studentName: studentName ?? this.studentName,
+      section: section ?? this.section,
+      date: date ?? this.date,
+      timeIn: timeIn ?? this.timeIn,
+      status: status ?? this.status,
+      method: method ?? this.method,
+      isSynced: isSynced ?? this.isSynced,
+    );
+  }
+}
+
+class ActivityModel {
+  final String id;
+  final String title;
+  final String description;
+  final String subject;
+  final String section;
+  final DateTime deadline;
+  final double maxScore;
+  final bool isPublished;
+  final String? attachmentName;
+  final int submissionsCount;
+  final int totalStudents;
+
+  ActivityModel({
+    required this.id,
+    required this.title,
+    required this.description,
+    required this.subject,
+    required this.section,
+    required this.deadline,
+    required this.maxScore,
+    this.isPublished = true,
+    this.attachmentName,
+    this.submissionsCount = 0,
+    this.totalStudents = 35,
+  });
+
+  ActivityModel copyWith({
+    String? id,
+    String? title,
+    String? description,
+    String? subject,
+    String? section,
+    DateTime? deadline,
+    double? maxScore,
+    bool? isPublished,
+    String? attachmentName,
+    int? submissionsCount,
+    int? totalStudents,
+  }) {
+    return ActivityModel(
+      id: id ?? this.id,
+      title: title ?? this.title,
+      description: description ?? this.description,
+      subject: subject ?? this.subject,
+      section: section ?? this.section,
+      deadline: deadline ?? this.deadline,
+      maxScore: maxScore ?? this.maxScore,
+      isPublished: isPublished ?? this.isPublished,
+      attachmentName: attachmentName ?? this.attachmentName,
+      submissionsCount: submissionsCount ?? this.submissionsCount,
+      totalStudents: totalStudents ?? this.totalStudents,
+    );
+  }
+}
+
+class StudentSubmission {
+  final String id;
+  final String activityOrExamId;
+  final String studentId;
+  final String studentName;
+  final DateTime submittedAt;
+  final String? attachedFile;
+  final double? score;
+  final double maxScore;
+  final ActivityStatus status;
+  final String? feedback;
+
+  StudentSubmission({
+    required this.id,
+    required this.activityOrExamId,
+    required this.studentId,
+    required this.studentName,
+    required this.submittedAt,
+    this.attachedFile,
+    this.score,
+    required this.maxScore,
+    this.status = ActivityStatus.pending,
+    this.feedback,
+  });
+
+  StudentSubmission copyWith({
+    String? id,
+    String? activityOrExamId,
+    String? studentId,
+    String? studentName,
+    DateTime? submittedAt,
+    String? attachedFile,
+    double? score,
+    double? maxScore,
+    ActivityStatus? status,
+    String? feedback,
+  }) {
+    return StudentSubmission(
+      id: id ?? this.id,
+      activityOrExamId: activityOrExamId ?? this.activityOrExamId,
+      studentId: studentId ?? this.studentId,
+      studentName: studentName ?? this.studentName,
+      submittedAt: submittedAt ?? this.submittedAt,
+      attachedFile: attachedFile ?? this.attachedFile,
+      score: score ?? this.score,
+      maxScore: maxScore ?? this.maxScore,
+      status: status ?? this.status,
+      feedback: feedback ?? this.feedback,
+    );
+  }
+}
+
+class QuestionModel {
+  final String id;
+  final String questionText;
+  final QuestionType type;
+  final List<String> choices;
+  final String correctAnswer; // e.g. "A", "True", "Quadratic Formula", etc.
+  final double points;
+
+  QuestionModel({
+    required this.id,
+    required this.questionText,
+    required this.type,
+    this.choices = const [],
+    required this.correctAnswer,
+    this.points = 1.0,
+  });
+}
+
+class QuizOrExamModel {
+  final String id;
+  final String title;
+  final String description;
+  final String subject;
+  final String section;
+  final bool isExam; // true: Examination, false: Quiz
+  final int durationMinutes;
+  final DateTime scheduleDate;
+  final bool isPublished;
+  final bool resultsReleased;
+  final List<QuestionModel> questions;
+
+  QuizOrExamModel({
+    required this.id,
+    required this.title,
+    required this.description,
+    required this.subject,
+    required this.section,
+    required this.isExam,
+    required this.durationMinutes,
+    required this.scheduleDate,
+    this.isPublished = true,
+    this.resultsReleased = false,
+    required this.questions,
+  });
+
+  double get totalPoints => questions.fold(0, (sum, q) => sum + q.points);
+
+  QuizOrExamModel copyWith({
+    String? id,
+    String? title,
+    String? description,
+    String? subject,
+    String? section,
+    bool? isExam,
+    int? durationMinutes,
+    DateTime? scheduleDate,
+    bool? isPublished,
+    bool? resultsReleased,
+    List<QuestionModel>? questions,
+  }) {
+    return QuizOrExamModel(
+      id: id ?? this.id,
+      title: title ?? this.title,
+      description: description ?? this.description,
+      subject: subject ?? this.subject,
+      section: section ?? this.section,
+      isExam: isExam ?? this.isExam,
+      durationMinutes: durationMinutes ?? this.durationMinutes,
+      scheduleDate: scheduleDate ?? this.scheduleDate,
+      isPublished: isPublished ?? this.isPublished,
+      resultsReleased: resultsReleased ?? this.resultsReleased,
+      questions: questions ?? this.questions,
+    );
+  }
+}
+
+class ExamStudentAnswer {
+  final String questionId;
+  final String studentAnswer;
+  final bool isCorrect;
+  final double scoreEarned;
+
+  ExamStudentAnswer({
+    required this.questionId,
+    required this.studentAnswer,
+    required this.isCorrect,
+    required this.scoreEarned,
+  });
+}
+
+class ExamSubmissionReview {
+  final String id;
+  final String examId;
+  final String studentId;
+  final String studentName;
+  final DateTime submittedAt;
+  final List<ExamStudentAnswer> answers;
+  final double calculatedScore;
+  final double manualAdjustedScore;
+  final bool isChecked;
+  final bool isFinalized;
+
+  ExamSubmissionReview({
+    required this.id,
+    required this.examId,
+    required this.studentId,
+    required this.studentName,
+    required this.submittedAt,
+    required this.answers,
+    required this.calculatedScore,
+    required this.manualAdjustedScore,
+    this.isChecked = true,
+    this.isFinalized = false,
+  });
+
+  ExamSubmissionReview copyWith({
+    String? id,
+    String? examId,
+    String? studentId,
+    String? studentName,
+    DateTime? submittedAt,
+    List<ExamStudentAnswer>? answers,
+    double? calculatedScore,
+    double? manualAdjustedScore,
+    bool? isChecked,
+    bool? isFinalized,
+  }) {
+    return ExamSubmissionReview(
+      id: id ?? this.id,
+      examId: examId ?? this.examId,
+      studentId: studentId ?? this.studentId,
+      studentName: studentName ?? this.studentName,
+      submittedAt: submittedAt ?? this.submittedAt,
+      answers: answers ?? this.answers,
+      calculatedScore: calculatedScore ?? this.calculatedScore,
+      manualAdjustedScore: manualAdjustedScore ?? this.manualAdjustedScore,
+      isChecked: isChecked ?? this.isChecked,
+      isFinalized: isFinalized ?? this.isFinalized,
+    );
+  }
+}
+
+class GradingCriteria {
+  final String id;
+  final String name;
+  final double percentage; // e.g., 30.0 for 30%
+
+  GradingCriteria({
+    required this.id,
+    required this.name,
+    required this.percentage,
+  });
+
+  GradingCriteria copyWith({String? id, String? name, double? percentage}) {
+    return GradingCriteria(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      percentage: percentage ?? this.percentage,
+    );
+  }
+}
+
+class LessonPlanModel {
+  final String id;
+  final String topic;
+  final String gradeLevel;
+  final String subject;
+  final String duration;
+  final String objectives;
+  final String materials;
+  final String procedure;
+  final String assessment;
+  final String assignment;
+  final DateTime createdAt;
+  final bool isArchived;
+
+  LessonPlanModel({
+    required this.id,
+    required this.topic,
+    required this.gradeLevel,
+    required this.subject,
+    required this.duration,
+    required this.objectives,
+    required this.materials,
+    required this.procedure,
+    required this.assessment,
+    required this.assignment,
+    required this.createdAt,
+    this.isArchived = false,
+  });
+
+  LessonPlanModel copyWith({
+    String? id,
+    String? topic,
+    String? gradeLevel,
+    String? subject,
+    String? duration,
+    String? objectives,
+    String? materials,
+    String? procedure,
+    String? assessment,
+    String? assignment,
+    DateTime? createdAt,
+    bool? isArchived,
+  }) {
+    return LessonPlanModel(
+      id: id ?? this.id,
+      topic: topic ?? this.topic,
+      gradeLevel: gradeLevel ?? this.gradeLevel,
+      subject: subject ?? this.subject,
+      duration: duration ?? this.duration,
+      objectives: objectives ?? this.objectives,
+      materials: materials ?? this.materials,
+      procedure: procedure ?? this.procedure,
+      assessment: assessment ?? this.assessment,
+      assignment: assignment ?? this.assignment,
+      createdAt: createdAt ?? this.createdAt,
+      isArchived: isArchived ?? this.isArchived,
+    );
+  }
+}
+
+class LearningMaterialModel {
+  final String id;
+  final String title;
+  final String category; // PDF, Document, Slide, Video Link
+  final String topic;
+  final String fileName;
+  final String fileSize;
+  final DateTime uploadedAt;
+  final String description;
+
+  LearningMaterialModel({
+    required this.id,
+    required this.title,
+    required this.category,
+    required this.topic,
+    required this.fileName,
+    required this.fileSize,
+    required this.uploadedAt,
+    required this.description,
+  });
+}
+
+class ScheduleModel {
+  final String id;
+  final String subject;
+  final String section;
+  final String room;
+  final String dayOfWeek; // 'Monday', 'Tuesday', etc.
+  final String startTime;
+  final String endTime;
+
+  ScheduleModel({
+    required this.id,
+    required this.subject,
+    required this.section,
+    required this.room,
+    required this.dayOfWeek,
+    required this.startTime,
+    required this.endTime,
+  });
+}
+
+class AppNotificationModel {
+  final String id;
+  final String title;
+  final String message;
+  final DateTime timestamp;
+  final bool isRead;
+  final String type; // 'attendance', 'grade', 'activity', 'announcement'
+
+  AppNotificationModel({
+    required this.id,
+    required this.title,
+    required this.message,
+    required this.timestamp,
+    this.isRead = false,
+    required this.type,
+  });
+}
