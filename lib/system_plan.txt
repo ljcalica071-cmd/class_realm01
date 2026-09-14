@@ -1,0 +1,1661 @@
+You are helping me develop the FRONTEND of my Flutter capstone system.
+
+==================================================
+PROJECT IDENTITY
+==================================================
+
+PROJECT NAME:
+CLASSREALM
+
+TAGLINE:
+"One Realm for Every Learning Journey."
+
+APPROVED SYSTEM TITLE:
+
+"Integrated Senior High School Attendance, Activity and Requirement Tracking, Teacher Lesson Planning, and Learning Materials Management System"
+
+==================================================
+IMPORTANT DEVELOPMENT CONTEXT
+==================================================
+
+This is a FRONTEND-FIRST Flutter development stage.
+
+The final production system will use Firebase as the database/backend.
+
+However:
+
+DO NOT IMPLEMENT FIREBASE YET.
+
+Do NOT configure or connect:
+
+- Firebase Authentication
+- Cloud Firestore
+- Firebase Storage
+- Firebase Cloud Messaging
+- Firebase backend services
+- Real ESP32 communication
+- Real RFID communication
+- Real AI API
+- Real email services
+- Real external APIs
+
+Instead, create a complete and demonstrable FRONTEND PROTOTYPE using:
+
+- Dart
+- Flutter
+- Mock data
+- Local in-memory state
+- Simulated services/repositories
+- Simulated authentication
+- Simulated synchronization
+- Simulated notifications
+- Simulated anti-cheating monitoring
+
+The application must feel like a real working system even without a backend.
+
+Later, the mock repositories/services should be replaceable with Firebase repositories/services without redesigning the entire UI.
+
+==================================================
+CURRENT FLUTTER DEPENDENCIES
+==================================================
+
+The following packages are already installed and may be used:
+
+- responsive_builder
+- flutter_screenutil
+- google_fonts
+- flutter_animate
+- lucide_icons
+
+You may use other packages ONLY when they provide a clear frontend benefit.
+
+Avoid unnecessary dependencies.
+
+==================================================
+CORE ARCHITECTURE RULE
+==================================================
+
+DO NOT put the entire application inside main.dart.
+
+main.dart must remain very small.
+
+main.dart should primarily:
+
+- initialize the Flutter application
+- initialize the theme
+- start the application
+- connect to the centralized routing system
+
+Do NOT put all screen implementations inside main.dart.
+
+Do NOT put all route definitions inside main.dart.
+
+Use a clean feature-based architecture.
+
+Separate:
+
+- screens/pages
+- widgets
+- models
+- mock data
+- controllers/state
+- repositories
+- services
+- navigation
+- responsive layouts
+- theme
+- reusable components
+- utilities
+
+Use reusable components instead of duplicating UI code.
+
+==================================================
+RESPONSIVE DESIGN
+==================================================
+
+The system has different primary device targets.
+
+ADMIN:
+Desktop/Web-first
+
+TEACHER:
+Desktop/Web-first
+
+STUDENT:
+Mobile-first
+
+PARENT:
+Mobile-first
+
+However, ALL interfaces must still behave correctly when screen/window size changes.
+
+Support:
+
+- Desktop
+- Laptop
+- Tablet
+- Mobile
+
+IMPORTANT:
+
+Do not simply shrink the desktop interface to mobile.
+
+Adapt the layout according to available screen width.
+
+For large screens:
+
+- Sidebar
+- Multi-column dashboards
+- Tables
+- Charts
+- Larger forms
+- Desktop navigation
+
+For smaller screens:
+
+- Drawer
+- Compact header
+- Cards
+- Scrollable content
+- Mobile-friendly forms
+- Bottom navigation where appropriate
+
+Use responsive/adaptive Flutter design.
+
+Avoid unnecessary hard-coded screen sizes.
+
+==================================================
+NAVIGATION
+==================================================
+
+Create centralized application routing.
+
+Use a dedicated routing structure.
+
+main.dart should NOT contain every screen or route.
+
+The demo authentication system should determine which dashboard is displayed.
+
+==================================================
+DEMO ACCOUNTS
+==================================================
+
+ADMIN:
+
+Username:
+admin
+
+Password:
+admin123
+
+
+TEACHER:
+
+Username:
+teacher
+
+Password:
+teacher123
+
+
+STUDENT:
+
+Username:
+student
+
+Password:
+student123
+
+
+PARENT:
+
+Username:
+parent
+
+Password:
+parent123
+
+After successful demo login:
+
+admin/admin123
+→ Admin Dashboard
+
+teacher/teacher123
+→ Teacher Dashboard
+
+student/student123
+→ Student Dashboard
+
+parent/parent123
+→ Parent Dashboard
+
+The demo accounts must actually work.
+
+==================================================
+AUTHENTICATION FRONTEND
+==================================================
+
+Create:
+
+- Login
+- Registration
+- Forgot Password
+- Reset Password mock screen
+- Account Pending screen
+- Account Approved state
+- Account Rejected state
+- Profile
+- Change Password
+- Logout
+
+Authentication is simulated.
+
+Do NOT connect Firebase Authentication yet.
+
+Login must actually work with the demo accounts.
+
+Invalid login must display a proper error modal.
+
+Registration must simulate account creation.
+
+==================================================
+CLASSREALM VISUAL IDENTITY
+==================================================
+
+Create a professional educational management system.
+
+Application:
+
+CLASSREALM
+
+Tagline:
+
+One Realm for Every Learning Journey.
+
+Use a modern, clean, professional academic-management design.
+
+Avoid making it look like a generic admin template.
+
+Create reusable components:
+
+- Buttons
+- Text fields
+- Dropdowns
+- Search fields
+- Cards
+- Tables
+- Status badges
+- Dialogs
+- Modal dialogs
+- Sidebar
+- Drawer
+- Bottom navigation
+- App bars
+- Charts
+- Empty states
+- Loading states
+- Error states
+- Success states
+- Offline indicators
+- Sync indicators
+- Warning indicators
+- Anti-cheating warning components
+
+All important text must remain editable through source code.
+
+Do NOT render important UI text as images.
+
+Use meaningful names for widgets, models, variables, and functions.
+
+==================================================
+ADMIN SYSTEM
+==================================================
+
+ADMIN is primarily responsible for:
+
+1. Managing teacher accounts
+2. Approving teacher registrations
+3. Monitoring overall system statistics
+
+ADMIN CAN:
+
+- Approve teacher accounts
+- Reject teacher accounts
+- Create teacher accounts
+- View teacher accounts
+- Edit teacher accounts
+- Delete/deactivate teacher accounts
+- Search teachers
+- Filter teachers
+- View teacher account status
+- View pending teacher approvals
+- Monitor total teacher count
+- Monitor total student count
+- Monitor total parent count
+- Monitor general system statistics
+
+ADMIN MUST NOT manage:
+
+- Activities
+- Requirements
+- Quizzes
+- Exams
+- Exam checking
+- Item analysis
+- Lesson plans
+- Learning materials
+- Student grades
+- Student attendance
+- Teacher grading systems
+- Teacher schedules
+- Academic years
+- Sections
+- Subjects assigned to teachers
+- Teacher-subject assignments
+- Teacher-student academic records
+
+Those academic functions belong to the Teacher.
+
+Create:
+
+Admin Dashboard
+Teacher Management
+Pending Teacher Approvals
+Teacher Account Details
+System Statistics
+Admin Profile
+Settings
+
+Use realistic dummy data.
+
+==================================================
+TEACHER SYSTEM
+==================================================
+
+The Teacher is the primary academic manager.
+
+Teacher can manage:
+
+- Academic Year
+- Sections
+- Students
+- Subjects
+- Teaching information
+- Schedule
+- Attendance
+- Activities
+- Requirements
+- Quizzes
+- Examinations
+- Exam Checker
+- Item Analysis
+- Grading System
+- Grades
+- Performance Analytics
+- Lesson Plans
+- Learning Materials
+- Notifications
+- Reports
+
+CURRENT PROTOTYPE CONTEXT:
+
+Grade Level:
+Grade 11
+
+Subject:
+Mathematics
+
+The architecture must still support:
+
+- Additional teachers
+- Additional subjects
+- Additional sections
+- Additional grade levels
+
+in the future.
+
+==================================================
+TEACHER ACCOUNT SETUP
+==================================================
+
+After Admin approves a teacher account, the Teacher completes their academic setup.
+
+Teacher can define:
+
+- Academic Year
+- Grade Level
+- Section
+- Subject
+- Schedule
+
+ADMIN DOES NOT assign these.
+
+Teacher manages their own academic structure.
+
+==================================================
+TEACHER DASHBOARD
+==================================================
+
+Create a professional desktop/web dashboard.
+
+Display:
+
+- Total students
+- Classes/sections
+- Today's attendance
+- Pending activities
+- Upcoming quizzes
+- Upcoming exams
+- Recent grades
+- Performance overview
+- Upcoming schedule
+- Notifications
+- Attendance status
+- Pending submissions
+- Anti-cheating alerts
+- Offline/sync status for attendance
+
+Use:
+
+- Cards
+- Tables
+- Charts
+- Summary panels
+- Recent activity lists
+- Status badges
+
+==================================================
+STUDENT MANAGEMENT
+==================================================
+
+Teacher can:
+
+- Add student
+- Edit student
+- View student
+- Archive student
+- Search students
+- Filter students
+- View student information
+- Associate students with sections
+- Associate students with parent accounts
+
+Student information may include:
+
+- Student ID
+- Full name
+- Grade level
+- Section
+- Subject
+- Parent/guardian
+- Account status
+
+Use mock data.
+
+==================================================
+ATTENDANCE
+==================================================
+
+Attendance methods:
+
+1. ESP32 + RFID
+2. Manual attendance
+
+Attendance statuses:
+
+- Present
+- Late
+- Absent
+- Excused
+
+Features:
+
+- Today's attendance
+- Attendance history
+- Student attendance
+- Section attendance
+- Attendance summary
+- Search
+- Filters
+- Date selection
+
+==================================================
+IMPORTANT OFFLINE ATTENDANCE REQUIREMENT
+==================================================
+
+ATTENDANCE is the MAIN OFFLINE-FIRST FUNCTION.
+
+ESP32 + RFID attendance must be designed so that attendance can continue to operate even when internet connectivity is temporarily unavailable.
+
+For this FRONTEND prototype:
+
+DO NOT implement real ESP32 or RFID communication.
+
+Instead, SIMULATE the behavior.
+
+When the system is offline:
+
+RFID attendance records should appear to be stored locally.
+
+Show:
+
+"Saved locally"
+
+"Pending synchronization"
+
+When connectivity returns:
+
+Show:
+
+"Syncing..."
+
+then:
+
+"Synced successfully"
+
+Possible connection states:
+
+ONLINE
+OFFLINE
+PENDING SYNC
+SYNCING
+SYNCED
+SYNC ERROR
+
+Create a reusable connection-status component.
+
+IMPORTANT:
+
+Do NOT give Quiz or Exam the same offline functionality.
+
+==================================================
+ACTIVITIES
+==================================================
+
+Teacher can:
+
+- Create activity
+- Edit activity
+- Delete activity
+- Publish activity
+- Set deadline
+- Add instructions
+- Upload/mock attach files
+- View submissions
+- Record score
+- Track completion
+
+Student can:
+
+- View activity
+- View instructions
+- Submit activity using mock file interaction
+- View submission status
+- View score
+
+Parent can:
+
+- View activity status of linked student
+
+==================================================
+REQUIREMENTS
+==================================================
+
+Teacher can:
+
+- Create requirements
+- Edit requirements
+- Delete requirements
+- Publish requirements
+- Set deadline
+- Track submissions
+- Record completion
+- Give scores where applicable
+
+Student can:
+
+- View assigned requirements
+- View status
+
+Parent can:
+
+- View relevant requirement status
+
+==================================================
+QUIZ SYSTEM
+==================================================
+
+Create a complete Quiz frontend.
+
+Teacher can:
+
+- Bulk Upload quiz file
+- Create quiz
+- Edit quiz
+- Delete quiz
+- Add questions
+- Add choices
+- Set correct answer
+- Set points
+- Set time limit
+- Set availability
+- Publish quiz
+- View submissions
+- View results
+
+Student can:
+
+- View available quizzes
+- View quiz instructions
+- Start quiz
+- Answer questions
+- Navigate questions
+- Submit quiz
+- View score when released
+
+Question types:
+
+- Multiple Choice
+- True/False
+- Matching Type
+- Identification
+
+Create realistic Grade 11 Mathematics mock questions.
+
+==================================================
+QUIZ MUST REQUIRE INTERNET
+==================================================
+
+IMPORTANT:
+
+Students MUST NOT be able to take quizzes while offline.
+
+DO NOT implement:
+
+- Offline quiz taking
+- Local quiz submission
+- Offline quiz synchronization
+- Offline quiz answer storage for continuing an exam
+
+If the student loses internet connection before or during a quiz:
+
+Display a clear connection warning.
+
+Example:
+
+"Internet connection lost. Quiz access is temporarily unavailable."
+
+The frontend should clearly distinguish Quiz from offline RFID Attendance.
+
+The system may temporarily preserve UI state only for demonstration purposes if necessary, but it MUST NOT present an offline quiz attempt as a valid completed/submitted quiz.
+
+==================================================
+EXAMINATION
+==================================================
+
+Create a complete Examination frontend.
+
+Teacher:
+
+- Create exam
+- Edit exam
+- Delete exam
+- Add questions
+- Create answer key
+- Set schedule
+- Set duration
+- Publish exam
+- View submissions
+- Check exam
+- Release results
+
+Student:
+
+- View available exams
+- View exam instructions
+- Start exam
+- Answer questions
+- Navigate questions
+- Submit exam
+- View result when released
+
+==================================================
+EXAM MUST REQUIRE INTERNET
+==================================================
+
+IMPORTANT:
+
+Students MUST NOT be able to take examinations while offline.
+
+Do NOT implement:
+
+- Offline exam taking
+- Offline exam submission
+- Offline exam synchronization
+- "Submitted locally" exam status
+
+If the student loses internet connection:
+
+Display a prominent warning.
+
+Example:
+
+"Internet connection lost. Your examination session requires an active internet connection."
+
+The UI must clearly communicate the current connection status.
+
+Do NOT create a fake offline exam system.
+
+==================================================
+ANTI-CHEATING FOR QUIZZES AND EXAMS
+==================================================
+
+IMPORTANT:
+
+The system must include a FRONTEND ANTI-CHEATING MONITORING DESIGN for Quiz and Examination.
+
+The goal is to simulate common online-learning anti-cheating behavior.
+
+The design should be inspired by common LMS examination security practices.
+
+DO NOT claim that frontend-only detection provides complete security.
+
+The final backend implementation will later be responsible for securely storing and validating violation records.
+
+==================================================
+ANTI-CHEATING EVENTS TO MONITOR
+==================================================
+
+During an active Quiz or Exam, simulate detection of events such as:
+
+1. Leaving the quiz/exam screen
+2. Switching browser tabs
+3. Browser/window losing focus
+4. Returning to the application
+5. Attempting to exit fullscreen
+6. Repeated focus changes
+7. Copy action
+8. Paste action
+9. Cut action
+10. Right-click/context menu attempt
+11. Navigation away from the assessment
+12. Closing or attempting to leave the assessment
+13. Multiple suspicious focus changes
+
+Where technically supported by the current Flutter platform, detect the event.
+
+Where actual detection is not possible in the frontend prototype, simulate the event using a development/demo control.
+
+Do NOT pretend that unsupported detection is real.
+
+==================================================
+ANTI-CHEATING STUDENT BEHAVIOR
+==================================================
+
+When a suspicious event occurs:
+
+1. Record the event in simulated local state.
+2. Display a warning modal or warning banner.
+3. Show the student how many violations have occurred.
+4. Continue or restrict the assessment according to the configured demo policy.
+
+Example:
+
+"Warning: You left the examination window."
+
+"Violation 1 of 3"
+
+The system should provide a clear explanation.
+
+==================================================
+ANTI-CHEATING VIOLATION POLICY
+==================================================
+
+Create a configurable FRONTEND DEMO policy.
+
+Example:
+
+Violation 1:
+Warning
+
+Violation 2:
+Final warning
+
+Violation 3:
+Assessment automatically submitted or locked
+
+This must be simulated only.
+
+Do not claim this is secure enforcement.
+
+The Teacher should be able to see the recorded violation history after submission.
+
+==================================================
+ANTI-CHEATING TEACHER MONITORING
+==================================================
+
+Teacher should have access to an assessment monitoring area.
+
+For each Quiz/Exam submission, show:
+
+- Student name
+- Assessment name
+- Start time
+- Submission time
+- Duration
+- Status
+- Score
+- Number of violations
+- Violation severity
+- Violation history
+
+Example statuses:
+
+Normal
+Warning
+Suspicious Activity
+Locked
+Auto Submitted
+Submitted
+
+Teacher can open a student's assessment monitoring details.
+
+Display a violation timeline such as:
+
+10:15 AM
+Tab/window focus lost
+
+10:17 AM
+Returned to assessment
+
+10:20 AM
+Copy attempt detected
+
+10:22 AM
+Fullscreen exit detected
+
+Use clear but professional warning indicators.
+
+==================================================
+ANTI-CHEATING STUDENT UI
+==================================================
+
+During Quiz/Exam, display:
+
+- Timer
+- Question number
+- Progress
+- Connection status
+- Remaining questions
+- Submit button
+- Assessment rules
+- Warning status when necessary
+
+Before starting:
+
+Display an Assessment Rules screen.
+
+Example rules:
+
+- Keep the assessment window open.
+- Do not switch tabs.
+- Do not leave the assessment screen.
+- Do not copy or paste.
+- Maintain an active internet connection.
+- The system may record suspicious assessment events.
+
+Require the student to acknowledge the rules before starting.
+
+==================================================
+IMPORTANT ANTI-CHEATING LIMITATION
+==================================================
+
+This is a FRONTEND prototype.
+
+Do NOT falsely state that the system is fully cheat-proof.
+
+Flutter frontend code alone cannot guarantee complete anti-cheating protection.
+
+The prototype should demonstrate:
+
+- Detection where technically possible
+- Warning UI
+- Violation counting
+- Violation history
+- Teacher monitoring
+- Simulated automatic submission/locking
+
+Later, the real backend should securely store and validate:
+
+- Assessment sessions
+- Violation records
+- Timestamps
+- Submission records
+- Student identity
+- Assessment state
+
+==================================================
+EXAM CHECKER
+==================================================
+
+Teacher can:
+
+- Select submitted exam
+- View student answers
+- View answer key
+- Compare answers
+- Auto-check objective questions
+- Calculate score
+- View correct answers
+- View incorrect answers
+- View unanswered questions
+- Manually review
+- Adjust score
+- Finalize result
+- Release result
+
+Use clear visual indicators.
+
+==================================================
+ITEM ANALYSIS
+==================================================
+
+Create an Item Analysis dashboard.
+
+Display:
+
+- Question number
+- Total students
+- Correct responses
+- Incorrect responses
+- Percentage correct
+- Difficulty indicator
+- Item performance
+
+Provide:
+
+- Exam filter
+- Section filter
+- Date filter
+- Summary cards
+- Table
+- Charts
+
+Use realistic dummy data.
+
+==================================================
+GRADING SYSTEM
+==================================================
+
+IMPORTANT:
+
+THE TEACHER SETS THE GRADING SYSTEM.
+
+ADMIN DOES NOT configure grading percentages.
+
+Teacher can create, edit, and manage grading components.
+
+Possible components:
+
+- Exams
+- Quizzes
+- Activities
+- Requirements/Performance Tasks
+- Attendance
+- Recitation
+- Other components
+
+Example dummy configuration:
+
+Exams = 30%
+Activities = 25%
+Quizzes = 15%
+Attendance = 20%
+Recitation = 10%
+
+Total = 100%
+
+Create a functional frontend simulation.
+
+The teacher must be able to:
+
+- Add grading component
+- Edit grading component
+- Delete grading component
+- Set percentage
+- Validate that total percentage equals 100%
+- Save grading configuration
+- View grading breakdown
+
+Use dummy student scores to calculate sample grades.
+
+==================================================
+GRADES
+==================================================
+
+Teacher:
+
+- View grades
+- Calculate grades
+- Edit grades
+- Publish grades
+- View grade history
+
+Student:
+
+- View published grades
+- View grade breakdown
+- View component scores
+
+Parent:
+
+- View linked student's published grades
+- View grade breakdown
+- View performance summary
+
+ADMIN:
+
+MUST NOT see detailed student grades.
+
+==================================================
+PERFORMANCE ANALYTICS
+==================================================
+
+Create Teacher Performance Analytics.
+
+Display:
+
+- Class average
+- Student performance
+- Quiz performance
+- Exam performance
+- Activity performance
+- Attendance relationship
+- Quarter performance
+- Improvement
+- Students needing attention
+
+Support:
+
+Quarter 1
+Quarter 2
+Quarter 3
+Quarter 4
+
+Current dummy context:
+
+Grade 11 Mathematics
+
+==================================================
+LESSON PLANNING
+==================================================
+
+Teacher can:
+
+- Create lesson plan
+- Generate lesson plan
+- Edit lesson plan
+- Save lesson plan
+- Search lesson plans
+- View previous lesson plans
+- Archive lesson plans
+
+Create a simulated AI Lesson Plan Generator.
+
+IMPORTANT:
+
+Do NOT connect Gemini API or another AI API yet.
+
+Use realistic mock generated lesson-plan content.
+
+==================================================
+LEARNING MATERIALS
+==================================================
+
+Teacher can:
+
+- Add learning material
+- Edit information
+- Search
+- View
+- Mock download
+- Archive
+
+Types:
+
+- PDF
+- Document
+- Presentation
+- Image
+- Link
+
+Student can view learning materials assigned to their class.
+
+==================================================
+SCHEDULE
+==================================================
+
+Teacher manages their own schedule.
+
+Teacher can:
+
+- Create schedule
+- Edit schedule
+- Delete schedule
+- View daily schedule
+- View weekly schedule
+- View calendar
+
+Schedule information:
+
+- Subject
+- Section
+- Room
+- Date
+- Start time
+- End time
+
+ADMIN DOES NOT manage schedules.
+
+==================================================
+STUDENT MOBILE APP
+==================================================
+
+Student interface is MOBILE-FIRST.
+
+Use bottom navigation for primary destinations.
+
+Suggested navigation:
+
+1. Home
+2. Activities
+3. Quiz/Exam
+4. Notifications
+5. Profile
+
+Use a side drawer for secondary features:
+
+- Attendance
+- Schedule
+- Learning Materials
+- Grades
+- Requirements
+- Settings
+- Logout
+
+Create touch-friendly interfaces.
+
+==================================================
+PARENT MOBILE APP
+==================================================
+
+Parent interface is MOBILE-FIRST.
+
+Parent can:
+
+- View linked student
+- View attendance
+- View grades
+- View performance
+- View activities
+- View requirements
+- View schedule
+- View notifications
+- Manage profile
+
+Use bottom navigation for major features.
+
+Use drawer for secondary features.
+
+==================================================
+TEACHER WEB NAVIGATION
+==================================================
+
+Use a collapsible desktop sidebar.
+
+Expanded:
+
+Icon + Label
+
+Collapsed:
+
+Icon only
+
+Teacher sidebar:
+
+Dashboard
+Academic Setup
+Students
+Attendance
+Activities
+Requirements
+Quizzes
+Exams
+Exam Checker
+Item Analysis
+Grades
+Performance Analytics
+Lesson Planning
+Learning Materials
+Schedule
+Notifications
+Profile
+Settings
+Logout
+
+==================================================
+ADMIN WEB NAVIGATION
+==================================================
+
+Admin sidebar:
+
+Dashboard
+Teacher Management
+Pending Approvals
+System Statistics
+Profile
+Settings
+Logout
+
+Do NOT add academic management features to Admin.
+
+==================================================
+OFFLINE/SYNCHRONIZATION DESIGN
+==================================================
+
+IMPORTANT:
+
+Offline functionality is primarily for:
+
+ESP32 + RFID ATTENDANCE.
+
+Attendance may:
+
+- Work offline
+- Save locally
+- Show Pending Sync
+- Sync when internet returns
+
+Quiz and Exam:
+
+MUST REQUIRE INTERNET.
+
+Do NOT provide offline quiz/exam taking.
+
+Do NOT provide offline quiz/exam submission.
+
+Do NOT present an offline quiz/exam as a valid completed assessment.
+
+==================================================
+MOCK DATA ARCHITECTURE
+==================================================
+
+Do not hard-code all data directly inside widgets.
+
+Create centralized models and mock repositories.
+
+Create mock data for:
+
+- Admin
+- Teachers
+- Students
+- Parents
+- Academic years
+- Sections
+- Subjects
+- Schedules
+- Attendance
+- Activities
+- Requirements
+- Quizzes
+- Exams
+- Questions
+- Answers
+- Scores
+- Grades
+- Performance data
+- Lesson plans
+- Learning materials
+- Notifications
+- Assessment violations
+- Assessment sessions
+- Connection status
+
+The application should behave as if a real backend exists.
+
+==================================================
+FUNCTIONAL FRONTEND
+==================================================
+
+The frontend must NOT be static.
+
+Buttons should perform simulated actions.
+
+Examples:
+
+Create
+→ Opens form
+
+Save
+→ Updates mock state
+→ Shows success modal
+
+Edit
+→ Opens editable form
+
+Delete
+→ Shows confirmation modal
+→ Removes item from mock state
+
+Search
+→ Filters mock data
+
+Filter
+→ Changes displayed records
+
+Publish
+→ Changes status
+
+Approve
+→ Changes teacher status
+
+Reject
+→ Changes teacher status
+
+Submit
+→ Changes submission state
+
+Grade
+→ Calculates score
+
+Offline attendance
+→ Saves attendance locally
+
+Sync
+→ Simulates synchronization
+
+Anti-cheating event
+→ Records simulated violation
+→ Updates violation count
+→ Shows warning
+
+Logout
+→ Returns to login
+
+==================================================
+FORMS AND VALIDATION
+==================================================
+
+Forms must have:
+
+- Required fields
+- Validation
+- Error messages
+- Success messages
+- Cancel
+- Save
+- Edit
+- Delete confirmation
+
+IMPORTANT:
+
+Use MODAL DIALOGS for important error messages.
+
+Do not make forms purely decorative.
+
+Validation must actually work in the frontend prototype.
+
+==================================================
+UI QUALITY
+==================================================
+
+The interface should look like a real production-ready school management system.
+
+Avoid:
+
+- Excessive animations
+- Unnecessary gradients
+- Oversized decorative elements
+- Fake functionality
+- Dead buttons
+- Text embedded in images
+- Inconsistent spacing
+- Inconsistent navigation
+- Generic dashboard-template appearance
+
+Prioritize:
+
+- Usability
+- Readability
+- Accessibility
+- Consistency
+- Responsive layouts
+- Clear hierarchy
+- Professional academic design
+- Touch-friendly mobile interaction
+- Desktop productivity
+- Clear status feedback
+
+==================================================
+ARCHITECTURE RULE
+==================================================
+
+Before generating a large amount of code:
+
+1. Analyze the requirements.
+2. Propose the folder architecture.
+3. Identify reusable components.
+4. Identify models.
+5. Identify mock data.
+6. Identify repositories/services.
+7. Identify routing.
+8. Identify state-management approach.
+9. Identify responsive layout strategy.
+10. Identify which features are simulated.
+11. Identify which features will later connect to Firebase.
+12. Then implement incrementally.
+
+Do NOT create everything in one enormous file.
+
+Do NOT create unnecessary packages.
+
+Do NOT introduce Firebase yet.
+
+==================================================
+IMPLEMENTATION STRATEGY
+==================================================
+
+Build the application in phases.
+
+PHASE 1:
+Project architecture
+Theme
+Reusable components
+Routing
+Authentication
+Demo accounts
+
+PHASE 2:
+Admin frontend
+
+PHASE 3:
+Teacher frontend
+
+PHASE 4:
+Student frontend
+
+PHASE 5:
+Parent frontend
+
+PHASE 6:
+Attendance
+Activities
+Requirements
+Quiz
+Exam
+Exam Checker
+Item Analysis
+
+PHASE 7:
+Grades
+Performance Analytics
+Lesson Planning
+Learning Materials
+Schedule
+Notifications
+
+PHASE 8:
+Attendance offline/synchronization UI simulation
+
+PHASE 9:
+Quiz/Exam anti-cheating frontend monitoring
+
+PHASE 10:
+Responsive testing
+Navigation testing
+UI consistency
+Error handling
+Code cleanup
+
+==================================================
+IMPORTANT SYSTEM BOUNDARIES
+==================================================
+
+ADMIN:
+
+Manages teacher accounts and approvals.
+
+Monitors:
+
+- Teacher count
+- Student count
+- Parent count
+- General system statistics
+
+ADMIN DOES NOT manage academic operations.
+
+TEACHER:
+
+Manages academic operations.
+
+Teacher controls:
+
+- Academic Year
+- Sections
+- Students
+- Subjects
+- Schedule
+- Grading System
+- Attendance
+- Activities
+- Requirements
+- Quizzes
+- Exams
+- Exam Checking
+- Item Analysis
+- Grades
+- Performance Analytics
+- Lesson Plans
+- Learning Materials
+
+STUDENT:
+
+Uses the mobile application to:
+
+- View academic information
+- Complete activities
+- Take quizzes
+- Take exams
+- View grades
+- View attendance
+- View learning materials
+- Receive notifications
+
+PARENT:
+
+Uses the mobile application to monitor the linked student.
+
+==================================================
+FINAL SYSTEM RULES
+==================================================
+
+This is currently a FRONTEND-ONLY implementation.
+
+The application must be demonstrable without Firebase.
+
+Use mock data and simulated state changes.
+
+Do NOT implement:
+
+- Firebase backend
+- Real authentication
+- Real ESP32
+- Real RFID
+- Real AI API
+- Real email
+- Real external APIs
+
+ATTENDANCE:
+
+Can be designed as OFFLINE-FIRST because ESP32/RFID attendance must continue operating during temporary internet loss.
+
+QUIZ:
+
+REQUIRES INTERNET.
+
+EXAM:
+
+REQUIRES INTERNET.
+
+QUIZ AND EXAM:
+
+Must include frontend anti-cheating monitoring and violation visualization.
+
+Do not claim frontend-only anti-cheating is completely secure.
+
+Later backend implementation should provide authoritative security, validation, and persistent violation records.
+
+==================================================
+FINAL REVIEW AND SYSTEM ANALYSIS
+==================================================
+
+AFTER you understand and plan the system, provide a professional analysis of my current system design.
+
+Identify:
+
+1. Strengths of the current system flow
+2. Weaknesses of the current system flow
+3. Possible confusing user flows
+4. Possible duplicated features
+5. Features that may be unnecessary
+6. Missing features that are important
+7. Potential security weaknesses
+8. Anti-cheating limitations
+9. Offline attendance risks
+10. Possible Firebase limitations or cost considerations for the future
+11. Responsive design risks
+12. Navigation problems
+13. Data relationship problems that may occur later
+14. Potential problems when more teachers are added
+15. Potential problems with teacher/student/parent account relationships
+16. Potential grading-system problems
+17. Potential quiz/exam problems
+18. Recommended improvements before backend implementation
+
+IMPORTANT:
+
+Do not silently redesign my requirements.
+
+First analyze the requirements as written.
+
+Clearly distinguish:
+
+- REQUIRED
+- RECOMMENDED
+- OPTIONAL
+
+If you find a problem, explain why it is a problem and propose a practical solution.
+
+Do not add unnecessary enterprise-level features that are outside the scope of this capstone.
+
+The goal is to create a realistic, maintainable, professional, and demonstrable Flutter frontend that can later be connected to Firebase.

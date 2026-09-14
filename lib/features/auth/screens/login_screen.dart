@@ -18,7 +18,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _passwordController = TextEditingController();
   bool _isLoading = false;
   bool _obscurePassword = true;
-  UserRole _selectedRole = UserRole.student; // Default tab
+  UserRole _selectedRole = UserRole.student;
 
   @override
   void dispose() {
@@ -45,13 +45,11 @@ class _LoginScreenState extends State<LoginScreen> {
         AppModals.showErrorDialog(
           context: context,
           title: 'Authentication Failed',
-          message: 'Invalid username or password. Please make sure you are using the correct credentials for the selected role.',
+          message: 'Invalid username or password. Please check your credentials or use the demo quick-login buttons below.',
         );
         return;
       }
 
-      // If they logged in with credentials that match a different role than selected,
-      // we can gracefully route them anyway to make the demo smooth, but let's notify them or just proceed!
       if (user.status == AccountStatus.pending) {
         Navigator.pushNamed(context, AppRoutes.pendingAccount);
         return;
@@ -123,7 +121,7 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
           ),
 
-          // Glowing architectural background design lines/watermark (Simulating the logo overlay)
+          // Architectural background watermarks
           Positioned(
             left: isDesktop ? -150 : -100,
             bottom: isDesktop ? -150 : -100,
@@ -170,7 +168,6 @@ class _LoginScreenState extends State<LoginScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // Academic Shield / Logo
                 Row(
                   children: [
                     Container(
@@ -200,12 +197,12 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                         ),
                         Text(
-                          'LAGUNA INSTITUTION',
+                          'EDUARDO BARRETTO SENIOR INTEGRATED SCHOOL',
                           style: TextStyle(
-                            fontSize: 12,
+                            fontSize: 11,
                             fontWeight: FontWeight.bold,
                             color: Colors.white70,
-                            letterSpacing: 1.5,
+                            letterSpacing: 1.2,
                           ),
                         ),
                       ],
@@ -224,7 +221,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 const SizedBox(height: 16),
                 const Text(
-                  'Integrated Senior High School Attendance, Activity and Requirement Tracking, Teacher Lesson Planning, and Learning Materials Management System',
+                  'Integrated Senior High School Attendance, Activity and Requirement Tracking, Teacher Lesson Planning, and Learning Materials Management System.',
                   style: TextStyle(
                     fontSize: 15,
                     color: Colors.white70,
@@ -244,7 +241,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     const SizedBox(width: 12),
                     const Text(
-                      'Integrity Towards Academic Excellence',
+                      'Excellence and Integrity in Education',
                       style: TextStyle(
                         color: Colors.white70,
                         fontSize: 13,
@@ -279,7 +276,7 @@ class _LoginScreenState extends State<LoginScreen> {
         slivers: [
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 24),
+              padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 24),
               child: Column(
                 children: [
                   Container(
@@ -294,31 +291,32 @@ class _LoginScreenState extends State<LoginScreen> {
                       color: Colors.white,
                     ),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 14),
                   const Text(
                     'CLASSREALM',
                     style: TextStyle(
-                      fontSize: 26,
+                      fontSize: 24,
                       fontWeight: FontWeight.w900,
                       color: Colors.white,
                       letterSpacing: 2,
                     ),
                   ),
                   const Text(
-                    'LAGUNA INSTITUTION',
+                    'EDUARDO BARRETTO SENIOR INTEGRATED SCHOOL',
+                    textAlign: TextAlign.center,
                     style: TextStyle(
-                      fontSize: 11,
+                      fontSize: 10,
                       fontWeight: FontWeight.bold,
                       color: Colors.white70,
-                      letterSpacing: 1.5,
+                      letterSpacing: 1.1,
                     ),
                   ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 4),
                   const Text(
-                    'Integrity Towards Academic Excellence',
+                    'Calamba City, Laguna',
                     style: TextStyle(
                       color: Colors.white54,
-                      fontSize: 12,
+                      fontSize: 11,
                       fontStyle: FontStyle.italic,
                     ),
                   ),
@@ -376,40 +374,35 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
             const SizedBox(height: 4),
             const Text(
-              'Laguna Institutional Portal Management System',
+              'Eduardo Barretto Senior Integrated School',
               style: TextStyle(
                 fontSize: 13,
                 color: AppColors.textSecondary,
+                fontWeight: FontWeight.w600,
               ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 20),
 
-            // Role indicator tab (Matches the "COLLEGE STUDENT" layout in the screenshot)
+            // Static Unified Portal Header (No longer changes dynamically per role)
             Container(
-              padding: const EdgeInsets.symmetric(vertical: 12),
+              padding: const EdgeInsets.symmetric(vertical: 10),
               decoration: const BoxDecoration(
                 border: Border(
                   bottom: BorderSide(color: AppColors.border, width: 1.5),
                 ),
               ),
-              child: Text(
-                _selectedRole.name.toUpperCase() == 'ADMIN'
-                    ? 'SYSTEM ADMINISTRATOR'
-                    : _selectedRole.name.toUpperCase() == 'TEACHER'
-                        ? 'FACULTY EDUCATOR'
-                        : _selectedRole.name.toUpperCase() == 'PARENT'
-                            ? 'PARENT / GUARDIAN'
-                            : 'SENIOR HIGH STUDENT',
+              child: const Text(
+                'UNIFIED ACADEMIC PORTAL',
                 textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 14,
+                style: TextStyle(
+                  fontSize: 13,
                   fontWeight: FontWeight.w800,
                   color: AppColors.accent,
                   letterSpacing: 2,
                 ),
               ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 20),
 
             // Username input
             TextFormField(
@@ -419,7 +412,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 filled: true,
                 fillColor: const Color(0xFFEFF6FF), // Soft light-blue/indigo tint
                 prefixIcon: const Icon(Icons.person, color: AppColors.primary),
-                hintText: 'Enter username or student ID',
+                hintText: 'Username / Account ID',
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                   borderSide: BorderSide.none,
@@ -443,7 +436,7 @@ class _LoginScreenState extends State<LoginScreen> {
               validator: (v) => v == null || v.isEmpty ? 'Password is required' : null,
               decoration: InputDecoration(
                 filled: true,
-                fillColor: const Color(0xFFEFF6FF), // Soft light-blue/indigo tint
+                fillColor: const Color(0xFFEFF6FF),
                 prefixIcon: const Icon(Icons.lock, color: AppColors.primary),
                 suffixIcon: IconButton(
                   icon: Icon(
@@ -453,7 +446,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
                 ),
-                hintText: 'Enter password',
+                hintText: 'Password',
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                   borderSide: BorderSide.none,
@@ -470,7 +463,7 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
             const SizedBox(height: 24),
 
-            // Login Button (Large solid theme color matching screenshot)
+            // Login Button
             SizedBox(
               height: 52,
               child: ElevatedButton(
@@ -502,11 +495,11 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
               ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 16),
 
-            // Demo Account Selection Row (Acts like the segment selection)
+            // Demo Account Selection Quick-Switch for Presentation
             const Text(
-              'Select Realm Role to Auto-Fill:',
+              'Demo Quick-Login (For Panel Presentation):',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 11,
@@ -514,7 +507,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 color: AppColors.textSecondary,
               ),
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 8),
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: Row(
@@ -530,9 +523,9 @@ class _LoginScreenState extends State<LoginScreen> {
                 ],
               ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 16),
 
-            // Bottom Recovery links matching the image layout
+            // Bottom Recovery links
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [

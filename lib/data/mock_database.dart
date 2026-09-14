@@ -24,6 +24,7 @@ class MockDatabase {
   List<LearningMaterialModel> materials = [];
   List<ScheduleModel> schedules = [];
   List<AppNotificationModel> notifications = [];
+  List<AssessmentResultModel> assessmentResults = [];
 
   // Teacher Academic Setup
   String academicYear = "2024-2025";
@@ -643,6 +644,42 @@ class MockDatabase {
           method: 'Manual Entry',
           isSynced: syncStatus == SyncStatus.online,
         ),
+      );
+    }
+  }
+
+  // Student Archive / Soft Delete Management
+  void archiveStudent(String id) {
+    final idx = users.indexWhere((u) => u.id == id);
+    if (idx != -1) {
+      users[idx] = users[idx].copyWith(
+        isArchived: true,
+        status: AccountStatus.archived,
+      );
+    }
+  }
+
+  void restoreStudent(String id) {
+    final idx = users.indexWhere((u) => u.id == id);
+    if (idx != -1) {
+      users[idx] = users[idx].copyWith(
+        isArchived: false,
+        status: AccountStatus.active,
+      );
+    }
+  }
+
+  void permanentlyDeleteStudent(String id) {
+    users.removeWhere((u) => u.id == id);
+  }
+
+  void updateStudent(String id, String fullName, String studentId, String section) {
+    final idx = users.indexWhere((u) => u.id == id);
+    if (idx != -1) {
+      users[idx] = users[idx].copyWith(
+        fullName: fullName,
+        studentId: studentId,
+        departmentOrSection: section,
       );
     }
   }

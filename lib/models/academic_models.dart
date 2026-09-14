@@ -2,7 +2,11 @@ enum AttendanceStatus { present, late, absent, excused }
 
 enum SyncStatus { online, offline, pendingSync, syncing, synced, syncError }
 
-enum ActivityStatus { pending, submitted, graded, lateSubmission }
+enum ActivityStatus { pending, submitted, checked, graded, lateSubmission, returned }
+
+enum AssessmentType { quiz, examination }
+
+enum SubmissionType { fileOnly, textOnly, fileAndText }
 
 enum QuestionType { multipleChoice, trueFalse, identification, matching }
 
@@ -58,12 +62,17 @@ class ActivityModel {
   final String id;
   final String title;
   final String description;
+  final String instructions;
   final String subject;
+  final String gradeLevel;
   final String section;
+  final DateTime dateAssigned;
   final DateTime deadline;
   final double maxScore;
   final bool isPublished;
+  final bool isRequirement; // true if Performance Task / Requirement, false if Activity
   final String? attachmentName;
+  final SubmissionType submissionType;
   final int submissionsCount;
   final int totalStudents;
 
@@ -71,26 +80,36 @@ class ActivityModel {
     required this.id,
     required this.title,
     required this.description,
+    this.instructions = '',
     required this.subject,
+    this.gradeLevel = 'Grade 11',
     required this.section,
+    DateTime? dateAssigned,
     required this.deadline,
     required this.maxScore,
     this.isPublished = true,
+    this.isRequirement = false,
     this.attachmentName,
+    this.submissionType = SubmissionType.fileAndText,
     this.submissionsCount = 0,
     this.totalStudents = 35,
-  });
+  }) : dateAssigned = dateAssigned ?? DateTime.now();
 
   ActivityModel copyWith({
     String? id,
     String? title,
     String? description,
+    String? instructions,
     String? subject,
+    String? gradeLevel,
     String? section,
+    DateTime? dateAssigned,
     DateTime? deadline,
     double? maxScore,
     bool? isPublished,
+    bool? isRequirement,
     String? attachmentName,
+    SubmissionType? submissionType,
     int? submissionsCount,
     int? totalStudents,
   }) {
@@ -98,12 +117,17 @@ class ActivityModel {
       id: id ?? this.id,
       title: title ?? this.title,
       description: description ?? this.description,
+      instructions: instructions ?? this.instructions,
       subject: subject ?? this.subject,
+      gradeLevel: gradeLevel ?? this.gradeLevel,
       section: section ?? this.section,
+      dateAssigned: dateAssigned ?? this.dateAssigned,
       deadline: deadline ?? this.deadline,
       maxScore: maxScore ?? this.maxScore,
       isPublished: isPublished ?? this.isPublished,
+      isRequirement: isRequirement ?? this.isRequirement,
       attachmentName: attachmentName ?? this.attachmentName,
+      submissionType: submissionType ?? this.submissionType,
       submissionsCount: submissionsCount ?? this.submissionsCount,
       totalStudents: totalStudents ?? this.totalStudents,
     );
@@ -117,6 +141,7 @@ class StudentSubmission {
   final String studentName;
   final DateTime submittedAt;
   final String? attachedFile;
+  final String? textSubmission;
   final double? score;
   final double maxScore;
   final ActivityStatus status;
@@ -129,6 +154,7 @@ class StudentSubmission {
     required this.studentName,
     required this.submittedAt,
     this.attachedFile,
+    this.textSubmission,
     this.score,
     required this.maxScore,
     this.status = ActivityStatus.pending,
@@ -142,6 +168,7 @@ class StudentSubmission {
     String? studentName,
     DateTime? submittedAt,
     String? attachedFile,
+    String? textSubmission,
     double? score,
     double? maxScore,
     ActivityStatus? status,
@@ -154,6 +181,7 @@ class StudentSubmission {
       studentName: studentName ?? this.studentName,
       submittedAt: submittedAt ?? this.submittedAt,
       attachedFile: attachedFile ?? this.attachedFile,
+      textSubmission: textSubmission ?? this.textSubmission,
       score: score ?? this.score,
       maxScore: maxScore ?? this.maxScore,
       status: status ?? this.status,
@@ -236,6 +264,38 @@ class QuizOrExamModel {
       questions: questions ?? this.questions,
     );
   }
+}
+
+class AssessmentResultModel {
+  final String id;
+  final String assessmentId;
+  final String studentId;
+  final String studentName;
+  final DateTime submittedAt;
+  final int durationTakenMinutes;
+  final int violationCount;
+  final Map<String, String> answers; // questionId -> student answer
+  final double scoreEarned;
+  final double totalPoints;
+  final bool isReleased;
+  final bool needsTeacherReview;
+
+  AssessmentResultModel({
+    required this.id,
+    required this.assessmentId,
+    required this.studentId,
+    required this.studentName,
+    required this.submittedAt,
+    required this.durationTakenMinutes,
+    this.violationCount = 0,
+    required this.answers,
+    required this.scoreEarned,
+    required this.totalPoints,
+    this.isReleased = false,
+    this.needsTeacherReview = false,
+  });
+
+  double get percentage => totalPoints > 0 ? (scoreEarned / totalPoints) * 100 : 0.0;
 }
 
 class ExamStudentAnswer {

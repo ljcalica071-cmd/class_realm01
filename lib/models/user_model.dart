@@ -1,6 +1,6 @@
 enum UserRole { admin, teacher, student, parent }
 
-enum AccountStatus { active, pending, rejected }
+enum AccountStatus { active, pending, rejected, archived }
 
 class UserModel {
   final String id;
@@ -14,6 +14,7 @@ class UserModel {
   final String? studentId;
   final String? linkedStudentId;
   final String? contactNumber;
+  final bool isArchived;
 
   const UserModel({
     required this.id,
@@ -27,6 +28,7 @@ class UserModel {
     this.studentId,
     this.linkedStudentId,
     this.contactNumber,
+    this.isArchived = false,
   });
 
   UserModel copyWith({
@@ -41,6 +43,7 @@ class UserModel {
     String? studentId,
     String? linkedStudentId,
     String? contactNumber,
+    bool? isArchived,
   }) {
     return UserModel(
       id: id ?? this.id,
@@ -54,6 +57,7 @@ class UserModel {
       studentId: studentId ?? this.studentId,
       linkedStudentId: linkedStudentId ?? this.linkedStudentId,
       contactNumber: contactNumber ?? this.contactNumber,
+      isArchived: isArchived ?? this.isArchived,
     );
   }
 }
