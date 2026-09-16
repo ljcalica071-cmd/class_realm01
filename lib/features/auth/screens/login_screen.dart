@@ -55,6 +55,20 @@ class _LoginScreenState extends State<LoginScreen> {
         return;
       }
 
+      if (user.status == AccountStatus.deactivated) {
+        AppModals.showErrorDialog(
+          context: context,
+          title: 'Account Deactivated',
+          message: 'Your account has been deactivated. Please contact your teacher.',
+        );
+        return;
+      }
+
+      if (user.status == AccountStatus.pendingFirstLogin) {
+        Navigator.pushReplacementNamed(context, AppRoutes.firstLogin);
+        return;
+      }
+
       switch (user.role) {
         case UserRole.admin:
           Navigator.pushReplacementNamed(context, AppRoutes.adminDashboard);

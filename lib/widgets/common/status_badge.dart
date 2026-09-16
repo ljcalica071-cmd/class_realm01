@@ -47,6 +47,20 @@ class StatusBadge extends StatelessWidget {
           textColor: AppColors.textSecondary,
           icon: Icons.archive_outlined,
         );
+      case AccountStatus.pendingFirstLogin:
+        return const StatusBadge(
+          text: 'Pending First Login',
+          backgroundColor: Color(0xFFEDE9FE),
+          textColor: Color(0xFF7C3AED),
+          icon: Icons.lock_clock_outlined,
+        );
+      case AccountStatus.deactivated:
+        return const StatusBadge(
+          text: 'Deactivated',
+          backgroundColor: AppColors.errorLight,
+          textColor: AppColors.error,
+          icon: Icons.block_outlined,
+        );
     }
   }
 

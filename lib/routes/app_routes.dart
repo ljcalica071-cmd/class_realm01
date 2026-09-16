@@ -3,6 +3,7 @@ class AppRoutes {
   static const String register = '/register';
   static const String forgotPassword = '/forgot-password';
   static const String pendingAccount = '/pending-account';
+  static const String firstLogin = '/student/first-login';
 
   // Dashboards
   static const String adminDashboard = '/admin/dashboard';

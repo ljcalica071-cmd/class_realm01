@@ -1,6 +1,6 @@
 enum UserRole { admin, teacher, student, parent }
 
-enum AccountStatus { active, pending, rejected, archived }
+enum AccountStatus { active, pending, rejected, archived, pendingFirstLogin, deactivated }
 
 class UserModel {
   final String id;
@@ -15,6 +15,15 @@ class UserModel {
   final String? linkedStudentId;
   final String? contactNumber;
   final bool isArchived;
+  // Student-specific fields
+  final String? firstName;
+  final String? middleName;
+  final String? lastName;
+  final DateTime? birthday;
+  final String? gradeLevel;
+  final String? parentGuardianName;
+  final String? parentGuardianContact;
+  final String? password; // mock only — not for production
 
   const UserModel({
     required this.id,
@@ -29,6 +38,14 @@ class UserModel {
     this.linkedStudentId,
     this.contactNumber,
     this.isArchived = false,
+    this.firstName,
+    this.middleName,
+    this.lastName,
+    this.birthday,
+    this.gradeLevel,
+    this.parentGuardianName,
+    this.parentGuardianContact,
+    this.password,
   });
 
   UserModel copyWith({
@@ -44,6 +61,14 @@ class UserModel {
     String? linkedStudentId,
     String? contactNumber,
     bool? isArchived,
+    String? firstName,
+    String? middleName,
+    String? lastName,
+    DateTime? birthday,
+    String? gradeLevel,
+    String? parentGuardianName,
+    String? parentGuardianContact,
+    String? password,
   }) {
     return UserModel(
       id: id ?? this.id,
@@ -58,6 +83,14 @@ class UserModel {
       linkedStudentId: linkedStudentId ?? this.linkedStudentId,
       contactNumber: contactNumber ?? this.contactNumber,
       isArchived: isArchived ?? this.isArchived,
+      firstName: firstName ?? this.firstName,
+      middleName: middleName ?? this.middleName,
+      lastName: lastName ?? this.lastName,
+      birthday: birthday ?? this.birthday,
+      gradeLevel: gradeLevel ?? this.gradeLevel,
+      parentGuardianName: parentGuardianName ?? this.parentGuardianName,
+      parentGuardianContact: parentGuardianContact ?? this.parentGuardianContact,
+      password: password ?? this.password,
     );
   }
 }

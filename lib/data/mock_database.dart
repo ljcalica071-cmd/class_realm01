@@ -1,6 +1,9 @@
   import '../models/user_model.dart';
 import '../models/academic_models.dart';
 
+// Mock password store: userId -> password (plain text, prototype only)
+final Map<String, String> _mockPasswords = {};
+
 class MockDatabase {
   // Singleton instance
   static final MockDatabase instance = MockDatabase._init();
@@ -71,6 +74,7 @@ class MockDatabase {
         status: AccountStatus.pending,
         departmentOrSection: 'English Literature',
       ),
+      // Demo student (existing, keeps working)
       const UserModel(
         id: 'usr_student_1',
         username: 'student',
@@ -78,9 +82,12 @@ class MockDatabase {
         email: 'juan.delacruz@student.classrealm.edu',
         role: UserRole.student,
         status: AccountStatus.active,
-        studentId: '2024-SHS-0101',
+        studentId: '123456789001',
         departmentOrSection: 'STEM 11-A',
         linkedStudentId: 'usr_parent_1',
+        firstName: 'Juan',
+        lastName: 'Dela Cruz',
+        gradeLevel: '11',
       ),
       const UserModel(
         id: 'usr_student_2',
@@ -89,8 +96,11 @@ class MockDatabase {
         email: 'angelo.reyes@student.classrealm.edu',
         role: UserRole.student,
         status: AccountStatus.active,
-        studentId: '2024-SHS-0102',
+        studentId: '123456789002',
         departmentOrSection: 'STEM 11-A',
+        firstName: 'Angelo',
+        lastName: 'Reyes',
+        gradeLevel: '11',
       ),
       const UserModel(
         id: 'usr_student_3',
@@ -99,8 +109,11 @@ class MockDatabase {
         email: 'bea.alonzo@student.classrealm.edu',
         role: UserRole.student,
         status: AccountStatus.active,
-        studentId: '2024-SHS-0103',
+        studentId: '123456789003',
         departmentOrSection: 'STEM 11-A',
+        firstName: 'Bea',
+        lastName: 'Alonzo',
+        gradeLevel: '11',
       ),
       const UserModel(
         id: 'usr_student_4',
@@ -109,8 +122,11 @@ class MockDatabase {
         email: 'carlos.yulo@student.classrealm.edu',
         role: UserRole.student,
         status: AccountStatus.active,
-        studentId: '2024-SHS-0104',
+        studentId: '123456789004',
         departmentOrSection: 'STEM 11-A',
+        firstName: 'Carlos',
+        lastName: 'Yulo',
+        gradeLevel: '11',
       ),
       const UserModel(
         id: 'usr_student_5',
@@ -119,8 +135,69 @@ class MockDatabase {
         email: 'diana.prince@student.classrealm.edu',
         role: UserRole.student,
         status: AccountStatus.active,
-        studentId: '2024-SHS-0105',
+        studentId: '123456789005',
         departmentOrSection: 'STEM 11-A',
+        firstName: 'Diana',
+        lastName: 'Prince',
+        gradeLevel: '11',
+      ),
+      // --- NEW MOCK STUDENTS for first-login flow demo ---
+      // 1. Pending First Login
+      UserModel(
+        id: 'usr_student_new_1',
+        username: 'John Carlo Del Mundo',
+        fullName: 'John Carlo H. Del Mundo',
+        email: 'john.delmundo@gmail.com',
+        role: UserRole.student,
+        status: AccountStatus.pendingFirstLogin,
+        studentId: '123456789006',
+        departmentOrSection: 'General Mathematics',
+        firstName: 'John Carlo',
+        middleName: 'H.',
+        lastName: 'Del Mundo',
+        birthday: DateTime(2005, 7, 1),
+        gradeLevel: '11',
+        parentGuardianName: 'Maria Del Mundo',
+        parentGuardianContact: '+63 912 345 6789',
+        password: 'delmundo07012005',
+      ),
+      // 2. Active (already completed first login)
+      UserModel(
+        id: 'usr_student_new_2',
+        username: 'Sofia Santos',
+        fullName: 'Sofia M. Santos',
+        email: 'sofia.santos@gmail.com',
+        role: UserRole.student,
+        status: AccountStatus.active,
+        studentId: '123456789007',
+        departmentOrSection: 'STEM 11-A',
+        firstName: 'Sofia',
+        middleName: 'M.',
+        lastName: 'Santos',
+        birthday: DateTime(2006, 3, 15),
+        gradeLevel: '11',
+        parentGuardianName: 'Roberto Santos',
+        parentGuardianContact: '+63 917 654 3210',
+        password: 'mypassword2026',
+      ),
+      // 3. Deactivated
+      UserModel(
+        id: 'usr_student_new_3',
+        username: 'Miguel Garcia',
+        fullName: 'Miguel A. Garcia',
+        email: 'miguel.garcia@gmail.com',
+        role: UserRole.student,
+        status: AccountStatus.deactivated,
+        studentId: '123456789008',
+        departmentOrSection: 'ABM 11-A',
+        firstName: 'Miguel',
+        middleName: 'A.',
+        lastName: 'Garcia',
+        birthday: DateTime(2005, 11, 20),
+        gradeLevel: '11',
+        parentGuardianName: 'Elena Garcia',
+        parentGuardianContact: '+63 918 111 2222',
+        password: 'garcia11202005',
       ),
       const UserModel(
         id: 'usr_parent_1',
@@ -134,12 +211,21 @@ class MockDatabase {
       ),
     ];
 
+    // Seed mock passwords for demo accounts
+    _mockPasswords['usr_admin'] = 'admin123';
+    _mockPasswords['usr_teacher_1'] = 'teacher123';
+    _mockPasswords['usr_student_1'] = 'student123';
+    _mockPasswords['usr_parent_1'] = 'parent123';
+    _mockPasswords['usr_student_new_1'] = 'delmundo07012005';
+    _mockPasswords['usr_student_new_2'] = 'mypassword2026';
+    _mockPasswords['usr_student_new_3'] = 'garcia11202005';
+
     // 2. Attendance Records (Simulated RFID & Manual)
     final now = DateTime.now();
     attendanceRecords = [
       AttendanceRecord(
         id: 'att_1',
-        studentId: '2024-SHS-0101',
+        studentId: '123456789001',
         studentName: 'Juan Dela Cruz',
         section: 'STEM 11-A',
         date: now,
@@ -149,7 +235,7 @@ class MockDatabase {
       ),
       AttendanceRecord(
         id: 'att_2',
-        studentId: '2024-SHS-0102',
+        studentId: '123456789002',
         studentName: 'Angelo Reyes',
         section: 'STEM 11-A',
         date: now,
@@ -159,7 +245,7 @@ class MockDatabase {
       ),
       AttendanceRecord(
         id: 'att_3',
-        studentId: '2024-SHS-0103',
+        studentId: '123456789003',
         studentName: 'Bea Alonzo',
         section: 'STEM 11-A',
         date: now,
@@ -169,7 +255,7 @@ class MockDatabase {
       ),
       AttendanceRecord(
         id: 'att_4',
-        studentId: '2024-SHS-0104',
+        studentId: '123456789004',
         studentName: 'Carlos Yulo',
         section: 'STEM 11-A',
         date: now,
@@ -179,7 +265,7 @@ class MockDatabase {
       ),
       AttendanceRecord(
         id: 'att_5',
-        studentId: '2024-SHS-0105',
+        studentId: '123456789005',
         studentName: 'Diana Prince',
         section: 'STEM 11-A',
         date: now,
@@ -338,7 +424,7 @@ class MockDatabase {
       ExamSubmissionReview(
         id: 'rev_1',
         examId: 'quiz_1',
-        studentId: '2024-SHS-0101',
+        studentId: '123456789001',
         studentName: 'Juan Dela Cruz',
         submittedAt: now.subtract(const Duration(days: 1)),
         calculatedScore: 20.0,
@@ -375,7 +461,7 @@ class MockDatabase {
       ExamSubmissionReview(
         id: 'rev_2',
         examId: 'quiz_1',
-        studentId: '2024-SHS-0102',
+        studentId: '123456789002',
         studentName: 'Angelo Reyes',
         submittedAt: now.subtract(const Duration(days: 1)),
         calculatedScore: 15.0,
@@ -412,7 +498,7 @@ class MockDatabase {
       ExamSubmissionReview(
         id: 'rev_3',
         examId: 'quiz_1',
-        studentId: '2024-SHS-0104',
+        studentId: '123456789004',
         studentName: 'Carlos Yulo',
         submittedAt: now.subtract(const Duration(days: 1)),
         calculatedScore: 10.0,
@@ -594,20 +680,14 @@ class MockDatabase {
 
   // Auth Simulation
   UserModel? authenticate(String username, String password) {
-    if (username == 'admin' && password == 'admin123') {
-      currentUser = users.firstWhere((u) => u.username == 'admin');
-      return currentUser;
-    } else if (username == 'teacher' && password == 'teacher123') {
-      currentUser = users.firstWhere((u) => u.username == 'teacher');
-      return currentUser;
-    } else if (username == 'student' && password == 'student123') {
-      currentUser = users.firstWhere((u) => u.username == 'student');
-      return currentUser;
-    } else if (username == 'parent' && password == 'parent123') {
-      currentUser = users.firstWhere((u) => u.username == 'parent');
-      return currentUser;
-    }
-    return null;
+    // Find user by username (case-sensitive for generated usernames)
+    final idx = users.indexWhere((u) => u.username == username);
+    if (idx == -1) return null;
+    final user = users[idx];
+    final storedPassword = _mockPasswords[user.id];
+    if (storedPassword == null || storedPassword != password) return null;
+    currentUser = user;
+    return currentUser;
   }
 
   void logout() {
@@ -671,6 +751,7 @@ class MockDatabase {
 
   void permanentlyDeleteStudent(String id) {
     users.removeWhere((u) => u.id == id);
+    _mockPasswords.remove(id);
   }
 
   void updateStudent(String id, String fullName, String studentId, String section) {
@@ -682,6 +763,149 @@ class MockDatabase {
         departmentOrSection: section,
       );
     }
+  }
+
+  // --- Student Account Management ---
+
+  /// Generate username: firstName + lastName (preserving spacing/capitalization)
+  static String generateUsername(String firstName, String lastName) {
+    return '${firstName.trim()} ${lastName.trim()}';
+  }
+
+  /// Generate temp password: lowercase(lastName no spaces) + MMDDYYYY
+  static String generateTempPassword(String lastName, DateTime birthday) {
+    final ln = lastName.toLowerCase().replaceAll(' ', '');
+    final mm = birthday.month.toString().padLeft(2, '0');
+    final dd = birthday.day.toString().padLeft(2, '0');
+    final yyyy = birthday.year.toString();
+    return '$ln$mm$dd$yyyy';
+  }
+
+  /// Create a new student account (teacher-initiated)
+  /// Returns null on success, or an error message string on duplicate.
+  String? createStudentAccount({
+    required String firstName,
+    required String middleName,
+    required String lastName,
+    required DateTime birthday,
+    required String email,
+    required String studentId,
+    required String gradeLevel,
+    required String section,
+    required String parentGuardianName,
+    required String parentGuardianContact,
+  }) {
+    final username = generateUsername(firstName, lastName);
+    final tempPassword = generateTempPassword(lastName, birthday);
+    final fullName = [
+      firstName.trim(),
+      if (middleName.trim().isNotEmpty) middleName.trim(),
+      lastName.trim(),
+    ].join(' ');
+
+    // Duplicate checks
+    if (users.any((u) => u.role == UserRole.student && u.studentId == studentId)) {
+      return 'A student with Student ID "$studentId" already exists.';
+    }
+    if (users.any((u) => u.role == UserRole.student && u.username == username)) {
+      return 'A student with username "$username" already exists.';
+    }
+    if (users.any((u) => u.role == UserRole.student && u.email.toLowerCase() == email.toLowerCase())) {
+      return 'A student with email "$email" already exists.';
+    }
+
+    final id = 'usr_s_${DateTime.now().millisecondsSinceEpoch}';
+    final newStudent = UserModel(
+      id: id,
+      username: username,
+      fullName: fullName,
+      email: email,
+      role: UserRole.student,
+      status: AccountStatus.pendingFirstLogin,
+      studentId: studentId,
+      departmentOrSection: section,
+      firstName: firstName,
+      middleName: middleName,
+      lastName: lastName,
+      birthday: birthday,
+      gradeLevel: gradeLevel,
+      parentGuardianName: parentGuardianName,
+      parentGuardianContact: parentGuardianContact,
+      password: tempPassword,
+    );
+    users.add(newStudent);
+    _mockPasswords[id] = tempPassword;
+    return null; // success
+  }
+
+  /// Complete first login: validate temp password, set new password, activate account
+  /// Returns null on success, or an error message.
+  String? completeFirstLogin(String userId, String enteredTempPassword, String newPassword) {
+    final idx = users.indexWhere((u) => u.id == userId);
+    if (idx == -1) return 'Account not found.';
+    final storedTemp = _mockPasswords[userId];
+    if (storedTemp == null || storedTemp != enteredTempPassword) {
+      return 'Incorrect temporary password.';
+    }
+    if (newPassword == enteredTempPassword) {
+      return 'New password must be different from the temporary password.';
+    }
+    users[idx] = users[idx].copyWith(
+      status: AccountStatus.active,
+      password: newPassword,
+    );
+    _mockPasswords[userId] = newPassword;
+    currentUser = users[idx];
+    return null; // success
+  }
+
+  void deactivateStudent(String id) {
+    final idx = users.indexWhere((u) => u.id == id);
+    if (idx != -1) {
+      users[idx] = users[idx].copyWith(status: AccountStatus.deactivated);
+    }
+  }
+
+  void reactivateStudent(String id) {
+    final idx = users.indexWhere((u) => u.id == id);
+    if (idx != -1) {
+      users[idx] = users[idx].copyWith(status: AccountStatus.active);
+    }
+  }
+
+  void updateStudentFull({
+    required String id,
+    required String firstName,
+    required String middleName,
+    required String lastName,
+    required String email,
+    required String studentId,
+    required String gradeLevel,
+    required String section,
+    required String parentGuardianName,
+    required String parentGuardianContact,
+    required DateTime birthday,
+  }) {
+    final idx = users.indexWhere((u) => u.id == id);
+    if (idx == -1) return;
+    final fullName = [
+      firstName.trim(),
+      if (middleName.trim().isNotEmpty) middleName.trim(),
+      lastName.trim(),
+    ].join(' ');
+    users[idx] = users[idx].copyWith(
+      fullName: fullName,
+      email: email,
+      studentId: studentId,
+      departmentOrSection: section,
+      firstName: firstName,
+      middleName: middleName,
+      lastName: lastName,
+      birthday: birthday,
+      gradeLevel: gradeLevel,
+      parentGuardianName: parentGuardianName,
+      parentGuardianContact: parentGuardianContact,
+    );
   }
 
   // Activity Submission & Creation
