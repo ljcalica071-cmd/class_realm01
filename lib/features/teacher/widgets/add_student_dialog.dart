@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
 import '../../../core/theme/app_colors.dart';
 import '../../../data/mock_database.dart';
 import '../../../widgets/common/app_buttons.dart';
@@ -10,7 +11,10 @@ class AddStudentDialog extends StatefulWidget {
 
   const AddStudentDialog({super.key, required this.onStudentCreated});
 
-  static Future<void> show(BuildContext context, {required VoidCallback onStudentCreated}) {
+  static Future<void> show(
+    BuildContext context, {
+    required VoidCallback onStudentCreated,
+  }) {
     return showDialog(
       context: context,
       barrierDismissible: false,
@@ -145,18 +149,33 @@ class _AddStudentDialogState extends State<AddStudentDialog> {
             children: [
               Container(
                 padding: const EdgeInsets.all(14),
-                decoration: const BoxDecoration(color: AppColors.successLight, shape: BoxShape.circle),
-                child: const Icon(Icons.how_to_reg_outlined, color: AppColors.success, size: 32),
+                decoration: const BoxDecoration(
+                  color: AppColors.successLight,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.how_to_reg_outlined,
+                  color: AppColors.success,
+                  size: 32,
+                ),
               ),
               const SizedBox(height: 16),
               const Text(
                 'STUDENT ACCOUNT CREATED',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: AppColors.textPrimary, letterSpacing: 1),
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w900,
+                  color: AppColors.textPrimary,
+                  letterSpacing: 1,
+                ),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 4),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: const Color(0xFFFEF3C7),
                   borderRadius: BorderRadius.circular(8),
@@ -171,10 +190,14 @@ class _AddStudentDialogState extends State<AddStudentDialog> {
               _CredentialRow(label: 'Student', value: fullName),
               _CredentialRow(label: 'Email', value: email),
               _CredentialRow(label: 'Username', value: username),
-              _CredentialRow(label: 'Temporary Password', value: tempPassword, isPassword: true),
+              _CredentialRow(
+                label: 'Temporary Password',
+                value: tempPassword,
+                isPassword: true,
+              ),
               _CredentialRow(
                 label: 'Account Status',
-                value: 'Pending First Login',
+                value: 'Pending',
                 valueColor: const Color(0xFF7C3AED),
               ),
               const SizedBox(height: 20),
@@ -186,16 +209,30 @@ class _AddStudentDialogState extends State<AddStudentDialog> {
                         foregroundColor: AppColors.primary,
                         side: const BorderSide(color: AppColors.primary),
                         padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
                       ),
                       icon: const Icon(Icons.copy, size: 16),
-                      label: const Text('Copy Credentials', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                      label: const Text(
+                        'Copy Credentials',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
+                      ),
                       onPressed: () {
-                        Clipboard.setData(ClipboardData(
-                          text: 'Student: $fullName\nEmail: $email\nUsername: $username\nTemporary Password: $tempPassword\nStatus: Pending First Login',
-                        ));
+                        Clipboard.setData(
+                          ClipboardData(
+                            text:
+                                'Student: $fullName\nEmail: $email\nUsername: $username\nTemporary Password: $tempPassword\nStatus: Pending',
+                          ),
+                        );
                         ScaffoldMessenger.of(ctx).showSnackBar(
-                          const SnackBar(content: Text('Credentials copied to clipboard'), duration: Duration(seconds: 2)),
+                          const SnackBar(
+                            content: Text('Credentials copied to clipboard'),
+                            duration: Duration(seconds: 2),
+                          ),
                         );
                       },
                     ),
@@ -231,16 +268,33 @@ class _AddStudentDialogState extends State<AddStudentDialog> {
         children: [
           Container(
             padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(color: AppColors.primary.withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
-            child: const Icon(Icons.person_add_alt_1, color: AppColors.primary, size: 22),
+            decoration: BoxDecoration(
+              color: AppColors.primary.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(
+              Icons.person_add_alt_1,
+              color: AppColors.primary,
+              size: 22,
+            ),
           ),
           const SizedBox(width: 12),
           const Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Add New Student', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                Text('Teacher creates the student account', style: TextStyle(fontSize: 12, color: AppColors.textSecondary, fontWeight: FontWeight.normal)),
+                Text(
+                  'Add New Student',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                Text(
+                  'Teacher creates the student account',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: AppColors.textSecondary,
+                    fontWeight: FontWeight.normal,
+                  ),
+                ),
               ],
             ),
           ),
@@ -259,35 +313,75 @@ class _AddStudentDialogState extends State<AddStudentDialog> {
                 const _SectionLabel('Student Name'),
                 Row(
                   children: [
-                    Expanded(flex: 3, child: _buildField(_firstNameCtrl, 'First Name *', onChanged: (_) => setState(() {}))),
+                    Expanded(
+                      flex: 3,
+                      child: _buildField(
+                        _firstNameCtrl,
+                        'First Name *',
+                        onChanged: (_) => setState(() {}),
+                      ),
+                    ),
                     const SizedBox(width: 12),
-                    Expanded(flex: 2, child: _buildField(_middleNameCtrl, 'Middle Name / Initial')),
+                    Expanded(
+                      flex: 2,
+                      child: _buildField(
+                        _middleNameCtrl,
+                        'Middle Name / Initial',
+                      ),
+                    ),
                     const SizedBox(width: 12),
-                    Expanded(flex: 3, child: _buildField(_lastNameCtrl, 'Last Name *', onChanged: (_) => setState(() {}))),
+                    Expanded(
+                      flex: 3,
+                      child: _buildField(
+                        _lastNameCtrl,
+                        'Last Name *',
+                        onChanged: (_) => setState(() {}),
+                      ),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 16),
                 const _SectionLabel('Account & Contact'),
                 Row(
                   children: [
-                    Expanded(child: _buildField(_emailCtrl, 'Email / Gmail *', keyboardType: TextInputType.emailAddress, validator: (v) {
-                      if (v == null || v.isEmpty) return 'Email is required';
-                      if (!v.contains('@')) return 'Enter a valid email';
-                      return null;
-                    })),
+                    Expanded(
+                      child: _buildField(
+                        _emailCtrl,
+                        'Email / Gmail *',
+                        keyboardType: TextInputType.emailAddress,
+                        validator: (v) {
+                          if (v == null || v.isEmpty)
+                            return 'Email is required';
+                          if (!v.toLowerCase().endsWith('@gmail.com')) {
+                            return 'Use a Gmail address ending in @gmail.com';
+                          }
+                          return null;
+                        },
+                      ),
+                    ),
                     const SizedBox(width: 12),
-                    Expanded(child: _buildField(_studentIdCtrl, 'LRN (12-digit number) *', keyboardType: TextInputType.number, validator: (v) {
-                      if (v == null || v.isEmpty) return 'LRN is required';
-                      if (v.length != 12 || int.tryParse(v) == null) return 'LRN must be exactly 12 digits';
-                      return null;
-                    })),
+                    Expanded(
+                      child: _buildField(
+                        _studentIdCtrl,
+                        'LRN (12-digit number) *',
+                        keyboardType: TextInputType.number,
+                        validator: (v) {
+                          if (v == null || v.isEmpty) return 'LRN is required';
+                          if (v.length != 12 || int.tryParse(v) == null)
+                            return 'LRN must be exactly 12 digits';
+                          return null;
+                        },
+                      ),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 16),
                 const _SectionLabel('Academic Information'),
                 Row(
                   children: [
-                    Expanded(child: _buildField(_gradeLevelCtrl, 'Grade Level *')),
+                    Expanded(
+                      child: _buildField(_gradeLevelCtrl, 'Grade Level *'),
+                    ),
                     const SizedBox(width: 12),
                     Expanded(child: _buildField(_sectionCtrl, 'Section *')),
                     const SizedBox(width: 12),
@@ -297,17 +391,29 @@ class _AddStudentDialogState extends State<AddStudentDialog> {
                         child: InputDecorator(
                           decoration: InputDecoration(
                             labelText: 'Birthday *',
-                            prefixIcon: const Icon(Icons.cake_outlined, size: 18, color: AppColors.primary),
+                            prefixIcon: const Icon(
+                              Icons.cake_outlined,
+                              size: 18,
+                              color: AppColors.primary,
+                            ),
                             filled: true,
                             fillColor: const Color(0xFFEFF6FF),
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
-                            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide: BorderSide.none,
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide: BorderSide.none,
+                            ),
                           ),
                           child: Text(
                             birthdayText,
                             style: TextStyle(
                               fontSize: 14,
-                              color: _birthday == null ? AppColors.textMuted : AppColors.textPrimary,
+                              color: _birthday == null
+                                  ? AppColors.textMuted
+                                  : AppColors.textPrimary,
                             ),
                           ),
                         ),
@@ -319,9 +425,21 @@ class _AddStudentDialogState extends State<AddStudentDialog> {
                 const _SectionLabel('Parent / Guardian'),
                 Row(
                   children: [
-                    Expanded(child: _buildField(_guardianNameCtrl, 'Guardian Name', required: false)),
+                    Expanded(
+                      child: _buildField(
+                        _guardianNameCtrl,
+                        'Guardian Name',
+                        required: false,
+                      ),
+                    ),
                     const SizedBox(width: 12),
-                    Expanded(child: _buildField(_guardianContactCtrl, 'Guardian Contact', required: false)),
+                    Expanded(
+                      child: _buildField(
+                        _guardianContactCtrl,
+                        'Guardian Contact',
+                        required: false,
+                      ),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 20),
@@ -337,13 +455,27 @@ class _AddStudentDialogState extends State<AddStudentDialog> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('Auto-Generated Credentials Preview', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.textPrimary)),
+                      const Text(
+                        'Auto-Generated Credentials Preview',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
                       const SizedBox(height: 10),
                       _PreviewRow(label: 'Username', value: _previewUsername),
                       const SizedBox(height: 6),
-                      _PreviewRow(label: 'Temp Password', value: _previewTempPassword),
+                      _PreviewRow(
+                        label: 'Temp Password',
+                        value: _previewTempPassword,
+                      ),
                       const SizedBox(height: 6),
-                      const _PreviewRow(label: 'Account Status', value: 'Pending First Login', valueColor: Color(0xFF7C3AED)),
+                      const _PreviewRow(
+                        label: 'Account Status',
+                        value: 'Pending',
+                        valueColor: Color(0xFF7C3AED),
+                      ),
                     ],
                   ),
                 ),
@@ -356,7 +488,10 @@ class _AddStudentDialogState extends State<AddStudentDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel', style: TextStyle(color: AppColors.textSecondary)),
+          child: const Text(
+            'Cancel',
+            style: TextStyle(color: AppColors.textSecondary),
+          ),
         ),
         AppPrimaryButton(
           label: 'Create Student Account',
@@ -381,17 +516,36 @@ class _AddStudentDialogState extends State<AddStudentDialog> {
       controller: ctrl,
       keyboardType: keyboardType,
       onChanged: onChanged,
-      validator: validator ?? (required ? (v) => (v == null || v.isEmpty) ? '$label is required' : null : null),
+      validator:
+          validator ??
+          (required
+              ? (v) => (v == null || v.isEmpty) ? '$label is required' : null
+              : null),
       decoration: InputDecoration(
         labelText: label,
         filled: true,
         fillColor: const Color(0xFFEFF6FF),
         isDense: true,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
-        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
-        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppColors.primary, width: 1.5)),
-        errorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppColors.error)),
-        focusedErrorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppColors.error, width: 1.5)),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: BorderSide.none,
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: BorderSide.none,
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: AppColors.error),
+        ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: AppColors.error, width: 1.5),
+        ),
       ),
     );
   }
@@ -407,7 +561,12 @@ class _SectionLabel extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 8),
       child: Text(
         text.toUpperCase(),
-        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: AppColors.textSecondary, letterSpacing: 1),
+        style: const TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w800,
+          color: AppColors.textSecondary,
+          letterSpacing: 1,
+        ),
       ),
     );
   }
@@ -418,7 +577,11 @@ class _PreviewRow extends StatelessWidget {
   final String value;
   final Color? valueColor;
 
-  const _PreviewRow({required this.label, required this.value, this.valueColor});
+  const _PreviewRow({
+    required this.label,
+    required this.value,
+    this.valueColor,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -426,7 +589,13 @@ class _PreviewRow extends StatelessWidget {
       children: [
         SizedBox(
           width: 120,
-          child: Text(label, style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+          child: Text(
+            label,
+            style: const TextStyle(
+              fontSize: 12,
+              color: AppColors.textSecondary,
+            ),
+          ),
         ),
         Expanded(
           child: Text(
@@ -450,7 +619,12 @@ class _CredentialRow extends StatelessWidget {
   final bool isPassword;
   final Color? valueColor;
 
-  const _CredentialRow({required this.label, required this.value, this.isPassword = false, this.valueColor});
+  const _CredentialRow({
+    required this.label,
+    required this.value,
+    this.isPassword = false,
+    this.valueColor,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -461,22 +635,37 @@ class _CredentialRow extends StatelessWidget {
         children: [
           SizedBox(
             width: 140,
-            child: Text(label, style: const TextStyle(fontSize: 13, color: AppColors.textSecondary, fontWeight: FontWeight.w600)),
+            child: Text(
+              label,
+              style: const TextStyle(
+                fontSize: 13,
+                color: AppColors.textSecondary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ),
           Expanded(
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
-                color: isPassword ? const Color(0xFFF0FDF4) : AppColors.background,
+                color: isPassword
+                    ? const Color(0xFFF0FDF4)
+                    : AppColors.background,
                 borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: isPassword ? AppColors.success.withOpacity(0.3) : AppColors.border),
+                border: Border.all(
+                  color: isPassword
+                      ? AppColors.success.withOpacity(0.3)
+                      : AppColors.border,
+                ),
               ),
               child: Text(
                 value,
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.bold,
-                  color: valueColor ?? (isPassword ? AppColors.success : AppColors.textPrimary),
+                  color:
+                      valueColor ??
+                      (isPassword ? AppColors.success : AppColors.textPrimary),
                   fontFamily: isPassword ? 'monospace' : null,
                 ),
               ),

@@ -1268,6 +1268,14 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     );
   }
 
+  int _calculateAge(DateTime birthday) {
+    final today = DateTime.now();
+    var age = today.year - birthday.year;
+    final birthdayThisYear = DateTime(today.year, birthday.month, birthday.day);
+    if (today.isBefore(birthdayThisYear)) age--;
+    return age;
+  }
+
   Widget _buildStudentManagementTab(
     List<UserModel> activeStudents,
     List<UserModel> archivedStudents,
@@ -1486,7 +1494,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                 child: TextField(
                   onChanged: (v) => setState(() => _studentSearchQuery = v),
                   decoration: InputDecoration(
-                    hintText: 'Search by name or LRN (12 digits)...',
+                    hintText: 'Search by name or LRN...',
                     prefixIcon: const Icon(
                       Icons.search,
                       size: 20,
@@ -1760,8 +1768,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                                             ? '${s.birthday!.year}-${s.birthday!.month.toString().padLeft(2, '0')}-${s.birthday!.day.toString().padLeft(2, '0')}'
                                             : '2006-05-12';
                                         final age = s.birthday != null
-                                            ? (DateTime.now().year -
-                                                  s.birthday!.year)
+                                            ? _calculateAge(s.birthday!)
                                             : 18;
                                         final contact =
                                             s.parentGuardianContact ??
@@ -2318,7 +2325,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                     username: 'student_${DateTime.now().millisecond}',
                     fullName: _studentNameCtrl.text.trim(),
                     email:
-                        '${_studentNameCtrl.text.trim().toLowerCase().replaceAll(" ", ".")}@barretto-shs.edu.ph',
+                        '${_studentNameCtrl.text.trim().toLowerCase().replaceAll(" ", ".")}@gmail.com',
                     role: UserRole.student,
                     status: AccountStatus.active,
                     studentId: _studentIdCtrl.text.trim().isEmpty
@@ -3175,7 +3182,8 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
 
   // --- 5. Attendance Tracker ---
   String _attendanceClassFilter = 'Grade 11 - Section A • General Mathematics';
-  String _selectedAttendanceView = 'Take Attendance'; // 'Take Attendance' or 'View History'
+  String _selectedAttendanceView =
+      'Take Attendance'; // 'Take Attendance' or 'View History'
   DateTime _attendanceSelectedDate = DateTime(2026, 9, 13);
 
   // Keep state for selected attendance status of students
@@ -3203,13 +3211,23 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
       }
     }
 
-    int presentCount = _tempAttendanceStates.values.where((st) => st == AttendanceStatus.present).length;
-    int absentCount = _tempAttendanceStates.values.where((st) => st == AttendanceStatus.absent).length;
-    int lateCount = _tempAttendanceStates.values.where((st) => st == AttendanceStatus.late).length;
-    int excusedCount = _tempAttendanceStates.values.where((st) => st == AttendanceStatus.excused).length;
+    int presentCount = _tempAttendanceStates.values
+        .where((st) => st == AttendanceStatus.present)
+        .length;
+    int absentCount = _tempAttendanceStates.values
+        .where((st) => st == AttendanceStatus.absent)
+        .length;
+    int lateCount = _tempAttendanceStates.values
+        .where((st) => st == AttendanceStatus.late)
+        .length;
+    int excusedCount = _tempAttendanceStates.values
+        .where((st) => st == AttendanceStatus.excused)
+        .length;
     // Calculated stats
     int totalCount = activeStudents.length;
-    double percentPresent = totalCount > 0 ? (presentCount / totalCount) * 100 : 0.0;
+    double percentPresent = totalCount > 0
+        ? (presentCount / totalCount) * 100
+        : 0.0;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
@@ -3236,7 +3254,11 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                     SizedBox(width: 8),
                     Text(
                       'Take Attendance',
-                      style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ],
                 ),
@@ -3253,7 +3275,10 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
           // Dropdown Row
           Row(
             children: [
-              const Text('Class / Section:  ', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+              const Text(
+                'Class / Section:  ',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+              ),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12),
                 decoration: BoxDecoration(
@@ -3264,11 +3289,23 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                 child: DropdownButtonHideUnderline(
                   child: DropdownButton<String>(
                     value: _attendanceClassFilter,
-                    style: const TextStyle(color: Color(0xFF1A56DB), fontWeight: FontWeight.w600, fontSize: 13),
-                    items: [
-                      'Grade 11 - Section A • General Mathematics',
-                      'Grade 11 - Section B • General Mathematics',
-                    ].map((val) => DropdownMenuItem(value: val, child: Text(val))).toList(),
+                    style: const TextStyle(
+                      color: Color(0xFF1A56DB),
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                    ),
+                    items:
+                        [
+                              'Grade 11 - Section A • General Mathematics',
+                              'Grade 11 - Section B • General Mathematics',
+                            ]
+                            .map(
+                              (val) => DropdownMenuItem(
+                                value: val,
+                                child: Text(val),
+                              ),
+                            )
+                            .toList(),
                     onChanged: (v) {
                       if (v != null) setState(() => _attendanceClassFilter = v);
                     },
@@ -3284,24 +3321,52 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
             children: [
               ElevatedButton(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: _selectedAttendanceView == 'Take Attendance' ? const Color(0xFF107B41) : Colors.white,
-                  foregroundColor: _selectedAttendanceView == 'Take Attendance' ? Colors.white : const Color(0xFF475569),
-                  side: BorderSide(color: _selectedAttendanceView == 'Take Attendance' ? Colors.transparent : const Color(0xFFCBD5E1)),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                  backgroundColor: _selectedAttendanceView == 'Take Attendance'
+                      ? const Color(0xFF107B41)
+                      : Colors.white,
+                  foregroundColor: _selectedAttendanceView == 'Take Attendance'
+                      ? Colors.white
+                      : const Color(0xFF475569),
+                  side: BorderSide(
+                    color: _selectedAttendanceView == 'Take Attendance'
+                        ? Colors.transparent
+                        : const Color(0xFFCBD5E1),
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                  ),
                 ),
-                onPressed: () => setState(() => _selectedAttendanceView = 'Take Attendance'),
-                child: const Text('Take Attendance', style: TextStyle(fontWeight: FontWeight.bold)),
+                onPressed: () =>
+                    setState(() => _selectedAttendanceView = 'Take Attendance'),
+                child: const Text(
+                  'Take Attendance',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
               ),
               const SizedBox(width: 12),
               ElevatedButton(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: _selectedAttendanceView == 'View History' ? const Color(0xFF107B41) : Colors.white,
-                  foregroundColor: _selectedAttendanceView == 'View History' ? Colors.white : const Color(0xFF475569),
-                  side: BorderSide(color: _selectedAttendanceView == 'View History' ? Colors.transparent : const Color(0xFFCBD5E1)),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                  backgroundColor: _selectedAttendanceView == 'View History'
+                      ? const Color(0xFF107B41)
+                      : Colors.white,
+                  foregroundColor: _selectedAttendanceView == 'View History'
+                      ? Colors.white
+                      : const Color(0xFF475569),
+                  side: BorderSide(
+                    color: _selectedAttendanceView == 'View History'
+                        ? Colors.transparent
+                        : const Color(0xFFCBD5E1),
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                  ),
                 ),
-                onPressed: () => setState(() => _selectedAttendanceView = 'View History'),
-                child: const Text('View History', style: TextStyle(fontWeight: FontWeight.bold)),
+                onPressed: () =>
+                    setState(() => _selectedAttendanceView = 'View History'),
+                child: const Text(
+                  'View History',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
               ),
             ],
           ),
@@ -3328,10 +3393,14 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                           firstDate: DateTime(2020),
                           lastDate: DateTime.now(),
                         );
-                        if (picked != null) setState(() => _attendanceSelectedDate = picked);
+                        if (picked != null)
+                          setState(() => _attendanceSelectedDate = picked);
                       },
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
                         decoration: BoxDecoration(
                           color: Colors.white,
                           borderRadius: BorderRadius.circular(8),
@@ -3341,10 +3410,18 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                           children: [
                             Text(
                               '${_attendanceSelectedDate.day.toString().padLeft(2, '0')}/${_attendanceSelectedDate.month.toString().padLeft(2, '0')}/${_attendanceSelectedDate.year}',
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF1E293B)),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                                color: Color(0xFF1E293B),
+                              ),
                             ),
                             const SizedBox(width: 8),
-                            const Icon(Icons.calendar_month, size: 16, color: Color(0xFF64748B)),
+                            const Icon(
+                              Icons.calendar_month,
+                              size: 16,
+                              color: Color(0xFF64748B),
+                            ),
                           ],
                         ),
                       ),
@@ -3352,7 +3429,10 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                     const SizedBox(width: 12),
                     // Students Badge
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(20),
@@ -3360,11 +3440,19 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                       ),
                       child: Row(
                         children: [
-                          const Icon(Icons.people_outline, size: 16, color: Color(0xFF107B41)),
+                          const Icon(
+                            Icons.people_outline,
+                            size: 16,
+                            color: Color(0xFF107B41),
+                          ),
                           const SizedBox(width: 6),
                           Text(
                             '$totalCount Students',
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF1E293B)),
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                              color: Color(0xFF1E293B),
+                            ),
                           ),
                         ],
                       ),
@@ -3372,7 +3460,10 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                     const SizedBox(width: 12),
                     // Percent Present Badge
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(20),
@@ -3380,11 +3471,19 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                       ),
                       child: Row(
                         children: [
-                          const Icon(Icons.check_circle_outline, size: 16, color: Color(0xFF107B41)),
+                          const Icon(
+                            Icons.check_circle_outline,
+                            size: 16,
+                            color: Color(0xFF107B41),
+                          ),
                           const SizedBox(width: 6),
                           Text(
                             '${percentPresent.toStringAsFixed(1)}% Present',
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF107B41)),
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                              color: Color(0xFF107B41),
+                            ),
                           ),
                         ],
                       ),
@@ -3425,22 +3524,36 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                         onPressed: () {
                           setState(() {
                             for (var s in activeStudents) {
-                              _tempAttendanceStates[s.id] = AttendanceStatus.present;
+                              _tempAttendanceStates[s.id] =
+                                  AttendanceStatus.present;
                             }
                           });
                         },
-                        child: const Text('Mark All Present', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF107B41))),
+                        child: const Text(
+                          'Mark All Present',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF107B41),
+                          ),
+                        ),
                       ),
                       const SizedBox(width: 12),
                       TextButton(
                         onPressed: () {
                           setState(() {
                             for (var s in activeStudents) {
-                              _tempAttendanceStates[s.id] = AttendanceStatus.absent;
+                              _tempAttendanceStates[s.id] =
+                                  AttendanceStatus.absent;
                             }
                           });
                         },
-                        child: const Text('Mark All Absent', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red)),
+                        child: const Text(
+                          'Mark All Absent',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.red,
+                          ),
+                        ),
                       ),
                     ],
                   ),
@@ -3453,13 +3566,25 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
           // Total counts summary banner row
           Row(
             children: [
-              _buildAttendanceCountBadge(label: '$presentCount PRESENT', color: const Color(0xFF107B41)),
+              _buildAttendanceCountBadge(
+                label: '$presentCount PRESENT',
+                color: const Color(0xFF107B41),
+              ),
               const SizedBox(width: 8),
-              _buildAttendanceCountBadge(label: '$absentCount ABSENT', color: const Color(0xFFEF4444)),
+              _buildAttendanceCountBadge(
+                label: '$absentCount ABSENT',
+                color: const Color(0xFFEF4444),
+              ),
               const SizedBox(width: 8),
-              _buildAttendanceCountBadge(label: '$lateCount LATE', color: const Color(0xFFD97706)),
+              _buildAttendanceCountBadge(
+                label: '$lateCount LATE',
+                color: const Color(0xFFD97706),
+              ),
               const SizedBox(width: 8),
-              _buildAttendanceCountBadge(label: '$excusedCount EXCUSED', color: const Color(0xFF64748B)),
+              _buildAttendanceCountBadge(
+                label: '$excusedCount EXCUSED',
+                color: const Color(0xFF64748B),
+              ),
             ],
           ),
           const SizedBox(height: 16),
@@ -3471,13 +3596,23 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
             itemCount: activeStudents.length,
             itemBuilder: (ctx, i) {
               final student = activeStudents[i];
-              final currentStatus = _tempAttendanceStates[student.id] ?? AttendanceStatus.present;
-              final initials = student.fullName.substring(0, 1).toLowerCase() + 
-                  (student.fullName.contains(' ') ? student.fullName.split(' ')[1].substring(0, 1).toLowerCase() : '');
+              final currentStatus =
+                  _tempAttendanceStates[student.id] ?? AttendanceStatus.present;
+              final initials =
+                  student.fullName.substring(0, 1).toLowerCase() +
+                  (student.fullName.contains(' ')
+                      ? student.fullName
+                            .split(' ')[1]
+                            .substring(0, 1)
+                            .toLowerCase()
+                      : '');
 
               return Container(
                 margin: const EdgeInsets.only(bottom: 8),
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(8),
@@ -3488,7 +3623,13 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                     // Index
                     SizedBox(
                       width: 28,
-                      child: Text('${i + 1}', style: const TextStyle(color: Color(0xFF64748B), fontSize: 13)),
+                      child: Text(
+                        '${i + 1}',
+                        style: const TextStyle(
+                          color: Color(0xFF64748B),
+                          fontSize: 13,
+                        ),
+                      ),
                     ),
                     // Initials Avatar
                     CircleAvatar(
@@ -3496,7 +3637,11 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                       backgroundColor: const Color(0xFF1A56DB),
                       child: Text(
                         initials,
-                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -3504,7 +3649,11 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                     Expanded(
                       child: Text(
                         student.fullName,
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF1E293B)),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                          color: Color(0xFF1E293B),
+                        ),
                       ),
                     ),
                     // Rounded check buttons row
@@ -3516,7 +3665,10 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                           color: const Color(0xFF107B41),
                           isActive: currentStatus == AttendanceStatus.present,
                           onPressed: () {
-                            setState(() => _tempAttendanceStates[student.id] = AttendanceStatus.present);
+                            setState(
+                              () => _tempAttendanceStates[student.id] =
+                                  AttendanceStatus.present,
+                            );
                           },
                         ),
                         const SizedBox(width: 8),
@@ -3526,7 +3678,10 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                           color: const Color(0xFFEF4444),
                           isActive: currentStatus == AttendanceStatus.absent,
                           onPressed: () {
-                            setState(() => _tempAttendanceStates[student.id] = AttendanceStatus.absent);
+                            setState(
+                              () => _tempAttendanceStates[student.id] =
+                                  AttendanceStatus.absent,
+                            );
                           },
                         ),
                         const SizedBox(width: 8),
@@ -3536,7 +3691,10 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                           color: const Color(0xFFD97706),
                           isActive: currentStatus == AttendanceStatus.late,
                           onPressed: () {
-                            setState(() => _tempAttendanceStates[student.id] = AttendanceStatus.late);
+                            setState(
+                              () => _tempAttendanceStates[student.id] =
+                                  AttendanceStatus.late,
+                            );
                           },
                         ),
                         const SizedBox(width: 8),
@@ -3546,7 +3704,10 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                           color: const Color(0xFF64748B),
                           isActive: currentStatus == AttendanceStatus.excused,
                           onPressed: () {
-                            setState(() => _tempAttendanceStates[student.id] = AttendanceStatus.excused);
+                            setState(
+                              () => _tempAttendanceStates[student.id] =
+                                  AttendanceStatus.excused,
+                            );
                           },
                         ),
                       ],
@@ -3566,8 +3727,13 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF107B41),
                   foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 14,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
                 ),
                 icon: const Icon(Icons.check, size: 18),
                 label: const Text(
@@ -3587,11 +3753,19 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                 style: OutlinedButton.styleFrom(
                   foregroundColor: const Color(0xFFEF4444),
                   side: const BorderSide(color: Color(0xFFEF4444)),
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 14,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
                 ),
                 icon: const Icon(Icons.delete_outline, size: 18),
-                label: const Text('Clear', style: TextStyle(fontWeight: FontWeight.bold)),
+                label: const Text(
+                  'Clear',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
                 onPressed: () {
                   setState(() {
                     for (var s in activeStudents) {
@@ -3607,7 +3781,11 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     );
   }
 
-  Widget _buildHeaderConfigButton({required String label, required IconData icon, required VoidCallback onPressed}) {
+  Widget _buildHeaderConfigButton({
+    required String label,
+    required IconData icon,
+    required VoidCallback onPressed,
+  }) {
     return OutlinedButton.icon(
       style: OutlinedButton.styleFrom(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -3616,12 +3794,18 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       ),
       icon: Icon(icon, size: 16, color: const Color(0xFF64748B)),
-      label: Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+      label: Text(
+        label,
+        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+      ),
       onPressed: onPressed,
     );
   }
 
-  Widget _buildAttendanceCountBadge({required String label, required Color color}) {
+  Widget _buildAttendanceCountBadge({
+    required String label,
+    required Color color,
+  }) {
     return Expanded(
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 10),
@@ -3632,7 +3816,11 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         ),
         child: Text(
           label,
-          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+            fontSize: 13,
+          ),
         ),
       ),
     );
@@ -3655,15 +3843,13 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
           elevation: 0,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(8),
-            side: isActive ? BorderSide.none : const BorderSide(color: Color(0xFFE2E8F0)),
+            side: isActive
+                ? BorderSide.none
+                : const BorderSide(color: Color(0xFFE2E8F0)),
           ),
         ),
         onPressed: onPressed,
         child: Icon(icon, size: 18),
-      ),
-    );
-  }
-
       ),
     );
   }

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../../core/theme/app_colors.dart';
 import '../../models/user_model.dart';
 import '../../models/academic_models.dart';
@@ -49,7 +50,7 @@ class StatusBadge extends StatelessWidget {
         );
       case AccountStatus.pendingFirstLogin:
         return const StatusBadge(
-          text: 'Pending First Login',
+          text: 'Pending',
           backgroundColor: Color(0xFFEDE9FE),
           textColor: Color(0xFF7C3AED),
           icon: Icons.lock_clock_outlined,

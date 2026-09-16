@@ -1,4 +1,4 @@
-  import '../models/user_model.dart';
+import '../models/user_model.dart';
 import '../models/academic_models.dart';
 
 // Mock password store: userId -> password (plain text, prototype only)
@@ -38,7 +38,7 @@ class MockDatabase {
   void _seedData() {
     // 1. Users
     users = [
-      const UserModel(
+      UserModel(
         id: 'usr_admin',
         username: 'admin',
         fullName: 'Dr. Arthur Pendelton',
@@ -47,7 +47,7 @@ class MockDatabase {
         status: AccountStatus.active,
         departmentOrSection: 'School Administration',
       ),
-      const UserModel(
+      UserModel(
         id: 'usr_teacher_1',
         username: 'teacher',
         fullName: 'Prof. Maria Santos',
@@ -56,7 +56,7 @@ class MockDatabase {
         status: AccountStatus.active,
         departmentOrSection: 'Mathematics Department',
       ),
-      const UserModel(
+      UserModel(
         id: 'usr_teacher_2',
         username: 'teacher_pending',
         fullName: 'Mr. Roberto Gomez',
@@ -65,7 +65,7 @@ class MockDatabase {
         status: AccountStatus.pending,
         departmentOrSection: 'Science & Physics',
       ),
-      const UserModel(
+      UserModel(
         id: 'usr_teacher_3',
         username: 'teacher_pending2',
         fullName: 'Ms. Clara Reyes',
@@ -75,11 +75,11 @@ class MockDatabase {
         departmentOrSection: 'English Literature',
       ),
       // Demo student (existing, keeps working)
-      const UserModel(
+      UserModel(
         id: 'usr_student_1',
         username: 'student',
         fullName: 'Juan Dela Cruz',
-        email: 'juan.delacruz@student.classrealm.edu',
+        email: 'juan.delacruz@gmail.com',
         role: UserRole.student,
         status: AccountStatus.active,
         studentId: '123456789001',
@@ -87,58 +87,63 @@ class MockDatabase {
         linkedStudentId: 'usr_parent_1',
         firstName: 'Juan',
         lastName: 'Dela Cruz',
+        birthday: DateTime(2006, 5, 12),
         gradeLevel: '11',
       ),
-      const UserModel(
+      UserModel(
         id: 'usr_student_2',
         username: 'student2',
         fullName: 'Angelo Reyes',
-        email: 'angelo.reyes@student.classrealm.edu',
+        email: 'angelo.reyes@gmail.com',
         role: UserRole.student,
         status: AccountStatus.active,
         studentId: '123456789002',
         departmentOrSection: 'STEM 11-A',
         firstName: 'Angelo',
         lastName: 'Reyes',
+        birthday: DateTime(2006, 5, 12),
         gradeLevel: '11',
       ),
-      const UserModel(
+      UserModel(
         id: 'usr_student_3',
         username: 'student3',
         fullName: 'Bea Alonzo',
-        email: 'bea.alonzo@student.classrealm.edu',
+        email: 'bea.alonzo@gmail.com',
         role: UserRole.student,
         status: AccountStatus.active,
         studentId: '123456789003',
         departmentOrSection: 'STEM 11-A',
         firstName: 'Bea',
         lastName: 'Alonzo',
+        birthday: DateTime(2006, 5, 12),
         gradeLevel: '11',
       ),
-      const UserModel(
+      UserModel(
         id: 'usr_student_4',
         username: 'student4',
         fullName: 'Carlos Yulo',
-        email: 'carlos.yulo@student.classrealm.edu',
+        email: 'carlos.yulo@gmail.com',
         role: UserRole.student,
         status: AccountStatus.active,
         studentId: '123456789004',
         departmentOrSection: 'STEM 11-A',
         firstName: 'Carlos',
         lastName: 'Yulo',
+        birthday: DateTime(2006, 5, 12),
         gradeLevel: '11',
       ),
-      const UserModel(
+      UserModel(
         id: 'usr_student_5',
         username: 'student5',
         fullName: 'Diana Prince',
-        email: 'diana.prince@student.classrealm.edu',
+        email: 'diana.prince@gmail.com',
         role: UserRole.student,
         status: AccountStatus.active,
         studentId: '123456789005',
         departmentOrSection: 'STEM 11-A',
         firstName: 'Diana',
         lastName: 'Prince',
+        birthday: DateTime(2006, 5, 12),
         gradeLevel: '11',
       ),
       // --- NEW MOCK STUDENTS for first-login flow demo ---
@@ -158,7 +163,7 @@ class MockDatabase {
         birthday: DateTime(2005, 7, 1),
         gradeLevel: '11',
         parentGuardianName: 'Maria Del Mundo',
-        parentGuardianContact: '+63 912 345 6789',
+        parentGuardianContact: '09123456789',
         password: 'delmundo07012005',
       ),
       // 2. Active (already completed first login)
@@ -177,7 +182,7 @@ class MockDatabase {
         birthday: DateTime(2006, 3, 15),
         gradeLevel: '11',
         parentGuardianName: 'Roberto Santos',
-        parentGuardianContact: '+63 917 654 3210',
+        parentGuardianContact: '09176543210',
         password: 'mypassword2026',
       ),
       // 3. Deactivated
@@ -196,7 +201,7 @@ class MockDatabase {
         birthday: DateTime(2005, 11, 20),
         gradeLevel: '11',
         parentGuardianName: 'Elena Garcia',
-        parentGuardianContact: '+63 918 111 2222',
+        parentGuardianContact: '09181112222',
         password: 'garcia11202005',
       ),
       const UserModel(
@@ -207,7 +212,7 @@ class MockDatabase {
         role: UserRole.parent,
         status: AccountStatus.active,
         linkedStudentId: 'usr_student_1',
-        contactNumber: '+63 917 123 4567',
+        contactNumber: '09171234567',
       ),
     ];
 
@@ -351,7 +356,12 @@ class MockDatabase {
             id: 'q1',
             questionText: 'What is the domain of f(x) = 1 / (x - 3)?',
             type: QuestionType.multipleChoice,
-            choices: ['All real numbers except x = 3', 'All real numbers except x = -3', 'x > 3', 'x >= 0'],
+            choices: [
+              'All real numbers except x = 3',
+              'All real numbers except x = -3',
+              'x > 3',
+              'x >= 0',
+            ],
             correctAnswer: 'All real numbers except x = 3',
             points: 5.0,
           ),
@@ -372,7 +382,8 @@ class MockDatabase {
           ),
           QuestionModel(
             id: 'q4',
-            questionText: 'Evaluate (f o g)(2) when f(x) = 2x + 1 and g(x) = x^2.',
+            questionText:
+                'Evaluate (f o g)(2) when f(x) = 2x + 1 and g(x) = x^2.',
             type: QuestionType.multipleChoice,
             choices: ['9', '8', '11', '5'],
             correctAnswer: '9',
@@ -396,7 +407,12 @@ class MockDatabase {
             id: 'eq1',
             questionText: 'Which function represents exponential decay?',
             type: QuestionType.multipleChoice,
-            choices: ['f(x) = 2(0.5)^x', 'f(x) = 3(2)^x', 'f(x) = x^2 - 4', 'f(x) = log(x)'],
+            choices: [
+              'f(x) = 2(0.5)^x',
+              'f(x) = 3(2)^x',
+              'f(x) = x^2 - 4',
+              'f(x) = log(x)',
+            ],
             correctAnswer: 'f(x) = 2(0.5)^x',
             points: 10.0,
           ),
@@ -410,7 +426,8 @@ class MockDatabase {
           ),
           QuestionModel(
             id: 'eq3',
-            questionText: 'Find the vertical asymptote of f(x) = (2x + 1)/(x - 5).',
+            questionText:
+                'Find the vertical asymptote of f(x) = (2x + 1)/(x - 5).',
             type: QuestionType.identification,
             correctAnswer: 'x = 5',
             points: 10.0,
@@ -536,11 +553,31 @@ class MockDatabase {
 
     // 7. Teacher-Configured Grading Criteria
     gradingCriteria = [
-      GradingCriteria(id: 'gc_1', name: 'Quarterly Examinations', percentage: 30.0),
-      GradingCriteria(id: 'gc_2', name: 'Written Activities & Worksheets', percentage: 25.0),
-      GradingCriteria(id: 'gc_3', name: 'Quizzes & Unit Tests', percentage: 20.0),
-      GradingCriteria(id: 'gc_4', name: 'Performance Tasks & Projects', percentage: 15.0),
-      GradingCriteria(id: 'gc_5', name: 'Attendance & Class Participation', percentage: 10.0),
+      GradingCriteria(
+        id: 'gc_1',
+        name: 'Quarterly Examinations',
+        percentage: 30.0,
+      ),
+      GradingCriteria(
+        id: 'gc_2',
+        name: 'Written Activities & Worksheets',
+        percentage: 25.0,
+      ),
+      GradingCriteria(
+        id: 'gc_3',
+        name: 'Quizzes & Unit Tests',
+        percentage: 20.0,
+      ),
+      GradingCriteria(
+        id: 'gc_4',
+        name: 'Performance Tasks & Projects',
+        percentage: 15.0,
+      ),
+      GradingCriteria(
+        id: 'gc_5',
+        name: 'Attendance & Class Participation',
+        percentage: 10.0,
+      ),
     ];
 
     // 8. AI Lesson Plans (Simulated)
@@ -554,7 +591,8 @@ class MockDatabase {
         objectives: '1. Distinguish between rational functions, rational equations, and rational inequalities.\n2. Determine domain, range, and vertical/horizontal asymptotes.\n3. Solve real-world mixture and rate problems.',
         materials: 'Interactive graphing app (GeoGebra), graphing paper, scientific calculator, projector.',
         procedure: 'A. Motivation (10m): Speed vs Time trip analysis.\nB. Direct Instruction (25m): Asymptote rules and behavior near discontinuities.\nC. Guided Practice (15m): Step-by-step table computation.\nD. Wrap-Up & Synthesis (10m): Exit ticket problem.',
-        assessment: '10-point formative assessment on identifying undefined values.',
+        assessment:
+            '10-point formative assessment on identifying undefined values.',
         assignment: 'Answer Problem Set 1 exercises 1-5.',
         createdAt: now.subtract(const Duration(days: 3)),
       ),
@@ -603,7 +641,8 @@ class MockDatabase {
         fileName: 'https://geogebra.org/m/classrealm-asymptotes',
         fileSize: 'Cloud URL',
         uploadedAt: now.subtract(const Duration(days: 2)),
-        description: 'Manipulate numerator and denominator coefficients in real time.',
+        description:
+            'Manipulate numerator and denominator coefficients in real time.',
       ),
     ];
 
@@ -711,7 +750,10 @@ class MockDatabase {
         isSynced: syncStatus == SyncStatus.online,
       );
     } else {
-      final student = users.firstWhere((u) => u.studentId == studentId, orElse: () => users.first);
+      final student = users.firstWhere(
+        (u) => u.studentId == studentId,
+        orElse: () => users.first,
+      );
       attendanceRecords.add(
         AttendanceRecord(
           id: 'att_${DateTime.now().millisecondsSinceEpoch}',
@@ -754,7 +796,12 @@ class MockDatabase {
     _mockPasswords.remove(id);
   }
 
-  void updateStudent(String id, String fullName, String studentId, String section) {
+  void updateStudent(
+    String id,
+    String fullName,
+    String studentId,
+    String section,
+  ) {
     final idx = users.indexWhere((u) => u.id == id);
     if (idx != -1) {
       users[idx] = users[idx].copyWith(
@@ -804,13 +851,21 @@ class MockDatabase {
     ].join(' ');
 
     // Duplicate checks
-    if (users.any((u) => u.role == UserRole.student && u.studentId == studentId)) {
+    if (users.any(
+      (u) => u.role == UserRole.student && u.studentId == studentId,
+    )) {
       return 'A student with Student ID "$studentId" already exists.';
     }
-    if (users.any((u) => u.role == UserRole.student && u.username == username)) {
+    if (users.any(
+      (u) => u.role == UserRole.student && u.username == username,
+    )) {
       return 'A student with username "$username" already exists.';
     }
-    if (users.any((u) => u.role == UserRole.student && u.email.toLowerCase() == email.toLowerCase())) {
+    if (users.any(
+      (u) =>
+          u.role == UserRole.student &&
+          u.email.toLowerCase() == email.toLowerCase(),
+    )) {
       return 'A student with email "$email" already exists.';
     }
 
@@ -840,7 +895,11 @@ class MockDatabase {
 
   /// Complete first login: validate temp password, set new password, activate account
   /// Returns null on success, or an error message.
-  String? completeFirstLogin(String userId, String enteredTempPassword, String newPassword) {
+  String? completeFirstLogin(
+    String userId,
+    String enteredTempPassword,
+    String newPassword,
+  ) {
     final idx = users.indexWhere((u) => u.id == userId);
     if (idx == -1) return 'Account not found.';
     final storedTemp = _mockPasswords[userId];
@@ -917,8 +976,15 @@ class MockDatabase {
     activities.removeWhere((a) => a.id == id);
   }
 
-  void submitActivity(String activityId, String studentId, String studentName, String fileName) {
-    activitySubmissions.removeWhere((s) => s.activityOrExamId == activityId && s.studentId == studentId);
+  void submitActivity(
+    String activityId,
+    String studentId,
+    String studentName,
+    String fileName,
+  ) {
+    activitySubmissions.removeWhere(
+      (s) => s.activityOrExamId == activityId && s.studentId == studentId,
+    );
     activitySubmissions.add(
       StudentSubmission(
         id: 'sub_${DateTime.now().millisecondsSinceEpoch}',
@@ -966,10 +1032,14 @@ class MockDatabase {
       gradeLevel: gradeLevel,
       subject: subject,
       duration: duration,
-      objectives: '1. Master the fundamental theorems of $topic.\n2. Solve practical mathematical equations in real contexts.\n3. Formulate step-by-step verification methods.',
-      materials: 'Teacher slide presentation, Scientific Calculator, Graphing Board, Worksheet $topic-01.',
-      procedure: '1. Warm-up Discovery (10m): Introduce real scenario.\n2. Core Modeling (25m): Step-by-step algebraic breakdown of $topic.\n3. Collaborative Problem Solving (15m): Work in pairs on sample problems.\n4. Synthesis & Assessment (10m): Quick diagnostic assessment.',
-      assessment: '5-item multiple choice and 1 problem solving item focusing on $topic.',
+      objectives:
+          '1. Master the fundamental theorems of $topic.\n2. Solve practical mathematical equations in real contexts.\n3. Formulate step-by-step verification methods.',
+      materials:
+          'Teacher slide presentation, Scientific Calculator, Graphing Board, Worksheet $topic-01.',
+      procedure:
+          '1. Warm-up Discovery (10m): Introduce real scenario.\n2. Core Modeling (25m): Step-by-step algebraic breakdown of $topic.\n3. Collaborative Problem Solving (15m): Work in pairs on sample problems.\n4. Synthesis & Assessment (10m): Quick diagnostic assessment.',
+      assessment:
+          '5-item multiple choice and 1 problem solving item focusing on $topic.',
       assignment: 'Complete exercises 1 to 8 on module workbook page 62.',
       createdAt: DateTime.now(),
     );

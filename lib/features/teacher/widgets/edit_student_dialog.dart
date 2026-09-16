@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../../../core/theme/app_colors.dart';
 import '../../../data/mock_database.dart';
 import '../../../models/user_model.dart';
@@ -9,13 +10,24 @@ class EditStudentDialog extends StatefulWidget {
   final UserModel student;
   final VoidCallback onStudentUpdated;
 
-  const EditStudentDialog({super.key, required this.student, required this.onStudentUpdated});
+  const EditStudentDialog({
+    super.key,
+    required this.student,
+    required this.onStudentUpdated,
+  });
 
-  static Future<void> show(BuildContext context, {required UserModel student, required VoidCallback onStudentUpdated}) {
+  static Future<void> show(
+    BuildContext context, {
+    required UserModel student,
+    required VoidCallback onStudentUpdated,
+  }) {
     return showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (_) => EditStudentDialog(student: student, onStudentUpdated: onStudentUpdated),
+      builder: (_) => EditStudentDialog(
+        student: student,
+        onStudentUpdated: onStudentUpdated,
+      ),
     );
   }
 
@@ -48,7 +60,9 @@ class _EditStudentDialogState extends State<EditStudentDialog> {
     _gradeLevelCtrl = TextEditingController(text: s.gradeLevel ?? '11');
     _sectionCtrl = TextEditingController(text: s.departmentOrSection ?? '');
     _guardianNameCtrl = TextEditingController(text: s.parentGuardianName ?? '');
-    _guardianContactCtrl = TextEditingController(text: s.parentGuardianContact ?? '');
+    _guardianContactCtrl = TextEditingController(
+      text: s.parentGuardianContact ?? '',
+    );
     _birthday = s.birthday;
   }
 
@@ -117,16 +131,33 @@ class _EditStudentDialogState extends State<EditStudentDialog> {
         children: [
           Container(
             padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(color: AppColors.primary.withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
-            child: const Icon(Icons.edit_outlined, color: AppColors.primary, size: 22),
+            decoration: BoxDecoration(
+              color: AppColors.primary.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(
+              Icons.edit_outlined,
+              color: AppColors.primary,
+              size: 22,
+            ),
           ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Edit Student', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                Text(widget.student.fullName, style: const TextStyle(fontSize: 12, color: AppColors.textSecondary, fontWeight: FontWeight.normal)),
+                const Text(
+                  'Edit Student',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                Text(
+                  widget.student.fullName,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppColors.textSecondary,
+                    fontWeight: FontWeight.normal,
+                  ),
+                ),
               ],
             ),
           ),
@@ -145,11 +176,24 @@ class _EditStudentDialogState extends State<EditStudentDialog> {
                 const _SectionLabel('Student Name'),
                 Row(
                   children: [
-                    Expanded(flex: 3, child: _buildField(_firstNameCtrl, 'First Name *')),
+                    Expanded(
+                      flex: 3,
+                      child: _buildField(_firstNameCtrl, 'First Name *'),
+                    ),
                     const SizedBox(width: 12),
-                    Expanded(flex: 2, child: _buildField(_middleNameCtrl, 'Middle Name / Initial', required: false)),
+                    Expanded(
+                      flex: 2,
+                      child: _buildField(
+                        _middleNameCtrl,
+                        'Middle Name / Initial',
+                        required: false,
+                      ),
+                    ),
                     const SizedBox(width: 12),
-                    Expanded(flex: 3, child: _buildField(_lastNameCtrl, 'Last Name *')),
+                    Expanded(
+                      flex: 3,
+                      child: _buildField(_lastNameCtrl, 'Last Name *'),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 16),
@@ -162,25 +206,38 @@ class _EditStudentDialogState extends State<EditStudentDialog> {
                         'Email / Gmail *',
                         keyboardType: TextInputType.emailAddress,
                         validator: (v) {
-                          if (v == null || v.isEmpty) return 'Email is required';
-                          if (!v.contains('@')) return 'Enter a valid email';
+                          if (v == null || v.isEmpty)
+                            return 'Email is required';
+                          if (!v.toLowerCase().endsWith('@gmail.com')) {
+                            return 'Use a Gmail address ending in @gmail.com';
+                          }
                           return null;
                         },
                       ),
                     ),
                     const SizedBox(width: 12),
-                    Expanded(child: _buildField(_studentIdCtrl, 'LRN (12-digit number) *', keyboardType: TextInputType.number, validator: (v) {
-                      if (v == null || v.isEmpty) return 'LRN is required';
-                      if (v.length != 12 || int.tryParse(v) == null) return 'LRN must be exactly 12 digits';
-                      return null;
-                    })),
+                    Expanded(
+                      child: _buildField(
+                        _studentIdCtrl,
+                        'LRN (12-digit number) *',
+                        keyboardType: TextInputType.number,
+                        validator: (v) {
+                          if (v == null || v.isEmpty) return 'LRN is required';
+                          if (v.length != 12 || int.tryParse(v) == null)
+                            return 'LRN must be exactly 12 digits';
+                          return null;
+                        },
+                      ),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 16),
                 const _SectionLabel('Academic Information'),
                 Row(
                   children: [
-                    Expanded(child: _buildField(_gradeLevelCtrl, 'Grade Level *')),
+                    Expanded(
+                      child: _buildField(_gradeLevelCtrl, 'Grade Level *'),
+                    ),
                     const SizedBox(width: 12),
                     Expanded(child: _buildField(_sectionCtrl, 'Section *')),
                     const SizedBox(width: 12),
@@ -190,15 +247,30 @@ class _EditStudentDialogState extends State<EditStudentDialog> {
                         child: InputDecorator(
                           decoration: InputDecoration(
                             labelText: 'Birthday',
-                            prefixIcon: const Icon(Icons.cake_outlined, size: 18, color: AppColors.primary),
+                            prefixIcon: const Icon(
+                              Icons.cake_outlined,
+                              size: 18,
+                              color: AppColors.primary,
+                            ),
                             filled: true,
                             fillColor: const Color(0xFFEFF6FF),
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
-                            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide: BorderSide.none,
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide: BorderSide.none,
+                            ),
                           ),
                           child: Text(
                             birthdayText,
-                            style: TextStyle(fontSize: 14, color: _birthday == null ? AppColors.textMuted : AppColors.textPrimary),
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: _birthday == null
+                                  ? AppColors.textMuted
+                                  : AppColors.textPrimary,
+                            ),
                           ),
                         ),
                       ),
@@ -209,9 +281,21 @@ class _EditStudentDialogState extends State<EditStudentDialog> {
                 const _SectionLabel('Parent / Guardian'),
                 Row(
                   children: [
-                    Expanded(child: _buildField(_guardianNameCtrl, 'Guardian Name', required: false)),
+                    Expanded(
+                      child: _buildField(
+                        _guardianNameCtrl,
+                        'Guardian Name',
+                        required: false,
+                      ),
+                    ),
                     const SizedBox(width: 12),
-                    Expanded(child: _buildField(_guardianContactCtrl, 'Guardian Contact', required: false)),
+                    Expanded(
+                      child: _buildField(
+                        _guardianContactCtrl,
+                        'Guardian Contact',
+                        required: false,
+                      ),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 12),
@@ -220,11 +304,17 @@ class _EditStudentDialogState extends State<EditStudentDialog> {
                   decoration: BoxDecoration(
                     color: const Color(0xFFFEF3C7),
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: const Color(0xFFF59E0B).withOpacity(0.4)),
+                    border: Border.all(
+                      color: const Color(0xFFF59E0B).withOpacity(0.4),
+                    ),
                   ),
                   child: const Text(
                     'Note: Editing the student\'s name does not automatically change the username or temporary password for an existing account.',
-                    style: TextStyle(fontSize: 11, color: Color(0xFF92400E), height: 1.4),
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Color(0xFF92400E),
+                      height: 1.4,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -236,7 +326,10 @@ class _EditStudentDialogState extends State<EditStudentDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel', style: TextStyle(color: AppColors.textSecondary)),
+          child: const Text(
+            'Cancel',
+            style: TextStyle(color: AppColors.textSecondary),
+          ),
         ),
         AppPrimaryButton(
           label: 'Save Changes',
@@ -259,17 +352,36 @@ class _EditStudentDialogState extends State<EditStudentDialog> {
     return TextFormField(
       controller: ctrl,
       keyboardType: keyboardType,
-      validator: validator ?? (required ? (v) => (v == null || v.isEmpty) ? '$label is required' : null : null),
+      validator:
+          validator ??
+          (required
+              ? (v) => (v == null || v.isEmpty) ? '$label is required' : null
+              : null),
       decoration: InputDecoration(
         labelText: label,
         filled: true,
         fillColor: const Color(0xFFEFF6FF),
         isDense: true,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
-        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
-        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppColors.primary, width: 1.5)),
-        errorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppColors.error)),
-        focusedErrorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppColors.error, width: 1.5)),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: BorderSide.none,
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: BorderSide.none,
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: AppColors.error),
+        ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: AppColors.error, width: 1.5),
+        ),
       ),
     );
   }
@@ -285,7 +397,12 @@ class _SectionLabel extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 8),
       child: Text(
         text.toUpperCase(),
-        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: AppColors.textSecondary, letterSpacing: 1),
+        style: const TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w800,
+          color: AppColors.textSecondary,
+          letterSpacing: 1,
+        ),
       ),
     );
   }
