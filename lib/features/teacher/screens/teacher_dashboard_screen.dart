@@ -27,7 +27,12 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   bool _isSidebarExpanded = true;
   bool _showArchivedStudents = false;
   bool _showNewSchoolYearForm = false;
+  bool _showAddClassForm = false;
   final List<String> _classroomSections = [];
+  String _selectedSchoolYear = '2026-2027';
+  String _newSchoolYearStructure = 'Quarterly (4 quarters)';
+  String _newClassSchoolYear = 'SY 2026-2027';
+  String _newClassGradeLevel = 'Grade 11';
   String _studentSearchQuery = '';
 
   // Controllers for CRUD forms
@@ -41,6 +46,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   final _schoolYearCtrl = TextEditingController();
   final _schoolYearStartCtrl = TextEditingController(text: '01/06/2026');
   final _schoolYearEndCtrl = TextEditingController(text: '30/04/2027');
+  final _classSectionCtrl = TextEditingController();
 
   @override
   void dispose() {
@@ -54,6 +60,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     _schoolYearCtrl.dispose();
     _schoolYearStartCtrl.dispose();
     _schoolYearEndCtrl.dispose();
+    _classSectionCtrl.dispose();
     super.dispose();
   }
 
@@ -2445,7 +2452,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                       ),
                       const SizedBox(height: 4),
                       const Text(
-                        'Solo Teacher — Self-managed · Pro · Trial — ends Oct 13, 2026 · 28d left',
+                        'Solo Teacher — Self-managed',
                         style: TextStyle(
                           fontSize: 12,
                           color: AppColors.textSecondary,
@@ -2530,11 +2537,16 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                   label: Text(
                     'Add Class${sections.isEmpty ? '' : ' (${sections.length}/10)'}',
                   ),
-                  onPressed: _showAddClassDialog,
+                  onPressed: () =>
+                      setState(() => _showAddClassForm = !_showAddClassForm),
                 ),
               ],
             ),
           ),
+          if (_showAddClassForm) ...[
+            const SizedBox(height: 12),
+            _buildAddClassForm(),
+          ],
           const SizedBox(height: 20),
           sections.isEmpty
               ? _buildEmptyClassroomState()
@@ -2639,7 +2651,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
           ),
           const SizedBox(width: 10),
           Text(
-            'SY ${MockDatabase.instance.academicYear} (Current)',
+            'SY $_selectedSchoolYear (Current)',
             style: const TextStyle(
               fontWeight: FontWeight.bold,
               color: AppColors.primary,
@@ -2678,7 +2690,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
               const SizedBox(width: 16),
               Expanded(
                 child: DropdownButtonFormField<String>(
-                  initialValue: 'Quarterly (4 quarters)',
+                  initialValue: _newSchoolYearStructure,
                   decoration: const InputDecoration(
                     labelText: 'STRUCTURE',
                     border: OutlineInputBorder(),
@@ -2688,8 +2700,20 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                       value: 'Quarterly (4 quarters)',
                       child: Text('Quarterly (4 quarters)'),
                     ),
+                    DropdownMenuItem(
+                      value: 'Semester (2 semesters)',
+                      child: Text('Semester (2 semesters)'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'Trimester (3 terms)',
+                      child: Text('Trimester (3 terms)'),
+                    ),
                   ],
-                  onChanged: (_) {},
+                  onChanged: (value) {
+                    if (value != null) {
+                      setState(() => _newSchoolYearStructure = value);
+                    }
+                  },
                 ),
               ),
             ],
@@ -2698,10 +2722,10 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
           Row(
             children: [
               Expanded(
-                child: _buildSetupField('START DATE', _schoolYearStartCtrl),
+                child: _buildDateField('START DATE', _schoolYearStartCtrl),
               ),
               const SizedBox(width: 16),
-              Expanded(child: _buildSetupField('END DATE', _schoolYearEndCtrl)),
+              Expanded(child: _buildDateField('END DATE', _schoolYearEndCtrl)),
             ],
           ),
           const SizedBox(height: 18),
@@ -2722,8 +2746,10 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                   ),
                   onPressed: () {
                     setState(() {
-                      MockDatabase.instance.academicYear = _schoolYearCtrl.text
+                      _selectedSchoolYear = _schoolYearCtrl.text
+                          .trim()
                           .replaceFirst('SY ', '');
+                      MockDatabase.instance.academicYear = _selectedSchoolYear;
                       _showNewSchoolYearForm = false;
                     });
                   },
@@ -2743,6 +2769,155 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
       decoration: InputDecoration(
         labelText: label,
         border: const OutlineInputBorder(),
+      ),
+    );
+  }
+
+  Widget _buildDateField(String label, TextEditingController controller) {
+    return TextField(
+      controller: controller,
+      readOnly: true,
+      decoration: InputDecoration(
+        labelText: label,
+        border: const OutlineInputBorder(),
+        suffixIcon: const Icon(Icons.calendar_today_outlined, size: 18),
+      ),
+      onTap: () async {
+        final picked = await showDatePicker(
+          context: context,
+          firstDate: DateTime(2020),
+          lastDate: DateTime(2040),
+          initialDate: DateTime.now(),
+        );
+        if (picked != null) {
+          controller.text =
+              '${picked.day.toString().padLeft(2, '0')}/${picked.month.toString().padLeft(2, '0')}/${picked.year}';
+        }
+      },
+    );
+  }
+
+  Widget _buildAddClassForm() {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFDCE6F5)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Add New Class',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: AppColors.primary,
+            ),
+          ),
+          const SizedBox(height: 18),
+          Row(
+            children: [
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  initialValue: _newClassSchoolYear,
+                  decoration: const InputDecoration(
+                    labelText: 'SCHOOL YEAR',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: const [
+                    DropdownMenuItem(
+                      value: 'SY 2026-2027',
+                      child: Text('SY 2026-2027'),
+                    ),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) {
+                      setState(() => _newClassSchoolYear = value);
+                    }
+                  },
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  initialValue: _newClassGradeLevel,
+                  decoration: const InputDecoration(
+                    labelText: 'GRADE LEVEL',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'Kinder', child: Text('Kinder')),
+                    DropdownMenuItem(value: 'Grade 1', child: Text('Grade 1')),
+                    DropdownMenuItem(value: 'Grade 2', child: Text('Grade 2')),
+                    DropdownMenuItem(value: 'Grade 3', child: Text('Grade 3')),
+                    DropdownMenuItem(value: 'Grade 4', child: Text('Grade 4')),
+                    DropdownMenuItem(value: 'Grade 5', child: Text('Grade 5')),
+                    DropdownMenuItem(value: 'Grade 6', child: Text('Grade 6')),
+                    DropdownMenuItem(value: 'Grade 7', child: Text('Grade 7')),
+                    DropdownMenuItem(value: 'Grade 8', child: Text('Grade 8')),
+                    DropdownMenuItem(value: 'Grade 9', child: Text('Grade 9')),
+                    DropdownMenuItem(
+                      value: 'Grade 10',
+                      child: Text('Grade 10'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'Grade 11',
+                      child: Text('Grade 11'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'Grade 12',
+                      child: Text('Grade 12'),
+                    ),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) {
+                      setState(() => _newClassGradeLevel = value);
+                    }
+                  },
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: _buildSetupField('SECTION NAME', _classSectionCtrl),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          Align(
+            alignment: Alignment.centerRight,
+            child: Wrap(
+              spacing: 10,
+              children: [
+                OutlinedButton(
+                  onPressed: () => setState(() => _showAddClassForm = false),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                  ),
+                  onPressed: () {
+                    final section = _classSectionCtrl.text.trim();
+                    if (section.isEmpty ||
+                        _classroomSections.contains(section) ||
+                        _classroomSections.length >= 10) {
+                      return;
+                    }
+                    setState(() {
+                      _classroomSections.add(section);
+                      _classSectionCtrl.clear();
+                      _showAddClassForm = false;
+                    });
+                  },
+                  child: const Text('Add Class'),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
