@@ -338,10 +338,9 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
             ),
           ),
-          SliverFillRemaining(
-            hasScrollBody: false,
-            child: Align(
-              alignment: Alignment.bottomCenter,
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: 24),
               child: _buildLoginCard(true),
             ),
           ),
@@ -540,8 +539,11 @@ class _LoginScreenState extends State<LoginScreen> {
             const SizedBox(height: 16),
 
             // Bottom Recovery links
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            Wrap(
+              alignment: WrapAlignment.center,
+              runAlignment: WrapAlignment.center,
+              spacing: 8,
+              runSpacing: 4,
               children: [
                 OutlinedButton(
                   style: OutlinedButton.styleFrom(
