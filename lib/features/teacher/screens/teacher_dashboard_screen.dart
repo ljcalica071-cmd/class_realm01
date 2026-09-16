@@ -28,9 +28,19 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   bool _showArchivedStudents = false;
   bool _showNewSchoolYearForm = false;
   bool _showAddClassForm = false;
-  final List<String> _classroomSections = [];
-  final Map<String, String> _classroomGrades = {};
-  final Map<String, String> _classroomSubjects = {};
+  final List<String> _classroomSections = ['Section A', 'Section B'];
+  final Map<String, String> _classroomGrades = {
+    'Section A': 'Grade 11',
+    'Section B': 'Grade 12',
+  };
+  final Map<String, String> _classroomSubjects = {
+    'Section A': 'General Mathematics',
+    'Section B': 'General Mathematics',
+  };
+  final Map<String, int> _classroomStudentCounts = {
+    'Section A': 3,
+    'Section B': 2,
+  };
   String _selectedSchoolYear = '2026-2027';
   String _newSchoolYearStructure = 'Quarterly (4 quarters)';
   String _newClassSchoolYear = 'SY 2026-2027';
@@ -1276,6 +1286,20 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     return age;
   }
 
+  String _formatStudentDisplayName(UserModel student) {
+    final lastName = student.lastName?.trim().isNotEmpty == true
+        ? student.lastName!.trim()
+        : student.fullName.split(' ').last;
+    final firstName = student.firstName?.trim().isNotEmpty == true
+        ? student.firstName!.trim()
+        : (student.fullName.split(' ').isNotEmpty
+              ? student.fullName.split(' ').first
+              : student.fullName);
+    final middleName = student.middleName?.trim() ?? '';
+    final middleInitial = middleName.isEmpty ? '' : ' ${middleName[0]}.';
+    return '$lastName, $firstName$middleInitial';
+  }
+
   Widget _buildStudentManagementTab(
     List<UserModel> activeStudents,
     List<UserModel> archivedStudents,
@@ -1289,10 +1313,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
               (s.studentId?.toLowerCase().contains(
                     _studentSearchQuery.toLowerCase(),
                   ) ??
-                  false) ||
-              (s.email.toLowerCase().contains(
-                _studentSearchQuery.toLowerCase(),
-              ));
+                  false);
           final matchesClass =
               _selectedClassFilter == '— Select a class —' ||
               (s.departmentOrSection == _selectedClassFilter);
@@ -1676,17 +1697,25 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                                   // EMAIL
                                   _buildHeaderCell(
                                     width: colEmailWidth,
-                                    child: _buildClickableHeaderTitle(
+                                    child: const Text(
                                       'EMAIL',
-                                      'email',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 13,
+                                      ),
                                     ),
                                   ),
                                   // CONTACT NO.
                                   _buildHeaderCell(
                                     width: colContactWidth,
-                                    child: _buildClickableHeaderTitle(
+                                    child: const Text(
                                       'CONTACT NO.',
-                                      'contact',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 13,
+                                      ),
                                     ),
                                   ),
                                   // STATUS
@@ -2977,6 +3006,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
       _classroomSections.add(section);
       _classroomGrades[section] = _newClassGradeLevel;
       _classroomSubjects[section] = subject;
+      _classroomStudentCounts[section] = 0;
       _classSectionCtrl.clear();
       _classSubjectCtrl.clear();
       _showAddClassForm = false;
@@ -3016,34 +3046,36 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
 
   Widget _buildClassroomCard(String section) {
     final teacherName =
-        MockDatabase.instance.currentUser?.fullName ?? 'Teacher';
+        MockDatabase.instance.currentUser?.fullName ?? 'Lj Calica';
     final gradeLevel = _classroomGrades[section] ?? 'Grade 11';
     final subject = _classroomSubjects[section] ?? 'General Mathematics';
-    final studentCount = MockDatabase.instance.users
-        .where(
-          (u) =>
-              u.role == UserRole.student &&
-              u.departmentOrSection == section &&
-              !u.isArchived,
-        )
-        .length;
+    final studentCount = _classroomStudentCounts[section] ??
+        MockDatabase.instance.users
+            .where(
+              (u) =>
+                  u.role == UserRole.student &&
+                  u.departmentOrSection == section &&
+                  !u.isArchived,
+            )
+            .length;
     return Container(
-      width: 295,
+      width: 310,
+      constraints: const BoxConstraints(minHeight: 360),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: const Color(0xFFFFFFFF),
         borderRadius: BorderRadius.circular(16),
         border: const Border(
-          top: BorderSide(color: AppColors.primary, width: 3),
+          top: BorderSide(color: Color(0xFF1A56DB), width: 3),
           right: BorderSide(color: Color(0xFFE2E8F0)),
           bottom: BorderSide(color: Color(0xFFE2E8F0)),
           left: BorderSide(color: Color(0xFFE2E8F0)),
         ),
         boxShadow: const [
           BoxShadow(
-            color: Color(0x0D1E3A8A),
-            blurRadius: 8,
-            offset: Offset(0, 3),
+            color: Color(0x0A000000),
+            blurRadius: 10,
+            offset: Offset(0, 4),
           ),
         ],
       ),
@@ -3058,14 +3090,14 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                   vertical: 5,
                 ),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFE8F0FF),
+                  color: const Color(0xFFE0EDFF),
                   borderRadius: BorderRadius.circular(14),
                 ),
                 child: Text(
                   gradeLevel,
                   style: const TextStyle(
                     fontSize: 12,
-                    color: AppColors.primary,
+                    color: Color(0xFF1A56DB),
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -3076,9 +3108,43 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                   section,
                   style: const TextStyle(
                     fontSize: 17,
-                    color: AppColors.primary,
+                    color: Color(0xFF0F172A),
                     fontWeight: FontWeight.bold,
                   ),
+                ),
+              ),
+              SizedBox(
+                width: 28,
+                height: 28,
+                child: IconButton(
+                  icon: const Icon(
+                    Icons.edit_outlined,
+                    size: 18,
+                    color: Color(0xFF94A3B8),
+                  ),
+                  padding: EdgeInsets.zero,
+                  onPressed: () {},
+                ),
+              ),
+              const SizedBox(width: 6),
+              SizedBox(
+                width: 28,
+                height: 28,
+                child: IconButton(
+                  icon: const Icon(
+                    Icons.delete_outline,
+                    size: 18,
+                    color: Color(0xFF94A3B8),
+                  ),
+                  padding: EdgeInsets.zero,
+                  onPressed: () {
+                    setState(() {
+                      _classroomSections.remove(section);
+                      _classroomGrades.remove(section);
+                      _classroomSubjects.remove(section);
+                      _classroomStudentCounts.remove(section);
+                    });
+                  },
                 ),
               ),
             ],
@@ -3086,39 +3152,68 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
           const SizedBox(height: 14),
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.all(10),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
             decoration: BoxDecoration(
-              color: const Color(0xFFF5F7FC),
+              color: const Color(0xFFEAF2FF),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Text(
-              '$studentCount students',
-              style: const TextStyle(color: AppColors.textSecondary),
+              '$section Classroom',
+              style: const TextStyle(
+                color: Color(0xFF163B8F),
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+              ),
             ),
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 12),
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.all(10),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             decoration: BoxDecoration(
-              color: const Color(0xFFEFFFF4),
-              border: Border.all(color: const Color(0xFFB6E8C9)),
+              color: const Color(0xFFF1F5F9),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.people_outline, size: 18, color: Color(0xFF1A56DB)),
+                const SizedBox(width: 8),
+                Text(
+                  '$studentCount students',
+                  style: const TextStyle(
+                    color: Color(0xFF334155),
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          // Non-editable Teacher adviser info card
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: const Color(0xFFEFFDF5),
+              border: Border.all(color: const Color(0xFFB9F6CA)),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Row(
               children: [
                 const Icon(
                   Icons.person_outline,
-                  size: 17,
-                  color: Color(0xFF167342),
+                  size: 18,
+                  color: Color(0xFF166534),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     teacherName,
                     style: const TextStyle(
-                      color: Color(0xFF167342),
+                      color: Color(0xFF166534),
                       fontWeight: FontWeight.bold,
+                      fontSize: 13,
                     ),
                   ),
                 ),
@@ -3126,54 +3221,55 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
             ),
           ),
           const SizedBox(height: 16),
-          Text(
+          const Text(
             'SUBJECT',
             style: TextStyle(
               fontSize: 11,
-              color: AppColors.textSecondary,
+              color: Color(0xFF64748B),
               fontWeight: FontWeight.bold,
               letterSpacing: 0.8,
             ),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 8),
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.all(10),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             decoration: BoxDecoration(
-              color: const Color(0xFFEFF5FF),
-              border: Border.all(color: const Color(0xFFC9DDFB)),
+              color: const Color(0xFFEFF6FF),
+              border: Border.all(color: const Color(0xFFDBEAFE)),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Text(
               subject,
               style: const TextStyle(
-                color: AppColors.primary,
-                fontWeight: FontWeight.bold,
+                color: Color(0xFF1E293B),
+                fontWeight: FontWeight.w600,
+                fontSize: 13,
               ),
             ),
           ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: () => setState(() => _selectedIndex = 12),
-                  icon: const Icon(Icons.people_outline, size: 16),
-                  label: const Text('Add Students'),
+          const SizedBox(height: 18),
+          // Add Students button occupying the footer (No Dashboard button)
+          SizedBox(
+            width: double.infinity,
+            height: 42,
+            child: ElevatedButton.icon(
+              onPressed: () => setState(() => _selectedIndex = 12),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFE8F8F0),
+                foregroundColor: const Color(0xFF166534),
+                elevation: 0,
+                side: const BorderSide(color: Color(0xFFB9F6CA)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
                 ),
               ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: ElevatedButton(
-                  onPressed: () {},
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.white,
-                  ),
-                  child: const Text('Dashboard'),
-                ),
+              icon: const Icon(Icons.person_add_alt, size: 18, color: Color(0xFF166534)),
+              label: const Text(
+                'Add Students',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
               ),
-            ],
+            ),
           ),
         ],
       ),
@@ -3563,31 +3659,41 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
           ),
           const SizedBox(height: 16),
 
-          // Total counts summary banner row
-          Row(
-            children: [
-              _buildAttendanceCountBadge(
-                label: '$presentCount PRESENT',
-                color: const Color(0xFF107B41),
-              ),
-              const SizedBox(width: 8),
-              _buildAttendanceCountBadge(
-                label: '$absentCount ABSENT',
-                color: const Color(0xFFEF4444),
-              ),
-              const SizedBox(width: 8),
-              _buildAttendanceCountBadge(
-                label: '$lateCount LATE',
-                color: const Color(0xFFD97706),
-              ),
-              const SizedBox(width: 8),
-              _buildAttendanceCountBadge(
-                label: '$excusedCount EXCUSED',
-                color: const Color(0xFF64748B),
-              ),
-            ],
+          // Compact attendance summary
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: const Color(0xFFE2E8F0)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildAttendanceStatusChip(
+                  label: 'Present',
+                  count: presentCount,
+                  color: const Color(0xFF107B41),
+                ),
+                _buildAttendanceStatusChip(
+                  label: 'Absent',
+                  count: absentCount,
+                  color: const Color(0xFFEF4444),
+                ),
+                _buildAttendanceStatusChip(
+                  label: 'Late',
+                  count: lateCount,
+                  color: const Color(0xFFD97706),
+                ),
+                _buildAttendanceStatusChip(
+                  label: 'Excused',
+                  count: excusedCount,
+                  color: const Color(0xFF64748B),
+                ),
+              ],
+            ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
 
           // Student Attendance Status Row Checklist List
           ListView.builder(
@@ -3648,10 +3754,10 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                     // Student name
                     Expanded(
                       child: Text(
-                        student.fullName,
+                        _formatStudentDisplayName(student),
                         style: const TextStyle(
                           fontWeight: FontWeight.bold,
-                          fontSize: 14,
+                          fontSize: 12,
                           color: Color(0xFF1E293B),
                         ),
                       ),
@@ -3802,26 +3908,31 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     );
   }
 
-  Widget _buildAttendanceCountBadge({
+  Widget _buildAttendanceStatusChip({
     required String label,
+    required int count,
     required Color color,
   }) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 10),
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: color,
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Text(
-          label,
-          style: const TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
-            fontSize: 13,
+    return Padding(
+      padding: const EdgeInsets.only(right: 14),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 7,
+            height: 7,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
           ),
-        ),
+          const SizedBox(width: 5),
+          Text(
+            '$label $count',
+            style: const TextStyle(
+              color: Color(0xFF475569),
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -3833,8 +3944,8 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     required VoidCallback onPressed,
   }) {
     return SizedBox(
-      width: 40,
-      height: 40,
+      width: 30,
+      height: 30,
       child: ElevatedButton(
         style: ElevatedButton.styleFrom(
           padding: EdgeInsets.zero,
@@ -3849,7 +3960,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
           ),
         ),
         onPressed: onPressed,
-        child: Icon(icon, size: 18),
+        child: Icon(icon, size: 15),
       ),
     );
   }
