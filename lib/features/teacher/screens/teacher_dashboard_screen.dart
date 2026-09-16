@@ -29,6 +29,8 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   bool _showNewSchoolYearForm = false;
   bool _showAddClassForm = false;
   final List<String> _classroomSections = [];
+  final Map<String, String> _classroomGrades = {};
+  final Map<String, String> _classroomSubjects = {};
   String _selectedSchoolYear = '2026-2027';
   String _newSchoolYearStructure = 'Quarterly (4 quarters)';
   String _newClassSchoolYear = 'SY 2026-2027';
@@ -47,6 +49,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   final _schoolYearStartCtrl = TextEditingController(text: '01/06/2026');
   final _schoolYearEndCtrl = TextEditingController(text: '30/04/2027');
   final _classSectionCtrl = TextEditingController();
+  final _classSubjectCtrl = TextEditingController();
 
   @override
   void dispose() {
@@ -61,6 +64,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     _schoolYearStartCtrl.dispose();
     _schoolYearEndCtrl.dispose();
     _classSectionCtrl.dispose();
+    _classSubjectCtrl.dispose();
     super.dispose();
   }
 
@@ -2650,15 +2654,34 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
             color: AppColors.textSecondary,
           ),
           const SizedBox(width: 10),
-          Text(
-            'SY $_selectedSchoolYear (Current)',
-            style: const TextStyle(
-              fontWeight: FontWeight.bold,
-              color: AppColors.primary,
+          Expanded(
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                value: _selectedSchoolYear,
+                isExpanded: true,
+                icon: const Icon(
+                  Icons.keyboard_arrow_down,
+                  color: AppColors.primary,
+                ),
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                  color: AppColors.primary,
+                ),
+                items: const [
+                  DropdownMenuItem(
+                    value: '2026-2027',
+                    child: Text('SY 2026-2027 (Current)'),
+                  ),
+                ],
+                onChanged: (value) {
+                  if (value != null) {
+                    setState(() => _selectedSchoolYear = value);
+                  }
+                },
+              ),
             ),
           ),
-          const Spacer(),
-          const Icon(Icons.keyboard_arrow_down, color: AppColors.primary),
         ],
       ),
     );
@@ -2709,6 +2732,11 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                       child: Text('Trimester (3 terms)'),
                     ),
                   ],
+                  menuMaxHeight: 280,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: AppColors.textPrimary,
+                  ),
                   onChanged: (value) {
                     if (value != null) {
                       setState(() => _newSchoolYearStructure = value);
@@ -2832,6 +2860,11 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                       child: Text('SY 2026-2027'),
                     ),
                   ],
+                  menuMaxHeight: 280,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: AppColors.textPrimary,
+                  ),
                   onChanged: (value) {
                     if (value != null) {
                       setState(() => _newClassSchoolYear = value);
@@ -2882,6 +2915,8 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
               Expanded(
                 child: _buildSetupField('SECTION NAME', _classSectionCtrl),
               ),
+              const SizedBox(width: 16),
+              Expanded(child: _buildSetupField('SUBJECT', _classSubjectCtrl)),
             ],
           ),
           const SizedBox(height: 18),
@@ -2901,14 +2936,19 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                   ),
                   onPressed: () {
                     final section = _classSectionCtrl.text.trim();
+                    final subject = _classSubjectCtrl.text.trim();
                     if (section.isEmpty ||
+                        subject.isEmpty ||
                         _classroomSections.contains(section) ||
                         _classroomSections.length >= 10) {
                       return;
                     }
                     setState(() {
                       _classroomSections.add(section);
+                      _classroomGrades[section] = _newClassGradeLevel;
+                      _classroomSubjects[section] = subject;
                       _classSectionCtrl.clear();
+                      _classSubjectCtrl.clear();
                       _showAddClassForm = false;
                     });
                   },
@@ -2954,6 +2994,10 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   }
 
   Widget _buildClassroomCard(String section) {
+    final teacherName =
+        MockDatabase.instance.currentUser?.fullName ?? 'Teacher';
+    final gradeLevel = _classroomGrades[section] ?? 'Grade 11';
+    final subject = _classroomSubjects[section] ?? 'General Mathematics';
     final studentCount = MockDatabase.instance.users
         .where(
           (u) =>
@@ -2997,7 +3041,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                   borderRadius: BorderRadius.circular(14),
                 ),
                 child: Text(
-                  MockDatabase.instance.gradeLevel,
+                  gradeLevel,
                   style: const TextStyle(
                     fontSize: 12,
                     color: AppColors.primary,
@@ -3032,12 +3076,6 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
             ),
           ),
           const SizedBox(height: 14),
-          OutlinedButton.icon(
-            onPressed: () {},
-            icon: const Icon(Icons.people_outline, size: 16),
-            label: const Text('Get a class code'),
-          ),
-          const SizedBox(height: 14),
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(10),
@@ -3046,10 +3084,49 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
               border: Border.all(color: const Color(0xFFB6E8C9)),
               borderRadius: BorderRadius.circular(10),
             ),
-            child: const Text(
-              'General Mathematics',
-              style: TextStyle(
-                color: Color(0xFF167342),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.person_outline,
+                  size: 17,
+                  color: Color(0xFF167342),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    teacherName,
+                    style: const TextStyle(
+                      color: Color(0xFF167342),
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'SUBJECT',
+            style: TextStyle(
+              fontSize: 11,
+              color: AppColors.textSecondary,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 0.8,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: const Color(0xFFEFF5FF),
+              border: Border.all(color: const Color(0xFFC9DDFB)),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Text(
+              subject,
+              style: const TextStyle(
+                color: AppColors.primary,
                 fontWeight: FontWeight.bold,
               ),
             ),
@@ -3080,41 +3157,6 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         ],
       ),
     );
-  }
-
-  void _showAddClassDialog() {
-    final controller = TextEditingController();
-    showDialog<void>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Add Class'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: const InputDecoration(
-            labelText: 'Section name',
-            hintText: 'e.g. STEM 11-A',
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              final section = controller.text.trim();
-              if (section.isEmpty ||
-                  MockDatabase.instance.sections.contains(section))
-                return;
-              setState(() => _classroomSections.add(section));
-              Navigator.pop(dialogContext);
-            },
-            child: const Text('Add Class'),
-          ),
-        ],
-      ),
-    ).then((_) => controller.dispose());
   }
 
   // --- 5. Attendance Tracker ---
