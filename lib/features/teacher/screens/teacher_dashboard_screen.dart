@@ -3281,18 +3281,30 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   String _selectedAttendanceView =
       'Take Attendance'; // 'Take Attendance' or 'View History'
   DateTime _attendanceSelectedDate = DateTime(2026, 9, 13);
+  String _attendanceSearchQuery = '';
 
   // Keep state for selected attendance status of students
   // Key is student ID, value is active selected status
   final Map<String, AttendanceStatus> _tempAttendanceStates = {};
 
   Widget _buildAttendanceTab(List<AttendanceRecord> attendance) {
-    final activeStudents = MockDatabase.instance.users
+    final allActiveStudents = MockDatabase.instance.users
         .where((u) => u.role == UserRole.student && !u.isArchived)
         .toList();
+    allActiveStudents.sort((a, b) {
+      final aLast = (a.lastName ?? a.fullName.split(' ').last).toLowerCase();
+      final bLast = (b.lastName ?? b.fullName.split(' ').last).toLowerCase();
+      return aLast.compareTo(bLast);
+    });
+    final activeStudents = allActiveStudents.where((student) {
+      final query = _attendanceSearchQuery.trim().toLowerCase();
+      return query.isEmpty ||
+          _formatStudentDisplayName(student).toLowerCase().contains(query) ||
+          (student.studentId?.toLowerCase().contains(query) ?? false);
+    }).toList();
 
     // Initialize temporary states for mock students if empty
-    for (var s in activeStudents) {
+    for (var s in allActiveStudents) {
       if (!_tempAttendanceStates.containsKey(s.id)) {
         // Set some default states matching: 1 present, 1 absent, 1 late, others present
         if (s.fullName.contains('alu')) {
@@ -3467,6 +3479,43 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
             ],
           ),
           const SizedBox(height: 20),
+
+          // Compact search for the attendance roster
+          SizedBox(
+            width: 320,
+            child: TextField(
+              onChanged: (value) =>
+                  setState(() => _attendanceSearchQuery = value),
+              style: const TextStyle(fontSize: 13),
+              decoration: InputDecoration(
+                hintText: 'Search student name or LRN',
+                hintStyle: const TextStyle(
+                  fontSize: 12,
+                  color: Color(0xFF94A3B8),
+                ),
+                prefixIcon: const Icon(Icons.search, size: 18),
+                suffixIcon: _attendanceSearchQuery.isEmpty
+                    ? null
+                    : IconButton(
+                        icon: const Icon(Icons.clear, size: 16),
+                        onPressed: () =>
+                            setState(() => _attendanceSearchQuery = ''),
+                      ),
+                isDense: true,
+                filled: true,
+                fillColor: Colors.white,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
 
           // Attendance Config Row Header Card
           Container(
@@ -3659,39 +3708,29 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
           ),
           const SizedBox(height: 16),
 
-          // Compact attendance summary
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: const Color(0xFFE2E8F0)),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _buildAttendanceStatusChip(
-                  label: 'Present',
-                  count: presentCount,
-                  color: const Color(0xFF107B41),
-                ),
-                _buildAttendanceStatusChip(
-                  label: 'Absent',
-                  count: absentCount,
-                  color: const Color(0xFFEF4444),
-                ),
-                _buildAttendanceStatusChip(
-                  label: 'Late',
-                  count: lateCount,
-                  color: const Color(0xFFD97706),
-                ),
-                _buildAttendanceStatusChip(
-                  label: 'Excused',
-                  count: excusedCount,
-                  color: const Color(0xFF64748B),
-                ),
-              ],
-            ),
+          // Attendance status summary boxes
+          Row(
+            children: [
+              _buildAttendanceCountBadge(
+                label: '$presentCount PRESENT',
+                color: const Color(0xFF107B41),
+              ),
+              const SizedBox(width: 8),
+              _buildAttendanceCountBadge(
+                label: '$absentCount ABSENT',
+                color: const Color(0xFFEF4444),
+              ),
+              const SizedBox(width: 8),
+              _buildAttendanceCountBadge(
+                label: '$lateCount LATE',
+                color: const Color(0xFFD97706),
+              ),
+              const SizedBox(width: 8),
+              _buildAttendanceCountBadge(
+                label: '$excusedCount EXCUSED',
+                color: const Color(0xFF64748B),
+              ),
+            ],
           ),
           const SizedBox(height: 12),
 
@@ -3705,12 +3744,12 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
               final currentStatus =
                   _tempAttendanceStates[student.id] ?? AttendanceStatus.present;
               final initials =
-                  student.fullName.substring(0, 1).toLowerCase() +
+                  student.fullName.substring(0, 1).toUpperCase() +
                   (student.fullName.contains(' ')
                       ? student.fullName
                             .split(' ')[1]
                             .substring(0, 1)
-                            .toLowerCase()
+                            .toUpperCase()
                       : '');
 
               return Container(
@@ -3757,7 +3796,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                         _formatStudentDisplayName(student),
                         style: const TextStyle(
                           fontWeight: FontWeight.bold,
-                          fontSize: 12,
+                          fontSize: 14,
                           color: Color(0xFF1E293B),
                         ),
                       ),
@@ -3933,6 +3972,30 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildAttendanceCountBadge({
+    required String label,
+    required Color color,
+  }) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: color,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Text(
+          label,
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+              fontSize: 14,
+          ),
+        ),
       ),
     );
   }
@@ -4866,49 +4929,153 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   }
 
   Widget _buildGradebookSection(String title, List<Map<String, String>> items) {
+    final isWrittenWork = title == 'Written Work';
+    final isPerformance = title == 'Performance Tasks';
+    final headerColor = isWrittenWork
+        ? const Color(0xFF1D4ED8)
+        : isPerformance
+        ? const Color(0xFF059669)
+        : const Color(0xFF6D28D9);
+    final headerIcon = isWrittenWork
+        ? Icons.description_outlined
+        : isPerformance
+        ? Icons.task_alt
+        : Icons.edit_note_outlined;
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.border),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x0A1E3A8A),
+            blurRadius: 8,
+            offset: Offset(0, 3),
+          ),
+        ],
       ),
       child: Column(
         children: [
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 13),
-            decoration: const BoxDecoration(
-              color: Color(0xFFF8FAFC),
+            decoration: BoxDecoration(
+              color: headerColor,
               borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
             ),
             child: Row(
               children: [
+                Icon(headerIcon, color: Colors.white, size: 18),
+                const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     title,
                     style: const TextStyle(
                       fontWeight: FontWeight.bold,
-                      color: AppColors.textPrimary,
+                      color: Colors.white,
+                      fontSize: 15,
                     ),
                   ),
                 ),
-                Text(
-                  '${items.length} grade item${items.length == 1 ? '' : 's'}',
-                  style: const TextStyle(
-                    color: AppColors.textSecondary,
-                    fontSize: 12,
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white24,
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Text(
+                    '${items.length} ITEM${items.length == 1 ? '' : 'S'}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
               ],
             ),
           ),
           ...items.map(
-            (item) => ListTile(
-              dense: true,
-              title: Text(item['name']!),
-              subtitle: Text('${item['points']}  •  ${item['date']}'),
-              trailing: OutlinedButton(
-                onPressed: () {},
-                child: const Text('View Scores'),
+            (item) => Container(
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+              decoration: const BoxDecoration(
+                border: Border(
+                  bottom: BorderSide(color: Color(0xFFE2E8F0)),
+                ),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.drag_indicator,
+                    color: Color(0xFFCBD5E1),
+                    size: 18,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      item['name']!,
+                      style: const TextStyle(
+                        color: Color(0xFF1E293B),
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: () {},
+                    icon: const Icon(Icons.edit_outlined, size: 15),
+                    label: const Text('View Scores'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFF1D4ED8),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      textStyle: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      side: const BorderSide(color: Color(0xFFBFD3F5)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 5,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFFF7ED),
+                      border: Border.all(color: const Color(0xFFFED7AA)),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Text(
+                      item['points']!,
+                      style: const TextStyle(
+                        color: Color(0xFFC2410C),
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  SizedBox(
+                    width: 90,
+                    child: Text(
+                      item['date']!,
+                      textAlign: TextAlign.right,
+                      style: const TextStyle(
+                        color: Color(0xFF94A3B8),
+                        fontSize: 11,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
