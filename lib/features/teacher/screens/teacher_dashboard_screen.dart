@@ -27,6 +27,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   bool _isSidebarExpanded = true;
   bool _showArchivedStudents = false;
   bool _showNewSchoolYearForm = false;
+  final List<String> _classroomSections = [];
   String _studentSearchQuery = '';
 
   // Controllers for CRUD forms
@@ -2399,7 +2400,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
 
   // --- 11. Academic Setup ---
   Widget _buildClassroomSetupTab() {
-    final sections = MockDatabase.instance.sections;
+    final sections = _classroomSections;
     final teacherName =
         MockDatabase.instance.currentUser?.fullName ?? 'Lj Calica';
 
@@ -2931,7 +2932,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
               if (section.isEmpty ||
                   MockDatabase.instance.sections.contains(section))
                 return;
-              setState(() => MockDatabase.instance.sections.add(section));
+              setState(() => _classroomSections.add(section));
               Navigator.pop(dialogContext);
             },
             child: const Text('Add Class'),
