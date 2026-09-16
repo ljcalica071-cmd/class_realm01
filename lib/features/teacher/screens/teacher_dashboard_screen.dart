@@ -23,7 +23,7 @@ class TeacherDashboardScreen extends StatefulWidget {
 }
 
 class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
-  int _selectedIndex = 11;
+  int _selectedIndex = 17;
   bool _isSidebarExpanded = true;
   bool _showArchivedStudents = false;
   bool _showNewSchoolYearForm = false;
@@ -126,34 +126,76 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                 ),
                 const Divider(color: Colors.white12, height: 1),
 
-                // Classroom navigation
+                // Grouped Navigation Items
                 Expanded(
                   child: ListView(
                     padding: const EdgeInsets.symmetric(vertical: 8),
                     children: [
-                      if (_isSidebarExpanded)
-                        _buildSectionHeader('MY CLASSROOM'),
+                      _buildNavItem(0, 'Dashboard', Icons.dashboard_outlined),
+                      const SizedBox(height: 8),
+                      _buildSectionHeader('TEACHING'),
                       _buildNavItem(
-                        11,
-                        'Classroom Setup',
-                        Icons.apartment_outlined,
+                        1,
+                        'Activities & Requirements',
+                        Icons.assignment_outlined,
                       ),
-                      _buildNavItem(9, 'Gradebook', Icons.menu_book_outlined),
+                      _buildNavItem(2, 'Quizzes & Exams', Icons.quiz_outlined),
+                      _buildNavItem(
+                        3,
+                        'Lesson Planning',
+                        Icons.psychology_outlined,
+                      ),
+                      _buildNavItem(
+                        4,
+                        'Learning Materials',
+                        Icons.menu_book_outlined,
+                      ),
+                      const SizedBox(height: 8),
+                      _buildSectionHeader('MONITORING & EVALUATION'),
+                      _buildNavItem(5, 'Attendance', Icons.fact_check_outlined),
+                      _buildNavItem(6, 'Exam Checker', Icons.checklist_rtl),
+                      _buildNavItem(7, 'Item Analysis', Icons.insights),
+                      _buildNavItem(
+                        8,
+                        'Grading System',
+                        Icons.pie_chart_outline,
+                      ),
+                      _buildNavItem(9, 'Grades', Icons.grade_outlined),
+                      _buildNavItem(
+                        10,
+                        'Academic Reports',
+                        Icons.assessment_outlined,
+                      ),
+                      const SizedBox(height: 8),
+                      _buildSectionHeader('INSIGHTS & MANAGEMENT'),
+                      _buildNavItem(11, 'Academic Setup', Icons.tune_outlined),
                       _buildNavItem(
                         12,
                         'Manage Students',
-                        Icons.people_outline,
+                        Icons.groups_outlined,
                       ),
                       _buildNavItem(
-                        1,
-                        'Assignments',
-                        Icons.assignment_outlined,
+                        13,
+                        'Performance Analytics',
+                        Icons.trending_up,
                       ),
-                      _buildNavItem(4, 'Projects', Icons.folder_copy_outlined),
                       _buildNavItem(
-                        10,
-                        'Grade Collection',
-                        Icons.link_outlined,
+                        14,
+                        'Schedule',
+                        Icons.calendar_today_outlined,
+                      ),
+                      _buildNavItem(
+                        15,
+                        'Notifications',
+                        Icons.notifications_outlined,
+                      ),
+                      _buildNavItem(16, 'Profile', Icons.person_outline),
+                      const SizedBox(height: 8),
+                      _buildSectionHeader('MY CLASSROOM'),
+                      _buildNavItem(
+                        17,
+                        'Classroom Setup',
+                        Icons.apartment_outlined,
                       ),
                     ],
                   ),
@@ -315,7 +357,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
 
   String _getTeacherTitle(int index) {
     switch (index) {
-      case 11:
+      case 17:
         return 'Classroom Setup';
       case 0:
         return 'Teacher Dashboard Overview';
@@ -334,11 +376,13 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
       case 7:
         return 'Item Analysis Dashboard';
       case 8:
-        return 'Gradebook';
+        return 'Teacher-Defined Grading Weights';
       case 9:
         return 'Student Grades & Component Breakdown';
       case 10:
-        return 'Grade Collection';
+        return 'Academic & DepEd Quarterly Reports';
+      case 11:
+        return 'Academic Setup & Configurations';
       case 12:
         return 'Student Management & Roster';
       case 13:
@@ -440,6 +484,8 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         return _buildReportsTab(); // Reports Feature Tab
       case 11:
         return _buildAcademicSetupTab();
+      case 17:
+        return _buildClassroomSetupTab();
       case 12:
         return _buildStudentManagementTab(activeStudents, archivedStudents);
       case 13:
@@ -2352,7 +2398,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   }
 
   // --- 11. Academic Setup ---
-  Widget _buildAcademicSetupTab() {
+  Widget _buildClassroomSetupTab() {
     final sections = MockDatabase.instance.sections;
     final teacherName =
         MockDatabase.instance.currentUser?.fullName ?? 'Lj Calica';
@@ -2497,6 +2543,80 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                   children: sections.map(_buildClassroomCard).toList(),
                 ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildAcademicSetupTab() {
+    return Padding(
+      padding: const EdgeInsets.all(24),
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 650),
+        padding: const EdgeInsets.all(32),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Teacher Academic Setup',
+              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              'Define your active academic year, grade level, sections, and subjects.',
+              style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
+            ),
+            const SizedBox(height: 24),
+            TextField(
+              controller: TextEditingController(
+                text: MockDatabase.instance.academicYear,
+              ),
+              decoration: const InputDecoration(labelText: 'Academic Year'),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: TextEditingController(
+                text: MockDatabase.instance.gradeLevel,
+              ),
+              decoration: const InputDecoration(labelText: 'Grade Level'),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: TextEditingController(
+                text: MockDatabase.instance.currentSubject,
+              ),
+              decoration: const InputDecoration(labelText: 'Primary Subject'),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Managed Sections:',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              children: MockDatabase.instance.sections
+                  .map((sec) => Chip(label: Text(sec)))
+                  .toList(),
+            ),
+            const SizedBox(height: 24),
+            AppPrimaryButton(
+              label: 'Save Academic Configuration',
+              onPressed: () {
+                AppModals.showSuccessDialog(
+                  context: context,
+                  title: 'Configuration Saved',
+                  message: 'Your academic setup has been updated successfully.',
+                );
+              },
+            ),
+          ],
+        ),
       ),
     );
   }
