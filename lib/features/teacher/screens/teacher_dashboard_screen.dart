@@ -165,13 +165,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                       const SizedBox(height: 8),
                       _buildSectionHeader('MONITORING & EVALUATION'),
                       _buildNavItem(5, 'Attendance', Icons.fact_check_outlined),
-                      _buildNavItem(6, 'Exam Checker', Icons.checklist_rtl),
                       _buildNavItem(7, 'Item Analysis', Icons.insights),
-                      _buildNavItem(
-                        8,
-                        'Grading System',
-                        Icons.pie_chart_outline,
-                      ),
                       _buildNavItem(9, 'Grades', Icons.grade_outlined),
                       _buildNavItem(
                         10,
@@ -180,7 +174,6 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                       ),
                       const SizedBox(height: 8),
                       _buildSectionHeader('INSIGHTS & MANAGEMENT'),
-                      _buildNavItem(11, 'Academic Setup', Icons.tune_outlined),
                       _buildNavItem(
                         12,
                         'Manage Students',
@@ -2934,24 +2927,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                     backgroundColor: AppColors.primary,
                     foregroundColor: Colors.white,
                   ),
-                  onPressed: () {
-                    final section = _classSectionCtrl.text.trim();
-                    final subject = _classSubjectCtrl.text.trim();
-                    if (section.isEmpty ||
-                        subject.isEmpty ||
-                        _classroomSections.contains(section) ||
-                        _classroomSections.length >= 10) {
-                      return;
-                    }
-                    setState(() {
-                      _classroomSections.add(section);
-                      _classroomGrades[section] = _newClassGradeLevel;
-                      _classroomSubjects[section] = subject;
-                      _classSectionCtrl.clear();
-                      _classSubjectCtrl.clear();
-                      _showAddClassForm = false;
-                    });
-                  },
+                  onPressed: _addClassFromForm,
                   child: const Text('Add Class'),
                 ),
               ],
@@ -2960,6 +2936,42 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         ],
       ),
     );
+  }
+
+  void _addClassFromForm() {
+    FocusScope.of(context).unfocus();
+    final section = _classSectionCtrl.text.trim();
+    final subject = _classSubjectCtrl.text.trim();
+
+    if (section.isEmpty || subject.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter both a section name and subject.'),
+        ),
+      );
+      return;
+    }
+    if (_classroomSections.contains(section)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('That section has already been added.')),
+      );
+      return;
+    }
+    if (_classroomSections.length >= 10) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('You can add up to 10 classes.')),
+      );
+      return;
+    }
+
+    setState(() {
+      _classroomSections.add(section);
+      _classroomGrades[section] = _newClassGradeLevel;
+      _classroomSubjects[section] = subject;
+      _classSectionCtrl.clear();
+      _classSubjectCtrl.clear();
+      _showAddClassForm = false;
+    });
   }
 
   Widget _buildEmptyClassroomState() {
