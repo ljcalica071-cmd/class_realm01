@@ -165,6 +165,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                       const SizedBox(height: 8),
                       _buildSectionHeader('MONITORING & EVALUATION'),
                       _buildNavItem(5, 'Attendance', Icons.fact_check_outlined),
+                      _buildNavItem(6, 'Exam Checker', Icons.checklist_rtl),
                       _buildNavItem(7, 'Item Analysis', Icons.insights),
                       _buildNavItem(9, 'Grades', Icons.grade_outlined),
                       _buildNavItem(
@@ -174,11 +175,6 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                       ),
                       const SizedBox(height: 8),
                       _buildSectionHeader('INSIGHTS & MANAGEMENT'),
-                      _buildNavItem(
-                        12,
-                        'Manage Students',
-                        Icons.groups_outlined,
-                      ),
                       _buildNavItem(
                         13,
                         'Performance Analytics',
@@ -201,6 +197,12 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                         17,
                         'Classroom Setup',
                         Icons.apartment_outlined,
+                      ),
+                      _buildNavItem(18, 'Gradebook', Icons.menu_book_outlined),
+                      _buildNavItem(
+                        12,
+                        'Manage Students',
+                        Icons.groups_outlined,
                       ),
                     ],
                   ),
@@ -364,6 +366,8 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     switch (index) {
       case 17:
         return 'Classroom Setup';
+      case 18:
+        return 'Gradebook';
       case 0:
         return 'Teacher Dashboard Overview';
       case 1:
@@ -491,6 +495,8 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         return _buildAcademicSetupTab();
       case 17:
         return _buildClassroomSetupTab();
+      case 18:
+        return _buildGradebookTab();
       case 12:
         return _buildStudentManagementTab(activeStudents, archivedStudents);
       case 13:
@@ -2939,28 +2945,24 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   }
 
   void _addClassFromForm() {
-    FocusScope.of(context).unfocus();
     final section = _classSectionCtrl.text.trim();
     final subject = _classSubjectCtrl.text.trim();
 
-    if (section.isEmpty || subject.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please enter both a section name and subject.'),
-        ),
-      );
-      return;
+    String? errorMessage;
+    if (section.isEmpty) {
+      errorMessage = 'Please enter a section name.';
+    } else if (subject.isEmpty) {
+      errorMessage = 'Please enter the subject handled for this class.';
+    } else if (_classroomSections.contains(section)) {
+      errorMessage = 'That section has already been added.';
+    } else if (_classroomSections.length >= 10) {
+      errorMessage = 'You can add up to 10 classes.';
     }
-    if (_classroomSections.contains(section)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('That section has already been added.')),
-      );
-      return;
-    }
-    if (_classroomSections.length >= 10) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('You can add up to 10 classes.')),
-      );
+
+    if (errorMessage != null) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(errorMessage)));
       return;
     }
 
@@ -3956,6 +3958,268 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  // --- 18. Gradebook (static frontend preview) ---
+  Widget _buildGradebookTab() {
+    final gradeItems = <String, List<Map<String, String>>>{
+      'Written Work': [
+        {'name': 'Quiz 1', 'points': '20 pts', 'date': 'Sep 05, 2026'},
+        {'name': 'Quiz 2', 'points': '20 pts', 'date': 'Sep 12, 2026'},
+      ],
+      'Performance Tasks': [
+        {
+          'name': 'Performance Task 1',
+          'points': '50 pts',
+          'date': 'Sep 19, 2026',
+        },
+      ],
+      'Summative Tests': [
+        {
+          'name': 'Summative Test 1',
+          'points': '50 pts',
+          'date': 'Sep 26, 2026',
+        },
+        {
+          'name': 'Summative Test 2',
+          'points': '50 pts',
+          'date': 'Oct 03, 2026',
+        },
+      ],
+      'Term Examination': [
+        {
+          'name': 'Quarter 1 Examination',
+          'points': '100 pts',
+          'date': 'Oct 10, 2026',
+        },
+      ],
+    };
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'Gradebook',
+                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                ),
+              ),
+              OutlinedButton.icon(
+                onPressed: () {},
+                icon: const Icon(Icons.file_upload_outlined, size: 18),
+                label: const Text('Import Grades'),
+              ),
+              const SizedBox(width: 8),
+              ElevatedButton.icon(
+                onPressed: () {},
+                icon: const Icon(Icons.file_download_outlined, size: 18),
+                label: const Text('Export Grades'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          _buildGradebookFilterBar(),
+          const SizedBox(height: 18),
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Expanded(
+                      child: Text(
+                        'Quarter 1 Gradebook',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    TextButton.icon(
+                      onPressed: () {},
+                      icon: const Icon(Icons.add, size: 18),
+                      label: const Text('Create Grade Item'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    _buildGradebookTabChip('Scores & Grade Items', true),
+                    const SizedBox(width: 8),
+                    _buildGradebookTabChip('Typing Final Grades', false),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    _buildGradeWeightChip('Written Work', '20%'),
+                    _buildGradeWeightChip('Performance Tasks', '50%'),
+                    _buildGradeWeightChip('Term Examination', '30%'),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          ...gradeItems.entries.map(
+            (entry) => Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: _buildGradebookSection(entry.key, entry.value),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGradebookFilterBar() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Wrap(
+        spacing: 16,
+        runSpacing: 12,
+        children: [
+          _buildGradebookDropdown(
+            label: 'Grading Period',
+            value: 'Quarter 1',
+            options: const ['Quarter 1', 'Quarter 2', 'Quarter 3', 'Quarter 4'],
+          ),
+          _buildGradebookDropdown(
+            label: 'Class',
+            value: 'Grade 11 - Section A - General Mathematics',
+            options: const [
+              'Grade 11 - Section A - General Mathematics',
+              'Grade 11 - Section B - General Mathematics',
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGradebookDropdown({
+    required String label,
+    required String value,
+    required List<String> options,
+  }) {
+    return SizedBox(
+      width: 300,
+      child: DropdownButtonFormField<String>(
+        initialValue: value,
+        decoration: InputDecoration(
+          labelText: label,
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+        ),
+        items: options
+            .map(
+              (option) => DropdownMenuItem(value: option, child: Text(option)),
+            )
+            .toList(),
+        onChanged: (_) {},
+      ),
+    );
+  }
+
+  Widget _buildGradebookTabChip(String label, bool selected) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+      decoration: BoxDecoration(
+        color: selected ? AppColors.primary : const Color(0xFFF1F5F9),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: selected ? Colors.white : AppColors.textSecondary,
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGradeWeightChip(String label, String weight) {
+    return Chip(
+      label: Text('$label  $weight'),
+      backgroundColor: const Color(0xFFE0F2FE),
+      labelStyle: const TextStyle(
+        color: Color(0xFF0369A1),
+        fontSize: 12,
+        fontWeight: FontWeight.w600,
+      ),
+      side: BorderSide.none,
+    );
+  }
+
+  Widget _buildGradebookSection(String title, List<Map<String, String>> items) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 13),
+            decoration: const BoxDecoration(
+              color: Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    title,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                ),
+                Text(
+                  '${items.length} grade item${items.length == 1 ? '' : 's'}',
+                  style: const TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          ...items.map(
+            (item) => ListTile(
+              dense: true,
+              title: Text(item['name']!),
+              subtitle: Text('${item['points']}  •  ${item['date']}'),
+              trailing: OutlinedButton(
+                onPressed: () {},
+                child: const Text('View Scores'),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
