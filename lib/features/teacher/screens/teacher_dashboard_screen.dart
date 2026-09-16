@@ -2448,7 +2448,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   Widget _buildClassroomSetupTab() {
     final sections = _classroomSections;
     final teacherName =
-        MockDatabase.instance.currentUser?.fullName ?? 'Lj Calica';
+        MockDatabase.instance.currentUser?.fullName ?? 'Prof. Maria Santos';
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
@@ -2592,8 +2592,204 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
               : Wrap(
                   spacing: 18,
                   runSpacing: 18,
-                  children: sections.map(_buildClassroomCard).toList(),
+                  children: sections
+                      .map(
+                        (section) => _buildClassroomPrototypeCard(
+                          section: section,
+                          teacherName: teacherName,
+                          gradeLevel: _classroomGrades[section] ?? 'Grade 11',
+                          subject:
+                              _classroomSubjects[section] ??
+                              'General Mathematics',
+                          studentCount: _classroomStudentCounts[section] ?? 0,
+                        ),
+                      )
+                      .toList(),
                 ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildClassroomPrototypeCard({
+    required String section,
+    required String teacherName,
+    required String gradeLevel,
+    required String subject,
+    required int studentCount,
+  }) {
+    return Container(
+      width: 300,
+      padding: const EdgeInsets.fromLTRB(18, 0, 18, 18),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x120F172A),
+            blurRadius: 10,
+            offset: Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            height: 4,
+            margin: const EdgeInsets.only(bottom: 14),
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Color(0xFF1D4ED8), Color(0xFFF59E0B)],
+              ),
+              borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+            ),
+          ),
+          Row(
+            children: [
+              _buildClassroomBadge(gradeLevel),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  section,
+                  style: const TextStyle(
+                    color: Color(0xFF0F172A),
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              IconButton(
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                icon: const Icon(
+                  Icons.delete_outline,
+                  size: 18,
+                  color: Color(0xFF94A3B8),
+                ),
+                onPressed: () {
+                  setState(() {
+                    _classroomSections.remove(section);
+                    _classroomGrades.remove(section);
+                    _classroomSubjects.remove(section);
+                    _classroomStudentCounts.remove(section);
+                  });
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          _buildClassroomInfoTile(
+            icon: Icons.people_outline,
+            text: '$studentCount students',
+            color: const Color(0xFFF3F6FC),
+            iconColor: const Color(0xFF1A56DB),
+          ),
+          const SizedBox(height: 12),
+          _buildClassroomInfoTile(
+            icon: Icons.person_outline,
+            text: teacherName,
+            color: const Color(0xFFEFFDF5),
+            iconColor: const Color(0xFF166534),
+            borderColor: const Color(0xFFB9F6CA),
+            textColor: const Color(0xFF166534),
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'SUBJECT',
+            style: TextStyle(
+              color: Color(0xFF64748B),
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 0.8,
+            ),
+          ),
+          const SizedBox(height: 8),
+          _buildClassroomInfoTile(
+            text: subject,
+            color: const Color(0xFFEFF6FF),
+            borderColor: const Color(0xFFDBEAFE),
+            textColor: const Color(0xFF1E293B),
+          ),
+          const SizedBox(height: 18),
+          SizedBox(
+            width: double.infinity,
+            height: 40,
+            child: ElevatedButton.icon(
+              onPressed: () => setState(() => _selectedIndex = 12),
+              icon: const Icon(Icons.person_add_alt, size: 17),
+              label: const Text(
+                'Add Students',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFE8F8F0),
+                foregroundColor: const Color(0xFF166534),
+                elevation: 0,
+                side: const BorderSide(color: Color(0xFFB9F6CA)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildClassroomBadge(String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: const Color(0xFFE0EDFF),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(
+          color: Color(0xFF1A56DB),
+          fontSize: 12,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildClassroomInfoTile({
+    required String text,
+    required Color color,
+    IconData? icon,
+    Color? iconColor,
+    Color? borderColor,
+    Color? textColor,
+  }) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(10),
+        border: borderColor == null ? null : Border.all(color: borderColor),
+      ),
+      child: Row(
+        children: [
+          if (icon != null) ...[
+            Icon(icon, size: 16, color: iconColor),
+            const SizedBox(width: 8),
+          ],
+          Expanded(
+            child: Text(
+              text,
+              style: TextStyle(
+                color: textColor ?? const Color(0xFF334155),
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -3046,42 +3242,38 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
 
   Widget _buildClassroomCard(String section) {
     final teacherName =
-        MockDatabase.instance.currentUser?.fullName ?? 'Lj Calica';
+        MockDatabase.instance.currentUser?.fullName ?? 'Prof. Maria Santos';
     final gradeLevel = _classroomGrades[section] ?? 'Grade 11';
     final subject = _classroomSubjects[section] ?? 'General Mathematics';
-    final studentCount = _classroomStudentCounts[section] ??
-        MockDatabase.instance.users
-            .where(
-              (u) =>
-                  u.role == UserRole.student &&
-                  u.departmentOrSection == section &&
-                  !u.isArchived,
-            )
-            .length;
+    final studentCount = _classroomStudentCounts[section] ?? 0;
     return Container(
-      width: 310,
-      constraints: const BoxConstraints(minHeight: 360),
-      padding: const EdgeInsets.all(20),
+      width: 300,
+      padding: const EdgeInsets.fromLTRB(18, 14, 18, 18),
       decoration: BoxDecoration(
-        color: const Color(0xFFFFFFFF),
+        color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: const Border(
-          top: BorderSide(color: Color(0xFF1A56DB), width: 3),
-          right: BorderSide(color: Color(0xFFE2E8F0)),
-          bottom: BorderSide(color: Color(0xFFE2E8F0)),
-          left: BorderSide(color: Color(0xFFE2E8F0)),
-        ),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
         boxShadow: const [
           BoxShadow(
-            color: Color(0x0A000000),
+            color: Color(0x120F172A),
             blurRadius: 10,
-            offset: Offset(0, 4),
+            offset: Offset(0, 3),
           ),
         ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Container(
+            height: 3,
+            margin: const EdgeInsets.only(bottom: 14),
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Color(0xFF1D4ED8), Color(0xFFF59E0B)],
+              ),
+              borderRadius: BorderRadius.vertical(top: Radius.circular(8)),
+            ),
+          ),
           Row(
             children: [
               Container(
@@ -3107,44 +3299,10 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                 child: Text(
                   section,
                   style: const TextStyle(
-                    fontSize: 17,
+                    fontSize: 16,
                     color: Color(0xFF0F172A),
                     fontWeight: FontWeight.bold,
                   ),
-                ),
-              ),
-              SizedBox(
-                width: 28,
-                height: 28,
-                child: IconButton(
-                  icon: const Icon(
-                    Icons.edit_outlined,
-                    size: 18,
-                    color: Color(0xFF94A3B8),
-                  ),
-                  padding: EdgeInsets.zero,
-                  onPressed: () {},
-                ),
-              ),
-              const SizedBox(width: 6),
-              SizedBox(
-                width: 28,
-                height: 28,
-                child: IconButton(
-                  icon: const Icon(
-                    Icons.delete_outline,
-                    size: 18,
-                    color: Color(0xFF94A3B8),
-                  ),
-                  padding: EdgeInsets.zero,
-                  onPressed: () {
-                    setState(() {
-                      _classroomSections.remove(section);
-                      _classroomGrades.remove(section);
-                      _classroomSubjects.remove(section);
-                      _classroomStudentCounts.remove(section);
-                    });
-                  },
                 ),
               ),
             ],
@@ -3152,31 +3310,14 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
           const SizedBox(height: 14),
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
             decoration: BoxDecoration(
-              color: const Color(0xFFEAF2FF),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Text(
-              '$section Classroom',
-              style: const TextStyle(
-                color: Color(0xFF163B8F),
-                fontSize: 14,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF1F5F9),
+              color: const Color(0xFFF3F6FC),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Row(
               children: [
-                const Icon(Icons.people_outline, size: 18, color: Color(0xFF1A56DB)),
+                const Icon(Icons.people_outline, size: 16, color: Color(0xFF1A56DB)),
                 const SizedBox(width: 8),
                 Text(
                   '$studentCount students',
@@ -3190,10 +3331,9 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
             ),
           ),
           const SizedBox(height: 12),
-          // Non-editable Teacher adviser info card
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
             decoration: BoxDecoration(
               color: const Color(0xFFEFFDF5),
               border: Border.all(color: const Color(0xFFB9F6CA)),
@@ -3203,7 +3343,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
               children: [
                 const Icon(
                   Icons.person_outline,
-                  size: 18,
+                  size: 16,
                   color: Color(0xFF166534),
                 ),
                 const SizedBox(width: 8),
@@ -3213,7 +3353,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                     style: const TextStyle(
                       color: Color(0xFF166534),
                       fontWeight: FontWeight.bold,
-                      fontSize: 13,
+                      fontSize: 12,
                     ),
                   ),
                 ),
@@ -3224,7 +3364,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
           const Text(
             'SUBJECT',
             style: TextStyle(
-              fontSize: 11,
+              fontSize: 10,
               color: Color(0xFF64748B),
               fontWeight: FontWeight.bold,
               letterSpacing: 0.8,
@@ -3233,7 +3373,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
           const SizedBox(height: 8),
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
             decoration: BoxDecoration(
               color: const Color(0xFFEFF6FF),
               border: Border.all(color: const Color(0xFFDBEAFE)),
@@ -3249,10 +3389,9 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
             ),
           ),
           const SizedBox(height: 18),
-          // Add Students button occupying the footer (No Dashboard button)
           SizedBox(
             width: double.infinity,
-            height: 42,
+            height: 40,
             child: ElevatedButton.icon(
               onPressed: () => setState(() => _selectedIndex = 12),
               style: ElevatedButton.styleFrom(
@@ -3267,7 +3406,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
               icon: const Icon(Icons.person_add_alt, size: 18, color: Color(0xFF166534)),
               label: const Text(
                 'Add Students',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
               ),
             ),
           ),
@@ -4754,79 +4893,222 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     };
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(18),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            children: [
-              const Expanded(
-                child: Text(
-                  'Gradebook',
-                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-                ),
-              ),
-              OutlinedButton.icon(
-                onPressed: () {},
-                icon: const Icon(Icons.file_upload_outlined, size: 18),
-                label: const Text('Import Grades'),
-              ),
-              const SizedBox(width: 8),
-              ElevatedButton.icon(
-                onPressed: () {},
-                icon: const Icon(Icons.file_download_outlined, size: 18),
-                label: const Text('Export Grades'),
-              ),
-            ],
-          ),
-          const SizedBox(height: 18),
-          _buildGradebookFilterBar(),
-          const SizedBox(height: 18),
           Container(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              border: Border.all(color: const Color(0xFFDCE6F5)),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x0A1E3A8A),
+                  blurRadius: 8,
+                  offset: Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Wrap(
+              alignment: WrapAlignment.start,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 12,
+              runSpacing: 10,
+              children: [
+                const Text(
+                  'Grading Period:',
+                  style: TextStyle(
+                    color: Color(0xFF334155),
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                _buildGradebookDropdown(
+                  label: '',
+                  value: 'Quarter 1',
+                  options: const [
+                    'Quarter 1',
+                    'Quarter 2',
+                    'Quarter 3',
+                    'Quarter 4',
+                  ],
+                  width: 120,
+                ),
+                const Text(
+                  'Class:',
+                  style: TextStyle(
+                    color: Color(0xFF334155),
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                _buildGradebookDropdown(
+                  label: '',
+                  value: 'Grade 11 - Section A - General Mathematics',
+                  options: const [
+                    'Grade 11 - Section A - General Mathematics',
+                    'Grade 11 - Section B - General Mathematics',
+                  ],
+                  width: 270,
+                ),
+                OutlinedButton.icon(
+                  onPressed: () {},
+                  icon: const Icon(Icons.file_upload_outlined, size: 16),
+                  label: const Text('Import Grades'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.primary,
+                    side: const BorderSide(color: AppColors.primary),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 12,
+                    ),
+                  ),
+                ),
+                ElevatedButton.icon(
+                  onPressed: () {},
+                  icon: const Icon(Icons.file_download_outlined, size: 16),
+                  label: const Text('Export Grades'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF059669),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 12,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          Container(
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: AppColors.border),
+              border: Border.all(color: const Color(0xFFDCE6F5)),
             ),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Row(
-                  children: [
-                    const Expanded(
-                      child: Text(
-                        'Quarter 1 Gradebook',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 10,
+                  ),
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [Color(0xFF2563EB), Color(0xFF1E3A8A)],
+                    ),
+                    borderRadius: BorderRadius.vertical(
+                      top: Radius.circular(14),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.workspace_premium_outlined,
+                        color: Colors.white,
+                        size: 18,
+                      ),
+                      const SizedBox(width: 8),
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Gradebook - Quarter 1',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            Text(
+                              'Grade 11 - Section A - General Mathematics',
+                              style: TextStyle(
+                                color: Colors.white70,
+                                fontSize: 10,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                    ),
-                    TextButton.icon(
-                      onPressed: () {},
-                      icon: const Icon(Icons.add, size: 18),
-                      label: const Text('Create Grade Item'),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    _buildGradebookTabChip('Scores & Grade Items', true),
-                    const SizedBox(width: 8),
-                    _buildGradebookTabChip('Typing Final Grades', false),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    _buildGradeWeightChip('Written Work', '20%'),
-                    _buildGradeWeightChip('Performance Tasks', '50%'),
-                    _buildGradeWeightChip('Term Examination', '30%'),
-                  ],
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          const Text(
+                            'Record grades by:',
+                            style: TextStyle(
+                              color: Color(0xFF475569),
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          _buildGradebookTabChip(
+                            'Scores & Grade Items',
+                            true,
+                          ),
+                          _buildGradebookTabChip(
+                            'Typing Final Grades',
+                            false,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Build the grade from written work, performance tasks and exams. SmartClass computes it and your E-Class Record shows the full DepEd computation.',
+                        style: TextStyle(
+                          color: Color(0xFF94A3B8),
+                          fontSize: 10,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          _buildGradebookInfoChip(
+                            'DepEd Order No. 015, s. 2026',
+                            const Color(0xFFE8F8F0),
+                            const Color(0xFF166534),
+                          ),
+                          _buildGradeWeightChip('WW', '20%'),
+                          _buildGradeWeightChip('PT', '50%'),
+                          _buildGradeWeightChip('EX', '30%'),
+                          _buildGradebookInfoChip(
+                            'EX = ST-1:30 + ST-2:30 + TE:40',
+                            const Color(0xFFF3F0FF),
+                            const Color(0xFF6D28D9),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: ElevatedButton.icon(
+                          onPressed: () {},
+                          icon: const Icon(Icons.add, size: 16),
+                          label: const Text('Create Grade Item'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFF4B400),
+                            foregroundColor: const Color(0xFF573B00),
+                            elevation: 0,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -4877,22 +5159,53 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     required String label,
     required String value,
     required List<String> options,
+    double width = 300,
   }) {
     return SizedBox(
-      width: 300,
+      width: width,
       child: DropdownButtonFormField<String>(
         initialValue: value,
         decoration: InputDecoration(
-          labelText: label,
+          labelText: label.isEmpty ? null : label,
           border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 10),
+          isDense: true,
         ),
         items: options
             .map(
-              (option) => DropdownMenuItem(value: option, child: Text(option)),
+              (option) => DropdownMenuItem(
+                value: option,
+                child: Text(
+                  option,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 12),
+                ),
+              ),
             )
             .toList(),
         onChanged: (_) {},
+      ),
+    );
+  }
+
+  Widget _buildGradebookInfoChip(
+    String label,
+    Color backgroundColor,
+    Color textColor,
+  ) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: backgroundColor,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: textColor,
+          fontSize: 10,
+          fontWeight: FontWeight.bold,
+        ),
       ),
     );
   }
