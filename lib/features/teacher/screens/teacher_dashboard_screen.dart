@@ -12,6 +12,7 @@ import '../../../widgets/common/app_modals.dart';
 import '../widgets/add_student_dialog.dart';
 import '../widgets/edit_student_dialog.dart';
 import 'create_assessment_flow.dart';
+import 'create_requirement_flow.dart';
 import 'edit_assessment_flow.dart';
 import 'activity_submissions_screen.dart';
 
@@ -158,10 +159,9 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                       _buildSectionHeader('TEACHING'),
                       _buildNavItem(
                         1,
-                        'Activities & Requirements',
+                        'Assessments & Classwork',
                         Icons.assignment_outlined,
                       ),
-                      _buildNavItem(2, 'Quizzes & Exams', Icons.quiz_outlined),
                       _buildNavItem(
                         3,
                         'Lesson Planning',
@@ -381,9 +381,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
       case 0:
         return 'Teacher Dashboard Overview';
       case 1:
-        return 'Activities & Requirements Management';
-      case 2:
-        return 'Quizzes & Periodical Examinations';
+        return 'Assessments & Classwork';
       case 3:
         return 'AI Lesson Planning Generator';
       case 4:
@@ -482,9 +480,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
           schedules,
         );
       case 1:
-        return _buildActivitiesTab(activities);
-      case 2:
-        return _buildQuizzesTab(quizzesAndExams);
+        return _buildUnifiedAssessmentsTab(activities, quizzesAndExams);
       case 3:
         return _buildLessonPlanningTab(lessonPlans);
       case 4:
@@ -708,11 +704,11 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                       ),
                       const Divider(height: 1),
                       _buildQuickActionTile(
-                        title: 'Create Activity / Task',
+                        title: 'Create Classwork',
                         icon: Icons.add_circle_outline,
                         onTap: () {
                           setState(() => _selectedIndex = 1);
-                          _showCreateActivityModal(context);
+                          _showUnifiedCreateChooser(context);
                         },
                       ),
                       const Divider(height: 1),
@@ -723,10 +719,10 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                       ),
                       const Divider(height: 1),
                       _buildQuickActionTile(
-                        title: 'Create Quiz / Examination',
+                        title: 'Create Quiz / Exam',
                         icon: Icons.description_outlined,
                         onTap: () {
-                          setState(() => _selectedIndex = 2);
+                          setState(() => _selectedIndex = 1);
                           CreateAssessmentFlowDialog.show(
                             context,
                             onAssessmentCreated: () => setState(() {}),
@@ -4167,7 +4163,277 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     );
   }
 
-  // --- 1. Activities ---
+  Widget _buildUnifiedAssessmentsTab(
+    List<ActivityModel> activities,
+    List<QuizOrExamModel> assessments,
+  ) {
+    final writtenWork = <Widget>[
+      ...activities
+          .where((item) => !item.isRequirement)
+          .map((item) => _buildUnifiedActivityCard(item, 'WW')),
+      ...assessments
+          .where((item) => !item.isExam)
+          .map((item) => _buildUnifiedAssessmentCard(item, 'WW')),
+    ];
+    final performanceTasks = activities
+        .where((item) => item.isRequirement)
+        .map((item) => _buildUnifiedActivityCard(item, 'PT'))
+        .toList();
+    final examinations = assessments
+        .where((item) => item.isExam)
+        .map((item) => _buildUnifiedAssessmentCard(item, 'EX'))
+        .toList();
+
+    return DefaultTabController(
+      length: 3,
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Assessments & Classwork',
+                      style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                    ),
+                    SizedBox(height: 4),
+                    Text(
+                      'Create activities, performance tasks, quizzes, and exams in one place.',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+                AppPrimaryButton(
+                  label: 'Create',
+                  icon: Icons.add_circle_outline,
+                  onPressed: () => _showUnifiedCreateChooser(context),
+                  height: 42,
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: const TabBar(
+                labelColor: AppColors.primary,
+                unselectedLabelColor: AppColors.textSecondary,
+                indicatorColor: AppColors.primary,
+                indicatorWeight: 3,
+                tabs: [
+                  Tab(text: 'Written Work (WW)'),
+                  Tab(text: 'Performance Tasks (PT)'),
+                  Tab(text: 'Examinations (EX)'),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            Expanded(
+              child: TabBarView(
+                children: [
+                  _buildUnifiedItemList(writtenWork, 'No written work yet.'),
+                  _buildUnifiedItemList(
+                    performanceTasks,
+                    'No performance tasks yet.',
+                  ),
+                  _buildUnifiedItemList(examinations, 'No examinations yet.'),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildUnifiedItemList(List<Widget> items, String emptyMessage) {
+    if (items.isEmpty) {
+      return Center(
+        child: Text(
+          emptyMessage,
+          style: const TextStyle(color: AppColors.textSecondary),
+        ),
+      );
+    }
+    return ListView.separated(
+      itemCount: items.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 12),
+      itemBuilder: (_, index) => items[index],
+    );
+  }
+
+  Widget _buildUnifiedActivityCard(ActivityModel item, String category) {
+    return _buildUnifiedCard(
+      title: item.title,
+      description: item.description,
+      category: category,
+      details:
+          'Activity • ${item.section} • ${item.maxScore.toInt()} pts • Due ${_monthName(item.deadline.month)} ${item.deadline.day}',
+      icon: Icons.assignment_outlined,
+      onPressed: () => ActivitySubmissionsScreen.show(context, item),
+      actionLabel: 'View Submissions',
+    );
+  }
+
+  Widget _buildUnifiedAssessmentCard(
+    QuizOrExamModel item,
+    String category,
+  ) {
+    return _buildUnifiedCard(
+      title: item.title,
+      description: item.description,
+      category: category,
+      details:
+          '${item.isExam ? 'Exam' : 'Quiz'} • ${item.section} • ${item.totalPoints.toInt()} pts • ${item.durationMinutes} mins',
+      icon: item.isExam ? Icons.description_outlined : Icons.quiz_outlined,
+      onPressed: () {},
+      actionLabel: 'View Scores',
+    );
+  }
+
+  Widget _buildUnifiedCard({
+    required String title,
+    required String description,
+    required String category,
+    required String details,
+    required IconData icon,
+    required VoidCallback onPressed,
+    required String actionLabel,
+  }) {
+    final isPerformanceTask = category == 'PT';
+    final isExam = category == 'EX';
+    final badgeBackground = isPerformanceTask
+        ? const Color(0xFFE8F8F0)
+        : isExam
+            ? const Color(0xFFF3F0FF)
+            : const Color(0xFFE8F0FF);
+    final badgeText = isPerformanceTask
+        ? const Color(0xFF166534)
+        : isExam
+            ? const Color(0xFF6D28D9)
+            : const Color(0xFF1D4ED8);
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: AppColors.primary, size: 34),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        title,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    _buildAssessmentCategoryBadge(
+                      category,
+                      badgeBackground,
+                      badgeText,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  description,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 13,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  details,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.primary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          AppSecondaryButton(
+            label: actionLabel,
+            icon: Icons.open_in_new,
+            height: 38,
+            onPressed: onPressed,
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showUnifiedCreateChooser(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Create Classwork'),
+        content: const Text(
+          'Choose the grading category and use the appropriate creation flow.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(dialogContext);
+              _showCreateActivityModal(context);
+            },
+            child: const Text('WW Activity / Assignment'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(dialogContext);
+              CreateRequirementFlowDialog.show(
+                context,
+                onRequirementCreated: () => setState(() {}),
+              );
+            },
+            child: const Text('PT Performance Task'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(dialogContext);
+              CreateAssessmentFlowDialog.show(
+                context,
+                onAssessmentCreated: () => setState(() {}),
+              );
+            },
+            child: const Text('WW Quiz / EX Exam'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // --- Legacy activity renderer ---
   Widget _buildActivitiesTab(List<ActivityModel> activities) {
     return Padding(
       padding: const EdgeInsets.all(24),
@@ -4181,7 +4447,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Activities & Requirements Management',
+                    'Legacy classwork view',
                     style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
                   ),
                   SizedBox(height: 4),
@@ -4236,6 +4502,15 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                               ),
                             ),
                             const SizedBox(height: 4),
+                            _buildAssessmentCategoryBadge(
+                              act.isRequirement ? 'PT' : 'WW',
+                              act.isRequirement
+                                  ? const Color(0xFFE8F8F0)
+                                  : const Color(0xFFE8F0FF),
+                              act.isRequirement
+                                  ? const Color(0xFF166534)
+                                  : const Color(0xFF1D4ED8),
+                            ),
                             Text(
                               act.description,
                               style: const TextStyle(
@@ -4351,7 +4626,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     );
   }
 
-  // --- 2. Quizzes & Exams ---
+  // --- Legacy assessment renderer ---
   Widget _buildQuizzesTab(List<QuizOrExamModel> quizzes) {
     final quizList = quizzes.where((q) => !q.isExam).toList();
     final examList = quizzes.where((q) => q.isExam).toList();
@@ -4370,7 +4645,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Assessments (Quizzes & Periodical Examinations)',
+                      'Legacy assessment view',
                       style: TextStyle(
                         fontSize: 22,
                         fontWeight: FontWeight.bold,
@@ -4378,7 +4653,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                     ),
                     SizedBox(height: 4),
                     Text(
-                      'Create and manage Formative Unit Quizzes and Summative Periodical Examinations separately.',
+                      'This legacy renderer is retained for compatibility.',
                       style: TextStyle(
                         fontSize: 13,
                         color: AppColors.textSecondary,
@@ -4510,6 +4785,16 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                           ),
                         ),
                         const SizedBox(width: 8),
+                        _buildAssessmentCategoryBadge(
+                          q.isExam ? 'EX' : 'WW',
+                          q.isExam
+                              ? const Color(0xFFF3F0FF)
+                              : const Color(0xFFE8F0FF),
+                          q.isExam
+                              ? const Color(0xFF6D28D9)
+                              : const Color(0xFF1D4ED8),
+                        ),
+                        const SizedBox(width: 8),
                         StatusBadge(
                           text: q.isExam ? 'PERIODICAL EXAM' : 'UNIT QUIZ',
                           backgroundColor: q.isExam
@@ -4567,6 +4852,28 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
           ),
         );
       },
+    );
+  }
+
+  Widget _buildAssessmentCategoryBadge(
+    String label,
+    Color backgroundColor,
+    Color textColor,
+  ) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: backgroundColor,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: textColor,
+          fontSize: 10,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
     );
   }
 
@@ -4857,26 +5164,51 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     );
   }
 
-  // --- 18. Gradebook (static frontend preview) ---
+  // --- 18. Gradebook ---
   Widget _buildGradebookTab() {
     final gradeItems = <String, List<Map<String, String>>>{
-      'Written Work': [
-        {'name': 'quiz1', 'points': '30 pts', 'date': 'Sep 16, 2026'},
-        {'name': 'quiz2', 'points': '20 pts', 'date': 'Sep 16, 2026'},
-      ],
-      'Performance Task': [
-        {'name': 'pt1', 'points': '100 pts', 'date': 'Sep 16, 2026'},
-      ],
-      'Summative Test 1 (ST1)': [
-        {'name': 'st1', 'points': '50 pts', 'date': 'Sep 16, 2026'},
-      ],
-      'Summative Test 2 (ST2)': [
-        {'name': 'st2', 'points': '50 pts', 'date': 'Sep 16, 2026'},
-      ],
-      'Term Examination (TE)': [
-        {'name': 'exam', 'points': '100 pts', 'date': 'Sep 16, 2026'},
-      ],
+      'Written Work': [],
+      'Performance Task': [],
+      'Summative Test 1 (ST1)': [],
+      'Summative Test 2 (ST2)': [],
+      'Term Examination (TE)': [],
     };
+    final database = MockDatabase.instance;
+
+    String formatDate(DateTime date) =>
+        '${_monthName(date.month)} ${date.day}, ${date.year}';
+
+    for (final activity in database.activities) {
+      gradeItems[activity.isRequirement ? 'Performance Task' : 'Written Work']!
+          .add({
+        'name': activity.title,
+        'points': '${activity.maxScore.toStringAsFixed(0)} pts',
+        'date': formatDate(activity.dateAssigned),
+      });
+    }
+
+    for (final assessment in database.quizzesAndExams) {
+      if (!assessment.isExam) {
+        gradeItems['Written Work']!.add({
+          'name': assessment.title,
+          'points': '${assessment.totalPoints.toStringAsFixed(0)} pts',
+          'date': formatDate(assessment.scheduleDate),
+        });
+        continue;
+      }
+
+      final title = assessment.title.toLowerCase();
+      final section = title.contains('second') || title.contains('st2')
+          ? 'Summative Test 2 (ST2)'
+          : title.contains('term') || title.contains('final')
+              ? 'Term Examination (TE)'
+              : 'Summative Test 1 (ST1)';
+      gradeItems[section]!.add({
+        'name': assessment.title,
+        'points': '${assessment.totalPoints.toStringAsFixed(0)} pts',
+        'date': formatDate(assessment.scheduleDate),
+      });
+    }
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(18),
@@ -4944,21 +5276,6 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                     ],
                   ),
                 ),
-                const SizedBox(width: 12),
-                OutlinedButton.icon(
-                  onPressed: () {},
-                  icon: const Icon(Icons.file_upload_outlined, size: 16),
-                  label: const Text('Import Grades'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.primary,
-                    side: const BorderSide(color: AppColors.primary),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 12,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
                 ElevatedButton.icon(
                   onPressed: () {},
                   icon: const Icon(Icons.file_download_outlined, size: 16),
@@ -5079,20 +5396,6 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                           ),
                         ],
                       ),
-                      const SizedBox(height: 12),
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: ElevatedButton.icon(
-                          onPressed: () {},
-                          icon: const Icon(Icons.add, size: 16),
-                          label: const Text('Create Grade Item'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFFF4B400),
-                            foregroundColor: const Color(0xFF573B00),
-                            elevation: 0,
-                          ),
-                        ),
-                      ),
                     ],
                   ),
                 ),
@@ -5139,6 +5442,24 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         ],
       ),
     );
+  }
+
+  String _monthName(int month) {
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    return months[month - 1];
   }
 
   Widget _buildGradebookDropdown({

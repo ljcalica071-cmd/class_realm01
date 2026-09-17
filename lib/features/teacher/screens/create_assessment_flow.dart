@@ -32,6 +32,7 @@ class _CreateAssessmentFlowDialogState extends State<CreateAssessmentFlowDialog>
   // 1: Configure & Add Questions / Details
   int _currentStep = 0;
   bool _isExam = false;
+  String _examCategory = 'ST1';
 
   // Form Fields
   final _titleCtrl = TextEditingController();
@@ -77,7 +78,7 @@ class _CreateAssessmentFlowDialogState extends State<CreateAssessmentFlowDialog>
       _currentStep = 1;
       _durationCtrl.text = isExam ? '60' : '30';
       if (_isExam) {
-        _titleCtrl.text = 'First Quarter Periodical Examination';
+        _titleCtrl.text = 'Summative Test 1';
         _descCtrl.text = 'Comprehensive examination covering General Mathematics core competencies.';
       } else {
         _titleCtrl.text = 'Quiz: Rational Functions & Domain/Range';
@@ -470,6 +471,32 @@ class _CreateAssessmentFlowDialogState extends State<CreateAssessmentFlowDialog>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (_isExam) ...[
+            DropdownButtonFormField<String>(
+              initialValue: _examCategory,
+              decoration: const InputDecoration(
+                labelText: 'Exam Category',
+                border: OutlineInputBorder(),
+              ),
+              items: const [
+                DropdownMenuItem(value: 'ST1', child: Text('Summative Test 1 (ST1)')),
+                DropdownMenuItem(value: 'ST2', child: Text('Summative Test 2 (ST2)')),
+                DropdownMenuItem(value: 'TE', child: Text('Term Examination (TE)')),
+              ],
+              onChanged: (value) {
+                if (value == null) return;
+                setState(() {
+                  _examCategory = value;
+                  _titleCtrl.text = switch (value) {
+                    'ST2' => 'Summative Test 2',
+                    'TE' => 'Term Examination',
+                    _ => 'Summative Test 1',
+                  };
+                });
+              },
+            ),
+            const SizedBox(height: 16),
+          ],
           // Basic Info
           Row(
             children: [

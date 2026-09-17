@@ -45,20 +45,20 @@ class _CreateRequirementFlowDialogState extends State<CreateRequirementFlowDialo
     super.dispose();
   }
 
-  void _saveRequirement() {
+  void _savePerformanceTask() {
     if (_titleCtrl.text.trim().isEmpty) {
       AppModals.showErrorDialog(
         context: context,
-        title: 'Requirement Title Required',
-        message: 'Please enter a valid title for this performance task or requirement.',
+        title: 'Performance Task Title Required',
+        message: 'Please enter a valid title for this performance task.',
       );
       return;
     }
 
     final maxScore = double.tryParse(_maxScoreCtrl.text.trim()) ?? 100.0;
 
-    final newReq = ActivityModel(
-      id: 'req_${DateTime.now().millisecondsSinceEpoch}',
+    final newTask = ActivityModel(
+      id: 'pt_${DateTime.now().millisecondsSinceEpoch}',
       title: _titleCtrl.text.trim(),
       description: _descCtrl.text.trim(),
       instructions: _instructionsCtrl.text.trim(),
@@ -68,19 +68,19 @@ class _CreateRequirementFlowDialogState extends State<CreateRequirementFlowDialo
       deadline: _deadline,
       maxScore: maxScore,
       isPublished: true,
-      isRequirement: true, // Marked as Requirement / Performance Task
+      isRequirement: true,
       submissionType: _submissionType,
       attachmentName: 'Performance_Task_Rubric.pdf',
     );
 
-    MockDatabase.instance.addActivity(newReq);
+    MockDatabase.instance.addActivity(newTask);
     widget.onRequirementCreated();
     Navigator.of(context).pop();
 
     AppModals.showSuccessDialog(
       context: context,
-      title: 'Requirement Published',
-      message: 'Performance task "${newReq.title}" has been successfully published to ${_sectionReqText(newReq.section)}.',
+      title: 'Performance Task Published',
+      message: 'Performance task "${newTask.title}" has been successfully published to ${_sectionReqText(newTask.section)}.',
     );
   }
 
@@ -117,8 +117,8 @@ class _CreateRequirementFlowDialogState extends State<CreateRequirementFlowDialo
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Create Requirement / Performance Task', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
-                        Text('Assign graded performance tasks or requirements to Senior High School sections', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                        Text('Create Performance Task', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+                        Text('Assign a graded performance task to a Senior High School section', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
                       ],
                     ),
                   ),
@@ -136,7 +136,7 @@ class _CreateRequirementFlowDialogState extends State<CreateRequirementFlowDialo
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     AppTextField(
-                      label: 'Requirement / Performance Task Title',
+                      label: 'Performance Task Title',
                       hint: 'e.g. Mathematical Modeling Portfolio',
                       controller: _titleCtrl,
                     ),
@@ -166,7 +166,7 @@ class _CreateRequirementFlowDialogState extends State<CreateRequirementFlowDialo
                     const SizedBox(height: 16),
                     AppTextField(
                       label: 'Short Description',
-                      hint: 'Brief overview of the requirement',
+                      hint: 'Brief overview of the performance task',
                       controller: _descCtrl,
                       maxLines: 2,
                     ),
@@ -212,10 +212,10 @@ class _CreateRequirementFlowDialogState extends State<CreateRequirementFlowDialo
                   ),
                   const SizedBox(width: 12),
                   AppPrimaryButton(
-                    label: 'Publish Requirement',
+                    label: 'Publish Performance Task',
                     icon: Icons.publish,
                     height: 40,
-                    onPressed: _saveRequirement,
+                    onPressed: _savePerformanceTask,
                   ),
                 ],
               ),
