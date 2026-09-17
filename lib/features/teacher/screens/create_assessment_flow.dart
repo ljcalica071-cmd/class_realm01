@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../data/mock_database.dart';
 import '../../../models/academic_models.dart';
@@ -58,6 +59,12 @@ class _CreateAssessmentFlowDialogState extends State<CreateAssessmentFlowDialog>
   };
   final _matchingLeftCtrl = TextEditingController();
   final _matchingRightCtrl = TextEditingController();
+  final Map<QuestionType, TextEditingController> _questionCountCtrls = {
+    QuestionType.multipleChoice: TextEditingController(),
+    QuestionType.trueFalse: TextEditingController(),
+    QuestionType.matching: TextEditingController(),
+    QuestionType.identification: TextEditingController(),
+  };
   final Map<String, String> _matchingPairs = {};
 
   // Form Fields
@@ -72,7 +79,7 @@ class _CreateAssessmentFlowDialogState extends State<CreateAssessmentFlowDialog>
   final List<QuestionModel> _questions = [];
   final _qTextCtrl = TextEditingController();
   final _qCorrectAnswerCtrl = TextEditingController();
-  final _qPointsCtrl = TextEditingController(text: '5.0');
+  final _qPointsCtrl = TextEditingController(text: '1');
   QuestionType _selectedQType = QuestionType.multipleChoice;
 
   // Options for multiple choice
@@ -107,6 +114,9 @@ class _CreateAssessmentFlowDialogState extends State<CreateAssessmentFlowDialog>
     _choiceDCtrl.dispose();
     _matchingLeftCtrl.dispose();
     _matchingRightCtrl.dispose();
+    for (final controller in _questionCountCtrls.values) {
+      controller.dispose();
+    }
     super.dispose();
   }
 
@@ -116,7 +126,7 @@ class _CreateAssessmentFlowDialogState extends State<CreateAssessmentFlowDialog>
       _currentStep = 1;
       _durationCtrl.text = isExam ? '60' : '30';
       if (_isExam) {
-        _titleCtrl.text = 'Summative Test 1';
+        _setExamTitle('ST1');
         _descCtrl.text = 'Comprehensive examination covering General Mathematics core competencies.';
       } else {
         _titleCtrl.text = 'Quiz: Rational Functions & Domain/Range';
@@ -126,7 +136,7 @@ class _CreateAssessmentFlowDialogState extends State<CreateAssessmentFlowDialog>
   }
 
   void _addQuestionToList() {
-    if (_qTextCtrl.text.trim().isEmpty || _qCorrectAnswerCtrl.text.trim().isEmpty) {
+    if (_qTextCtrl.text.trim().isEmpty) {
       AppModals.showErrorDialog(
         context: context,
         title: 'Incomplete Question',
@@ -135,7 +145,15 @@ class _CreateAssessmentFlowDialogState extends State<CreateAssessmentFlowDialog>
       return;
     }
 
-    final double points = double.tryParse(_qPointsCtrl.text.trim()) ?? 5.0;
+    final points = int.tryParse(_qPointsCtrl.text.trim());
+    if (points == null || points < 1 || points > 10) {
+      AppModals.showErrorDialog(
+        context: context,
+        title: 'Invalid Points',
+        message: 'Points must be a whole number from 1 to 10.',
+      );
+      return;
+    }
     final planned = _questionCounts[_selectedQType] ?? 0;
     final alreadyAdded = _questions.where((q) => q.type == _selectedQType).length;
     if (planned == 0 || alreadyAdded >= planned) {
@@ -191,7 +209,7 @@ class _CreateAssessmentFlowDialogState extends State<CreateAssessmentFlowDialog>
           type: _selectedQType,
           choices: choices,
           correctAnswer: correctAnswer,
-          points: points,
+          points: points.toDouble(),
           matchingPairs: Map<String, String>.from(_matchingPairs),
         ),
       );
@@ -205,7 +223,42 @@ class _CreateAssessmentFlowDialogState extends State<CreateAssessmentFlowDialog>
       _choiceDCtrl.clear();
       _selectedChoiceAnswer = null;
       _matchingPairs.clear();
+      _advanceToNextQuestionType();
     });
+  }
+
+  List<QuestionType> get _configuredQuestionTypes => QuestionType.values
+      .where((type) => (_questionCounts[type] ?? 0) > 0)
+      .toList();
+
+  bool get _canAddCurrentQuestion {
+    final planned = _questionCounts[_selectedQType] ?? 0;
+    final added = _questions.where((question) => question.type == _selectedQType).length;
+    return planned > 0 && added < planned;
+  }
+
+  void _advanceToNextQuestionType() {
+    final types = _configuredQuestionTypes;
+    if (types.isEmpty) return;
+    final currentIndex = types.indexOf(_selectedQType);
+    final currentCount = _questions.where((q) => q.type == _selectedQType).length;
+    if (currentCount < (_questionCounts[_selectedQType] ?? 0)) return;
+    for (var index = currentIndex + 1; index < types.length; index++) {
+      final type = types[index];
+      if (_questions.where((q) => q.type == type).length < (_questionCounts[type] ?? 0)) {
+        _selectedQType = type;
+        return;
+      }
+    }
+  }
+
+  void _setExamTitle(String category) {
+    _examCategory = category;
+    _titleCtrl.text = switch (category) {
+      'ST2' => 'Summative Test 2 (ST2)',
+      'TE' => 'Term Examination (TE)',
+      _ => 'Summative Test 1 (ST1)',
+    };
   }
 
   void _saveAssessment() {
@@ -214,6 +267,16 @@ class _CreateAssessmentFlowDialogState extends State<CreateAssessmentFlowDialog>
         context: context,
         title: 'Title Required',
         message: 'Please provide a valid title for this assessment.',
+      );
+      return;
+    }
+
+    final duration = int.tryParse(_durationCtrl.text.trim());
+    if (duration == null || duration < 1) {
+      AppModals.showErrorDialog(
+        context: context,
+        title: 'Invalid Duration',
+        message: 'Duration must be a whole number greater than 0.',
       );
       return;
     }
@@ -228,7 +291,15 @@ class _CreateAssessmentFlowDialogState extends State<CreateAssessmentFlowDialog>
       return;
     }
 
-    final int duration = int.tryParse(_durationCtrl.text.trim()) ?? (_isExam ? 60 : 30);
+    final totalPoints = _questions.fold<double>(0, (sum, question) => sum + question.points);
+    if (totalPoints > 100) {
+      AppModals.showErrorDialog(
+        context: context,
+        title: 'Maximum Points Exceeded',
+        message: 'The total points for one quiz or examination cannot exceed 100.',
+      );
+      return;
+    }
 
     final newAssessment = QuizOrExamModel(
       id: '${_isExam ? "exam" : "quiz"}_${DateTime.now().millisecondsSinceEpoch}',
@@ -301,7 +372,11 @@ class _CreateAssessmentFlowDialogState extends State<CreateAssessmentFlowDialog>
                         Text(
                           _currentStep == 0
                               ? 'Choose the assessment category for Senior High School'
-                              : 'Step 2: Define examination schedule, duration, and question items',
+                              : _currentStep == 1
+                                  ? 'Step 1: Define title, section, duration, and instructions'
+                                  : _currentStep == 2
+                                      ? 'Step 2: Define the question distribution'
+                                      : 'Step 3: Add questions and answer keys',
                           style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
                         ),
                       ],
@@ -320,8 +395,10 @@ class _CreateAssessmentFlowDialogState extends State<CreateAssessmentFlowDialog>
               child: _currentStep == 0
                   ? _buildTypeSelectionView()
                   : _currentStep == 1
-                      ? _buildQuestionPlanView()
-                      : _buildConfigurationFormView(),
+                      ? _buildBasicDetailsView()
+                      : _currentStep == 2
+                          ? _buildQuestionPlanView()
+                          : _buildQuestionBuilderView(),
             ),
 
             // Footer / Bottom Actions
@@ -341,7 +418,13 @@ class _CreateAssessmentFlowDialogState extends State<CreateAssessmentFlowDialog>
                   if (_currentStep > 0)
                     TextButton.icon(
                       icon: const Icon(Icons.arrow_back, size: 16),
-                      label: Text(_currentStep == 2 ? 'Back to Question Setup' : 'Back to Type Selection'),
+                      label: Text(
+                        _currentStep == 3
+                            ? 'Back to Question Setup'
+                            : _currentStep == 2
+                                ? 'Back to Details'
+                                : 'Back to Type Selection',
+                      ),
                       onPressed: () => setState(() => _currentStep--),
                     )
                   else
@@ -353,9 +436,20 @@ class _CreateAssessmentFlowDialogState extends State<CreateAssessmentFlowDialog>
                         child: const Text('Cancel', style: TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.w600)),
                       ),
                       const SizedBox(width: 12),
-                      if (_currentStep == 2)
+                      if (_currentStep == 1 || _currentStep == 2)
                         AppPrimaryButton(
-                          label: _isExam ? 'Publish Periodical Exam' : 'Publish Unit Quiz',
+                          label: _currentStep == 1
+                              ? 'Continue to Question Setup'
+                              : 'Continue to Question Builder',
+                          icon: Icons.arrow_forward,
+                          height: 42,
+                          onPressed: _currentStep == 1
+                              ? _continueToQuestionSetup
+                              : _continueToQuestionBuilder,
+                        ),
+                      if (_currentStep == 3)
+                        AppPrimaryButton(
+                          label: _isExam ? 'Save Examination' : 'Save Quiz',
                           icon: Icons.check_circle_outline,
                           height: 42,
                           backgroundColor: _isExam ? AppColors.error : AppColors.primary,
@@ -370,6 +464,128 @@ class _CreateAssessmentFlowDialogState extends State<CreateAssessmentFlowDialog>
         ),
       ),
     );
+  }
+
+  Widget _buildBasicDetailsView() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (_isExam)
+            DropdownButtonFormField<String>(
+              initialValue: _examCategory,
+              decoration: const InputDecoration(
+                labelText: 'Periodical Examination Title',
+                border: OutlineInputBorder(),
+              ),
+              items: const [
+                DropdownMenuItem(value: 'ST1', child: Text('Summative Test 1 (ST1)')),
+                DropdownMenuItem(value: 'ST2', child: Text('Summative Test 2 (ST2)')),
+                DropdownMenuItem(value: 'TE', child: Text('Term Examination (TE)')),
+              ],
+              onChanged: (value) {
+                if (value != null) setState(() => _setExamTitle(value));
+              },
+            )
+          else
+            AppTextField(
+              label: 'Quiz Title',
+              controller: _titleCtrl,
+            ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: AppTextField(
+                  label: 'Duration (Minutes)',
+                  controller: _durationCtrl,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  initialValue: _sectionCtrl.text,
+                  decoration: const InputDecoration(
+                    labelText: 'Target Section',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'Section A', child: Text('Section A')),
+                    DropdownMenuItem(value: 'Section B', child: Text('Section B')),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) _sectionCtrl.text = value;
+                  },
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          AppTextField(
+            label: 'Instructions & Guidelines',
+            controller: _descCtrl,
+            maxLines: 3,
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _continueToQuestionSetup() {
+    if (_titleCtrl.text.trim().isEmpty) {
+      AppModals.showErrorDialog(
+        context: context,
+        title: 'Title Required',
+        message: 'Please provide a title before continuing.',
+      );
+      return;
+    }
+    final duration = int.tryParse(_durationCtrl.text.trim());
+    if (duration == null || duration < 1) {
+      AppModals.showErrorDialog(
+        context: context,
+        title: 'Invalid Duration',
+        message: 'Duration must be a whole number greater than 0.',
+      );
+      return;
+    }
+    setState(() => _currentStep = 2);
+  }
+
+  void _continueToQuestionBuilder() {
+    final counts = <QuestionType, int>{};
+    for (final entry in _questionCountCtrls.entries) {
+      final text = entry.value.text.trim();
+      final count = text.isEmpty ? 0 : int.tryParse(text);
+      if (count == null || count < 0 || count > 100) {
+        AppModals.showErrorDialog(
+          context: context,
+          title: 'Invalid Question Count',
+          message: 'Each question type must be empty/0 or a whole number from 1 to 100.',
+        );
+        return;
+      }
+      counts[entry.key] = count;
+    }
+    final total = counts.values.fold<int>(0, (sum, count) => sum + count);
+    if (total < 1 || total > 100) {
+      AppModals.showErrorDialog(
+        context: context,
+        title: 'Invalid Total Number of Questions',
+        message: 'The total number of questions must be between 1 and 100.',
+      );
+      return;
+    }
+    setState(() {
+      _questionCounts
+        ..clear()
+        ..addAll(counts);
+      _selectedQType = _configuredQuestionTypes.first;
+      _currentStep = 3;
+    });
   }
 
   Widget _buildQuestionPlanView() {
@@ -406,12 +622,16 @@ class _CreateAssessmentFlowDialogState extends State<CreateAssessmentFlowDialog>
                     width: 120,
                     child: TextField(
                       keyboardType: TextInputType.number,
+                      controller: _questionCountCtrls[type],
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                       decoration: const InputDecoration(
                         labelText: 'Number of items',
                         border: OutlineInputBorder(),
                         isDense: true,
                       ),
-                      onChanged: (value) => setState(() => _questionCounts[type] = int.tryParse(value) ?? 0),
+                      onChanged: (value) {
+                        setState(() => _questionCounts[type] = int.tryParse(value) ?? 0);
+                      },
                     ),
                   ),
                 ],
@@ -426,21 +646,7 @@ class _CreateAssessmentFlowDialogState extends State<CreateAssessmentFlowDialog>
           const SizedBox(height: 24),
           Align(
             alignment: Alignment.centerRight,
-            child: AppPrimaryButton(
-              label: 'Continue to Question Builder',
-              icon: Icons.arrow_forward,
-              onPressed: () {
-                if (_questionCounts.values.every((count) => count == 0)) {
-                  AppModals.showErrorDialog(
-                    context: context,
-                    title: 'Question Count Required',
-                    message: 'Add at least one question to continue.',
-                  );
-                  return;
-                }
-                setState(() => _currentStep = 2);
-              },
-            ),
+            child: const SizedBox.shrink(),
           ),
         ],
       ),
@@ -613,77 +819,14 @@ class _CreateAssessmentFlowDialogState extends State<CreateAssessmentFlowDialog>
   }
 
   // ==========================================
-  // STEP 1: CONFIGURE ASSESSMENT & QUESTIONS
+  // STEP 3: BUILD QUESTIONS
   // ==========================================
-  Widget _buildConfigurationFormView() {
+  Widget _buildQuestionBuilderView() {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (_isExam) ...[
-            DropdownButtonFormField<String>(
-              initialValue: _examCategory,
-              decoration: const InputDecoration(
-                labelText: 'Exam Category',
-                border: OutlineInputBorder(),
-              ),
-              items: const [
-                DropdownMenuItem(value: 'ST1', child: Text('Summative Test 1 (ST1)')),
-                DropdownMenuItem(value: 'ST2', child: Text('Summative Test 2 (ST2)')),
-                DropdownMenuItem(value: 'TE', child: Text('Term Examination (TE)')),
-              ],
-              onChanged: (value) {
-                if (value == null) return;
-                setState(() {
-                  _examCategory = value;
-                  _titleCtrl.text = switch (value) {
-                    'ST2' => 'Summative Test 2',
-                    'TE' => 'Term Examination',
-                    _ => 'Summative Test 1',
-                  };
-                });
-              },
-            ),
-            const SizedBox(height: 16),
-          ],
-          // Basic Info
-          Row(
-            children: [
-              Expanded(
-                flex: 3,
-                child: AppTextField(
-                  label: _isExam ? 'Periodical Examination Title' : 'Quiz Title',
-                  controller: _titleCtrl,
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                flex: 1,
-                child: AppTextField(
-                  label: 'Duration (Minutes)',
-                  controller: _durationCtrl,
-                  keyboardType: TextInputType.number,
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                flex: 1,
-                child: AppTextField(
-                  label: 'Target Section',
-                  controller: _sectionCtrl,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          AppTextField(
-            label: 'Instructions & Guidelines',
-            controller: _descCtrl,
-            maxLines: 2,
-          ),
-          const SizedBox(height: 24),
-
           // Examination Answer Key & Question Builder Banner
           Container(
             padding: const EdgeInsets.all(16),
@@ -713,32 +856,42 @@ class _CreateAssessmentFlowDialogState extends State<CreateAssessmentFlowDialog>
                 // Question Type Selector
                 Row(
                   children: [
-                    const Text('Question Type:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                    const SizedBox(width: 12),
-                    DropdownButton<QuestionType>(
-                      value: _selectedQType,
-                      items: QuestionType.values
-                          .map((t) => DropdownMenuItem(
-                                value: t,
-                                child: Text(t.name.toUpperCase()),
-                              ))
-                          .toList(),
-                      onChanged: (val) {
-                        if (val != null) {
-                          setState(() {
-                            _selectedQType = val;
-                            _selectedChoiceAnswer = null;
-                            _matchingPairs.clear();
-                          });
-                        }
-                      },
-                    ),
+                    if (_configuredQuestionTypes.length > 1) ...[
+                      const Text('Question Type:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                      const SizedBox(width: 12),
+                      DropdownButton<QuestionType>(
+                        value: _configuredQuestionTypes.contains(_selectedQType)
+                            ? _selectedQType
+                            : _configuredQuestionTypes.first,
+                        items: _configuredQuestionTypes
+                            .map((t) => DropdownMenuItem(
+                                  value: t,
+                                  child: Text(t.name.toUpperCase()),
+                                ))
+                            .toList(),
+                        onChanged: (val) {
+                          if (val != null) {
+                            setState(() {
+                              _selectedQType = val;
+                              _selectedChoiceAnswer = null;
+                              _matchingPairs.clear();
+                            });
+                          }
+                        },
+                      ),
+                    ],
+                    if (_configuredQuestionTypes.length == 1)
+                      Text(
+                        _configuredQuestionTypes.first.name.toUpperCase(),
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.primary),
+                      ),
                     const Spacer(),
                     SizedBox(
                       width: 120,
                       child: TextField(
                         controller: _qPointsCtrl,
                         keyboardType: TextInputType.number,
+                        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                         decoration: const InputDecoration(labelText: 'Points', isDense: true),
                       ),
                     ),
@@ -862,13 +1015,25 @@ class _CreateAssessmentFlowDialogState extends State<CreateAssessmentFlowDialog>
                         ),
                       ),
                       const SizedBox(width: 16),
-                      AppPrimaryButton(label: 'Add to List', icon: Icons.add, height: 42, width: 130, onPressed: _addQuestionToList),
+                      AppPrimaryButton(
+                        label: 'Add to List',
+                        icon: Icons.add,
+                        height: 42,
+                        width: 130,
+                        onPressed: _canAddCurrentQuestion ? _addQuestionToList : null,
+                      ),
                     ],
                   )
                 else
                   Align(
                     alignment: Alignment.centerRight,
-                    child: AppPrimaryButton(label: 'Add to List', icon: Icons.add, height: 42, width: 130, onPressed: _addQuestionToList),
+                    child: AppPrimaryButton(
+                      label: 'Add to List',
+                      icon: Icons.add,
+                      height: 42,
+                      width: 130,
+                      onPressed: _canAddCurrentQuestion ? _addQuestionToList : null,
+                    ),
                   ),
               ],
             ),

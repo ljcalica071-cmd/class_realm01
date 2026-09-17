@@ -4580,6 +4580,16 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   }
 
   void _showUnifiedCreateChooser(BuildContext context, [String? category]) {
+    if (category == 'EX') {
+      CreateAssessmentFlowDialog.show(
+        context,
+        initialSection: _selectedClassSection,
+        initialIsExam: true,
+        skipTypeSelection: true,
+        onAssessmentCreated: () => setState(() {}),
+      );
+      return;
+    }
     showDialog(
       context: context,
       builder: (dialogContext) => AlertDialog(
