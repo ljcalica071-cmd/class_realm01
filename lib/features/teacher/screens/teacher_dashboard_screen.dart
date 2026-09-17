@@ -4861,34 +4861,20 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   Widget _buildGradebookTab() {
     final gradeItems = <String, List<Map<String, String>>>{
       'Written Work': [
-        {'name': 'Quiz 1', 'points': '20 pts', 'date': 'Sep 05, 2026'},
-        {'name': 'Quiz 2', 'points': '20 pts', 'date': 'Sep 12, 2026'},
+        {'name': 'quiz1', 'points': '30 pts', 'date': 'Sep 16, 2026'},
+        {'name': 'quiz2', 'points': '20 pts', 'date': 'Sep 16, 2026'},
       ],
-      'Performance Tasks': [
-        {
-          'name': 'Performance Task 1',
-          'points': '50 pts',
-          'date': 'Sep 19, 2026',
-        },
+      'Performance Task': [
+        {'name': 'pt1', 'points': '100 pts', 'date': 'Sep 16, 2026'},
       ],
-      'Summative Tests': [
-        {
-          'name': 'Summative Test 1',
-          'points': '50 pts',
-          'date': 'Sep 26, 2026',
-        },
-        {
-          'name': 'Summative Test 2',
-          'points': '50 pts',
-          'date': 'Oct 03, 2026',
-        },
+      'Summative Test 1 (ST1)': [
+        {'name': 'st1', 'points': '50 pts', 'date': 'Sep 16, 2026'},
       ],
-      'Term Examination': [
-        {
-          'name': 'Quarter 1 Examination',
-          'points': '100 pts',
-          'date': 'Oct 10, 2026',
-        },
+      'Summative Test 2 (ST2)': [
+        {'name': 'st2', 'points': '50 pts', 'date': 'Sep 16, 2026'},
+      ],
+      'Term Examination (TE)': [
+        {'name': 'exam', 'points': '100 pts', 'date': 'Sep 16, 2026'},
       ],
     };
 
@@ -4910,48 +4896,55 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                 ),
               ],
             ),
-            child: Wrap(
-              alignment: WrapAlignment.start,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              spacing: 12,
-              runSpacing: 10,
+            child: Row(
               children: [
-                const Text(
-                  'Grading Period:',
-                  style: TextStyle(
-                    color: Color(0xFF334155),
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
+                Expanded(
+                  child: Wrap(
+                    alignment: WrapAlignment.start,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 12,
+                    runSpacing: 10,
+                    children: [
+                      const Text(
+                        'Grading Period:',
+                        style: TextStyle(
+                          color: Color(0xFF334155),
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      _buildGradebookDropdown(
+                        label: '',
+                        value: 'Quarter 1',
+                        options: const [
+                          'Quarter 1',
+                          'Quarter 2',
+                          'Quarter 3',
+                          'Quarter 4',
+                        ],
+                        width: 120,
+                      ),
+                      const Text(
+                        'Class:',
+                        style: TextStyle(
+                          color: Color(0xFF334155),
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      _buildGradebookDropdown(
+                        label: '',
+                        value: 'Grade 11 - Section A - General Mathematics',
+                        options: const [
+                          'Grade 11 - Section A - General Mathematics',
+                          'Grade 11 - Section B - General Mathematics',
+                        ],
+                        width: 270,
+                      ),
+                    ],
                   ),
                 ),
-                _buildGradebookDropdown(
-                  label: '',
-                  value: 'Quarter 1',
-                  options: const [
-                    'Quarter 1',
-                    'Quarter 2',
-                    'Quarter 3',
-                    'Quarter 4',
-                  ],
-                  width: 120,
-                ),
-                const Text(
-                  'Class:',
-                  style: TextStyle(
-                    color: Color(0xFF334155),
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                _buildGradebookDropdown(
-                  label: '',
-                  value: 'Grade 11 - Section A - General Mathematics',
-                  options: const [
-                    'Grade 11 - Section A - General Mathematics',
-                    'Grade 11 - Section B - General Mathematics',
-                  ],
-                  width: 270,
-                ),
+                const SizedBox(width: 12),
                 OutlinedButton.icon(
                   onPressed: () {},
                   icon: const Icon(Icons.file_upload_outlined, size: 16),
@@ -4965,6 +4958,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                     ),
                   ),
                 ),
+                const SizedBox(width: 8),
                 ElevatedButton.icon(
                   onPressed: () {},
                   icon: const Icon(Icons.file_download_outlined, size: 16),
@@ -5048,20 +5042,12 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                         crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
                           const Text(
-                            'Record grades by:',
+                            'Grades are automatically computed from grade items:',
                             style: TextStyle(
                               color: Color(0xFF475569),
                               fontSize: 12,
                               fontWeight: FontWeight.bold,
                             ),
-                          ),
-                          _buildGradebookTabChip(
-                            'Scores & Grade Items',
-                            true,
-                          ),
-                          _buildGradebookTabChip(
-                            'Typing Final Grades',
-                            false,
                           ),
                         ],
                       ),
@@ -5243,7 +5229,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
 
   Widget _buildGradebookSection(String title, List<Map<String, String>> items) {
     final isWrittenWork = title == 'Written Work';
-    final isPerformance = title == 'Performance Tasks';
+    final isPerformance = title == 'Performance Task';
     final headerColor = isWrittenWork
         ? const Color(0xFF1D4ED8)
         : isPerformance
@@ -5272,7 +5258,12 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 13),
             decoration: BoxDecoration(
-              color: headerColor,
+              gradient: LinearGradient(
+                colors: [
+                  headerColor,
+                  Color.lerp(headerColor, Colors.black, 0.18) ?? headerColor,
+                ],
+              ),
               borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
             ),
             child: Row(
@@ -5300,6 +5291,25 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                   ),
                   child: Text(
                     '${items.length} ITEM${items.length == 1 ? '' : 'S'}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white24,
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Text(
+                    _gradebookSectionWeight(title),
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 11,
@@ -5336,10 +5346,32 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                       ),
                     ),
                   ),
+                  IconButton(
+                    onPressed: () {},
+                    icon: const Icon(
+                      Icons.edit_outlined,
+                      size: 17,
+                      color: Color(0xFF94A3B8),
+                    ),
+                    tooltip: 'Edit grade item',
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  IconButton(
+                    onPressed: () {},
+                    icon: const Icon(
+                      Icons.copy_outlined,
+                      size: 17,
+                      color: Color(0xFF94A3B8),
+                    ),
+                    tooltip: 'Duplicate grade item',
+                    visualDensity: VisualDensity.compact,
+                  ),
                   OutlinedButton.icon(
                     onPressed: () {},
                     icon: const Icon(Icons.edit_outlined, size: 15),
-                    label: const Text('View Scores'),
+                    label: Text(
+                      title.contains('Summative') ? 'Enter Scores' : 'View Scores',
+                    ),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: const Color(0xFF1D4ED8),
                       padding: const EdgeInsets.symmetric(
@@ -5355,6 +5387,16 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                         borderRadius: BorderRadius.circular(18),
                       ),
                     ),
+                  ),
+                  IconButton(
+                    onPressed: () {},
+                    icon: const Icon(
+                      Icons.delete_outline,
+                      size: 17,
+                      color: Color(0xFF94A3B8),
+                    ),
+                    tooltip: 'Delete grade item',
+                    visualDensity: VisualDensity.compact,
                   ),
                   const SizedBox(width: 14),
                   Container(
@@ -5395,6 +5437,13 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         ],
       ),
     );
+  }
+
+  String _gradebookSectionWeight(String title) {
+    if (title == 'Written Work') return '20%';
+    if (title == 'Performance Task') return '50%';
+    if (title == 'Term Examination (TE)') return '40%';
+    return '30%';
   }
 
   // --- 9. Grades ---
