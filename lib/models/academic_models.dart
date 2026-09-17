@@ -197,6 +197,7 @@ class QuestionModel {
   final List<String> choices;
   final String correctAnswer; // e.g. "A", "True", "Quadratic Formula", etc.
   final double points;
+  final Map<String, String> matchingPairs;
 
   QuestionModel({
     required this.id,
@@ -205,6 +206,7 @@ class QuestionModel {
     this.choices = const [],
     required this.correctAnswer,
     this.points = 1.0,
+    this.matchingPairs = const {},
   });
 }
 

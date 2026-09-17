@@ -4604,6 +4604,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                   context,
                   initialSection: _selectedClassSection,
                   initialIsExam: category == 'EX',
+                  skipTypeSelection: true,
                   onAssessmentCreated: () => setState(() {}),
                 );
               },

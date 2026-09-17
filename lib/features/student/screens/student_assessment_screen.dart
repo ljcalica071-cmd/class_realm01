@@ -56,7 +56,10 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen> {
     for (var q in widget.assessment.questions) {
       final studentAns = (_studentAnswers[q.id] ?? '').trim().toLowerCase();
       final correctAns = q.correctAnswer.trim().toLowerCase();
-      if (studentAns == correctAns) {
+      final isMatching = q.type == QuestionType.matching &&
+          q.matchingPairs.entries.every((pair) =>
+              studentAns.contains('${pair.key.toLowerCase()}=${pair.value.toLowerCase()}'));
+      if (studentAns == correctAns || isMatching) {
         scoreEarned += q.points;
       }
     }
@@ -267,6 +270,37 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen> {
                         ),
                       );
                     }),
+                  ] else if (q.type == QuestionType.matching) ...[
+                    Column(
+                      children: q.matchingPairs.keys.map((left) {
+                        final options = q.matchingPairs.values.toList();
+                        final current = _studentAnswers[q.id]
+                            ?.split('|')
+                            .firstWhere(
+                              (entry) => entry.startsWith('$left='),
+                              orElse: () => '',
+                            )
+                            .split('=')
+                            .skip(1)
+                            .join('=');
+                        return DropdownButtonFormField<String>(
+                          initialValue: options.contains(current) ? current : null,
+                          decoration: InputDecoration(labelText: left),
+                          items: options
+                              .map((option) => DropdownMenuItem(value: option, child: Text(option)))
+                              .toList(),
+                          onChanged: (value) {
+                            if (value == null) return;
+                            final answers = (_studentAnswers[q.id] ?? '')
+                                .split('|')
+                                .where((entry) => entry.isNotEmpty && !entry.startsWith('$left='))
+                                .toList();
+                            answers.add('$left=$value');
+                            setState(() => _studentAnswers[q.id] = answers.join('|'));
+                          },
+                        );
+                      }).toList(),
+                    ),
                   ] else ...[
                     TextField(
                       controller: TextEditingController(text: _studentAnswers[q.id]),

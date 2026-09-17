@@ -10,12 +10,14 @@ class CreateAssessmentFlowDialog extends StatefulWidget {
   final VoidCallback onAssessmentCreated;
   final String initialSection;
   final bool initialIsExam;
+  final bool skipTypeSelection;
 
   const CreateAssessmentFlowDialog({
     super.key,
     required this.onAssessmentCreated,
     this.initialSection = 'Section A',
     this.initialIsExam = false,
+    this.skipTypeSelection = false,
   });
 
   static Future<void> show(
@@ -23,6 +25,7 @@ class CreateAssessmentFlowDialog extends StatefulWidget {
     required VoidCallback onAssessmentCreated,
     String initialSection = 'Section A',
     bool initialIsExam = false,
+    bool skipTypeSelection = false,
   }) {
     return showDialog(
       context: context,
@@ -31,6 +34,7 @@ class CreateAssessmentFlowDialog extends StatefulWidget {
         onAssessmentCreated: onAssessmentCreated,
         initialSection: initialSection,
         initialIsExam: initialIsExam,
+        skipTypeSelection: skipTypeSelection,
       ),
     );
   }
@@ -46,6 +50,15 @@ class _CreateAssessmentFlowDialogState extends State<CreateAssessmentFlowDialog>
   int _currentStep = 0;
   bool _isExam = false;
   String _examCategory = 'ST1';
+  final Map<QuestionType, int> _questionCounts = {
+    QuestionType.multipleChoice: 0,
+    QuestionType.trueFalse: 0,
+    QuestionType.matching: 0,
+    QuestionType.identification: 0,
+  };
+  final _matchingLeftCtrl = TextEditingController();
+  final _matchingRightCtrl = TextEditingController();
+  final Map<String, String> _matchingPairs = {};
 
   // Form Fields
   final _titleCtrl = TextEditingController();
@@ -67,13 +80,14 @@ class _CreateAssessmentFlowDialogState extends State<CreateAssessmentFlowDialog>
   final _choiceBCtrl = TextEditingController();
   final _choiceCCtrl = TextEditingController();
   final _choiceDCtrl = TextEditingController();
+  String? _selectedChoiceAnswer;
 
   @override
   void initState() {
     super.initState();
     _sectionCtrl.text = widget.initialSection;
-    if (widget.initialIsExam) {
-      _selectAssessmentType(true);
+    if (widget.skipTypeSelection) {
+      _selectAssessmentType(widget.initialIsExam);
     }
   }
 
@@ -91,6 +105,8 @@ class _CreateAssessmentFlowDialogState extends State<CreateAssessmentFlowDialog>
     _choiceBCtrl.dispose();
     _choiceCCtrl.dispose();
     _choiceDCtrl.dispose();
+    _matchingLeftCtrl.dispose();
+    _matchingRightCtrl.dispose();
     super.dispose();
   }
 
@@ -120,6 +136,16 @@ class _CreateAssessmentFlowDialogState extends State<CreateAssessmentFlowDialog>
     }
 
     final double points = double.tryParse(_qPointsCtrl.text.trim()) ?? 5.0;
+    final planned = _questionCounts[_selectedQType] ?? 0;
+    final alreadyAdded = _questions.where((q) => q.type == _selectedQType).length;
+    if (planned == 0 || alreadyAdded >= planned) {
+      AppModals.showErrorDialog(
+        context: context,
+        title: 'Question Limit Reached',
+        message: 'This question type is not included or has already reached its planned count.',
+      );
+      return;
+    }
     List<String> choices = [];
 
     if (_selectedQType == QuestionType.multipleChoice) {
@@ -131,6 +157,30 @@ class _CreateAssessmentFlowDialogState extends State<CreateAssessmentFlowDialog>
       ];
     } else if (_selectedQType == QuestionType.trueFalse) {
       choices = ['True', 'False'];
+    } else if (_selectedQType == QuestionType.matching) {
+      if (_matchingPairs.isEmpty) {
+        AppModals.showErrorDialog(
+          context: context,
+          title: 'Matching Pairs Required',
+          message: 'Add at least one matching pair before adding this question.',
+        );
+        return;
+      }
+    }
+
+    final correctAnswer = _selectedQType == QuestionType.multipleChoice ||
+            _selectedQType == QuestionType.trueFalse
+        ? (_selectedChoiceAnswer ?? '')
+        : _selectedQType == QuestionType.matching
+            ? _matchingPairs.entries.map((e) => '${e.key}=${e.value}').join('|')
+            : _qCorrectAnswerCtrl.text.trim();
+    if (correctAnswer.isEmpty) {
+      AppModals.showErrorDialog(
+        context: context,
+        title: 'Correct Answer Required',
+        message: 'Select or enter the correct answer before adding the question.',
+      );
+      return;
     }
 
     setState(() {
@@ -140,8 +190,9 @@ class _CreateAssessmentFlowDialogState extends State<CreateAssessmentFlowDialog>
           questionText: _qTextCtrl.text.trim(),
           type: _selectedQType,
           choices: choices,
-          correctAnswer: _qCorrectAnswerCtrl.text.trim(),
+          correctAnswer: correctAnswer,
           points: points,
+          matchingPairs: Map<String, String>.from(_matchingPairs),
         ),
       );
 
@@ -152,6 +203,8 @@ class _CreateAssessmentFlowDialogState extends State<CreateAssessmentFlowDialog>
       _choiceBCtrl.clear();
       _choiceCCtrl.clear();
       _choiceDCtrl.clear();
+      _selectedChoiceAnswer = null;
+      _matchingPairs.clear();
     });
   }
 
@@ -165,18 +218,14 @@ class _CreateAssessmentFlowDialogState extends State<CreateAssessmentFlowDialog>
       return;
     }
 
-    // If no questions added manually, generate a default sample question
-    if (_questions.isEmpty) {
-      _questions.add(
-        QuestionModel(
-          id: 'q_default_1',
-          questionText: 'Which function represents exponential growth?',
-          type: QuestionType.multipleChoice,
-          choices: ['f(x) = 2(3)^x', 'f(x) = 2(0.5)^x', 'f(x) = 2x - 5', 'f(x) = 1/x'],
-          correctAnswer: 'f(x) = 2(3)^x',
-          points: _isExam ? 10.0 : 5.0,
-        ),
+    final plannedTotal = _questionCounts.values.fold<int>(0, (sum, count) => sum + count);
+    if (_questions.length != plannedTotal) {
+      AppModals.showErrorDialog(
+        context: context,
+        title: 'Incomplete Question Set',
+        message: 'Add all $plannedTotal planned questions before publishing. Current total: ${_questions.length}.',
       );
+      return;
     }
 
     final int duration = int.tryParse(_durationCtrl.text.trim()) ?? (_isExam ? 60 : 30);
@@ -268,7 +317,11 @@ class _CreateAssessmentFlowDialogState extends State<CreateAssessmentFlowDialog>
 
             // Content Body
             Expanded(
-              child: _currentStep == 0 ? _buildTypeSelectionView() : _buildConfigurationFormView(),
+              child: _currentStep == 0
+                  ? _buildTypeSelectionView()
+                  : _currentStep == 1
+                      ? _buildQuestionPlanView()
+                      : _buildConfigurationFormView(),
             ),
 
             // Footer / Bottom Actions
@@ -285,11 +338,11 @@ class _CreateAssessmentFlowDialogState extends State<CreateAssessmentFlowDialog>
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  if (_currentStep == 1)
+                  if (_currentStep > 0)
                     TextButton.icon(
                       icon: const Icon(Icons.arrow_back, size: 16),
-                      label: const Text('Back to Type Selection'),
-                      onPressed: () => setState(() => _currentStep = 0),
+                      label: Text(_currentStep == 2 ? 'Back to Question Setup' : 'Back to Type Selection'),
+                      onPressed: () => setState(() => _currentStep--),
                     )
                   else
                     const SizedBox.shrink(),
@@ -300,7 +353,7 @@ class _CreateAssessmentFlowDialogState extends State<CreateAssessmentFlowDialog>
                         child: const Text('Cancel', style: TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.w600)),
                       ),
                       const SizedBox(width: 12),
-                      if (_currentStep == 1)
+                      if (_currentStep == 2)
                         AppPrimaryButton(
                           label: _isExam ? 'Publish Periodical Exam' : 'Publish Unit Quiz',
                           icon: Icons.check_circle_outline,
@@ -315,6 +368,81 @@ class _CreateAssessmentFlowDialogState extends State<CreateAssessmentFlowDialog>
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildQuestionPlanView() {
+    final labels = {
+      QuestionType.multipleChoice: 'Multiple Choice',
+      QuestionType.trueFalse: 'True / False',
+      QuestionType.matching: 'Matching Type',
+      QuestionType.identification: 'Identification',
+    };
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(28),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            _isExam ? 'Set Examination Question Distribution' : 'Set Quiz Question Distribution',
+            style: const TextStyle(fontSize: 19, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'Choose which question types to include and how many items each section should contain. The total will be calculated automatically.',
+            style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+          ),
+          const SizedBox(height: 22),
+          ..._questionCounts.keys.map(
+            (type) => Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(labels[type]!, style: const TextStyle(fontWeight: FontWeight.w600)),
+                  ),
+                  SizedBox(
+                    width: 120,
+                    child: TextField(
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: 'Number of items',
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                      onChanged: (value) => setState(() => _questionCounts[type] = int.tryParse(value) ?? 0),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Total questions: ${_questionCounts.values.fold<int>(0, (sum, count) => sum + count)}',
+            style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary),
+          ),
+          const SizedBox(height: 24),
+          Align(
+            alignment: Alignment.centerRight,
+            child: AppPrimaryButton(
+              label: 'Continue to Question Builder',
+              icon: Icons.arrow_forward,
+              onPressed: () {
+                if (_questionCounts.values.every((count) => count == 0)) {
+                  AppModals.showErrorDialog(
+                    context: context,
+                    title: 'Question Count Required',
+                    message: 'Add at least one question to continue.',
+                  );
+                  return;
+                }
+                setState(() => _currentStep = 2);
+              },
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -596,7 +724,13 @@ class _CreateAssessmentFlowDialogState extends State<CreateAssessmentFlowDialog>
                               ))
                           .toList(),
                       onChanged: (val) {
-                        if (val != null) setState(() => _selectedQType = val);
+                        if (val != null) {
+                          setState(() {
+                            _selectedQType = val;
+                            _selectedChoiceAnswer = null;
+                            _matchingPairs.clear();
+                          });
+                        }
                       },
                     ),
                     const Spacer(),
@@ -641,32 +775,101 @@ class _CreateAssessmentFlowDialogState extends State<CreateAssessmentFlowDialog>
                     ],
                   ),
                   const SizedBox(height: 12),
+                  const Text('Select the correct answer:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  ...[
+                    ['A', _choiceACtrl.text],
+                    ['B', _choiceBCtrl.text],
+                    ['C', _choiceCCtrl.text],
+                    ['D', _choiceDCtrl.text],
+                  ].map(
+                    (choice) => RadioListTile<String>(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      title: Text('${choice[0]}. ${choice[1].isEmpty ? 'Choice ${choice[0]}' : choice[1]}'),
+                      value: choice[0],
+                      groupValue: _selectedChoiceAnswer,
+                      onChanged: (value) => setState(() => _selectedChoiceAnswer = value),
+                    ),
+                  ),
+                ],
+                if (_selectedQType == QuestionType.trueFalse) ...[
+                  const Text('Select the correct answer:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  ...['True', 'False'].map(
+                    (answer) => RadioListTile<String>(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(answer),
+                      value: answer,
+                      groupValue: _selectedChoiceAnswer,
+                      onChanged: (value) => setState(() => _selectedChoiceAnswer = value),
+                    ),
+                  ),
+                ],
+                if (_selectedQType == QuestionType.matching) ...[
+                  const Text('Matching pairs', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      Expanded(child: TextField(controller: _matchingLeftCtrl, decoration: const InputDecoration(labelText: 'Item / Prompt', isDense: true))),
+                      const SizedBox(width: 10),
+                      Expanded(child: TextField(controller: _matchingRightCtrl, decoration: const InputDecoration(labelText: 'Correct Match', isDense: true))),
+                      IconButton(
+                        icon: const Icon(Icons.add_circle, color: AppColors.primary),
+                        onPressed: () {
+                          final left = _matchingLeftCtrl.text.trim();
+                          final right = _matchingRightCtrl.text.trim();
+                          if (left.isEmpty || right.isEmpty) return;
+                          setState(() {
+                            _matchingPairs[left] = right;
+                            _matchingLeftCtrl.clear();
+                            _matchingRightCtrl.clear();
+                          });
+                        },
+                      ),
+                    ],
+                  ),
+                  ..._matchingPairs.entries.map(
+                    (pair) => ListTile(
+                      dense: true,
+                      title: Text(pair.key),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(pair.value, style: const TextStyle(fontWeight: FontWeight.bold)),
+                          IconButton(
+                            icon: const Icon(Icons.close, size: 17),
+                            onPressed: () => setState(() => _matchingPairs.remove(pair.key)),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                 ],
 
                 // Answer Key / Correct Answer field
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _qCorrectAnswerCtrl,
-                        decoration: const InputDecoration(
-                          labelText: 'Official Correct Answer (Auto-Checker Key)',
-                          hintText: 'e.g. y = 3/2 or Option A or True',
-                          isDense: true,
-                          prefixIcon: Icon(Icons.vpn_key_outlined, size: 18),
+                if (_selectedQType == QuestionType.identification)
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _qCorrectAnswerCtrl,
+                          decoration: const InputDecoration(
+                            labelText: 'Official Correct Answer',
+                            hintText: 'Enter the answer used by the auto-checker',
+                            isDense: true,
+                            prefixIcon: Icon(Icons.vpn_key_outlined, size: 18),
+                          ),
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 16),
-                    AppPrimaryButton(
-                      label: 'Add to List',
-                      icon: Icons.add,
-                      height: 42,
-                      width: 130,
-                      onPressed: _addQuestionToList,
-                    ),
-                  ],
-                ),
+                      const SizedBox(width: 16),
+                      AppPrimaryButton(label: 'Add to List', icon: Icons.add, height: 42, width: 130, onPressed: _addQuestionToList),
+                    ],
+                  )
+                else
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: AppPrimaryButton(label: 'Add to List', icon: Icons.add, height: 42, width: 130, onPressed: _addQuestionToList),
+                  ),
               ],
             ),
           ),
