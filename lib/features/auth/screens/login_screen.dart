@@ -211,7 +211,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                         ),
                         Text(
-                          'EDUARDO BARRETTO SENIOR INTEGRATED SCHOOL',
+                          'CALAMBA CITY, LAGUNA',
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.bold,
@@ -241,28 +241,6 @@ class _LoginScreenState extends State<LoginScreen> {
                     color: Colors.white70,
                     height: 1.6,
                   ),
-                ),
-                const SizedBox(height: 32),
-                Row(
-                  children: [
-                    Container(
-                      width: 40,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: AppColors.accentLight,
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    const Text(
-                      'Excellence and Integrity in Education',
-                      style: TextStyle(
-                        color: Colors.white70,
-                        fontSize: 13,
-                        fontStyle: FontStyle.italic,
-                      ),
-                    ),
-                  ],
                 ),
               ],
             ),
@@ -316,22 +294,11 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ),
                   const Text(
-                    'EDUARDO BARRETTO SENIOR INTEGRATED SCHOOL',
+                    'One Realm for Every Learning Journey.',
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
                       color: Colors.white70,
-                      letterSpacing: 1.1,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  const Text(
-                    'Calamba City, Laguna',
-                    style: TextStyle(
-                      color: Colors.white54,
                       fontSize: 11,
-                      fontStyle: FontStyle.italic,
                     ),
                   ),
                 ],
@@ -526,7 +493,7 @@ class _LoginScreenState extends State<LoginScreen> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  _buildRoleChip(UserRole.student, 'Student'),
+                  _buildRoleChip(UserRole.student, 'Student Demo'),
                   const SizedBox(width: 6),
                   _buildRoleChip(UserRole.teacher, 'Teacher'),
                   const SizedBox(width: 6),

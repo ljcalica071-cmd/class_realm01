@@ -8,17 +8,26 @@ import '../../../widgets/common/app_text_field.dart';
 
 class CreateRequirementFlowDialog extends StatefulWidget {
   final VoidCallback onRequirementCreated;
+  final String initialSection;
 
   const CreateRequirementFlowDialog({
     super.key,
     required this.onRequirementCreated,
+    this.initialSection = 'Section A',
   });
 
-  static Future<void> show(BuildContext context, {required VoidCallback onRequirementCreated}) {
+  static Future<void> show(
+    BuildContext context, {
+    required VoidCallback onRequirementCreated,
+    String initialSection = 'Section A',
+  }) {
     return showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => CreateRequirementFlowDialog(onRequirementCreated: onRequirementCreated),
+      builder: (ctx) => CreateRequirementFlowDialog(
+        onRequirementCreated: onRequirementCreated,
+        initialSection: initialSection,
+      ),
     );
   }
 
@@ -31,9 +40,16 @@ class _CreateRequirementFlowDialogState extends State<CreateRequirementFlowDialo
   final _descCtrl = TextEditingController();
   final _instructionsCtrl = TextEditingController();
   final _maxScoreCtrl = TextEditingController(text: '100');
-  final _sectionCtrl = TextEditingController(text: '11-STEM A');
+  final _sectionCtrl = TextEditingController(text: 'Section A');
+  String? _attachmentName;
   SubmissionType _submissionType = SubmissionType.fileAndText;
   DateTime _deadline = DateTime.now().add(const Duration(days: 7));
+
+  @override
+  void initState() {
+    super.initState();
+    _sectionCtrl.text = widget.initialSection;
+  }
 
   @override
   void dispose() {
@@ -70,7 +86,7 @@ class _CreateRequirementFlowDialogState extends State<CreateRequirementFlowDialo
       isPublished: true,
       isRequirement: true,
       submissionType: _submissionType,
-      attachmentName: 'Performance_Task_Rubric.pdf',
+      attachmentName: _attachmentName,
     );
 
     MockDatabase.instance.addActivity(newTask);
@@ -176,6 +192,29 @@ class _CreateRequirementFlowDialogState extends State<CreateRequirementFlowDialo
                       hint: 'Provide step-by-step instructions for students...',
                       controller: _instructionsCtrl,
                       maxLines: 3,
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        OutlinedButton.icon(
+                          onPressed: () => setState(
+                            () => _attachmentName = 'Performance_Task_Rubric.pdf',
+                          ),
+                          icon: const Icon(Icons.attach_file, size: 18),
+                          label: const Text('Attach PDF/DOCX'),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            _attachmentName ?? 'No file attached (prototype)',
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: AppColors.textSecondary,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 16),
                     const Text('Submission Type:', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),

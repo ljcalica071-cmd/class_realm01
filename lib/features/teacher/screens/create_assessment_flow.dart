@@ -8,17 +8,30 @@ import '../../../widgets/common/app_text_field.dart';
 
 class CreateAssessmentFlowDialog extends StatefulWidget {
   final VoidCallback onAssessmentCreated;
+  final String initialSection;
+  final bool initialIsExam;
 
   const CreateAssessmentFlowDialog({
     super.key,
     required this.onAssessmentCreated,
+    this.initialSection = 'Section A',
+    this.initialIsExam = false,
   });
 
-  static Future<void> show(BuildContext context, {required VoidCallback onAssessmentCreated}) {
+  static Future<void> show(
+    BuildContext context, {
+    required VoidCallback onAssessmentCreated,
+    String initialSection = 'Section A',
+    bool initialIsExam = false,
+  }) {
     return showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => CreateAssessmentFlowDialog(onAssessmentCreated: onAssessmentCreated),
+      builder: (ctx) => CreateAssessmentFlowDialog(
+        onAssessmentCreated: onAssessmentCreated,
+        initialSection: initialSection,
+        initialIsExam: initialIsExam,
+      ),
     );
   }
 
@@ -38,7 +51,7 @@ class _CreateAssessmentFlowDialogState extends State<CreateAssessmentFlowDialog>
   final _titleCtrl = TextEditingController();
   final _descCtrl = TextEditingController();
   final _durationCtrl = TextEditingController(text: '30');
-  final _sectionCtrl = TextEditingController(text: 'STEM 11-A');
+  final _sectionCtrl = TextEditingController(text: 'Section A');
   final _gradingQuarterCtrl = TextEditingController(text: '1st Quarter');
   DateTime _scheduleDate = DateTime.now().add(const Duration(days: 2));
 
@@ -54,6 +67,15 @@ class _CreateAssessmentFlowDialogState extends State<CreateAssessmentFlowDialog>
   final _choiceBCtrl = TextEditingController();
   final _choiceCCtrl = TextEditingController();
   final _choiceDCtrl = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _sectionCtrl.text = widget.initialSection;
+    if (widget.initialIsExam) {
+      _selectAssessmentType(true);
+    }
+  }
 
   @override
   void dispose() {

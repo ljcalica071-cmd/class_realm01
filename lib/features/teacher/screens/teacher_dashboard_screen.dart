@@ -24,7 +24,7 @@ class TeacherDashboardScreen extends StatefulWidget {
 }
 
 class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
-  int _selectedIndex = 17;
+  int _selectedIndex = 0;
   bool _isSidebarExpanded = true;
   bool _showArchivedStudents = false;
   bool _showNewSchoolYearForm = false;
@@ -39,14 +39,15 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     'Section B': 'General Mathematics',
   };
   final Map<String, int> _classroomStudentCounts = {
-    'Section A': 3,
-    'Section B': 2,
+    'Section A': 10,
+    'Section B': 8,
   };
   String _selectedSchoolYear = '2026-2027';
   String _newSchoolYearStructure = 'Quarterly (4 quarters)';
   String _newClassSchoolYear = 'SY 2026-2027';
   String _newClassGradeLevel = 'Grade 11';
   String _studentSearchQuery = '';
+  String _selectedClassSection = 'Section A';
 
   // Controllers for CRUD forms
   final _studentNameCtrl = TextEditingController();
@@ -156,10 +157,23 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                     children: [
                       _buildNavItem(0, 'Dashboard', Icons.dashboard_outlined),
                       const SizedBox(height: 8),
+                      _buildSectionHeader('MY CLASSROOM'),
+                      _buildNavItem(
+                        17,
+                        'Classroom Setup',
+                        Icons.apartment_outlined,
+                      ),
+                      _buildNavItem(18, 'Gradebook', Icons.menu_book_outlined),
+                      _buildNavItem(
+                        12,
+                        'Manage Students',
+                        Icons.groups_outlined,
+                      ),
+                      const SizedBox(height: 8),
                       _buildSectionHeader('TEACHING'),
                       _buildNavItem(
                         1,
-                        'Assessments & Classwork',
+                        'Class Activities & Assessments',
                         Icons.assignment_outlined,
                       ),
                       _buildNavItem(
@@ -201,19 +215,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                         Icons.notifications_outlined,
                       ),
                       _buildNavItem(16, 'Profile', Icons.person_outline),
-                      const SizedBox(height: 8),
-                      _buildSectionHeader('MY CLASSROOM'),
-                      _buildNavItem(
-                        17,
-                        'Classroom Setup',
-                        Icons.apartment_outlined,
-                      ),
-                      _buildNavItem(18, 'Gradebook', Icons.menu_book_outlined),
-                      _buildNavItem(
-                        12,
-                        'Manage Students',
-                        Icons.groups_outlined,
-                      ),
+                      _buildNavItem(11, 'Settings', Icons.settings_outlined),
                     ],
                   ),
                 ),
@@ -381,7 +383,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
       case 0:
         return 'Teacher Dashboard Overview';
       case 1:
-        return 'Assessments & Classwork';
+        return 'Class Activities & Assessments';
       case 3:
         return 'AI Lesson Planning Generator';
       case 4:
@@ -399,7 +401,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
       case 10:
         return 'Academic & DepEd Quarterly Reports';
       case 11:
-        return 'Academic Setup & Configurations';
+        return 'Settings';
       case 12:
         return 'Student Management & Roster';
       case 13:
@@ -638,7 +640,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                       _buildClassItem(
                         subject: 'Mathematics 11 (General Math)',
                         sectionAndRoom:
-                            'Grade 11 - STEM 11-A • Room 304 - Science Wing',
+                            'Grade 11 - Section A • Room 304 - Science Wing',
                         time: '07:30 AM - 09:00 AM',
                         isDone: true,
                         attendanceStats: 'Attendance: 34 / 35 present',
@@ -647,7 +649,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                       _buildClassItem(
                         subject: 'Mathematics 11 (General Math)',
                         sectionAndRoom:
-                            'Grade 11 - STEM 11-B • Room 305 - Science Wing',
+                            'Grade 11 - Section B • Room 305 - Science Wing',
                         time: '09:15 AM - 10:45 AM',
                         isDone: true,
                         attendanceStats: 'Attendance: 35 / 35 present',
@@ -656,7 +658,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                       _buildClassItem(
                         subject: 'Business Mathematics',
                         sectionAndRoom:
-                            'Grade 11 - ABM 11-A • Room 201 - Business Wing',
+                            'Grade 11 - Section A • Room 201 - Business Wing',
                         time: '01:00 PM - 02:30 PM',
                         isDone: false,
                         attendanceStats: 'Scheduled (Not yet started)',
@@ -664,7 +666,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                       const SizedBox(height: 12),
                       _buildClassItem(
                         subject: 'Basic Calculus & Statistics',
-                        sectionAndRoom: 'Grade 11 - HUMSS 11-A • Room 102 - Humanities Wing',
+                        sectionAndRoom: 'Grade 11 - Section B • Room 102 - Humanities Wing',
                         time: '02:45 PM - 04:15 PM',
                         isDone: false,
                         attendanceStats: 'Scheduled (Not yet started)',
@@ -2300,7 +2302,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   void _showAddStudentModal(BuildContext context) {
     _studentNameCtrl.clear();
     _studentIdCtrl.clear();
-    _studentSectionCtrl.text = 'STEM 11-A';
+    _studentSectionCtrl.text = 'Section A';
 
     showDialog(
       context: context,
@@ -2328,7 +2330,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
               TextField(
                 controller: _studentSectionCtrl,
                 decoration: const InputDecoration(
-                  labelText: 'Assigned Section (e.g. STEM 11-A)',
+                  labelText: 'Assigned Section (e.g. Section A)',
                 ),
               ),
             ],
@@ -2379,7 +2381,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   void _showEditStudentModal(BuildContext context, UserModel student) {
     _studentNameCtrl.text = student.fullName;
     _studentIdCtrl.text = student.studentId ?? '';
-    _studentSectionCtrl.text = student.departmentOrSection ?? 'STEM 11-A';
+    _studentSectionCtrl.text = student.departmentOrSection ?? 'Section A';
 
     showDialog(
       context: context,
@@ -4169,18 +4171,18 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   ) {
     final writtenWork = <Widget>[
       ...activities
-          .where((item) => !item.isRequirement)
+          .where((item) => !item.isRequirement && item.section == _selectedClassSection)
           .map((item) => _buildUnifiedActivityCard(item, 'WW')),
       ...assessments
-          .where((item) => !item.isExam)
+          .where((item) => !item.isExam && item.section == _selectedClassSection)
           .map((item) => _buildUnifiedAssessmentCard(item, 'WW')),
     ];
     final performanceTasks = activities
-        .where((item) => item.isRequirement)
+        .where((item) => item.isRequirement && item.section == _selectedClassSection)
         .map((item) => _buildUnifiedActivityCard(item, 'PT'))
         .toList();
     final examinations = assessments
-        .where((item) => item.isExam)
+        .where((item) => item.isExam && item.section == _selectedClassSection)
         .map((item) => _buildUnifiedAssessmentCard(item, 'EX'))
         .toList();
 
@@ -4198,7 +4200,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Assessments & Classwork',
+                      'Class Activities & Assessments',
                       style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
                     ),
                     SizedBox(height: 4),
@@ -4211,15 +4213,39 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                     ),
                   ],
                 ),
-                AppPrimaryButton(
-                  label: 'Create',
-                  icon: Icons.add_circle_outline,
-                  onPressed: () => _showUnifiedCreateChooser(context),
-                  height: 42,
-                ),
               ],
             ),
             const SizedBox(height: 20),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value: _selectedClassSection,
+                  isExpanded: true,
+                  items: const [
+                    DropdownMenuItem(
+                      value: 'Section A',
+                      child: Text('Class/Section: Section A'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'Section B',
+                      child: Text('Class/Section: Section B'),
+                    ),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) {
+                      setState(() => _selectedClassSection = value);
+                    }
+                  },
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
             Container(
               decoration: BoxDecoration(
                 color: Colors.white,
@@ -4242,18 +4268,54 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
             Expanded(
               child: TabBarView(
                 children: [
-                  _buildUnifiedItemList(writtenWork, 'No written work yet.'),
-                  _buildUnifiedItemList(
-                    performanceTasks,
-                    'No performance tasks yet.',
+                  _buildUnifiedCategoryView(
+                    label: 'Written Work',
+                    items: writtenWork,
+                    emptyMessage: 'No written work for this section yet.',
+                    onCreate: () => _showUnifiedCreateChooser(context, 'WW'),
                   ),
-                  _buildUnifiedItemList(examinations, 'No examinations yet.'),
+                  _buildUnifiedCategoryView(
+                    label: 'Performance Tasks',
+                    items: performanceTasks,
+                    emptyMessage: 'No performance tasks for this section yet.',
+                    onCreate: () => _showUnifiedCreateChooser(context, 'PT'),
+                  ),
+                  _buildUnifiedCategoryView(
+                    label: 'Examinations',
+                    items: examinations,
+                    emptyMessage: 'No examinations for this section yet.',
+                    onCreate: () => _showUnifiedCreateChooser(context, 'EX'),
+                  ),
                 ],
               ),
             ),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildUnifiedCategoryView({
+    required String label,
+    required List<Widget> items,
+    required String emptyMessage,
+    required VoidCallback onCreate,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Align(
+          alignment: Alignment.centerRight,
+          child: AppPrimaryButton(
+            label: 'Create $label',
+            icon: Icons.add,
+            onPressed: onCreate,
+            height: 38,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Expanded(child: _buildUnifiedItemList(items, emptyMessage)),
+      ],
     );
   }
 
@@ -4283,6 +4345,8 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
       icon: Icons.assignment_outlined,
       onPressed: () => ActivitySubmissionsScreen.show(context, item),
       actionLabel: 'View Submissions',
+      onEdit: () => _showEditActivityModal(item),
+      onDelete: () => _confirmDeleteActivity(item),
     );
   }
 
@@ -4299,6 +4363,12 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
       icon: item.isExam ? Icons.description_outlined : Icons.quiz_outlined,
       onPressed: () {},
       actionLabel: 'View Scores',
+      onEdit: () => EditAssessmentFlowDialog.show(
+        context,
+        assessment: item,
+        onAssessmentUpdated: () => setState(() {}),
+      ),
+      onDelete: () => _confirmDeleteAssessment(item),
     );
   }
 
@@ -4310,6 +4380,8 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     required IconData icon,
     required VoidCallback onPressed,
     required String actionLabel,
+    VoidCallback? onEdit,
+    VoidCallback? onDelete,
   }) {
     final isPerformanceTask = category == 'PT';
     final isExam = category == 'EX';
@@ -4381,53 +4453,174 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
             ),
           ),
           const SizedBox(width: 12),
-          AppSecondaryButton(
-            label: actionLabel,
-            icon: Icons.open_in_new,
-            height: 38,
-            onPressed: onPressed,
+          Wrap(
+            spacing: 4,
+            children: [
+              AppSecondaryButton(
+                label: actionLabel,
+                icon: Icons.open_in_new,
+                height: 38,
+                onPressed: onPressed,
+              ),
+              if (onEdit != null)
+                IconButton(
+                  tooltip: 'Edit',
+                  icon: const Icon(Icons.edit_outlined),
+                  onPressed: onEdit,
+                ),
+              if (onDelete != null)
+                IconButton(
+                  tooltip: 'Delete',
+                  icon: const Icon(Icons.delete_outline, color: AppColors.error),
+                  onPressed: onDelete,
+                ),
+            ],
           ),
         ],
       ),
     );
   }
 
-  void _showUnifiedCreateChooser(BuildContext context) {
+  void _confirmDeleteActivity(ActivityModel item) {
+    _showDeleteConfirmation(
+      title: item.title,
+      onDelete: () {
+        setState(() => MockDatabase.instance.deleteActivity(item.id));
+      },
+    );
+  }
+
+  void _confirmDeleteAssessment(QuizOrExamModel item) {
+    _showDeleteConfirmation(
+      title: item.title,
+      onDelete: () {
+        setState(() => MockDatabase.instance.deleteQuizOrExam(item.id));
+      },
+    );
+  }
+
+  void _showDeleteConfirmation({
+    required String title,
+    required VoidCallback onDelete,
+  }) {
     showDialog(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Create Classwork'),
+        title: const Text('Delete Item'),
+        content: Text(
+          'Are you sure you want to delete this item?\n\n$title',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+            onPressed: () {
+              onDelete();
+              Navigator.pop(dialogContext);
+            },
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showEditActivityModal(ActivityModel item) {
+    final titleCtrl = TextEditingController(text: item.title);
+    final descriptionCtrl = TextEditingController(text: item.description);
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('Edit ${item.isRequirement ? 'Performance Task' : 'Activity'}'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: titleCtrl,
+              decoration: const InputDecoration(labelText: 'Title'),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: descriptionCtrl,
+              maxLines: 3,
+              decoration: const InputDecoration(labelText: 'Description'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              if (titleCtrl.text.trim().isEmpty) return;
+              final index = MockDatabase.instance.activities
+                  .indexWhere((activity) => activity.id == item.id);
+              if (index != -1) {
+                MockDatabase.instance.activities[index] = item.copyWith(
+                  title: titleCtrl.text.trim(),
+                  description: descriptionCtrl.text.trim(),
+                );
+              }
+              setState(() {});
+              Navigator.pop(dialogContext);
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    ).then((_) {
+      titleCtrl.dispose();
+      descriptionCtrl.dispose();
+    });
+  }
+
+  void _showUnifiedCreateChooser(BuildContext context, [String? category]) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(category == null ? 'Create Classwork' : 'Create $category Item'),
         content: const Text(
           'Choose the grading category and use the appropriate creation flow.',
         ),
         actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(dialogContext);
-              _showCreateActivityModal(context);
-            },
-            child: const Text('WW Activity / Assignment'),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(dialogContext);
-              CreateRequirementFlowDialog.show(
-                context,
-                onRequirementCreated: () => setState(() {}),
-              );
-            },
-            child: const Text('PT Performance Task'),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(dialogContext);
-              CreateAssessmentFlowDialog.show(
-                context,
-                onAssessmentCreated: () => setState(() {}),
-              );
-            },
-            child: const Text('WW Quiz / EX Exam'),
-          ),
+          if (category != 'PT' && category != 'EX')
+            TextButton(
+              onPressed: () {
+                Navigator.pop(dialogContext);
+                _showCreateActivityModal(context);
+              },
+              child: const Text('Activity / Assignment'),
+            ),
+          if (category != 'PT')
+            TextButton(
+              onPressed: () {
+                Navigator.pop(dialogContext);
+                CreateAssessmentFlowDialog.show(
+                  context,
+                  initialSection: _selectedClassSection,
+                  initialIsExam: category == 'EX',
+                  onAssessmentCreated: () => setState(() {}),
+                );
+              },
+              child: Text(category == 'EX' ? 'Exam' : 'Quiz'),
+            ),
+          if (category != 'WW' && category != 'EX')
+            TextButton(
+              onPressed: () {
+                Navigator.pop(dialogContext);
+                CreateRequirementFlowDialog.show(
+                  context,
+                  initialSection: _selectedClassSection,
+                  onRequirementCreated: () => setState(() {}),
+                );
+              },
+              child: const Text('Performance Task'),
+            ),
         ],
       ),
     );
@@ -4560,11 +4753,18 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     );
   }
 
-  void _showCreateActivityModal(BuildContext context) {
+  void _showCreateActivityModal(
+    BuildContext context, {
+    bool isPerformanceTask = false,
+  }) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Create New Activity / Requirement'),
+        title: Text(
+          isPerformanceTask
+              ? 'Create Performance Task'
+              : 'Create Activity / Assignment',
+        ),
         content: SizedBox(
           width: 450,
           child: Column(
@@ -4601,7 +4801,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                     title: _actTitleCtrl.text.trim(),
                     description: _actDescCtrl.text.trim(),
                     subject: 'General Mathematics',
-                    section: 'STEM 11-A',
+                    section: _selectedClassSection,
                     deadline: DateTime.now().add(const Duration(days: 3)),
                     maxScore: 50.0,
                     isPublished: true,
@@ -5763,7 +5963,6 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   String _gradebookSectionWeight(String title) {
     if (title == 'Written Work') return '20%';
     if (title == 'Performance Task') return '50%';
-    if (title == 'Term Examination (TE)') return '40%';
     return '30%';
   }
 

@@ -34,7 +34,7 @@ class _AddStudentDialogState extends State<AddStudentDialog> {
   final _emailCtrl = TextEditingController();
   final _studentIdCtrl = TextEditingController();
   final _gradeLevelCtrl = TextEditingController(text: '11');
-  final _sectionCtrl = TextEditingController(text: 'STEM 11-A');
+  final _sectionCtrl = TextEditingController(text: 'Section A');
   final _guardianNameCtrl = TextEditingController();
   final _guardianContactCtrl = TextEditingController();
   DateTime? _birthday;

@@ -56,7 +56,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         email: _emailController.text.trim(),
         role: _selectedRole,
         status: _selectedRole == UserRole.teacher ? AccountStatus.pending : AccountStatus.active,
-        departmentOrSection: _deptOrSectionController.text.trim().isEmpty ? 'STEM 11-A' : _deptOrSectionController.text.trim(),
+        departmentOrSection: _deptOrSectionController.text.trim().isEmpty ? 'Section A' : _deptOrSectionController.text.trim(),
         studentId: _selectedRole == UserRole.student ? (_studentIdController.text.trim().isEmpty ? '2024-SHS-0999' : _studentIdController.text.trim()) : null,
         contactNumber: _contactController.text.trim(),
       );
@@ -154,7 +154,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     const SizedBox(height: 16),
                     AppTextField(
                       label: 'Grade & Section',
-                      hint: 'STEM 11-A',
+                      hint: 'Section A',
                       controller: _deptOrSectionController,
                       prefixIcon: Icons.class_outlined,
                     ),

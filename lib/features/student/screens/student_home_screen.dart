@@ -49,7 +49,7 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
           Center(child: Padding(padding: EdgeInsets.symmetric(horizontal: 12), child: SyncStatusBadge())),
         ],
       ),
-      drawer: _buildStudentDrawer(context),
+      drawer: _buildStudentDrawer(context, student),
       body: pages[_currentIndex],
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
@@ -68,12 +68,12 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
     );
   }
 
-  Widget _buildStudentDrawer(BuildContext context) {
+  Widget _buildStudentDrawer(BuildContext context, UserModel student) {
     return Drawer(
       child: ListView(
         padding: EdgeInsets.zero,
         children: [
-          const DrawerHeader(
+          DrawerHeader(
             decoration: BoxDecoration(color: AppColors.primary),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -81,8 +81,8 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
               children: [
                 CircleAvatar(backgroundColor: Colors.white, radius: 28, child: Icon(Icons.school, size: 32, color: AppColors.primary)),
                 SizedBox(height: 10),
-                Text('Juan Dela Cruz', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
-                Text('STEM 11-A • ID: 2024-SHS-0101', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                Text('${student.fullName}', style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                Text('${student.departmentOrSection ?? 'Section A'} • ID: ${student.studentId ?? 'N/A'}', style: const TextStyle(color: Colors.white70, fontSize: 12)),
               ],
             ),
           ),
@@ -133,6 +133,8 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
   }
 
   Widget _buildHomeTab(List<ActivityModel> activities, List<QuizOrExamModel> quizzes) {
+    final student = MockDatabase.instance.currentUser ??
+        MockDatabase.instance.users.firstWhere((u) => u.role == UserRole.student);
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -144,7 +146,7 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
               gradient: const LinearGradient(colors: [AppColors.primary, AppColors.primaryDark]),
               borderRadius: BorderRadius.circular(16),
             ),
-            child: const Row(
+            child: Row(
               children: [
                 Expanded(
                   child: Column(
@@ -152,9 +154,9 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
                     children: [
                       Text('Welcome to ClassRealm', style: TextStyle(color: Colors.white70, fontSize: 13)),
                       SizedBox(height: 4),
-                      Text('Juan Dela Cruz', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+                      Text('${student.fullName}', style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
                       SizedBox(height: 8),
-                      Text('Grade 11 - STEM 11-A', style: TextStyle(color: Colors.white70, fontSize: 13)),
+                      Text('Grade ${student.gradeLevel ?? '11'} - ${student.departmentOrSection ?? 'Section A'}', style: const TextStyle(color: Colors.white70, fontSize: 13)),
                     ],
                   ),
                 ),
@@ -310,7 +312,7 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
           Text(student.email, style: const TextStyle(color: AppColors.textSecondary)),
           const SizedBox(height: 24),
           ListTile(leading: const Icon(Icons.badge), title: const Text('Student ID'), subtitle: Text(student.studentId ?? '2024-SHS-0101')),
-          ListTile(leading: const Icon(Icons.class_), title: const Text('Section'), subtitle: Text(student.departmentOrSection ?? 'STEM 11-A')),
+          ListTile(leading: const Icon(Icons.class_), title: const Text('Section'), subtitle: Text(student.departmentOrSection ?? 'Section A')),
         ],
       ),
     );

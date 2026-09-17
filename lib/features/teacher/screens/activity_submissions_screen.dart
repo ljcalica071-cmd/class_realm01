@@ -108,7 +108,7 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
                         child: Text(student.fullName.substring(0, 1), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                       ),
                       title: Text(student.fullName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                      subtitle: Text('ID: ${student.studentId} • Section: ${student.departmentOrSection ?? "STEM 11-A"} • Status: ${submission.status.name.toUpperCase()}'),
+                      subtitle: Text('ID: ${student.studentId} • Section: ${student.departmentOrSection ?? "Section A"} • Status: ${submission.status.name.toUpperCase()}'),
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
