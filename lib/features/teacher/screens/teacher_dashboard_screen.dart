@@ -4167,12 +4167,15 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
       ...activities
           .where(
             (item) =>
-                !item.isRequirement && item.section == _selectedClassSection,
+                !item.isRequirement &&
+                item.assignedSections.contains(_selectedClassSection),
           )
           .map((item) => _buildUnifiedActivityCard(item, 'WW')),
       ...assessments
           .where(
-            (item) => !item.isExam && item.section == _selectedClassSection,
+            (item) =>
+                !item.isExam &&
+                item.assignedSections.contains(_selectedClassSection),
           )
           .map((item) => _buildUnifiedAssessmentCard(item, 'WW')),
     ];
@@ -4185,7 +4188,11 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         .map((item) => _buildUnifiedActivityCard(item, 'PT'))
         .toList();
     final examinations = assessments
-        .where((item) => item.isExam && item.section == _selectedClassSection)
+        .where(
+          (item) =>
+              item.isExam &&
+              item.assignedSections.contains(_selectedClassSection),
+        )
         .map((item) => _buildUnifiedAssessmentCard(item, 'EX'))
         .toList();
 
