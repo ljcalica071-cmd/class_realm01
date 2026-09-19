@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
 import '../../../core/theme/app_colors.dart';
 import '../../../data/mock_database.dart';
 import '../../../models/user_model.dart';
@@ -9,209 +11,446 @@ import '../../../widgets/common/app_modals.dart';
 
 class ActivitySubmissionsScreen extends StatefulWidget {
   final ActivityModel activity;
+  final bool embedded;
+  final VoidCallback? onBack;
 
-  const ActivitySubmissionsScreen({super.key, required this.activity});
+  const ActivitySubmissionsScreen({
+    super.key,
+    required this.activity,
+    this.embedded = false,
+    this.onBack,
+  });
 
   static Future<void> show(BuildContext context, ActivityModel activity) {
     return Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => ActivitySubmissionsScreen(activity: activity)),
+      MaterialPageRoute(
+        builder: (_) => ActivitySubmissionsScreen(activity: activity),
+      ),
     );
   }
 
   @override
-  State<ActivitySubmissionsScreen> createState() => _ActivitySubmissionsScreenState();
+  State<ActivitySubmissionsScreen> createState() =>
+      _ActivitySubmissionsScreenState();
 }
 
 class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
-  String _selectedSection = 'All';
+  String _selectedStatus = 'All';
 
   @override
   Widget build(BuildContext context) {
-    final sections = ['All', ...MockDatabase.instance.sections];
-    final students = MockDatabase.instance.users.where((u) => u.role == UserRole.student && !u.isArchived).toList();
+    final statuses = ['All', 'Graded', 'Pending', 'Unsubmitted'];
+    final allStudents = MockDatabase.instance.users.where((u) {
+      if (u.role != UserRole.student || u.isArchived) return false;
+      if (!widget.activity.assignedSections.contains(u.departmentOrSection)) {
+        return false;
+      }
+      return true;
+    }).toList();
+    final statusCounts = <String, int>{
+      'Graded': 0,
+      'Pending': 0,
+      'Unsubmitted': 0,
+    };
+    for (final student in allStudents) {
+      final submission = _submissionFor(student.id);
+      statusCounts[_statusFor(submission)] =
+          statusCounts[_statusFor(submission)]! + 1;
+    }
+    final students = allStudents.where((u) {
+      final matching = MockDatabase.instance.activitySubmissions.where(
+        (sub) =>
+            sub.activityOrExamId == widget.activity.id && sub.studentId == u.id,
+      );
+      final submission = matching.isEmpty ? null : matching.first;
+      final status = _statusFor(submission);
+      return _selectedStatus == 'All' || status == _selectedStatus;
+    }).toList();
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('Submissions: ${widget.activity.title}'),
-        backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
-      ),
-      body: Container(
-        color: AppColors.background,
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header info & Section Dropdown Filter
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(widget.activity.title, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
-                    const SizedBox(height: 4),
-                    Text('Subject: ${widget.activity.subject} • Max Score: ${widget.activity.maxScore.toInt()} pts', style: const TextStyle(fontSize: 13, color: AppColors.textSecondary)),
-                  ],
-                ),
-                Row(
-                  children: [
-                    const Text('Filter Section: ', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                    const SizedBox(width: 8),
-                    DropdownButton<String>(
-                      value: _selectedSection,
-                      items: sections.map((sec) => DropdownMenuItem(value: sec, child: Text(sec))).toList(),
-                      onChanged: (val) {
-                        if (val != null) setState(() => _selectedSection = val);
-                      },
+    final content = Container(
+      color: AppColors.background,
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header info & Section Dropdown Filter
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    widget.activity.title,
+                    style: const TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textPrimary,
                     ),
-                  ],
-                ),
-              ],
-            ),
-            const SizedBox(height: 24),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Subject: ${widget.activity.subject} • Sections: ${widget.activity.section}',
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+              Row(
+                children: [
+                  Text(
+                    '${allStudents.length - statusCounts['Unsubmitted']!}/${allStudents.length} submitted  •  ${statusCounts['Graded']} graded  •  ${statusCounts['Pending']} pending  •  ${statusCounts['Unsubmitted']} unsubmitted',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppColors.textSecondary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(width: 18),
+                  const Text(
+                    'Filter Status: ',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                  ),
+                  const SizedBox(width: 8),
+                  DropdownButton<String>(
+                    value: _selectedStatus,
+                    items: statuses
+                        .map(
+                          (sec) =>
+                              DropdownMenuItem(value: sec, child: Text(sec)),
+                        )
+                        .toList(),
+                    onChanged: (val) {
+                      if (val != null) setState(() => _selectedStatus = val);
+                    },
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
 
-            // Students List Table / Cards for checking
-            Expanded(
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppColors.border),
-                ),
-                child: ListView.separated(
-                  itemCount: students.length,
-                  separatorBuilder: (_, __) => const Divider(height: 1),
-                  itemBuilder: (ctx, i) {
-                    final student = students[i];
-                    // Find submission if exists
-                    final submission = MockDatabase.instance.activitySubmissions.firstWhere(
-                      (sub) => sub.activityOrExamId == widget.activity.id && sub.studentId == student.id,
-                      orElse: () => StudentSubmission(
-                        id: 'sub_dummy_${student.id}',
-                        activityOrExamId: widget.activity.id,
-                        studentId: student.id,
-                        studentName: student.fullName,
-                        submittedAt: DateTime.now().subtract(const Duration(hours: 2)),
-                        attachedFile: '${student.fullName.replaceAll(" ", "")}_Output.pdf',
-                        textSubmission: 'Here is my complete problem solution and derived graph for Rational Functions.',
-                        maxScore: widget.activity.maxScore,
-                        status: ActivityStatus.submitted,
-                      ),
-                    );
+          // Students List Table / Cards for checking
+          Expanded(
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: ListView.separated(
+                itemCount: students.length,
+                separatorBuilder: (_, _) => const Divider(height: 1),
+                itemBuilder: (ctx, i) {
+                  final student = students[i];
+                  // Find submission if exists
+                  final submission = MockDatabase.instance.activitySubmissions
+                      .firstWhere(
+                        (sub) =>
+                            sub.activityOrExamId == widget.activity.id &&
+                            sub.studentId == student.id,
+                        orElse: () => StudentSubmission(
+                          id: 'sub_dummy_${student.id}',
+                          activityOrExamId: widget.activity.id,
+                          studentId: student.id,
+                          studentName: student.fullName,
+                          submittedAt: DateTime.now(),
+                          maxScore: widget.activity.maxScore,
+                          status: ActivityStatus.pending,
+                        ),
+                      );
+                  final name = [
+                    student.lastName ?? student.fullName.split(' ').last,
+                    student.firstName ?? student.fullName.split(' ').first,
+                  ].join(', ');
 
-                    return ListTile(
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                      leading: CircleAvatar(
-                        backgroundColor: AppColors.primaryLight,
-                        child: Text(student.fullName.substring(0, 1), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                  return ListTile(
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 8,
+                    ),
+                    leading: CircleAvatar(
+                      backgroundColor: AppColors.primaryLight,
+                      child: Text(
+                        student.fullName.substring(0, 1),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
-                      title: Text(student.fullName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                      subtitle: Text('ID: ${student.studentId} • Section: ${student.departmentOrSection ?? "Section A"} • Status: ${submission.status.name.toUpperCase()}'),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (submission.score != null)
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                              decoration: BoxDecoration(color: AppColors.successLight, borderRadius: BorderRadius.circular(20)),
-                              child: Text('${submission.score!.toInt()} / ${widget.activity.maxScore.toInt()}', style: const TextStyle(color: AppColors.success, fontWeight: FontWeight.bold)),
-                            )
-                          else
-                            const StatusBadge(text: 'Pending Review', backgroundColor: AppColors.warningLight, textColor: AppColors.warning),
-                          const SizedBox(width: 16),
-                          AppPrimaryButton(
-                            label: submission.score != null ? 'Edit Score' : 'Review & Score',
-                            height: 36,
-                            width: 130,
-                            onPressed: () => _showScoringModal(context, submission, student.fullName),
+                    ),
+                    title: Text(
+                      name,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                      ),
+                    ),
+                    subtitle: Text(_submissionStatus(submission)),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (submission.score != null)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppColors.successLight,
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Text(
+                              '${submission.score!.toInt()} / ${widget.activity.maxScore.toInt()}',
+                              style: const TextStyle(
+                                color: AppColors.success,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          )
+                        else
+                          StatusBadge(
+                            text: _statusText(submission),
+                            backgroundColor: submission.attachedFile == null
+                                ? AppColors.background
+                                : AppColors.warningLight,
+                            textColor: submission.attachedFile == null
+                                ? AppColors.textSecondary
+                                : AppColors.warning,
                           ),
-                        ],
-                      ),
-                    );
-                  },
-                ),
+                        const SizedBox(width: 16),
+                        AppPrimaryButton(
+                          label: 'View',
+                          height: 36,
+                          width: 130,
+                          onPressed: () => _showScoringModal(
+                            context,
+                            submission,
+                            student.fullName,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
               ),
             ),
-          ],
-        ),
+          ),
+        ],
+      ),
+    );
+    final header = Container(
+      height: 58,
+      color: AppColors.primary,
+      child: Row(
+        children: [
+          IconButton(
+            icon: const Icon(Icons.arrow_back, color: Colors.white),
+            onPressed: widget.onBack ?? () => Navigator.of(context).pop(),
+          ),
+          Text(
+            'For Performance Task Submissions: ${widget.activity.title}',
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
+      ),
+    );
+    if (widget.embedded) {
+      return Column(
+        children: [
+          header,
+          Expanded(child: content),
+        ],
+      );
+    }
+    return Scaffold(
+      body: Column(
+        children: [
+          header,
+          Expanded(child: content),
+        ],
       ),
     );
   }
 
-  void _showScoringModal(BuildContext context, StudentSubmission submission, String studentName) {
-    final scoreCtrl = TextEditingController(text: submission.score?.toString() ?? '');
+  String _formatSubmittedAt(DateTime date) {
+    final hour = date.hour == 0
+        ? 12
+        : (date.hour > 12 ? date.hour - 12 : date.hour);
+    return '${date.month}/${date.day}/${date.year} $hour:${date.minute.toString().padLeft(2, '0')} ${date.hour >= 12 ? 'PM' : 'AM'}';
+  }
+
+  StudentSubmission? _submissionFor(String studentId) {
+    final matches = MockDatabase.instance.activitySubmissions.where(
+      (sub) =>
+          sub.activityOrExamId == widget.activity.id &&
+          sub.studentId == studentId,
+    );
+    return matches.isEmpty ? null : matches.first;
+  }
+
+  String _statusFor(StudentSubmission? submission) {
+    if (submission?.score != null) return 'Graded';
+    if (submission?.attachedFile != null) return 'Pending';
+    return 'Unsubmitted';
+  }
+
+  String _statusText(StudentSubmission submission) {
+    if (submission.attachedFile == null) return 'Unsubmitted';
+    return 'Pending Review';
+  }
+
+  String _submissionStatus(StudentSubmission submission) {
+    if (submission.attachedFile == null) return 'Status: UNSUBMITTED';
+    if (submission.score != null) {
+      return 'Status: GRADED • Submitted ${_formatSubmittedAt(submission.submittedAt)}';
+    }
+    return 'Status: PENDING • Submitted ${_formatSubmittedAt(submission.submittedAt)}';
+  }
+
+  void _showScoringModal(
+    BuildContext context,
+    StudentSubmission submission,
+    String studentName,
+  ) {
+    final scoreCtrl = TextEditingController(
+      text: submission.score?.toString() ?? '',
+    );
     final feedbackCtrl = TextEditingController(text: submission.feedback ?? '');
 
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('Review Submission: $studentName'),
+        title: Text('Performance Task Submissions: $studentName'),
         content: SizedBox(
-          width: 480,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
+          width: 820,
+          child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Attached Student Work:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.textSecondary)),
-              const SizedBox(height: 4),
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(color: AppColors.background, borderRadius: BorderRadius.circular(8), border: Border.all(color: AppColors.border)),
-                child: Row(
+              Expanded(
+                child: Container(
+                  height: 330,
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: AppColors.background,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: AppColors.border),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Student Work File',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      Expanded(
+                        child: Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                Icons.picture_as_pdf,
+                                color: AppColors.error,
+                                size: 52,
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                submission.attachedFile ??
+                                    'No file submitted yet',
+                                textAlign: TextAlign.center,
+                              ),
+                              if (submission.attachedFile != null)
+                                TextButton.icon(
+                                  onPressed: () {},
+                                  icon: const Icon(Icons.open_in_new),
+                                  label: const Text('Open file'),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 18),
+              Expanded(
+                child: Column(
                   children: [
-                    const Icon(Icons.picture_as_pdf, color: AppColors.error),
-                    const SizedBox(width: 10),
-                    Expanded(child: Text(submission.attachedFile ?? 'Student_Output_Work.pdf', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
+                    TextField(
+                      controller: scoreCtrl,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.digitsOnly,
+                        LengthLimitingTextInputFormatter(3),
+                      ],
+                      decoration: InputDecoration(
+                        labelText:
+                            'Score (Max: ${widget.activity.maxScore.toInt()})',
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: feedbackCtrl,
+                      maxLines: 5,
+                      decoration: const InputDecoration(
+                        labelText: 'Remarks / Feedback (Optional)',
+                      ),
+                    ),
                   ],
                 ),
-              ),
-              const SizedBox(height: 12),
-              if (submission.textSubmission != null) ...[
-                const Text('Student Text Note:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.textSecondary)),
-                const SizedBox(height: 4),
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(color: AppColors.background, borderRadius: BorderRadius.circular(8), border: Border.all(color: AppColors.border)),
-                  child: Text(submission.textSubmission!, style: const TextStyle(fontSize: 13)),
-                ),
-                const SizedBox(height: 16),
-              ],
-              TextField(
-                controller: scoreCtrl,
-                keyboardType: TextInputType.number,
-                decoration: InputDecoration(labelText: 'Score (Max: ${widget.activity.maxScore.toInt()})'),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: feedbackCtrl,
-                maxLines: 2,
-                decoration: const InputDecoration(labelText: 'Remarks / Feedback (Optional)'),
               ),
             ],
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
           AppPrimaryButton(
-            label: 'Save Score & Remarks',
+            label: 'Save Score',
             height: 40,
             onPressed: () {
-              final double? enteredScore = double.tryParse(scoreCtrl.text.trim());
-              if (enteredScore == null || enteredScore < 0 || enteredScore > widget.activity.maxScore) {
-                AppModals.showErrorDialog(context: context, title: 'Invalid Score', message: 'Please enter a valid numeric score between 0 and ${widget.activity.maxScore.toInt()}.');
+              final double? enteredScore = double.tryParse(
+                scoreCtrl.text.trim(),
+              );
+              if (enteredScore == null ||
+                  enteredScore < 0 ||
+                  enteredScore > widget.activity.maxScore) {
+                AppModals.showErrorDialog(
+                  context: context,
+                  title: 'Invalid Score',
+                  message:
+                      'Please enter a valid numeric score between 0 and ${widget.activity.maxScore.toInt()}.',
+                );
                 return;
               }
 
               setState(() {
-                MockDatabase.instance.scoreSubmission(submission.id, enteredScore, feedbackCtrl.text.trim());
+                MockDatabase.instance.scoreSubmission(
+                  submission.id,
+                  enteredScore,
+                  feedbackCtrl.text.trim(),
+                );
               });
               Navigator.pop(ctx);
               AppModals.showSuccessDialog(
                 context: context,
                 title: 'Score Saved',
-                message: 'Score of ${enteredScore.toInt()} / ${widget.activity.maxScore.toInt()} saved successfully and released to student portal.',
+                message:
+                    'Score of ${enteredScore.toInt()} / ${widget.activity.maxScore.toInt()} saved successfully and released to student portal.',
               );
             },
             width: 170,

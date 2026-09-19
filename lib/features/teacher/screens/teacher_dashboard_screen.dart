@@ -48,6 +48,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   String _newClassGradeLevel = 'Grade 11';
   String _studentSearchQuery = '';
   String _selectedClassSection = 'Section A';
+  ActivityModel? _viewingSubmissionsFor;
 
   // Controllers for CRUD forms
   final _studentNameCtrl = TextEditingController();
@@ -171,11 +172,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                       ),
                       const SizedBox(height: 8),
                       _buildSectionHeader('TEACHING'),
-                      _buildNavItem(
-                        1,
-                        'Class Activities & Assessments',
-                        Icons.assignment_outlined,
-                      ),
+                      _buildNavItem(1, 'Classwork', Icons.assignment_outlined),
                       _buildNavItem(
                         3,
                         'Lesson Planning',
@@ -383,7 +380,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
       case 0:
         return 'Teacher Dashboard Overview';
       case 1:
-        return 'Class Activities & Assessments';
+        return 'Classwork';
       case 3:
         return 'AI Lesson Planning Generator';
       case 4:
@@ -482,7 +479,13 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
           schedules,
         );
       case 1:
-        return _buildUnifiedAssessmentsTab(activities, quizzesAndExams);
+        return _viewingSubmissionsFor == null
+            ? _buildUnifiedAssessmentsTab(activities, quizzesAndExams)
+            : ActivitySubmissionsScreen(
+                activity: _viewingSubmissionsFor!,
+                embedded: true,
+                onBack: () => setState(() => _viewingSubmissionsFor = null),
+              );
       case 3:
         return _buildLessonPlanningTab(lessonPlans);
       case 4:
@@ -666,7 +669,8 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                       const SizedBox(height: 12),
                       _buildClassItem(
                         subject: 'Basic Calculus & Statistics',
-                        sectionAndRoom: 'Grade 11 - Section B • Room 102 - Humanities Wing',
+                        sectionAndRoom:
+                            'Grade 11 - Section B • Room 102 - Humanities Wing',
                         time: '02:45 PM - 04:15 PM',
                         isDone: false,
                         attendanceStats: 'Scheduled (Not yet started)',
@@ -3315,7 +3319,11 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
             ),
             child: Row(
               children: [
-                const Icon(Icons.people_outline, size: 16, color: Color(0xFF1A56DB)),
+                const Icon(
+                  Icons.people_outline,
+                  size: 16,
+                  color: Color(0xFF1A56DB),
+                ),
                 const SizedBox(width: 8),
                 Text(
                   '$studentCount students',
@@ -3401,7 +3409,11 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                   borderRadius: BorderRadius.circular(10),
                 ),
               ),
-              icon: const Icon(Icons.person_add_alt, size: 18, color: Color(0xFF166534)),
+              icon: const Icon(
+                Icons.person_add_alt,
+                size: 18,
+                color: Color(0xFF166534),
+              ),
               label: const Text(
                 'Add Students',
                 style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
@@ -4130,7 +4142,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
           style: const TextStyle(
             color: Colors.white,
             fontWeight: FontWeight.bold,
-              fontSize: 14,
+            fontSize: 14,
           ),
         ),
       ),
@@ -4171,14 +4183,23 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   ) {
     final writtenWork = <Widget>[
       ...activities
-          .where((item) => !item.isRequirement && item.section == _selectedClassSection)
+          .where(
+            (item) =>
+                !item.isRequirement && item.section == _selectedClassSection,
+          )
           .map((item) => _buildUnifiedActivityCard(item, 'WW')),
       ...assessments
-          .where((item) => !item.isExam && item.section == _selectedClassSection)
+          .where(
+            (item) => !item.isExam && item.section == _selectedClassSection,
+          )
           .map((item) => _buildUnifiedAssessmentCard(item, 'WW')),
     ];
     final performanceTasks = activities
-        .where((item) => item.isRequirement && item.section == _selectedClassSection)
+        .where(
+          (item) =>
+              item.isRequirement &&
+              item.assignedSections.contains(_selectedClassSection),
+        )
         .map((item) => _buildUnifiedActivityCard(item, 'PT'))
         .toList();
     final examinations = assessments
@@ -4200,8 +4221,11 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Class Activities & Assessments',
-                      style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                      'Classwork',
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     SizedBox(height: 4),
                     Text(
@@ -4336,24 +4360,33 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   }
 
   Widget _buildUnifiedActivityCard(ActivityModel item, String category) {
+    final dueDate = item.deadlineForSection(_selectedClassSection);
     return _buildUnifiedCard(
       title: item.title,
-      description: item.description,
+      description: item.isRequirement ? '' : item.description,
       category: category,
-      details:
-          'Activity • ${item.section} • ${item.maxScore.toInt()} pts • Due ${_monthName(item.deadline.month)} ${item.deadline.day}',
+      details: item.isRequirement
+          ? '${item.maxScore.toInt()} pts • Due ${_monthName(dueDate.month)} ${dueDate.day}, ${_formatTime(dueDate)}'
+          : 'Activity • ${item.section} • ${item.maxScore.toInt()} pts • Due ${_monthName(dueDate.month)} ${dueDate.day}',
       icon: Icons.assignment_outlined,
-      onPressed: () => ActivitySubmissionsScreen.show(context, item),
+      onPressed: () => setState(() {
+        _viewingSubmissionsFor = item;
+      }),
       actionLabel: 'View Submissions',
       onEdit: () => _showEditActivityModal(item),
       onDelete: () => _confirmDeleteActivity(item),
     );
   }
 
-  Widget _buildUnifiedAssessmentCard(
-    QuizOrExamModel item,
-    String category,
-  ) {
+  String _formatTime(DateTime date) {
+    final hour = date.hour == 0
+        ? 12
+        : (date.hour > 12 ? date.hour - 12 : date.hour);
+    final minute = date.minute.toString().padLeft(2, '0');
+    return '$hour:$minute ${date.hour >= 12 ? 'PM' : 'AM'}';
+  }
+
+  Widget _buildUnifiedAssessmentCard(QuizOrExamModel item, String category) {
     return _buildUnifiedCard(
       title: item.title,
       description: item.description,
@@ -4388,13 +4421,13 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     final badgeBackground = isPerformanceTask
         ? const Color(0xFFE8F8F0)
         : isExam
-            ? const Color(0xFFF3F0FF)
-            : const Color(0xFFE8F0FF);
+        ? const Color(0xFFF3F0FF)
+        : const Color(0xFFE8F0FF);
     final badgeText = isPerformanceTask
         ? const Color(0xFF166534)
         : isExam
-            ? const Color(0xFF6D28D9)
-            : const Color(0xFF1D4ED8);
+        ? const Color(0xFF6D28D9)
+        : const Color(0xFF1D4ED8);
 
     return Container(
       padding: const EdgeInsets.all(18),
@@ -4430,16 +4463,18 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 5),
-                Text(
-                  description,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: AppColors.textSecondary,
-                    fontSize: 13,
+                if (description.isNotEmpty) ...[
+                  const SizedBox(height: 5),
+                  Text(
+                    description,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 13,
+                    ),
                   ),
-                ),
+                ],
                 const SizedBox(height: 6),
                 Text(
                   details,
@@ -4471,7 +4506,10 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
               if (onDelete != null)
                 IconButton(
                   tooltip: 'Delete',
-                  icon: const Icon(Icons.delete_outline, color: AppColors.error),
+                  icon: const Icon(
+                    Icons.delete_outline,
+                    color: AppColors.error,
+                  ),
                   onPressed: onDelete,
                 ),
             ],
@@ -4507,9 +4545,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Delete Item'),
-        content: Text(
-          'Are you sure you want to delete this item?\n\n$title',
-        ),
+        content: Text('Are you sure you want to delete this item?\n\n$title'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext),
@@ -4529,54 +4565,15 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   }
 
   void _showEditActivityModal(ActivityModel item) {
-    final titleCtrl = TextEditingController(text: item.title);
-    final descriptionCtrl = TextEditingController(text: item.description);
-    showDialog(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text('Edit ${item.isRequirement ? 'Performance Task' : 'Activity'}'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: titleCtrl,
-              decoration: const InputDecoration(labelText: 'Title'),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: descriptionCtrl,
-              maxLines: 3,
-              decoration: const InputDecoration(labelText: 'Description'),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              if (titleCtrl.text.trim().isEmpty) return;
-              final index = MockDatabase.instance.activities
-                  .indexWhere((activity) => activity.id == item.id);
-              if (index != -1) {
-                MockDatabase.instance.activities[index] = item.copyWith(
-                  title: titleCtrl.text.trim(),
-                  description: descriptionCtrl.text.trim(),
-                );
-              }
-              setState(() {});
-              Navigator.pop(dialogContext);
-            },
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    ).then((_) {
-      titleCtrl.dispose();
-      descriptionCtrl.dispose();
-    });
+    if (!item.isRequirement) {
+      return;
+    }
+    CreateRequirementFlowDialog.show(
+      context,
+      existingTask: item,
+      initialSection: item.assignedSections.first,
+      onRequirementCreated: () => setState(() {}),
+    );
   }
 
   void _showUnifiedCreateChooser(BuildContext context, [String? category]) {
@@ -4590,10 +4587,20 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
       );
       return;
     }
+    if (category == 'PT') {
+      CreateRequirementFlowDialog.show(
+        context,
+        initialSection: _selectedClassSection,
+        onRequirementCreated: () => setState(() {}),
+      );
+      return;
+    }
     showDialog(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: Text(category == null ? 'Create Classwork' : 'Create $category Item'),
+        title: Text(
+          category == null ? 'Create Classwork' : 'Create $category Item',
+        ),
         content: const Text(
           'Choose the grading category and use the appropriate creation flow.',
         ),
@@ -4630,7 +4637,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                   onRequirementCreated: () => setState(() {}),
                 );
               },
-              child: const Text('Performance Task'),
+              child: const Text('Classwork'),
             ),
         ],
       ),
@@ -4773,7 +4780,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
       builder: (ctx) => AlertDialog(
         title: Text(
           isPerformanceTask
-              ? 'Create Performance Task'
+              ? 'Create Classwork'
               : 'Create Activity / Assignment',
         ),
         content: SizedBox(
@@ -5392,10 +5399,10 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     for (final activity in database.activities) {
       gradeItems[activity.isRequirement ? 'Performance Task' : 'Written Work']!
           .add({
-        'name': activity.title,
-        'points': '${activity.maxScore.toStringAsFixed(0)} pts',
-        'date': formatDate(activity.dateAssigned),
-      });
+            'name': activity.title,
+            'points': '${activity.maxScore.toStringAsFixed(0)} pts',
+            'date': formatDate(activity.dateAssigned),
+          });
     }
 
     for (final assessment in database.quizzesAndExams) {
@@ -5412,8 +5419,8 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
       final section = title.contains('second') || title.contains('st2')
           ? 'Summative Test 2 (ST2)'
           : title.contains('term') || title.contains('final')
-              ? 'Term Examination (TE)'
-              : 'Summative Test 1 (ST1)';
+          ? 'Term Examination (TE)'
+          : 'Summative Test 1 (ST1)';
       gradeItems[section]!.add({
         'name': assessment.title,
         'points': '${assessment.totalPoints.toStringAsFixed(0)} pts',
@@ -5856,9 +5863,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
             (item) => Container(
               padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
               decoration: const BoxDecoration(
-                border: Border(
-                  bottom: BorderSide(color: Color(0xFFE2E8F0)),
-                ),
+                border: Border(bottom: BorderSide(color: Color(0xFFE2E8F0))),
               ),
               child: Row(
                 children: [
@@ -5902,7 +5907,9 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                     onPressed: () {},
                     icon: const Icon(Icons.edit_outlined, size: 15),
                     label: Text(
-                      title.contains('Summative') ? 'Enter Scores' : 'View Scores',
+                      title.contains('Summative')
+                          ? 'Enter Scores'
+                          : 'View Scores',
                     ),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: const Color(0xFF1D4ED8),

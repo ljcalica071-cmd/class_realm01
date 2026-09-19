@@ -2,7 +2,14 @@ enum AttendanceStatus { present, late, absent, excused }
 
 enum SyncStatus { online, offline, pendingSync, syncing, synced, syncError }
 
-enum ActivityStatus { pending, submitted, checked, graded, lateSubmission, returned }
+enum ActivityStatus {
+  pending,
+  submitted,
+  checked,
+  graded,
+  lateSubmission,
+  returned,
+}
 
 enum AssessmentType { quiz, examination }
 
@@ -70,11 +77,13 @@ class ActivityModel {
   final DateTime deadline;
   final double maxScore;
   final bool isPublished;
-  final bool isRequirement; // true if Performance Task / Requirement, false if Activity
+  final bool
+  isRequirement; // true if Performance Task / Requirement, false if Activity
   final String? attachmentName;
   final SubmissionType submissionType;
   final int submissionsCount;
   final int totalStudents;
+  final Map<String, DateTime> sectionDeadlines;
 
   ActivityModel({
     required this.id,
@@ -93,7 +102,14 @@ class ActivityModel {
     this.submissionType = SubmissionType.fileAndText,
     this.submissionsCount = 0,
     this.totalStudents = 35,
-  }) : dateAssigned = dateAssigned ?? DateTime.now();
+    Map<String, DateTime>? sectionDeadlines,
+  }) : dateAssigned = dateAssigned ?? DateTime.now(),
+       sectionDeadlines = sectionDeadlines ?? {section: deadline};
+
+  List<String> get assignedSections => sectionDeadlines.keys.toList();
+
+  DateTime deadlineForSection(String targetSection) =>
+      sectionDeadlines[targetSection] ?? deadline;
 
   ActivityModel copyWith({
     String? id,
@@ -112,6 +128,7 @@ class ActivityModel {
     SubmissionType? submissionType,
     int? submissionsCount,
     int? totalStudents,
+    Map<String, DateTime>? sectionDeadlines,
   }) {
     return ActivityModel(
       id: id ?? this.id,
@@ -130,6 +147,7 @@ class ActivityModel {
       submissionType: submissionType ?? this.submissionType,
       submissionsCount: submissionsCount ?? this.submissionsCount,
       totalStudents: totalStudents ?? this.totalStudents,
+      sectionDeadlines: sectionDeadlines ?? this.sectionDeadlines,
     );
   }
 }
@@ -297,7 +315,8 @@ class AssessmentResultModel {
     this.needsTeacherReview = false,
   });
 
-  double get percentage => totalPoints > 0 ? (scoreEarned / totalPoints) * 100 : 0.0;
+  double get percentage =>
+      totalPoints > 0 ? (scoreEarned / totalPoints) * 100 : 0.0;
 }
 
 class ExamStudentAnswer {
