@@ -123,10 +123,12 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
                   DropdownButton<String>(
                     value: _selectedSection,
                     items: sections
-                        .map((section) => DropdownMenuItem(
-                              value: section,
-                              child: Text(section),
-                            ))
+                        .map(
+                          (section) => DropdownMenuItem(
+                            value: section,
+                            child: Text(section),
+                          ),
+                        )
                         .toList(),
                     onChanged: (value) {
                       if (value != null) {
@@ -225,7 +227,8 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
                               vertical: 4,
                             ),
                             decoration: BoxDecoration(
-                              color: submission.score! >=
+                              color:
+                                  submission.score! >=
                                       widget.activity.maxScore * 0.76
                                   ? AppColors.successLight
                                   : AppColors.errorLight,
@@ -234,7 +237,8 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
                             child: Text(
                               '${submission.score!.toInt()} / ${widget.activity.maxScore.toInt()}',
                               style: TextStyle(
-                                color: submission.score! >=
+                                color:
+                                    submission.score! >=
                                         widget.activity.maxScore * 0.76
                                     ? AppColors.success
                                     : AppColors.error,
@@ -361,85 +365,71 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
       builder: (ctx) => AlertDialog(
         title: Text('Performance Task Submissions: $studentName'),
         content: SizedBox(
-          width: 820,
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          width: 560,
+          child: Column(
             children: [
-              Expanded(
-                child: Container(
-                  height: 330,
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: AppColors.background,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: AppColors.border),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Student Work File',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-                      Expanded(
-                        child: Center(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(
-                                Icons.picture_as_pdf,
-                                color: AppColors.error,
-                                size: 52,
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                submission.attachedFile ??
-                                    'No file submitted yet',
-                                textAlign: TextAlign.center,
-                              ),
-                              if (submission.attachedFile != null)
-                                TextButton.icon(
-                                  onPressed: () {},
-                                  icon: const Icon(Icons.open_in_new),
-                                  label: const Text('Open file'),
-                                ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
+              Container(
+                height: 190,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: AppColors.background,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppColors.border),
                 ),
-              ),
-              const SizedBox(width: 18),
-              Expanded(
-                child: Column(
+                child: Row(
                   children: [
-                    TextField(
-                      controller: scoreCtrl,
-                      keyboardType: TextInputType.number,
-                      inputFormatters: [
-                        FilteringTextInputFormatter.digitsOnly,
-                        LengthLimitingTextInputFormatter(3),
-                      ],
-                      decoration: InputDecoration(
-                        labelText:
-                            'Score (Max: ${widget.activity.maxScore.toInt()})',
-                      ),
+                    const Icon(
+                      Icons.picture_as_pdf,
+                      color: AppColors.error,
+                      size: 52,
                     ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: feedbackCtrl,
-                      maxLines: 5,
-                      decoration: const InputDecoration(
-                        labelText: 'Remarks / Feedback (Optional)',
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Student Work File',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            submission.attachedFile ?? 'No file submitted yet',
+                          ),
+                          if (submission.attachedFile != null)
+                            TextButton.icon(
+                              onPressed: () {},
+                              icon: const Icon(Icons.open_in_new),
+                              label: const Text('Open file'),
+                            ),
+                        ],
                       ),
                     ),
                   ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: scoreCtrl,
+                keyboardType: TextInputType.number,
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                  LengthLimitingTextInputFormatter(3),
+                ],
+                decoration: InputDecoration(
+                  labelText: 'Score (Max: ${widget.activity.maxScore.toInt()})',
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: feedbackCtrl,
+                maxLines: 4,
+                decoration: const InputDecoration(
+                  labelText: 'Remarks / Feedback (Optional)',
                 ),
               ),
             ],

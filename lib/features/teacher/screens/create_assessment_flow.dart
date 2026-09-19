@@ -137,7 +137,6 @@ class _CreateAssessmentFlowDialogState
         _descCtrl.text =
             'Formative quiz on composite functions and asymptote evaluations.';
       }
-
     });
   }
 
@@ -463,10 +462,10 @@ class _CreateAssessmentFlowDialogState
                           _currentStep == 0
                               ? 'Choose the assessment category for Senior High School'
                               : _currentStep == 1
-                              ? 'Step 1: Define title, section, duration, and instructions'
+                              ? 'Set title, section, duration, and instructions'
                               : _currentStep == 2
-                              ? 'Step 1: Define details and question distribution'
-                              : 'Step 3: Add questions and answer keys',
+                              ? 'Set details and question distribution'
+                              : 'Add questions and answer keys',
                           style: const TextStyle(
                             fontSize: 12,
                             color: AppColors.textSecondary,
@@ -614,7 +613,7 @@ class _CreateAssessmentFlowDialogState
           ),
           const SizedBox(height: 16),
           const Text(
-            'Assigned Section & Due Date / Time',
+            'Assigned Section & Start Date / Time',
             style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
           ),
           const SizedBox(height: 8),
@@ -641,15 +640,36 @@ class _CreateAssessmentFlowDialogState
                     ),
                   ),
                   Expanded(
-                    child: OutlinedButton.icon(
-                      icon: const Icon(Icons.calendar_month_outlined, size: 18),
-                      label: Text(
-                        _formatAssessmentDeadline(
-                          _sectionDeadlines[section] ?? _scheduleDate,
+                    child: InkWell(
+                      onTap: () => _selectAssessmentDeadline(section),
+                      borderRadius: BorderRadius.circular(8),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 12,
                         ),
-                        overflow: TextOverflow.ellipsis,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: AppColors.border),
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                _formatAssessmentDeadline(
+                                  _sectionDeadlines[section] ?? _scheduleDate,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            const Icon(
+                              Icons.calendar_month_outlined,
+                              size: 18,
+                              color: AppColors.textSecondary,
+                            ),
+                          ],
+                        ),
                       ),
-                      onPressed: () => _selectAssessmentDeadline(section),
                     ),
                   ),
                 ],
@@ -697,7 +717,10 @@ class _CreateAssessmentFlowDialogState
           child: Column(
             children: _questionCountCtrls.entries.map((entry) {
               return Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
                 child: Row(
                   children: [
                     Expanded(
@@ -715,14 +738,30 @@ class _CreateAssessmentFlowDialogState
                         keyboardType: TextInputType.number,
                         inputFormatters: [
                           FilteringTextInputFormatter.digitsOnly,
-                          LengthLimitingTextInputFormatter(2),
                         ],
+                        onChanged: (_) => setState(() {}),
                       ),
                     ),
                   ],
                 ),
               );
             }).toList(),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Text(
+          'Total number of questions: ${_questionCountCtrls.values.fold<int>(0, (sum, controller) => sum + (int.tryParse(controller.text) ?? 0))} / 100',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            color:
+                _questionCountCtrls.values.fold<int>(
+                      0,
+                      (sum, controller) =>
+                          sum + (int.tryParse(controller.text) ?? 0),
+                    ) >
+                    100
+                ? AppColors.error
+                : AppColors.primary,
           ),
         ),
       ],

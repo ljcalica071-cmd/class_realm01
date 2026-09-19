@@ -1429,32 +1429,6 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                   const SizedBox(width: 12),
                   ElevatedButton.icon(
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF107C41),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 12,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                    icon: const Icon(Icons.download, size: 18),
-                    label: const Text(
-                      'Export Excel',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    onPressed: () {
-                      AppModals.showSuccessDialog(
-                        context: context,
-                        title: 'Exported to Excel',
-                        message: 'Student roster has been successfully exported to Excel (.xlsx).',
-                      );
-                    },
-                  ),
-                  const SizedBox(width: 12),
-                  ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF1A56DB),
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(
@@ -2375,6 +2349,12 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                 ),
               ),
               const SizedBox(height: 16),
+              const Text(
+                'Please follow the format shown above so the system can accept the file. Download the template to ensure the columns and format are correct.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Color(0xFF475569), fontSize: 13),
+              ),
+              const SizedBox(height: 12),
               ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF0F8A48),
@@ -4348,36 +4328,6 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
             ),
             const SizedBox(height: 20),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: AppColors.border),
-              ),
-              child: DropdownButtonHideUnderline(
-                child: DropdownButton<String>(
-                  value: _selectedClassSection,
-                  isExpanded: true,
-                  items: const [
-                    DropdownMenuItem(
-                      value: 'Section A',
-                      child: Text('Class/Section: Section A'),
-                    ),
-                    DropdownMenuItem(
-                      value: 'Section B',
-                      child: Text('Class/Section: Section B'),
-                    ),
-                  ],
-                  onChanged: (value) {
-                    if (value != null) {
-                      setState(() => _selectedClassSection = value);
-                    }
-                  },
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Container(
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(10),
@@ -4473,8 +4423,8 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
       description: item.isRequirement ? '' : item.description,
       category: category,
       details: item.isRequirement
-          ? '${item.maxScore.toInt()} pts • Due ${_monthName(dueDate.month)} ${dueDate.day}, ${_formatTime(dueDate)}'
-          : 'Activity • ${item.section} • ${item.maxScore.toInt()} pts • Due ${_monthName(dueDate.month)} ${dueDate.day}',
+          ? '${item.section} • ${item.maxScore.toInt()} pts • Due ${_monthName(dueDate.month)} ${dueDate.day}, ${_formatTime(dueDate)}'
+          : '${item.section} • ${item.maxScore.toInt()} pts • Due ${_monthName(dueDate.month)} ${dueDate.day}',
       icon: Icons.assignment_outlined,
       onPressed: () => setState(() {
         _viewingSubmissionsFor = item;
@@ -4499,7 +4449,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
       description: item.description,
       category: category,
       details:
-          '${item.isExam ? 'Exam' : 'Quiz'} • ${item.section} • ${item.totalPoints.toInt()} pts • ${item.durationMinutes} mins',
+          '${item.section} • ${item.totalPoints.toInt()} pts • Start ${_monthName(item.scheduleDate.month)} ${item.scheduleDate.day}, ${_formatTime(item.scheduleDate)}',
       icon: item.isExam ? Icons.description_outlined : Icons.quiz_outlined,
       onPressed: () {},
       actionLabel: 'View Scores',
