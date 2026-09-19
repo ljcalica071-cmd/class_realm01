@@ -1331,7 +1331,9 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
           cmp = aFirst.compareTo(bFirst);
           break;
         case 'lrn':
-          cmp = (a.lrn ?? a.studentId ?? '').compareTo(b.lrn ?? b.studentId ?? '');
+          cmp = (a.lrn ?? a.studentId ?? '').compareTo(
+            b.lrn ?? b.studentId ?? '',
+          );
           break;
         case 'gender':
           cmp = (a.id.hashCode % 2).compareTo(b.id.hashCode % 2);
@@ -1405,6 +1407,26 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
               ),
               Row(
                 children: [
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF0F8A48),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    icon: const Icon(Icons.upload_file, size: 18),
+                    label: const Text(
+                      'Import Excel',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    onPressed: () => _showImportStudentsDialog(context),
+                  ),
+                  const SizedBox(width: 12),
                   ElevatedButton.icon(
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF107C41),
@@ -2282,6 +2304,102 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
             : null,
       ),
       child: child,
+    );
+  }
+
+  void _showImportStudentsDialog(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Import Students'),
+        content: SizedBox(
+          width: 760,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              InkWell(
+                onTap: () {
+                  Navigator.of(dialogContext).pop();
+                  AppModals.showSuccessDialog(
+                    context: context,
+                    title: 'File Selected',
+                    message: 'Prototype only: the selected CSV or Excel file will be processed here.',
+                  );
+                },
+                borderRadius: BorderRadius.circular(8),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 28,
+                  ),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: const Color(0xFFCBD5E1)),
+                    color: const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Column(
+                    children: [
+                      Icon(
+                        Icons.upload_file_outlined,
+                        size: 42,
+                        color: Color(0xFF94A3B8),
+                      ),
+                      SizedBox(height: 12),
+                      Text(
+                        'Click to select a CSV or Excel file',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      SizedBox(height: 8),
+                      Text(
+                        'Accepted: .csv, .xlsx, .xls',
+                        style: TextStyle(color: Color(0xFF475569)),
+                      ),
+                      SizedBox(height: 12),
+                      Text(
+                        'Required: LRN, Last Name, First Name, Gender, Birthday, Email, Contact Number',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Color(0xFF475569)),
+                      ),
+                      SizedBox(height: 4),
+                      Text(
+                        'Optional: Middle Name',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Color(0xFF475569)),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF0F8A48),
+                  foregroundColor: Colors.white,
+                ),
+                icon: const Icon(Icons.description_outlined),
+                label: const Text('Download Template'),
+                onPressed: () {
+                  AppModals.showSuccessDialog(
+                    context: context,
+                    title: 'Template Ready',
+                    message: 'Student import template downloaded. Fill in the required columns before importing.',
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
     );
   }
 

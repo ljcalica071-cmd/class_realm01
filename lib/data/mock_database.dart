@@ -231,10 +231,16 @@ class MockDatabase {
         departmentOrSection: 'General Mathematics',
       ),
       ...studentRecords.map((record) {
-        final fullName = '${record['first']} ${record['middle']} ${record['last']}';
+        final fullName =
+            '${record['first']} ${record['middle']} ${record['last']}';
         return UserModel(
           id: record['id']!,
-          username: '${record['first']}${record['last']}'.toLowerCase().replaceAll(' ', ''),
+          username: record['id'] == 'A01'
+              ? 'student'
+              : '${record['first']}${record['last']}'.toLowerCase().replaceAll(
+                  ' ',
+                  '',
+                ),
           fullName: fullName,
           email: record['email']!,
           role: UserRole.student,
@@ -246,6 +252,7 @@ class MockDatabase {
           lastName: record['last'],
           gender: record['gender'],
           birthday: parseBirthday(record['birthday']!),
+          contactNumber: record['phone'],
           gradeLevel: '11',
           parentGuardianName: record['parent'],
           parentGuardianRelationship: record['relationship'],
@@ -256,7 +263,7 @@ class MockDatabase {
         final parentId = 'P${record['id']}';
         return UserModel(
           id: parentId,
-          username: parentId.toLowerCase(),
+          username: record['id'] == 'A01' ? 'parent' : parentId.toLowerCase(),
           fullName: record['parent']!,
           email: record['parentEmail']!,
           role: UserRole.parent,
@@ -271,8 +278,7 @@ class MockDatabase {
       ..addAll({
         'usr_admin': 'admin123',
         'T001': 'teacher123',
-        for (final record in studentRecords)
-          record['id']!: 'student123',
+        for (final record in studentRecords) record['id']!: 'student123',
         for (final record in studentRecords)
           'P${record['id']}'.toLowerCase(): 'parent123',
       });
@@ -303,7 +309,9 @@ class MockDatabase {
       _ => AttendanceStatus.present,
     };
     attendanceRecords = [
-      for (final student in users.where((user) => user.role == UserRole.student))
+      for (final student in users.where(
+        (user) => user.role == UserRole.student,
+      ))
         for (var index = 0; index < attendanceDates.length; index++)
           AttendanceRecord(
             id: 'att_${student.id}_${index + 1}',
@@ -385,7 +393,17 @@ class MockDatabase {
       for (final id in ['WW1', 'WW2', 'WW3', 'PT1', 'EX1', 'EX2', 'EX3'])
         id: {
           for (final student in scores.keys)
-            student: scores[student]![['WW1', 'WW2', 'WW3', 'PT1', 'EX1', 'EX2', 'EX3'].indexOf(id)].toDouble(),
+            student:
+                scores[student]![[
+                      'WW1',
+                      'WW2',
+                      'WW3',
+                      'PT1',
+                      'EX1',
+                      'EX2',
+                      'EX3',
+                    ].indexOf(id)]
+                    .toDouble(),
         },
     };
 
@@ -399,11 +417,9 @@ class MockDatabase {
       for (final activity in activities)
         for (final student in users.where(
           (user) =>
-              user.role == UserRole.student &&
-              user.departmentOrSection != null,
+              user.role == UserRole.student && user.departmentOrSection != null,
         ))
-          if (student.id.endsWith('04') ||
-              student.id.endsWith('05')) ...[
+          if (student.id.endsWith('04') || student.id.endsWith('05')) ...[
             StudentSubmission(
               id: 'sub_${activity.id}_${student.id}',
               activityOrExamId: activity.id,
@@ -546,7 +562,7 @@ class MockDatabase {
       // Demo student (existing, keeps working)
       UserModel(
         id: 'usr_student_1',
-        username: 'student',
+        username: 'student_legacy',
         fullName: 'Juan Dela Cruz',
         email: 'juan.delacruz@gmail.com',
         role: UserRole.student,
@@ -675,7 +691,7 @@ class MockDatabase {
       ),
       const UserModel(
         id: 'usr_parent_1',
-        username: 'parent',
+        username: 'parent_legacy',
         fullName: 'Mrs. Josefina Dela Cruz',
         email: 'josefina.delacruz@gmail.com',
         role: UserRole.parent,
@@ -821,6 +837,8 @@ class MockDatabase {
     // Seed mock passwords for demo accounts
     _mockPasswords['usr_admin'] = 'admin123';
     _mockPasswords['usr_teacher_1'] = 'teacher123';
+    _mockPasswords['A01'] = 'student123';
+    _mockPasswords['PA01'] = 'parent123';
     _mockPasswords['usr_student_1'] = 'student123';
     _mockPasswords['usr_parent_1'] = 'parent123';
     _mockPasswords['usr_student_new_1'] = 'delmundo07012005';
@@ -832,8 +850,8 @@ class MockDatabase {
     attendanceRecords = [
       AttendanceRecord(
         id: 'att_1',
-        studentId: '123456789001',
-        studentName: 'Juan Dela Cruz',
+        studentId: '100001230001',
+        studentName: 'Alyssa M. Reyes',
         section: 'Section A',
         date: now,
         timeIn: '07:28 AM',
@@ -842,7 +860,7 @@ class MockDatabase {
       ),
       AttendanceRecord(
         id: 'att_2',
-        studentId: '123456789002',
+        studentId: '100001230002',
         studentName: 'Angelo Reyes',
         section: 'Section A',
         date: now,
@@ -852,7 +870,7 @@ class MockDatabase {
       ),
       AttendanceRecord(
         id: 'att_3',
-        studentId: '123456789003',
+        studentId: '100001230003',
         studentName: 'Bea Alonzo',
         section: 'Section A',
         date: now,
@@ -862,7 +880,7 @@ class MockDatabase {
       ),
       AttendanceRecord(
         id: 'att_4',
-        studentId: '123456789004',
+        studentId: '100001230004',
         studentName: 'Carlos Yulo',
         section: 'Section A',
         date: now,
@@ -872,7 +890,7 @@ class MockDatabase {
       ),
       AttendanceRecord(
         id: 'att_5',
-        studentId: '123456789005',
+        studentId: '100001230005',
         studentName: 'Diana Prince',
         section: 'Section A',
         date: now,
@@ -946,10 +964,10 @@ class MockDatabase {
       StudentSubmission(
         id: 'sub_1',
         activityOrExamId: 'act_1',
-        studentId: 'usr_student_1',
-        studentName: 'Juan Dela Cruz',
+        studentId: 'A01',
+        studentName: 'Alyssa M. Reyes',
         submittedAt: now.subtract(const Duration(hours: 4)),
-        attachedFile: 'JuanDelaCruz_RationalFunctions_Act1.pdf',
+        attachedFile: 'AlyssaReyes_RationalFunctions_Act1.pdf',
         score: 48.0,
         maxScore: 50.0,
         status: ActivityStatus.graded,
@@ -958,10 +976,10 @@ class MockDatabase {
       StudentSubmission(
         id: 'pt_sub_1',
         activityOrExamId: 'pt_mock_1',
-        studentId: 'usr_student_1',
-        studentName: 'Juan Dela Cruz',
+        studentId: 'A01',
+        studentName: 'Alyssa M. Reyes',
         submittedAt: now.subtract(const Duration(days: 1, hours: 2)),
-        attachedFile: 'DelaCruz_RationalFunctions.pdf',
+        attachedFile: 'Reyes_RationalFunctions.pdf',
         score: 99,
         maxScore: 100,
         status: ActivityStatus.graded,
@@ -1533,10 +1551,8 @@ class MockDatabase {
     required DateTime birthday,
     required String email,
     required String studentId,
-    required String gradeLevel,
-    required String section,
-    required String parentGuardianName,
-    required String parentGuardianContact,
+    required String gender,
+    required String contactNumber,
   }) {
     if (!RegExp(r'^\d{12}$').hasMatch(studentId)) {
       return 'LRN must contain exactly 12 digits.';
@@ -1550,9 +1566,7 @@ class MockDatabase {
     ].join(' ');
 
     // Duplicate checks
-    if (users.any(
-      (u) => u.role == UserRole.student && u.lrn == studentId,
-    )) {
+    if (users.any((u) => u.role == UserRole.student && u.lrn == studentId)) {
       return 'A student with LRN "$studentId" already exists.';
     }
     if (users.any(
@@ -1578,14 +1592,14 @@ class MockDatabase {
       status: AccountStatus.pendingFirstLogin,
       studentId: studentId,
       lrn: studentId,
-      departmentOrSection: section,
+      departmentOrSection: 'Section A',
       firstName: firstName,
       middleName: middleName,
       lastName: lastName,
       birthday: birthday,
-      gradeLevel: gradeLevel,
-      parentGuardianName: parentGuardianName,
-      parentGuardianContact: parentGuardianContact,
+      gender: gender,
+      contactNumber: contactNumber,
+      gradeLevel: '11',
       password: tempPassword,
     );
     users.add(newStudent);
@@ -1639,10 +1653,8 @@ class MockDatabase {
     required String lastName,
     required String email,
     required String studentId,
-    required String gradeLevel,
-    required String section,
-    required String parentGuardianName,
-    required String parentGuardianContact,
+    required String gender,
+    required String contactNumber,
     required DateTime birthday,
   }) {
     final idx = users.indexWhere((u) => u.id == id);
@@ -1658,14 +1670,14 @@ class MockDatabase {
       email: email,
       studentId: studentId,
       lrn: studentId,
-      departmentOrSection: section,
+      departmentOrSection: users[idx].departmentOrSection ?? 'Section A',
       firstName: firstName,
       middleName: middleName,
       lastName: lastName,
       birthday: birthday,
-      gradeLevel: gradeLevel,
-      parentGuardianName: parentGuardianName,
-      parentGuardianContact: parentGuardianContact,
+      gender: gender,
+      contactNumber: contactNumber,
+      gradeLevel: users[idx].gradeLevel ?? '11',
     );
   }
 

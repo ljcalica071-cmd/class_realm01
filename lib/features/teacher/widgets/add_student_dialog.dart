@@ -33,10 +33,8 @@ class _AddStudentDialogState extends State<AddStudentDialog> {
   final _lastNameCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
   final _studentIdCtrl = TextEditingController();
-  final _gradeLevelCtrl = TextEditingController(text: '11');
-  final _sectionCtrl = TextEditingController(text: 'Section A');
-  final _guardianNameCtrl = TextEditingController();
-  final _guardianContactCtrl = TextEditingController();
+  final _contactCtrl = TextEditingController();
+  String? _gender;
   DateTime? _birthday;
 
   String get _previewUsername {
@@ -59,10 +57,7 @@ class _AddStudentDialogState extends State<AddStudentDialog> {
     _lastNameCtrl.dispose();
     _emailCtrl.dispose();
     _studentIdCtrl.dispose();
-    _gradeLevelCtrl.dispose();
-    _sectionCtrl.dispose();
-    _guardianNameCtrl.dispose();
-    _guardianContactCtrl.dispose();
+    _contactCtrl.dispose();
     super.dispose();
   }
 
@@ -94,10 +89,8 @@ class _AddStudentDialogState extends State<AddStudentDialog> {
       birthday: _birthday!,
       email: _emailCtrl.text.trim(),
       studentId: _studentIdCtrl.text.trim(),
-      gradeLevel: _gradeLevelCtrl.text.trim(),
-      section: _sectionCtrl.text.trim(),
-      parentGuardianName: _guardianNameCtrl.text.trim(),
-      parentGuardianContact: _guardianContactCtrl.text.trim(),
+      gender: _gender!,
+      contactNumber: _contactCtrl.text.trim(),
     );
 
     if (error != null) {
@@ -341,9 +334,64 @@ class _AddStudentDialogState extends State<AddStudentDialog> {
                   ],
                 ),
                 const SizedBox(height: 16),
-                const _SectionLabel('Account & Contact'),
+                const _SectionLabel('Student Details'),
                 Row(
                   children: [
+                    Expanded(
+                      child: _buildField(
+                        _studentIdCtrl,
+                        'LRN (12-digit number) *',
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                          LengthLimitingTextInputFormatter(12),
+                        ],
+                        validator: (v) {
+                          if (v == null || v.isEmpty) return 'LRN is required';
+                          if (v.length != 12 || int.tryParse(v) == null) {
+                            return 'LRN must be exactly 12 digits';
+                          }
+                          return null;
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: DropdownButtonFormField<String>(
+                        value: _gender,
+                        decoration: const InputDecoration(
+                          labelText: 'Gender *',
+                        ),
+                        items: const [
+                          DropdownMenuItem(value: 'Male', child: Text('Male')),
+                          DropdownMenuItem(
+                            value: 'Female',
+                            child: Text('Female'),
+                          ),
+                        ],
+                        validator: (value) =>
+                            value == null ? 'Gender is required' : null,
+                        onChanged: (value) => setState(() => _gender = value),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: InkWell(
+                        onTap: _pickBirthday,
+                        child: InputDecorator(
+                          decoration: const InputDecoration(
+                            labelText: 'Birthday *',
+                            prefixIcon: Icon(Icons.cake_outlined, size: 18),
+                          ),
+                          child: Text(birthdayText),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
                     Expanded(
                       child: _buildField(
                         _emailCtrl,
@@ -359,92 +407,13 @@ class _AddStudentDialogState extends State<AddStudentDialog> {
                         },
                       ),
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _buildField(
-                        _studentIdCtrl,
-                        'LRN (12-digit number) *',
-                        keyboardType: TextInputType.number,
-                        inputFormatters: [
-                          FilteringTextInputFormatter.digitsOnly,
-                          LengthLimitingTextInputFormatter(12),
-                        ],
-                        validator: (v) {
-                          if (v == null || v.isEmpty) return 'LRN is required';
-                          if (v.length != 12 || int.tryParse(v) == null)
-                            return 'LRN must be exactly 12 digits';
-                          return null;
-                        },
-                      ),
-                    ),
                   ],
                 ),
                 const SizedBox(height: 16),
-                const _SectionLabel('Academic Information'),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _buildField(_gradeLevelCtrl, 'Grade Level *'),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(child: _buildField(_sectionCtrl, 'Section *')),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: InkWell(
-                        onTap: _pickBirthday,
-                        child: InputDecorator(
-                          decoration: InputDecoration(
-                            labelText: 'Birthday *',
-                            prefixIcon: const Icon(
-                              Icons.cake_outlined,
-                              size: 18,
-                              color: AppColors.primary,
-                            ),
-                            filled: true,
-                            fillColor: const Color(0xFFEFF6FF),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(10),
-                              borderSide: BorderSide.none,
-                            ),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(10),
-                              borderSide: BorderSide.none,
-                            ),
-                          ),
-                          child: Text(
-                            birthdayText,
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: _birthday == null
-                                  ? AppColors.textMuted
-                                  : AppColors.textPrimary,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                const _SectionLabel('Parent / Guardian'),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _buildField(
-                        _guardianNameCtrl,
-                        'Guardian Name',
-                        required: false,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _buildField(
-                        _guardianContactCtrl,
-                        'Guardian Contact',
-                        required: false,
-                      ),
-                    ),
-                  ],
+                _buildField(
+                  _contactCtrl,
+                  'Contact Number *',
+                  keyboardType: TextInputType.phone,
                 ),
                 const SizedBox(height: 20),
 

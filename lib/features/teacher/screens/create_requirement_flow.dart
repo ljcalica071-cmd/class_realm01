@@ -8,26 +8,6 @@ import '../../../widgets/common/app_buttons.dart';
 import '../../../widgets/common/app_modals.dart';
 import '../../../widgets/common/app_text_field.dart';
 
-class _SlashDateFormatter extends TextInputFormatter {
-  @override
-  TextEditingValue formatEditUpdate(
-    TextEditingValue oldValue,
-    TextEditingValue newValue,
-  ) {
-    final digits = newValue.text.replaceAll(RegExp(r'[^0-9]'), '');
-    if (digits.length > 8) return oldValue;
-    final buffer = StringBuffer();
-    for (var i = 0; i < digits.length; i++) {
-      if (i == 2 || i == 4) buffer.write('/');
-      buffer.write(digits[i]);
-    }
-    return TextEditingValue(
-      text: buffer.toString(),
-      selection: TextSelection.collapsed(offset: buffer.length),
-    );
-  }
-}
-
 class CreateRequirementFlowDialog extends StatefulWidget {
   final VoidCallback onRequirementCreated;
   final String initialSection;
@@ -176,132 +156,29 @@ class _CreateRequirementFlowDialogState
 
   Future<void> _selectDeadline(String section) async {
     final current = _sectionDeadlines[section]!;
-    final dateCtrl = TextEditingController(
-      text:
-          '${current.month.toString().padLeft(2, '0')}/${current.day.toString().padLeft(2, '0')}/${current.year}',
-    );
-    final hourCtrl = TextEditingController(
-      text:
-          (current.hour == 0
-                  ? 12
-                  : (current.hour > 12 ? current.hour - 12 : current.hour))
-              .toString()
-              .padLeft(2, '0'),
-    );
-    final minuteCtrl = TextEditingController(
-      text: current.minute.toString().padLeft(2, '0'),
-    );
-    var period = current.hour >= 12 ? 'PM' : 'AM';
-    final result = await showDialog<DateTime>(
+    final date = await showDatePicker(
       context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: Text('Set $section due date and time'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: dateCtrl,
-                keyboardType: TextInputType.number,
-                inputFormatters: [_SlashDateFormatter()],
-                onChanged: (_) => setDialogState(() {}),
-                decoration: InputDecoration(
-                  labelText: 'Date (MM/DD/YYYY)',
-                  prefixIcon: AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 220),
-                    child: Icon(
-                      Icons.calendar_today_outlined,
-                      key: ValueKey(dateCtrl.text),
-                    ),
-                  ),
-                ),
-              ),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: hourCtrl,
-                      keyboardType: TextInputType.number,
-                      inputFormatters: [
-                        FilteringTextInputFormatter.digitsOnly,
-                        LengthLimitingTextInputFormatter(2),
-                      ],
-                      decoration: const InputDecoration(labelText: 'Hour'),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: TextField(
-                      controller: minuteCtrl,
-                      keyboardType: TextInputType.number,
-                      inputFormatters: [
-                        FilteringTextInputFormatter.digitsOnly,
-                        LengthLimitingTextInputFormatter(2),
-                      ],
-                      decoration: const InputDecoration(labelText: 'Minute'),
-                    ),
-                  ),
-                  DropdownButton<String>(
-                    value: period,
-                    items: const [
-                      DropdownMenuItem(value: 'AM', child: Text('AM')),
-                      DropdownMenuItem(value: 'PM', child: Text('PM')),
-                    ],
-                    onChanged: (value) {
-                      if (value != null) setDialogState(() => period = value);
-                    },
-                  ),
-                ],
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                final dateParts = dateCtrl.text.split('/');
-                final hour = int.tryParse(hourCtrl.text);
-                final minute = int.tryParse(minuteCtrl.text);
-                if (dateParts.length != 3 ||
-                    dateParts.any((part) => part.isEmpty) ||
-                    hour == null ||
-                    hour < 1 ||
-                    hour > 12 ||
-                    minute == null ||
-                    minute > 59)
-                  return;
-                final month = int.tryParse(dateParts[0]);
-                final day = int.tryParse(dateParts[1]);
-                final year = int.tryParse(dateParts[2]);
-                if (month == null || day == null || year == null) return;
-                Navigator.pop(
-                  dialogContext,
-                  DateTime(
-                    year,
-                    month,
-                    day,
-                    (hour % 12) + (period == 'PM' ? 12 : 0),
-                    minute,
-                  ),
-                );
-              },
-              child: const Text('Set'),
-            ),
-          ],
-        ),
-      ),
+      initialDate: current,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2100),
     );
-    dateCtrl.dispose();
-    hourCtrl.dispose();
-    minuteCtrl.dispose();
-    if (result != null && mounted) {
-      setState(() {
-        _sectionDeadlines[section] = result;
-      });
-    }
+    if (!mounted || date == null) return;
+
+    final time = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(current),
+    );
+    if (!mounted || time == null) return;
+
+    setState(() {
+      _sectionDeadlines[section] = DateTime(
+        date.year,
+        date.month,
+        date.day,
+        time.hour,
+        time.minute,
+      );
+    });
   }
 
   String _formatDeadline(DateTime date) {
@@ -404,7 +281,7 @@ class _CreateRequirementFlowDialogState
                     AnimatedSwitcher(
                       duration: const Duration(milliseconds: 220),
                       child: Icon(
-                        Icons.access_time_outlined,
+                        Icons.calendar_month_outlined,
                         key: ValueKey(_formatDeadline(deadline)),
                         size: 17,
                         color: AppColors.textSecondary,

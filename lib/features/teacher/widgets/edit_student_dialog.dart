@@ -43,10 +43,8 @@ class _EditStudentDialogState extends State<EditStudentDialog> {
   late final TextEditingController _lastNameCtrl;
   late final TextEditingController _emailCtrl;
   late final TextEditingController _studentIdCtrl;
-  late final TextEditingController _gradeLevelCtrl;
-  late final TextEditingController _sectionCtrl;
-  late final TextEditingController _guardianNameCtrl;
-  late final TextEditingController _guardianContactCtrl;
+  late final TextEditingController _contactCtrl;
+  String? _gender;
   DateTime? _birthday;
 
   @override
@@ -58,12 +56,8 @@ class _EditStudentDialogState extends State<EditStudentDialog> {
     _lastNameCtrl = TextEditingController(text: s.lastName ?? '');
     _emailCtrl = TextEditingController(text: s.email);
     _studentIdCtrl = TextEditingController(text: s.lrn ?? s.studentId ?? '');
-    _gradeLevelCtrl = TextEditingController(text: s.gradeLevel ?? '11');
-    _sectionCtrl = TextEditingController(text: s.departmentOrSection ?? '');
-    _guardianNameCtrl = TextEditingController(text: s.parentGuardianName ?? '');
-    _guardianContactCtrl = TextEditingController(
-      text: s.parentGuardianContact ?? '',
-    );
+    _contactCtrl = TextEditingController(text: s.contactNumber ?? '');
+    _gender = s.gender;
     _birthday = s.birthday;
   }
 
@@ -74,10 +68,7 @@ class _EditStudentDialogState extends State<EditStudentDialog> {
     _lastNameCtrl.dispose();
     _emailCtrl.dispose();
     _studentIdCtrl.dispose();
-    _gradeLevelCtrl.dispose();
-    _sectionCtrl.dispose();
-    _guardianNameCtrl.dispose();
-    _guardianContactCtrl.dispose();
+    _contactCtrl.dispose();
     super.dispose();
   }
 
@@ -101,10 +92,8 @@ class _EditStudentDialogState extends State<EditStudentDialog> {
       lastName: _lastNameCtrl.text.trim(),
       email: _emailCtrl.text.trim(),
       studentId: _studentIdCtrl.text.trim(),
-      gradeLevel: _gradeLevelCtrl.text.trim(),
-      section: _sectionCtrl.text.trim(),
-      parentGuardianName: _guardianNameCtrl.text.trim(),
-      parentGuardianContact: _guardianContactCtrl.text.trim(),
+      gender: _gender!,
+      contactNumber: _contactCtrl.text.trim(),
       birthday: _birthday ?? widget.student.birthday ?? DateTime(2006, 1, 1),
     );
 
@@ -198,9 +187,64 @@ class _EditStudentDialogState extends State<EditStudentDialog> {
                   ],
                 ),
                 const SizedBox(height: 16),
-                const _SectionLabel('Account & Contact'),
+                const _SectionLabel('Student Details'),
                 Row(
                   children: [
+                    Expanded(
+                      child: _buildField(
+                        _studentIdCtrl,
+                        'LRN (12-digit number) *',
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                          LengthLimitingTextInputFormatter(12),
+                        ],
+                        validator: (v) {
+                          if (v == null || v.isEmpty) return 'LRN is required';
+                          if (v.length != 12 || int.tryParse(v) == null) {
+                            return 'LRN must be exactly 12 digits';
+                          }
+                          return null;
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: DropdownButtonFormField<String>(
+                        value: _gender,
+                        decoration: const InputDecoration(
+                          labelText: 'Gender *',
+                        ),
+                        items: const [
+                          DropdownMenuItem(value: 'Male', child: Text('Male')),
+                          DropdownMenuItem(
+                            value: 'Female',
+                            child: Text('Female'),
+                          ),
+                        ],
+                        validator: (value) =>
+                            value == null ? 'Gender is required' : null,
+                        onChanged: (value) => setState(() => _gender = value),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: InkWell(
+                        onTap: _pickBirthday,
+                        child: InputDecorator(
+                          decoration: const InputDecoration(
+                            labelText: 'Birthday *',
+                            prefixIcon: Icon(Icons.cake_outlined, size: 18),
+                          ),
+                          child: Text(birthdayText),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
                     Expanded(
                       child: _buildField(
                         _emailCtrl,
@@ -216,92 +260,13 @@ class _EditStudentDialogState extends State<EditStudentDialog> {
                         },
                       ),
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _buildField(
-                        _studentIdCtrl,
-                        'LRN (12-digit number) *',
-                        keyboardType: TextInputType.number,
-                        inputFormatters: [
-                          FilteringTextInputFormatter.digitsOnly,
-                          LengthLimitingTextInputFormatter(12),
-                        ],
-                        validator: (v) {
-                          if (v == null || v.isEmpty) return 'LRN is required';
-                          if (v.length != 12 || int.tryParse(v) == null)
-                            return 'LRN must be exactly 12 digits';
-                          return null;
-                        },
-                      ),
-                    ),
                   ],
                 ),
                 const SizedBox(height: 16),
-                const _SectionLabel('Academic Information'),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _buildField(_gradeLevelCtrl, 'Grade Level *'),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(child: _buildField(_sectionCtrl, 'Section *')),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: InkWell(
-                        onTap: _pickBirthday,
-                        child: InputDecorator(
-                          decoration: InputDecoration(
-                            labelText: 'Birthday',
-                            prefixIcon: const Icon(
-                              Icons.cake_outlined,
-                              size: 18,
-                              color: AppColors.primary,
-                            ),
-                            filled: true,
-                            fillColor: const Color(0xFFEFF6FF),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(10),
-                              borderSide: BorderSide.none,
-                            ),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(10),
-                              borderSide: BorderSide.none,
-                            ),
-                          ),
-                          child: Text(
-                            birthdayText,
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: _birthday == null
-                                  ? AppColors.textMuted
-                                  : AppColors.textPrimary,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                const _SectionLabel('Parent / Guardian'),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _buildField(
-                        _guardianNameCtrl,
-                        'Guardian Name',
-                        required: false,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _buildField(
-                        _guardianContactCtrl,
-                        'Guardian Contact',
-                        required: false,
-                      ),
-                    ),
-                  ],
+                _buildField(
+                  _contactCtrl,
+                  'Contact Number *',
+                  keyboardType: TextInputType.phone,
                 ),
                 const SizedBox(height: 12),
                 Container(
