@@ -37,12 +37,18 @@ class ActivitySubmissionsScreen extends StatefulWidget {
 
 class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
   String _selectedStatus = 'All';
+  String _selectedSection = 'All Sections';
 
   @override
   Widget build(BuildContext context) {
     final statuses = ['All', 'Graded', 'Pending', 'Unsubmitted'];
+    final sections = ['All Sections', 'Section A', 'Section B'];
     final allStudents = MockDatabase.instance.users.where((u) {
       if (u.role != UserRole.student || u.isArchived) return false;
+      if (_selectedSection != 'All Sections' &&
+          u.departmentOrSection != _selectedSection) {
+        return false;
+      }
       if (!widget.activity.assignedSections.contains(u.departmentOrSection)) {
         return false;
       }
@@ -83,7 +89,7 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
                 children: [
                   Text(
                     widget.activity.title,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 22,
                       fontWeight: FontWeight.bold,
                       color: AppColors.textPrimary,
@@ -92,7 +98,7 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
                   const SizedBox(height: 4),
                   Text(
                     'Subject: ${widget.activity.subject} • Sections: ${widget.activity.section}',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 13,
                       color: AppColors.textSecondary,
                     ),
@@ -110,6 +116,25 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
                     ),
                   ),
                   const SizedBox(width: 18),
+                  const Text(
+                    'Section: ',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                  ),
+                  DropdownButton<String>(
+                    value: _selectedSection,
+                    items: sections
+                        .map((section) => DropdownMenuItem(
+                              value: section,
+                              child: Text(section),
+                            ))
+                        .toList(),
+                    onChanged: (value) {
+                      if (value != null) {
+                        setState(() => _selectedSection = value);
+                      }
+                    },
+                  ),
+                  const SizedBox(width: 12),
                   const Text(
                     'Filter Status: ',
                     style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
@@ -200,13 +225,19 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
                               vertical: 4,
                             ),
                             decoration: BoxDecoration(
-                              color: AppColors.successLight,
+                              color: submission.score! >=
+                                      widget.activity.maxScore * 0.76
+                                  ? AppColors.successLight
+                                  : AppColors.errorLight,
                               borderRadius: BorderRadius.circular(20),
                             ),
                             child: Text(
                               '${submission.score!.toInt()} / ${widget.activity.maxScore.toInt()}',
-                              style: const TextStyle(
-                                color: AppColors.success,
+                              style: TextStyle(
+                                color: submission.score! >=
+                                        widget.activity.maxScore * 0.76
+                                    ? AppColors.success
+                                    : AppColors.error,
                                 fontWeight: FontWeight.bold,
                               ),
                             ),

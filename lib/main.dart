@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'core/theme/app_theme.dart';
 import 'routes/app_routes.dart';
 import 'features/auth/screens/login_screen.dart';
@@ -27,7 +28,8 @@ class ClassRealmApp extends StatelessWidget {
       initialRoute: AppRoutes.login,
       routes: {
         AppRoutes.login: (context) => const LoginScreen(),
-        AppRoutes.register: (context) => const RegisterScreen(),
+        AppRoutes.register: (context) =>
+            kIsWeb ? const RegisterScreen() : const LoginScreen(),
         AppRoutes.forgotPassword: (context) => const ForgotPasswordScreen(),
         AppRoutes.pendingAccount: (context) => const PendingAccountScreen(),
         AppRoutes.firstLogin: (context) => const FirstLoginScreen(),

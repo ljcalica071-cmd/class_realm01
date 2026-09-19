@@ -240,6 +240,7 @@ class QuizOrExamModel {
   final bool isPublished;
   final bool resultsReleased;
   final List<QuestionModel> questions;
+  final Map<String, DateTime> sectionDeadlines;
 
   QuizOrExamModel({
     required this.id,
@@ -253,9 +254,13 @@ class QuizOrExamModel {
     this.isPublished = true,
     this.resultsReleased = false,
     required this.questions,
-  });
+    Map<String, DateTime>? sectionDeadlines,
+  }) : sectionDeadlines = sectionDeadlines ?? {section: scheduleDate};
 
   double get totalPoints => questions.fold(0, (sum, q) => sum + q.points);
+  List<String> get assignedSections => sectionDeadlines.keys.toList();
+  DateTime deadlineForSection(String targetSection) =>
+      sectionDeadlines[targetSection] ?? scheduleDate;
 
   QuizOrExamModel copyWith({
     String? id,
@@ -269,6 +274,7 @@ class QuizOrExamModel {
     bool? isPublished,
     bool? resultsReleased,
     List<QuestionModel>? questions,
+    Map<String, DateTime>? sectionDeadlines,
   }) {
     return QuizOrExamModel(
       id: id ?? this.id,
@@ -282,6 +288,7 @@ class QuizOrExamModel {
       isPublished: isPublished ?? this.isPublished,
       resultsReleased: resultsReleased ?? this.resultsReleased,
       questions: questions ?? this.questions,
+      sectionDeadlines: sectionDeadlines ?? this.sectionDeadlines,
     );
   }
 }

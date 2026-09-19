@@ -74,9 +74,10 @@ class _CreateAssessmentFlowDialogState
   final _titleCtrl = TextEditingController();
   final _descCtrl = TextEditingController();
   final _durationCtrl = TextEditingController(text: '30');
-  final _sectionCtrl = TextEditingController(text: 'Section A');
   final _gradingQuarterCtrl = TextEditingController(text: '1st Quarter');
   DateTime _scheduleDate = DateTime.now().add(const Duration(days: 2));
+  final Set<String> _selectedSections = {'Section A'};
+  final Map<String, DateTime> _sectionDeadlines = {};
 
   // Questions Builder
   final List<QuestionModel> _questions = [];
@@ -95,7 +96,8 @@ class _CreateAssessmentFlowDialogState
   @override
   void initState() {
     super.initState();
-    _sectionCtrl.text = widget.initialSection;
+    _sectionDeadlines['Section A'] = _scheduleDate;
+    _sectionDeadlines['Section B'] = _scheduleDate;
     if (widget.skipTypeSelection) {
       _selectAssessmentType(widget.initialIsExam);
     }
@@ -106,7 +108,6 @@ class _CreateAssessmentFlowDialogState
     _titleCtrl.dispose();
     _descCtrl.dispose();
     _durationCtrl.dispose();
-    _sectionCtrl.dispose();
     _gradingQuarterCtrl.dispose();
     _qTextCtrl.dispose();
     _qCorrectAnswerCtrl.dispose();
@@ -136,7 +137,43 @@ class _CreateAssessmentFlowDialogState
         _descCtrl.text =
             'Formative quiz on composite functions and asymptote evaluations.';
       }
+
     });
+  }
+
+  Future<void> _selectAssessmentDeadline(String section) async {
+    final current = _sectionDeadlines[section] ?? _scheduleDate;
+    final date = await showDatePicker(
+      context: context,
+      initialDate: current,
+      firstDate: DateTime.now(),
+      lastDate: DateTime(2100),
+    );
+    if (!mounted || date == null) return;
+    final time = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(current),
+    );
+    if (!mounted || time == null) return;
+    setState(() {
+      _sectionDeadlines[section] = DateTime(
+        date.year,
+        date.month,
+        date.day,
+        time.hour,
+        time.minute,
+      );
+      _scheduleDate = _sectionDeadlines[section]!;
+    });
+  }
+
+  String _formatAssessmentDeadline(DateTime date) {
+    final hour = date.hour == 0
+        ? 12
+        : (date.hour > 12 ? date.hour - 12 : date.hour);
+    final period = date.hour >= 12 ? 'PM' : 'AM';
+    return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year} '
+        '${hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')} $period';
   }
 
   void _addQuestionToList() {
@@ -302,6 +339,14 @@ class _CreateAssessmentFlowDialogState
       );
       return;
     }
+    if (_selectedSections.isEmpty) {
+      AppModals.showErrorDialog(
+        context: context,
+        title: 'Assigned Section Required',
+        message: 'Select at least one assigned section.',
+      );
+      return;
+    }
 
     final plannedTotal = _questionCounts.values.fold<int>(
       0,
@@ -336,10 +381,14 @@ class _CreateAssessmentFlowDialogState
       title: _titleCtrl.text.trim(),
       description: _descCtrl.text.trim(),
       subject: 'General Mathematics',
-      section: _sectionCtrl.text.trim(),
+      section: _selectedSections.join(', '),
       isExam: _isExam,
       durationMinutes: duration,
-      scheduleDate: _scheduleDate,
+      scheduleDate: _sectionDeadlines[_selectedSections.first] ?? _scheduleDate,
+      sectionDeadlines: {
+        for (final section in _selectedSections)
+          section: _sectionDeadlines[section] ?? _scheduleDate,
+      },
       isPublished: true,
       questions: List.from(_questions),
     );
@@ -561,32 +610,53 @@ class _CreateAssessmentFlowDialogState
                   inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                 ),
               ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: DropdownButtonFormField<String>(
-                  initialValue: _sectionCtrl.text,
-                  decoration: const InputDecoration(
-                    labelText: 'Target Section',
-                    border: OutlineInputBorder(),
-                  ),
-                  items: const [
-                    DropdownMenuItem(
-                      value: 'Section A',
-                      child: Text('Section A'),
-                    ),
-                    DropdownMenuItem(
-                      value: 'Section B',
-                      child: Text('Section B'),
-                    ),
-                  ],
-                  onChanged: (value) {
-                    if (value != null) _sectionCtrl.text = value;
-                  },
-                ),
-              ),
             ],
           ),
           const SizedBox(height: 16),
+          const Text(
+            'Assigned Section & Due Date / Time',
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+          ),
+          const SizedBox(height: 8),
+          ...['Section A', 'Section B'].map(
+            (section) => Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: CheckboxListTile(
+                      dense: true,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                      title: Text(section),
+                      value: _selectedSections.contains(section),
+                      onChanged: (selected) {
+                        setState(() {
+                          if (selected == true) {
+                            _selectedSections.add(section);
+                          } else {
+                            _selectedSections.remove(section);
+                          }
+                        });
+                      },
+                    ),
+                  ),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      icon: const Icon(Icons.calendar_month_outlined, size: 18),
+                      label: Text(
+                        _formatAssessmentDeadline(
+                          _sectionDeadlines[section] ?? _scheduleDate,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      onPressed: () => _selectAssessmentDeadline(section),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
           AppTextField(
             label: 'Instructions & Guidelines',
             controller: _descCtrl,
@@ -618,33 +688,41 @@ class _CreateAssessmentFlowDialogState
           'Set how many questions to include for each question type.',
           style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
         ),
-        const SizedBox(height: 16),
-        ..._questionCountCtrls.entries.map(
-          (entry) => Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    labels[entry.key]!,
-                    style: const TextStyle(fontWeight: FontWeight.w600),
-                  ),
+        const SizedBox(height: 10),
+        Container(
+          decoration: BoxDecoration(
+            border: Border.all(color: AppColors.border),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Column(
+            children: _questionCountCtrls.entries.map((entry) {
+              return Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        labels[entry.key]!,
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                    SizedBox(
+                      width: 130,
+                      child: AppTextField(
+                        label: '',
+                        hint: 'Items',
+                        controller: entry.value,
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                          LengthLimitingTextInputFormatter(2),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-                SizedBox(
-                  width: 150,
-                  child: AppTextField(
-                    label: '',
-                    hint: 'Number of items',
-                    controller: entry.value,
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [
-                      FilteringTextInputFormatter.digitsOnly,
-                      LengthLimitingTextInputFormatter(3),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+              );
+            }).toList(),
           ),
         ),
       ],

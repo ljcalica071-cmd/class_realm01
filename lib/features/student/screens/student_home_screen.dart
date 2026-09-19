@@ -115,7 +115,12 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
             title: const Text('Published Grades'),
             onTap: () {
               Navigator.pop(context);
-              AppModals.showSuccessDialog(context: context, title: 'Published Grades', message: 'Current Quarter Grade: 92.5 (A) - Excellent performance.');
+              final grade = MockDatabase.instance.quarterlyGradeFor(student.id);
+              AppModals.showSuccessDialog(
+                context: context,
+                title: 'Published Grades',
+                message: 'Current Quarter Grade: ${grade.toStringAsFixed(1)}.',
+              );
             },
           ),
           const Divider(),
@@ -187,7 +192,9 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
                           height: 36,
                           width: 110,
                           onPressed: () {
-                            MockDatabase.instance.submitActivity(act.id, 'usr_student_1', 'Juan Dela Cruz', 'Juan_Worksheet.pdf');
+                            final student = MockDatabase.instance.currentUser ??
+                                MockDatabase.instance.users.firstWhere((u) => u.role == UserRole.student);
+                            MockDatabase.instance.submitActivity(act.id, student.id, student.fullName, '${student.id}_Worksheet.pdf');
                             AppModals.showSuccessDialog(context: context, title: 'Activity Submitted', message: 'Your file has been saved locally and synchronized successfully.');
                           },
                         ),
@@ -222,7 +229,9 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
                 label: 'Upload & Submit Document (.docx / .pdf)',
                 height: 40,
                 onPressed: () {
-                  MockDatabase.instance.submitActivity(act.id, 'usr_student_1', 'Juan Dela Cruz', 'Juan_Solution.pdf');
+                  final student = MockDatabase.instance.currentUser ??
+                      MockDatabase.instance.users.firstWhere((u) => u.role == UserRole.student);
+                  MockDatabase.instance.submitActivity(act.id, student.id, student.fullName, '${student.id}_Solution.pdf');
                   AppModals.showSuccessDialog(context: context, title: 'Submission Successful', message: 'File uploaded and status updated to Submitted.');
                 },
               ),

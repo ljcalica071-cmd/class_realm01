@@ -12,6 +12,7 @@ class UserModel {
   final String? profileImage;
   final String? departmentOrSection;
   final String? studentId;
+  final String? lrn;
   final String? linkedStudentId;
   final String? contactNumber;
   final bool isArchived;
@@ -19,9 +20,11 @@ class UserModel {
   final String? firstName;
   final String? middleName;
   final String? lastName;
+  final String? gender;
   final DateTime? birthday;
   final String? gradeLevel;
   final String? parentGuardianName;
+  final String? parentGuardianRelationship;
   final String? parentGuardianContact;
   final String? password; // mock only — not for production
 
@@ -35,15 +38,18 @@ class UserModel {
     this.profileImage,
     this.departmentOrSection,
     this.studentId,
+    this.lrn,
     this.linkedStudentId,
     this.contactNumber,
     this.isArchived = false,
     this.firstName,
     this.middleName,
     this.lastName,
+    this.gender,
     this.birthday,
     this.gradeLevel,
     this.parentGuardianName,
+    this.parentGuardianRelationship,
     this.parentGuardianContact,
     this.password,
   });
@@ -58,15 +64,18 @@ class UserModel {
     String? profileImage,
     String? departmentOrSection,
     String? studentId,
+    String? lrn,
     String? linkedStudentId,
     String? contactNumber,
     bool? isArchived,
     String? firstName,
     String? middleName,
     String? lastName,
+    String? gender,
     DateTime? birthday,
     String? gradeLevel,
     String? parentGuardianName,
+    String? parentGuardianRelationship,
     String? parentGuardianContact,
     String? password,
   }) {
@@ -80,15 +89,19 @@ class UserModel {
       profileImage: profileImage ?? this.profileImage,
       departmentOrSection: departmentOrSection ?? this.departmentOrSection,
       studentId: studentId ?? this.studentId,
+      lrn: lrn ?? this.lrn,
       linkedStudentId: linkedStudentId ?? this.linkedStudentId,
       contactNumber: contactNumber ?? this.contactNumber,
       isArchived: isArchived ?? this.isArchived,
       firstName: firstName ?? this.firstName,
       middleName: middleName ?? this.middleName,
       lastName: lastName ?? this.lastName,
+      gender: gender ?? this.gender,
       birthday: birthday ?? this.birthday,
       gradeLevel: gradeLevel ?? this.gradeLevel,
       parentGuardianName: parentGuardianName ?? this.parentGuardianName,
+      parentGuardianRelationship:
+          parentGuardianRelationship ?? this.parentGuardianRelationship,
       parentGuardianContact: parentGuardianContact ?? this.parentGuardianContact,
       password: password ?? this.password,
     );

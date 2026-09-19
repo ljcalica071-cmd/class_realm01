@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../data/mock_database.dart';
 import '../../../models/user_model.dart';
@@ -530,17 +531,19 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ),
                 ),
-                TextButton(
-                  onPressed: () => Navigator.pushNamed(context, AppRoutes.register),
-                  child: const Text(
-                    'Register Teacher?',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: AppColors.primary,
-                      fontWeight: FontWeight.bold,
+                if (kIsWeb)
+                  TextButton(
+                    onPressed: () =>
+                        Navigator.pushNamed(context, AppRoutes.register),
+                    child: const Text(
+                      'Register Teacher?',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: AppColors.primary,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
-                ),
               ],
             ),
           ],

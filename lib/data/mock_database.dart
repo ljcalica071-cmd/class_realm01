@@ -28,6 +28,7 @@ class MockDatabase {
   List<ScheduleModel> schedules = [];
   List<AppNotificationModel> notifications = [];
   List<AssessmentResultModel> assessmentResults = [];
+  Map<String, Map<String, double>> assessmentScores = {};
 
   // Teacher Academic Setup
   String academicYear = "2024-2025";
@@ -36,6 +37,474 @@ class MockDatabase {
   List<String> sections = ["Section A", "Section B"];
 
   void _seedData() {
+    _seedCanonicalData();
+  }
+
+  void _seedCanonicalData() {
+    academicYear = '2026-2027';
+    gradeLevel = 'Grade 11';
+    currentSubject = 'General Mathematics';
+    sections = ['Section A', 'Section B'];
+
+    const studentRecords = [
+      {
+        'id': 'A01',
+        'section': 'Section A',
+        'first': 'Alyssa',
+        'middle': 'M.',
+        'last': 'Reyes',
+        'gender': 'Female',
+        'email': 'alyssareyes@gmail.com',
+        'phone': '09171234501',
+        'lrn': '100001230001',
+        'birthday': '2009-03-14',
+        'parent': 'Maricel Reyes',
+        'relationship': 'Mother',
+        'parentEmail': 'maricelreyes@gmail.com',
+        'parentPhone': '09181234501',
+      },
+      {
+        'id': 'A02',
+        'section': 'Section A',
+        'first': 'Joshua',
+        'middle': 'L.',
+        'last': 'Navarro',
+        'gender': 'Male',
+        'email': 'joshuanavarro@gmail.com',
+        'phone': '09171234502',
+        'lrn': '100001230002',
+        'birthday': '2009-07-22',
+        'parent': 'Ramon Navarro',
+        'relationship': 'Father',
+        'parentEmail': 'ramonnavarro@gmail.com',
+        'parentPhone': '09181234502',
+      },
+      {
+        'id': 'A03',
+        'section': 'Section A',
+        'first': 'Bianca',
+        'middle': 'R.',
+        'last': 'Dela Cruz',
+        'gender': 'Female',
+        'email': 'biancadelacruz@gmail.com',
+        'phone': '09171234503',
+        'lrn': '100001230003',
+        'birthday': '2009-11-05',
+        'parent': 'Lorna Dela Cruz',
+        'relationship': 'Mother',
+        'parentEmail': 'lornadelacruz@gmail.com',
+        'parentPhone': '09181234503',
+      },
+      {
+        'id': 'A04',
+        'section': 'Section A',
+        'first': 'Daniel',
+        'middle': 'J.',
+        'last': 'Mendoza',
+        'gender': 'Male',
+        'email': 'danielmendoza@gmail.com',
+        'phone': '09171234504',
+        'lrn': '100001230004',
+        'birthday': '2009-01-28',
+        'parent': 'Joel Mendoza',
+        'relationship': 'Father',
+        'parentEmail': 'joelmendoza@gmail.com',
+        'parentPhone': '09181234504',
+      },
+      {
+        'id': 'A05',
+        'section': 'Section A',
+        'first': 'Camille',
+        'middle': 'S.',
+        'last': 'Villanueva',
+        'gender': 'Female',
+        'email': 'camillevillanueva@gmail.com',
+        'phone': '09171234505',
+        'lrn': '100001230005',
+        'birthday': '2009-09-09',
+        'parent': 'Grace Villanueva',
+        'relationship': 'Mother',
+        'parentEmail': 'grace.villanueva@gmail.com',
+        'parentPhone': '09181234505',
+      },
+      {
+        'id': 'B01',
+        'section': 'Section B',
+        'first': 'Nathan',
+        'middle': 'P.',
+        'last': 'Garcia',
+        'gender': 'Male',
+        'email': 'nathangarcia@gmail.com',
+        'phone': '09171234506',
+        'lrn': '100001230006',
+        'birthday': '2009-02-16',
+        'parent': 'Teresa Garcia',
+        'relationship': 'Mother',
+        'parentEmail': 'teresagarcia@gmail.com',
+        'parentPhone': '09181234506',
+      },
+      {
+        'id': 'B02',
+        'section': 'Section B',
+        'first': 'Sofia',
+        'middle': 'C.',
+        'last': 'Bautista',
+        'gender': 'Female',
+        'email': 'sofiabautista@gmail.com',
+        'phone': '09171234507',
+        'lrn': '100001230007',
+        'birthday': '2009-06-30',
+        'parent': 'Eduardo Bautista',
+        'relationship': 'Father',
+        'parentEmail': 'eduardobautista@gmail.com',
+        'parentPhone': '09181234507',
+      },
+      {
+        'id': 'B03',
+        'section': 'Section B',
+        'first': 'Ethan',
+        'middle': 'D.',
+        'last': 'Aquino',
+        'gender': 'Male',
+        'email': 'ethanaquino@gmail.com',
+        'phone': '09171234508',
+        'lrn': '100001230008',
+        'birthday': '2009-10-12',
+        'parent': 'Monica Aquino',
+        'relationship': 'Mother',
+        'parentEmail': 'monicaaquino@gmail.com',
+        'parentPhone': '09181234508',
+      },
+      {
+        'id': 'B04',
+        'section': 'Section B',
+        'first': 'Jasmine',
+        'middle': 'F.',
+        'last': 'Santiago',
+        'gender': 'Female',
+        'email': 'jasminesantiago@gmail.com',
+        'phone': '09171234509',
+        'lrn': '100001230009',
+        'birthday': '2009-12-03',
+        'parent': 'Roberto Santiago',
+        'relationship': 'Father',
+        'parentEmail': 'robertosantiago@gmail.com',
+        'parentPhone': '09181234509',
+      },
+      {
+        'id': 'B05',
+        'section': 'Section B',
+        'first': 'Marco',
+        'middle': 'T.',
+        'last': 'Castillo',
+        'gender': 'Male',
+        'email': 'marcocastillo@gmail.com',
+        'phone': '09171234510',
+        'lrn': '100001230010',
+        'birthday': '2009-04-25',
+        'parent': 'Elena Castillo',
+        'relationship': 'Mother',
+        'parentEmail': 'elenacastillo@gmail.com',
+        'parentPhone': '09181234510',
+      },
+    ];
+
+    DateTime parseBirthday(String value) {
+      final parts = value.split('-').map(int.parse).toList();
+      return DateTime(parts[0], parts[1], parts[2]);
+    }
+
+    users = [
+      const UserModel(
+        id: 'usr_admin',
+        username: 'admin',
+        fullName: 'School Administrator',
+        email: 'admin@classrealm.edu',
+        role: UserRole.admin,
+      ),
+      const UserModel(
+        id: 'T001',
+        username: 'teacher',
+        fullName: 'Karen P. Gonzaga',
+        email: 'karen.gonzaga@classrealm.edu',
+        role: UserRole.teacher,
+        departmentOrSection: 'General Mathematics',
+      ),
+      ...studentRecords.map((record) {
+        final fullName = '${record['first']} ${record['middle']} ${record['last']}';
+        return UserModel(
+          id: record['id']!,
+          username: '${record['first']}${record['last']}'.toLowerCase().replaceAll(' ', ''),
+          fullName: fullName,
+          email: record['email']!,
+          role: UserRole.student,
+          studentId: record['id'],
+          lrn: record['lrn'],
+          departmentOrSection: record['section'],
+          firstName: record['first'],
+          middleName: record['middle'],
+          lastName: record['last'],
+          gender: record['gender'],
+          birthday: parseBirthday(record['birthday']!),
+          gradeLevel: '11',
+          parentGuardianName: record['parent'],
+          parentGuardianRelationship: record['relationship'],
+          parentGuardianContact: record['parentPhone'],
+        );
+      }),
+      ...studentRecords.map((record) {
+        final parentId = 'P${record['id']}';
+        return UserModel(
+          id: parentId,
+          username: parentId.toLowerCase(),
+          fullName: record['parent']!,
+          email: record['parentEmail']!,
+          role: UserRole.parent,
+          linkedStudentId: record['id'],
+          contactNumber: record['parentPhone'],
+        );
+      }),
+    ];
+
+    _mockPasswords
+      ..clear()
+      ..addAll({
+        'usr_admin': 'admin123',
+        'T001': 'teacher123',
+        for (final record in studentRecords)
+          record['id']!: 'student123',
+        for (final record in studentRecords)
+          'P${record['id']}'.toLowerCase(): 'parent123',
+      });
+
+    final attendanceDates = [
+      DateTime(2026, 9, 14),
+      DateTime(2026, 9, 15),
+      DateTime(2026, 9, 16),
+      DateTime(2026, 9, 17),
+      DateTime(2026, 9, 18),
+    ];
+    const attendanceStatuses = {
+      'A01': ['Present', 'Present', 'Absent', 'Present', 'Late'],
+      'A02': ['Present', 'Present', 'Present', 'Present', 'Present'],
+      'A03': ['Present', 'Present', 'Present', 'Present', 'Present'],
+      'A04': ['Present', 'Present', 'Present', 'Present', 'Present'],
+      'A05': ['Present', 'Present', 'Present', 'Present', 'Present'],
+      'B01': ['Present', 'Late', 'Present', 'Absent', 'Present'],
+      'B02': ['Present', 'Present', 'Present', 'Present', 'Present'],
+      'B03': ['Present', 'Present', 'Present', 'Present', 'Present'],
+      'B04': ['Present', 'Present', 'Present', 'Present', 'Present'],
+      'B05': ['Present', 'Present', 'Present', 'Present', 'Present'],
+    };
+    AttendanceStatus statusFor(String value) => switch (value) {
+      'Late' => AttendanceStatus.late,
+      'Absent' => AttendanceStatus.absent,
+      'Excused' => AttendanceStatus.excused,
+      _ => AttendanceStatus.present,
+    };
+    attendanceRecords = [
+      for (final student in users.where((user) => user.role == UserRole.student))
+        for (var index = 0; index < attendanceDates.length; index++)
+          AttendanceRecord(
+            id: 'att_${student.id}_${index + 1}',
+            studentId: student.id,
+            studentName: student.fullName,
+            section: student.departmentOrSection!,
+            date: attendanceDates[index],
+            timeIn: attendanceStatuses[student.id]![index] == 'Present'
+                ? '07:30 AM'
+                : '--:--',
+            status: statusFor(attendanceStatuses[student.id]![index]),
+            method: 'Manual',
+          ),
+    ];
+
+    DateTime due(int day) => DateTime(2026, 9, day, 16, 0);
+    activities = [
+      ActivityModel(
+        id: 'WW1',
+        title: 'Functions Activity',
+        description: '',
+        subject: currentSubject,
+        section: 'Section A, Section B',
+        deadline: due(22),
+        sectionDeadlines: {'Section A': due(22), 'Section B': due(22)},
+        maxScore: 20,
+        totalStudents: 10,
+      ),
+      ActivityModel(
+        id: 'WW2',
+        title: 'Function Operations',
+        description: '',
+        subject: currentSubject,
+        section: 'Section A, Section B',
+        deadline: due(24),
+        sectionDeadlines: {'Section A': due(24), 'Section B': due(24)},
+        maxScore: 20,
+        totalStudents: 10,
+      ),
+      ActivityModel(
+        id: 'WW3',
+        title: 'Functions Quiz',
+        description: '',
+        subject: currentSubject,
+        section: 'Section A, Section B',
+        deadline: due(26),
+        sectionDeadlines: {'Section A': due(26), 'Section B': due(26)},
+        maxScore: 30,
+        totalStudents: 10,
+      ),
+      ActivityModel(
+        id: 'PT1',
+        title: 'Functions Project',
+        description: '',
+        instructions: 'Complete the Functions Project.',
+        subject: currentSubject,
+        section: 'Section A, Section B',
+        deadline: due(30),
+        sectionDeadlines: {'Section A': due(30), 'Section B': due(30)},
+        maxScore: 100,
+        isRequirement: true,
+        totalStudents: 10,
+      ),
+    ];
+
+    const scores = {
+      'A01': [18, 17, 26, 88, 42, 44, 86],
+      'A02': [16, 18, 24, 82, 39, 41, 80],
+      'A03': [19, 19, 28, 94, 46, 47, 91],
+      'A04': [15, 16, 22, 78, 37, 40, 76],
+      'A05': [17, 18, 25, 85, 41, 43, 84],
+      'B01': [18, 16, 25, 86, 43, 42, 85],
+      'B02': [20, 19, 29, 96, 48, 46, 94],
+      'B03': [16, 17, 23, 80, 38, 40, 79],
+      'B04': [19, 18, 27, 90, 45, 44, 89],
+      'B05': [17, 19, 26, 87, 42, 45, 88],
+    };
+    assessmentScores = {
+      for (final id in ['WW1', 'WW2', 'WW3', 'PT1', 'EX1', 'EX2', 'EX3'])
+        id: {
+          for (final student in scores.keys)
+            student: scores[student]![['WW1', 'WW2', 'WW3', 'PT1', 'EX1', 'EX2', 'EX3'].indexOf(id)].toDouble(),
+        },
+    };
+
+    final submissionScore = <String, Map<String, double>>{
+      'WW1': assessmentScores['WW1']!,
+      'WW2': assessmentScores['WW2']!,
+      'WW3': assessmentScores['WW3']!,
+      'PT1': assessmentScores['PT1']!,
+    };
+    activitySubmissions = [
+      for (final activity in activities)
+        for (final student in users.where(
+          (user) =>
+              user.role == UserRole.student &&
+              user.departmentOrSection != null,
+        ))
+          if (student.id.endsWith('04') ||
+              student.id.endsWith('05')) ...[
+            StudentSubmission(
+              id: 'sub_${activity.id}_${student.id}',
+              activityOrExamId: activity.id,
+              studentId: student.id,
+              studentName: student.fullName,
+              submittedAt: DateTime(2026, 9, 18, 15),
+              attachedFile: '${student.id}_${activity.id}.pdf',
+              score: submissionScore[activity.id]?[student.id],
+              maxScore: activity.maxScore,
+              status: ActivityStatus.graded,
+            ),
+          ] else if (student.id.endsWith('02') ||
+              student.id.endsWith('03')) ...[
+            StudentSubmission(
+              id: 'sub_${activity.id}_${student.id}',
+              activityOrExamId: activity.id,
+              studentId: student.id,
+              studentName: student.fullName,
+              submittedAt: DateTime(2026, 9, 18, 15),
+              attachedFile: '${student.id}_${activity.id}.pdf',
+              maxScore: activity.maxScore,
+              status: ActivityStatus.submitted,
+            ),
+          ],
+    ];
+
+    QuestionModel question(String id, double points) => QuestionModel(
+      id: id,
+      questionText: 'General Mathematics question',
+      type: QuestionType.multipleChoice,
+      choices: const ['A', 'B', 'C', 'D'],
+      correctAnswer: 'A',
+      points: points,
+    );
+    List<QuestionModel> questions(String prefix, int count, double points) =>
+        List.generate(
+          count,
+          (index) => question('$prefix-Q${index + 1}', points),
+        );
+    quizzesAndExams = [
+      QuizOrExamModel(
+        id: 'EX1',
+        title: 'ST1',
+        description: 'Summative Test 1',
+        subject: currentSubject,
+        section: 'Section A, Section B',
+        isExam: true,
+        durationMinutes: 60,
+        scheduleDate: DateTime(2026, 9, 25),
+        sectionDeadlines: {
+          'Section A': DateTime(2026, 9, 25, 16),
+          'Section B': DateTime(2026, 9, 25, 16),
+        },
+        questions: questions('EX1', 10, 5),
+      ),
+      QuizOrExamModel(
+        id: 'EX2',
+        title: 'ST2',
+        description: 'Summative Test 2',
+        subject: currentSubject,
+        section: 'Section A, Section B',
+        isExam: true,
+        durationMinutes: 60,
+        scheduleDate: DateTime(2026, 10, 2),
+        sectionDeadlines: {
+          'Section A': DateTime(2026, 10, 2, 16),
+          'Section B': DateTime(2026, 10, 2, 16),
+        },
+        questions: questions('EX2', 10, 5),
+      ),
+      QuizOrExamModel(
+        id: 'EX3',
+        title: 'TE',
+        description: 'Term Examination',
+        subject: currentSubject,
+        section: 'Section A, Section B',
+        isExam: true,
+        durationMinutes: 90,
+        scheduleDate: DateTime(2026, 10, 9),
+        sectionDeadlines: {
+          'Section A': DateTime(2026, 10, 9, 16),
+          'Section B': DateTime(2026, 10, 9, 16),
+        },
+        questions: questions('EX3', 10, 10),
+      ),
+    ];
+    examReviews = [];
+    assessmentResults = [];
+    gradingCriteria = [
+      GradingCriteria(id: 'WW', name: 'Written Works', percentage: 20),
+      GradingCriteria(id: 'PT', name: 'Performance Task', percentage: 50),
+      GradingCriteria(id: 'EX', name: 'Examinations', percentage: 30),
+    ];
+    lessonPlans = [];
+    materials = [];
+    schedules = [];
+    notifications = [];
+  }
+
+  /*
+  void _seedLegacyData() {
     // 1. Users
     users = [
       UserModel(
@@ -898,6 +1367,38 @@ class MockDatabase {
       ),
     ];
   }
+  */
+
+  double categoryAverageFor(String studentId, String category) {
+    const ids = {
+      'Written Works': ['WW1', 'WW2', 'WW3'],
+      'Performance Task': ['PT1'],
+      'Examinations': ['EX1', 'EX2', 'EX3'],
+    };
+    const maxPoints = {
+      'WW1': 20.0,
+      'WW2': 20.0,
+      'WW3': 30.0,
+      'PT1': 100.0,
+      'EX1': 50.0,
+      'EX2': 50.0,
+      'EX3': 100.0,
+    };
+    final assessmentIds = ids[category] ?? const <String>[];
+    if (assessmentIds.isEmpty) return 0;
+    final scores = assessmentIds.map(
+      (id) => (assessmentScores[id]?[studentId] ?? 0) / maxPoints[id]!,
+    );
+    return scores.reduce((sum, value) => sum + value) /
+        assessmentIds.length *
+        100;
+  }
+
+  double quarterlyGradeFor(String studentId) {
+    return categoryAverageFor(studentId, 'Written Works') * 0.20 +
+        categoryAverageFor(studentId, 'Performance Task') * 0.50 +
+        categoryAverageFor(studentId, 'Examinations') * 0.30;
+  }
 
   // --- Helper CRUD Actions ---
 
@@ -1062,6 +1563,7 @@ class MockDatabase {
       role: UserRole.student,
       status: AccountStatus.pendingFirstLogin,
       studentId: studentId,
+      lrn: studentId,
       departmentOrSection: section,
       firstName: firstName,
       middleName: middleName,

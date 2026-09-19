@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../data/mock_database.dart';
 import '../../../models/academic_models.dart';
+import '../../../models/user_model.dart';
 import '../../../widgets/common/app_buttons.dart';
 import '../../../widgets/common/app_modals.dart';
 
@@ -72,13 +73,17 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen> {
       });
 
       // Store result in MockDatabase
-      MockDatabase.instance.assessmentResults.removeWhere((r) => r.assessmentId == widget.assessment.id && r.studentId == 'usr_student_1');
+      final student = MockDatabase.instance.currentUser ??
+          MockDatabase.instance.users.firstWhere((u) => u.role == UserRole.student);
+      MockDatabase.instance.assessmentResults.removeWhere(
+        (r) => r.assessmentId == widget.assessment.id && r.studentId == student.id,
+      );
       MockDatabase.instance.assessmentResults.add(
         AssessmentResultModel(
           id: 'res_${DateTime.now().millisecondsSinceEpoch}',
           assessmentId: widget.assessment.id,
-          studentId: 'usr_student_1',
-          studentName: 'Juan Dela Cruz',
+          studentId: student.id,
+          studentName: student.fullName,
           submittedAt: DateTime.now(),
           durationTakenMinutes: 12,
           violationCount: _violations,
@@ -388,13 +393,15 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen> {
   }
 
   Widget _buildResultView() {
+    final student = MockDatabase.instance.currentUser ??
+        MockDatabase.instance.users.firstWhere((u) => u.role == UserRole.student);
     final result = MockDatabase.instance.assessmentResults.firstWhere(
-      (r) => r.assessmentId == widget.assessment.id && r.studentId == 'usr_student_1',
+      (r) => r.assessmentId == widget.assessment.id && r.studentId == student.id,
       orElse: () => AssessmentResultModel(
         id: 'res_empty',
         assessmentId: widget.assessment.id,
-        studentId: 'usr_student_1',
-        studentName: 'Juan Dela Cruz',
+        studentId: student.id,
+        studentName: student.fullName,
         submittedAt: DateTime.now(),
         durationTakenMinutes: 10,
         answers: {},

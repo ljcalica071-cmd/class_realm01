@@ -24,9 +24,14 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
     final attendance = MockDatabase.instance.attendanceRecords;
     final notifications = MockDatabase.instance.notifications;
     final parent = MockDatabase.instance.currentUser ?? MockDatabase.instance.users.firstWhere((u) => u.role == UserRole.parent);
+    final linkedStudent = MockDatabase.instance.users.firstWhere(
+      (u) => u.id == parent.linkedStudentId,
+      orElse: () => MockDatabase.instance.users.firstWhere((u) => u.role == UserRole.student),
+    );
+    final teacher = MockDatabase.instance.users.firstWhere((u) => u.role == UserRole.teacher);
 
     final List<Widget> pages = [
-      _buildStudentOverviewTab(attendance),
+      _buildStudentOverviewTab(attendance, linkedStudent, teacher),
       _buildAttendanceLogTab(attendance),
       _buildGradesTab(),
       _buildNotificationsTab(notifications),
@@ -67,11 +72,17 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
   }
 
   Widget _buildParentDrawer(BuildContext context) {
+    final parent = MockDatabase.instance.currentUser ?? MockDatabase.instance.users.firstWhere((u) => u.role == UserRole.parent);
+    final linkedStudent = MockDatabase.instance.users.firstWhere(
+      (u) => u.id == parent.linkedStudentId,
+      orElse: () => MockDatabase.instance.users.firstWhere((u) => u.role == UserRole.student),
+    );
+    final teacher = MockDatabase.instance.users.firstWhere((u) => u.role == UserRole.teacher);
     return Drawer(
       child: ListView(
         padding: EdgeInsets.zero,
         children: [
-          const DrawerHeader(
+          DrawerHeader(
             decoration: BoxDecoration(color: AppColors.primary),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -79,8 +90,8 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
               children: [
                 CircleAvatar(backgroundColor: Colors.white, radius: 28, child: Icon(Icons.family_restroom, size: 32, color: AppColors.primary)),
                 SizedBox(height: 10),
-                Text('Mrs. Josefina Dela Cruz', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
-                Text('Linked Student: Juan Dela Cruz (Section A)', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                Text(parent.fullName, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                Text('Linked Student: ${linkedStudent.fullName} (${linkedStudent.departmentOrSection})', style: const TextStyle(color: Colors.white70, fontSize: 12)),
               ],
             ),
           ),
@@ -97,7 +108,7 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
             title: const Text("Teacher Contact"),
             onTap: () {
               Navigator.pop(context);
-              AppModals.showSuccessDialog(context: context, title: 'Adviser Contact', message: 'Prof. Maria Santos • msantos@classrealm.edu');
+              AppModals.showSuccessDialog(context: context, title: 'Adviser Contact', message: '${teacher.fullName} • ${teacher.email}');
             },
           ),
           const Divider(),
@@ -114,7 +125,12 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
     );
   }
 
-  Widget _buildStudentOverviewTab(List<AttendanceRecord> attendance) {
+  Widget _buildStudentOverviewTab(
+    List<AttendanceRecord> attendance,
+    UserModel linkedStudent,
+    UserModel teacher,
+  ) {
+    final quarterGrade = MockDatabase.instance.quarterlyGradeFor(linkedStudent.id);
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -127,7 +143,7 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
               borderRadius: BorderRadius.circular(16),
               border: Border.all(color: AppColors.border),
             ),
-            child: const Row(
+            child: Row(
               children: [
                 CircleAvatar(backgroundColor: AppColors.primaryLight, radius: 28, child: Icon(Icons.school, color: Colors.white, size: 30)),
                 SizedBox(width: 16),
@@ -137,9 +153,9 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
                     children: [
                       Text('Linked Student Profile', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
                       SizedBox(height: 4),
-                      Text('Juan Dela Cruz', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                      Text(linkedStudent.fullName, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                       SizedBox(height: 2),
-                      Text('Grade 11 - Section A • ID: 2024-SHS-0101', style: TextStyle(fontSize: 13, color: AppColors.textSecondary)),
+                      Text('Grade ${linkedStudent.gradeLevel} - ${linkedStudent.departmentOrSection} • ID: ${linkedStudent.studentId}', style: const TextStyle(fontSize: 13, color: AppColors.textSecondary)),
                     ],
                   ),
                 ),
@@ -152,7 +168,7 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: AppColors.border)),
-            child: const Row(
+            child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Row(
@@ -178,17 +194,17 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: AppColors.border)),
-            child: const Row(
+            child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text('General Mathematics', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                    Text('Prof. Maria Santos', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                    Text(teacher.fullName, style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
                   ],
                 ),
-                Text('92.5 (A)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: AppColors.success)),
+                Text('${quarterGrade.toStringAsFixed(1)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: AppColors.success)),
               ],
             ),
           ),
@@ -227,24 +243,38 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
   }
 
   Widget _buildGradesTab() {
+    final parent = MockDatabase.instance.currentUser ??
+        MockDatabase.instance.users.firstWhere((u) => u.role == UserRole.parent);
+    final student = MockDatabase.instance.users.firstWhere(
+      (u) => u.id == parent.linkedStudentId,
+      orElse: () => MockDatabase.instance.users.firstWhere((u) => u.role == UserRole.student),
+    );
+    final database = MockDatabase.instance;
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Container(
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: AppColors.border)),
-        child: const Column(
+        child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
             Text('Grade Breakdown & Component Scores', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             SizedBox(height: 16),
-            ListTile(title: Text('Quarterly Examinations (30%)'), trailing: Text('95.0 / 100')),
+            ListTile(
+              title: Text('Examinations (30%)'),
+              trailing: Text('${database.categoryAverageFor(student.id, 'Examinations').toStringAsFixed(1)} / 100'),
+            ),
             Divider(),
-            ListTile(title: Text('Written Activities (25%)'), trailing: Text('48.0 / 50')),
+            ListTile(
+              title: Text('Written Works (20%)'),
+              trailing: Text('${database.categoryAverageFor(student.id, 'Written Works').toStringAsFixed(1)} / 100'),
+            ),
             Divider(),
-            ListTile(title: Text('Quizzes & Unit Tests (20%)'), trailing: Text('20.0 / 20')),
-            Divider(),
-            ListTile(title: Text('Attendance & Participation (25%)'), trailing: Text('100%')),
+            ListTile(
+              title: Text('Performance Task (50%)'),
+              trailing: Text('${database.categoryAverageFor(student.id, 'Performance Task').toStringAsFixed(1)} / 100'),
+            ),
           ],
         ),
       ),
@@ -283,6 +313,10 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
   }
 
   Widget _buildProfileTab(UserModel parent) {
+    final linkedStudent = MockDatabase.instance.users.firstWhere(
+      (u) => u.id == parent.linkedStudentId,
+      orElse: () => MockDatabase.instance.users.firstWhere((u) => u.role == UserRole.student),
+    );
     return Padding(
       padding: const EdgeInsets.all(24),
       child: Column(
@@ -292,7 +326,11 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
           Text(parent.fullName, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
           Text(parent.email, style: const TextStyle(color: AppColors.textSecondary)),
           const SizedBox(height: 24),
-          const ListTile(leading: Icon(Icons.family_restroom), title: Text('Linked Student'), subtitle: Text('Juan Dela Cruz (Section A)')),
+          ListTile(
+            leading: const Icon(Icons.family_restroom),
+            title: const Text('Linked Student'),
+            subtitle: Text('${linkedStudent.fullName} (${linkedStudent.departmentOrSection})'),
+          ),
           ListTile(leading: const Icon(Icons.phone), title: Text('Contact Number'), subtitle: Text(parent.contactNumber ?? '+63 917 123 4567')),
         ],
       ),

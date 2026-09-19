@@ -16,15 +16,11 @@ class RegisterScreen extends StatefulWidget {
 
 class _RegisterScreenState extends State<RegisterScreen> {
   final _formKey = GlobalKey<FormState>();
-  UserRole _selectedRole = UserRole.student; // Default is Student as requested
-  
   // Controllers
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
-  final _deptOrSectionController = TextEditingController();
-  final _studentIdController = TextEditingController();
   final _contactController = TextEditingController();
   bool _isLoading = false;
 
@@ -34,8 +30,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
     _emailController.dispose();
     _usernameController.dispose();
     _passwordController.dispose();
-    _deptOrSectionController.dispose();
-    _studentIdController.dispose();
     _contactController.dispose();
     super.dispose();
   }
@@ -50,14 +44,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
       setState(() => _isLoading = false);
 
       final newUser = UserModel(
-        id: 'usr_${_selectedRole.name}_${DateTime.now().millisecondsSinceEpoch}',
+        id: 'usr_teacher_${DateTime.now().millisecondsSinceEpoch}',
         username: _usernameController.text.trim(),
         fullName: _nameController.text.trim(),
         email: _emailController.text.trim(),
-        role: _selectedRole,
-        status: _selectedRole == UserRole.teacher ? AccountStatus.pending : AccountStatus.active,
-        departmentOrSection: _deptOrSectionController.text.trim().isEmpty ? 'Section A' : _deptOrSectionController.text.trim(),
-        studentId: _selectedRole == UserRole.student ? (_studentIdController.text.trim().isEmpty ? '2024-SHS-0999' : _studentIdController.text.trim()) : null,
+        role: UserRole.teacher,
+        status: AccountStatus.pending,
         contactNumber: _contactController.text.trim(),
       );
 
@@ -65,10 +57,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
       AppModals.showSuccessDialog(
         context: context,
-        title: _selectedRole == UserRole.teacher ? 'Registration Pending Approval' : 'Account Created Successfully',
-        message: _selectedRole == UserRole.teacher
-            ? 'Your teacher account has been submitted and is pending admin approval.'
-            : 'Your account has been successfully created. You can now log in with your credentials.',
+        title: 'Registration Pending Approval',
+        message: 'Your teacher account has been submitted and is pending admin approval.',
         onConfirm: () => Navigator.pushReplacementNamed(context, AppRoutes.login),
       );
     });
@@ -104,31 +94,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   ),
                   const SizedBox(height: 6),
                   const Text(
-                    'Select your role below and fill out your details to register in the portal.',
+                    'Teacher registration is available for the web portal only. Student and parent accounts are created by the teacher.',
                     style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
                   ),
                   const SizedBox(height: 20),
 
-                  // Role Selection Segment
-                  const Text('Select Role:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.textSecondary)),
-                  const SizedBox(height: 8),
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children: [
-                        _buildRoleTab(UserRole.student, 'Student (Default)', Icons.school),
-                        const SizedBox(width: 8),
-                        _buildRoleTab(UserRole.teacher, 'Teacher', Icons.person_pin),
-                        const SizedBox(width: 8),
-                        _buildRoleTab(UserRole.parent, 'Parent', Icons.family_restroom),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-
                   AppTextField(
                     label: 'Full Name',
-                    hint: _selectedRole == UserRole.teacher ? 'Prof. Juan Santos' : 'Juan Dela Cruz',
+                    hint: 'Karen P. Gonzaga',
                     controller: _nameController,
                     prefixIcon: Icons.badge_outlined,
                     validator: (v) => v == null || v.isEmpty ? 'Full name is required' : null,
@@ -143,36 +116,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     validator: (v) => v == null || !v.contains('@') ? 'Valid email is required' : null,
                   ),
                   const SizedBox(height: 16),
-
-                  if (_selectedRole == UserRole.student) ...[
-                    AppTextField(
-                      label: 'Student ID Number',
-                      hint: '2024-SHS-0150',
-                      controller: _studentIdController,
-                      prefixIcon: Icons.confirmation_number_outlined,
-                    ),
-                    const SizedBox(height: 16),
-                    AppTextField(
-                      label: 'Grade & Section',
-                      hint: 'Section A',
-                      controller: _deptOrSectionController,
-                      prefixIcon: Icons.class_outlined,
-                    ),
-                  ] else if (_selectedRole == UserRole.teacher) ...[
-                    AppTextField(
-                      label: 'Department / Specialization',
-                      hint: 'STEM Mathematics Department',
-                      controller: _deptOrSectionController,
-                      prefixIcon: Icons.science_outlined,
-                    ),
-                  ] else ...[
-                    AppTextField(
-                      label: 'Linked Student Name / ID',
-                      hint: 'Juan Dela Cruz (2024-SHS-0101)',
-                      controller: _deptOrSectionController,
-                      prefixIcon: Icons.family_restroom,
-                    ),
-                  ],
 
                   const SizedBox(height: 16),
                   AppTextField(
@@ -201,7 +144,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   ),
                   const SizedBox(height: 24),
                   AppPrimaryButton(
-                    label: _selectedRole == UserRole.teacher ? 'Submit Teacher Registration Request' : 'Complete Account Registration',
+                    label: 'Submit Teacher Registration Request',
                     isLoading: _isLoading,
                     onPressed: _handleRegister,
                   ),
@@ -221,15 +164,4 @@ class _RegisterScreenState extends State<RegisterScreen> {
     );
   }
 
-  Widget _buildRoleTab(UserRole role, String label, IconData icon) {
-    final isSelected = _selectedRole == role;
-    return ChoiceChip(
-      avatar: Icon(icon, size: 16, color: isSelected ? Colors.white : AppColors.primary),
-      label: Text(label, style: TextStyle(fontWeight: FontWeight.bold, color: isSelected ? Colors.white : AppColors.textPrimary)),
-      selected: isSelected,
-      selectedColor: AppColors.primary,
-      backgroundColor: AppColors.background,
-      onSelected: (_) => setState(() => _selectedRole = role),
-    );
-  }
 }

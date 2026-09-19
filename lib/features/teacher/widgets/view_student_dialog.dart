@@ -61,7 +61,7 @@ class ViewStudentDialog extends StatelessWidget {
             const SizedBox(height: 20),
             const Divider(),
             const SizedBox(height: 12),
-            _InfoRow(icon: Icons.badge_outlined, label: 'Student ID', value: s.studentId ?? 'N/A'),
+            _InfoRow(icon: Icons.badge_outlined, label: 'LRN', value: s.lrn ?? s.studentId ?? 'N/A'),
             _InfoRow(icon: Icons.email_outlined, label: 'Email', value: s.email),
             _InfoRow(icon: Icons.school_outlined, label: 'Grade Level', value: s.gradeLevel ?? 'N/A'),
             _InfoRow(icon: Icons.groups_outlined, label: 'Section', value: s.departmentOrSection ?? 'N/A'),

@@ -32,15 +32,15 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   final List<String> _classroomSections = ['Section A', 'Section B'];
   final Map<String, String> _classroomGrades = {
     'Section A': 'Grade 11',
-    'Section B': 'Grade 12',
+    'Section B': 'Grade 11',
   };
   final Map<String, String> _classroomSubjects = {
     'Section A': 'General Mathematics',
     'Section B': 'General Mathematics',
   };
   final Map<String, int> _classroomStudentCounts = {
-    'Section A': 10,
-    'Section B': 8,
+    'Section A': 5,
+    'Section B': 5,
   };
   String _selectedSchoolYear = '2026-2027';
   String _newSchoolYearStructure = 'Quarterly (4 quarters)';
@@ -304,7 +304,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                         children: [
                           Text(
                             MockDatabase.instance.currentUser?.fullName ??
-                                'Prof. Maria Santos',
+                                'Ma\'am Karen',
                             style: const TextStyle(
                               fontWeight: FontWeight.bold,
                               fontSize: 13,
@@ -575,7 +575,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                 child: _buildTopSummaryCard(
                   title: 'Students',
                   mainValue: '${activeStudents.length * 27}',
-                  subText: '↑ Across 5 sections (Grade 11)',
+                  subText: 'Across 2 sections (Grade 11)',
                   subColor: AppColors.primary,
                   icon: Icons.school_outlined,
                   iconColor: AppColors.primary,
@@ -2450,7 +2450,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   Widget _buildClassroomSetupTab() {
     final sections = _classroomSections;
     final teacherName =
-        MockDatabase.instance.currentUser?.fullName ?? 'Prof. Maria Santos';
+        MockDatabase.instance.currentUser?.fullName ?? 'Karen P. Gonzaga';
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
@@ -3244,7 +3244,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
 
   Widget _buildClassroomCard(String section) {
     final teacherName =
-        MockDatabase.instance.currentUser?.fullName ?? 'Prof. Maria Santos';
+        MockDatabase.instance.currentUser?.fullName ?? 'Karen P. Gonzaga';
     final gradeLevel = _classroomGrades[section] ?? 'Grade 11';
     final subject = _classroomSubjects[section] ?? 'General Mathematics';
     final studentCount = _classroomStudentCounts[section] ?? 0;
@@ -5329,11 +5329,9 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   // --- 18. Gradebook ---
   Widget _buildGradebookTab() {
     final gradeItems = <String, List<Map<String, String>>>{
-      'Written Work': [],
-      'Performance Task': [],
-      'Summative Test 1 (ST1)': [],
-      'Summative Test 2 (ST2)': [],
-      'Term Examination (TE)': [],
+      'Written Works (WW)': [],
+      'Performance Task (PT)': [],
+      'Examinations (EX)': [],
     };
     final database = MockDatabase.instance;
 
@@ -5341,7 +5339,9 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         '${_monthName(date.month)} ${date.day}, ${date.year}';
 
     for (final activity in database.activities) {
-      gradeItems[activity.isRequirement ? 'Performance Task' : 'Written Work']!
+      gradeItems[activity.isRequirement
+              ? 'Performance Task (PT)'
+              : 'Written Works (WW)']!
           .add({
             'name': activity.title,
             'points': '${activity.maxScore.toStringAsFixed(0)} pts',
@@ -5351,7 +5351,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
 
     for (final assessment in database.quizzesAndExams) {
       if (!assessment.isExam) {
-        gradeItems['Written Work']!.add({
+        gradeItems['Written Works (WW)']!.add({
           'name': assessment.title,
           'points': '${assessment.totalPoints.toStringAsFixed(0)} pts',
           'date': formatDate(assessment.scheduleDate),
@@ -5359,14 +5359,10 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         continue;
       }
 
-      final title = assessment.title.toLowerCase();
-      final section = title.contains('second') || title.contains('st2')
-          ? 'Summative Test 2 (ST2)'
-          : title.contains('term') || title.contains('final')
-          ? 'Term Examination (TE)'
-          : 'Summative Test 1 (ST1)';
-      gradeItems[section]!.add({
-        'name': assessment.title,
+      gradeItems['Examinations (EX)']!.add({
+        'name': assessment.id == 'EX3'
+            ? 'Term Examination (TE) • 40%'
+            : assessment.title,
         'points': '${assessment.totalPoints.toStringAsFixed(0)} pts',
         'date': formatDate(assessment.scheduleDate),
       });
@@ -5711,8 +5707,8 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   }
 
   Widget _buildGradebookSection(String title, List<Map<String, String>> items) {
-    final isWrittenWork = title == 'Written Work';
-    final isPerformance = title == 'Performance Task';
+    final isWrittenWork = title == 'Written Works (WW)';
+    final isPerformance = title == 'Performance Task (PT)';
     final headerColor = isWrittenWork
         ? const Color(0xFF1D4ED8)
         : isPerformance
@@ -5923,8 +5919,8 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   }
 
   String _gradebookSectionWeight(String title) {
-    if (title == 'Written Work') return '20%';
-    if (title == 'Performance Task') return '50%';
+    if (title == 'Written Works (WW)') return '20%';
+    if (title == 'Performance Task (PT)') return '50%';
     return '30%';
   }
 
@@ -5952,6 +5948,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                 separatorBuilder: (_, __) => const Divider(height: 1),
                 itemBuilder: (ctx, i) {
                   final s = students[i];
+                  final grade = MockDatabase.instance.quarterlyGradeFor(s.id);
                   return ListTile(
                     leading: CircleAvatar(
                       backgroundColor: AppColors.accent,
@@ -5967,9 +5964,9 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                     subtitle: Text(
                       'ID: ${s.studentId} • Calculated Quarter Grade',
                     ),
-                    trailing: const Text(
-                      '92.5 (Outstanding)',
-                      style: TextStyle(
+                    trailing: Text(
+                      '${grade.toStringAsFixed(1)} (${grade >= 90 ? 'Outstanding' : 'Satisfactory'})',
+                      style: const TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.bold,
                         color: AppColors.success,
