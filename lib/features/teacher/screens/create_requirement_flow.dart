@@ -32,12 +32,14 @@ class CreateRequirementFlowDialog extends StatefulWidget {
   final VoidCallback onRequirementCreated;
   final String initialSection;
   final ActivityModel? existingTask;
+  final bool isPerformanceTask;
 
   const CreateRequirementFlowDialog({
     super.key,
     required this.onRequirementCreated,
     this.initialSection = 'Section A',
     this.existingTask,
+    this.isPerformanceTask = true,
   });
 
   static Future<void> show(
@@ -45,6 +47,7 @@ class CreateRequirementFlowDialog extends StatefulWidget {
     required VoidCallback onRequirementCreated,
     String initialSection = 'Section A',
     ActivityModel? existingTask,
+    bool isPerformanceTask = true,
   }) {
     return showDialog(
       context: context,
@@ -53,6 +56,7 @@ class CreateRequirementFlowDialog extends StatefulWidget {
         onRequirementCreated: onRequirementCreated,
         initialSection: initialSection,
         existingTask: existingTask,
+        isPerformanceTask: isPerformanceTask,
       ),
     );
   }
@@ -102,8 +106,9 @@ class _CreateRequirementFlowDialogState
     if (_titleCtrl.text.trim().isEmpty) {
       AppModals.showErrorDialog(
         context: context,
-        title: 'Performance Task Title Required',
-        message: 'Please enter a valid title for this performance task.',
+        title:
+            '${widget.isPerformanceTask ? 'Performance Task' : 'Activity / Assignment'} Title Required',
+        message: 'Please enter a valid title.',
       );
       return;
     }
@@ -139,7 +144,7 @@ class _CreateRequirementFlowDialogState
       deadline: _sectionDeadlines.values.first,
       maxScore: maxScore,
       isPublished: true,
-      isRequirement: true,
+      isRequirement: widget.isPerformanceTask,
       attachmentName: _attachmentName,
       sectionDeadlines: Map<String, DateTime>.from(_sectionDeadlines),
     );
@@ -160,10 +165,10 @@ class _CreateRequirementFlowDialogState
     AppModals.showSuccessDialog(
       context: context,
       title: widget.existingTask == null
-          ? 'Performance Task Published'
-          : 'Performance Task Updated',
+          ? '${widget.isPerformanceTask ? 'Performance Task' : 'Activity / Assignment'} Published'
+          : '${widget.isPerformanceTask ? 'Performance Task' : 'Activity / Assignment'} Updated',
       message:
-          'Performance task "${newTask.title}" has been successfully ${widget.existingTask == null ? 'published' : 'updated'} for ${_sectionReqText(newTask.section)}.',
+          '${widget.isPerformanceTask ? 'Performance task' : 'Activity / Assignment'} "${newTask.title}" has been successfully ${widget.existingTask == null ? 'published' : 'updated'} for ${_sectionReqText(newTask.section)}.',
     );
   }
 
@@ -452,8 +457,8 @@ class _CreateRequirementFlowDialogState
                       children: [
                         Text(
                           widget.existingTask == null
-                              ? 'Create Performance Task'
-                              : 'Edit Performance Task',
+                              ? 'Create ${widget.isPerformanceTask ? 'Performance Task' : 'Activity / Assignment'}'
+                              : 'Edit ${widget.isPerformanceTask ? 'Performance Task' : 'Activity / Assignment'}',
                           style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
@@ -462,8 +467,8 @@ class _CreateRequirementFlowDialogState
                         ),
                         Text(
                           widget.existingTask == null
-                              ? 'Assign a graded performance task to a Senior High School section'
-                              : 'Update the performance task details and deadlines',
+                              ? 'Assign ${widget.isPerformanceTask ? 'graded performance task' : 'an activity or assignment'} to a Senior High School section'
+                              : 'Update the ${widget.isPerformanceTask ? 'performance task' : 'activity / assignment'} details and deadlines',
                           style: TextStyle(
                             fontSize: 12,
                             color: AppColors.textSecondary,
@@ -489,8 +494,12 @@ class _CreateRequirementFlowDialogState
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     AppTextField(
-                      label: 'Performance Task Title',
-                      hint: 'e.g. Mathematical Modeling Portfolio',
+                      label: widget.isPerformanceTask
+                          ? 'Performance Task Title'
+                          : 'Activity / Assignment Title',
+                      hint: widget.isPerformanceTask
+                          ? 'e.g. Mathematical Modeling Portfolio'
+                          : 'e.g. Rational Functions Problem Set',
                       controller: _titleCtrl,
                     ),
                     const SizedBox(height: 16),
@@ -534,7 +543,9 @@ class _CreateRequirementFlowDialogState
                     ),
                     const SizedBox(height: 16),
                     AppTextField(
-                      label: 'Detailed Instructions & Rubrics',
+                      label: widget.isPerformanceTask
+                          ? 'Detailed Instructions & Rubrics'
+                          : 'Detailed Instructions',
                       hint: 'Provide step-by-step instructions for students...',
                       controller: _instructionsCtrl,
                       maxLines: 3,
@@ -552,7 +563,7 @@ class _CreateRequirementFlowDialogState
                           OutlinedButton.icon(
                             onPressed: () => setState(
                               () => _attachmentName =
-                                  'Classwork_Instructions.pdf',
+                                  '${widget.isPerformanceTask ? 'Performance_Task' : 'Activity'}_Instructions.pdf',
                             ),
                             icon: const Icon(Icons.attach_file, size: 18),
                             label: const Text('Attach PDF/DOCX'),
@@ -601,8 +612,8 @@ class _CreateRequirementFlowDialogState
                   const SizedBox(width: 12),
                   AppPrimaryButton(
                     label: widget.existingTask == null
-                        ? 'Publish Performance Task'
-                        : 'Save Performance Task',
+                        ? 'Publish ${widget.isPerformanceTask ? 'Performance Task' : 'Activity / Assignment'}'
+                        : 'Save ${widget.isPerformanceTask ? 'Performance Task' : 'Activity / Assignment'}',
                     icon: Icons.publish,
                     height: 40,
                     onPressed: _savePerformanceTask,

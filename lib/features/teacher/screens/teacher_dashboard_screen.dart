@@ -4609,7 +4609,12 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
             TextButton(
               onPressed: () {
                 Navigator.pop(dialogContext);
-                _showCreateActivityModal(context);
+                CreateRequirementFlowDialog.show(
+                  context,
+                  initialSection: _selectedClassSection,
+                  isPerformanceTask: false,
+                  onRequirementCreated: () => setState(() {}),
+                );
               },
               child: const Text('Activity / Assignment'),
             ),
@@ -4775,72 +4780,11 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     BuildContext context, {
     bool isPerformanceTask = false,
   }) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(
-          isPerformanceTask
-              ? 'Create Classwork'
-              : 'Create Activity / Assignment',
-        ),
-        content: SizedBox(
-          width: 450,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: _actTitleCtrl,
-                decoration: const InputDecoration(labelText: 'Activity Title'),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _actDescCtrl,
-                maxLines: 3,
-                decoration: const InputDecoration(
-                  labelText: 'Instructions / Description',
-                ),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          AppPrimaryButton(
-            label: 'Publish Activity',
-            onPressed: () {
-              if (_actTitleCtrl.text.isEmpty) return;
-              setState(() {
-                MockDatabase.instance.addActivity(
-                  ActivityModel(
-                    id: 'act_${DateTime.now().millisecondsSinceEpoch}',
-                    title: _actTitleCtrl.text.trim(),
-                    description: _actDescCtrl.text.trim(),
-                    subject: 'General Mathematics',
-                    section: _selectedClassSection,
-                    deadline: DateTime.now().add(const Duration(days: 3)),
-                    maxScore: 50.0,
-                    isPublished: true,
-                  ),
-                );
-              });
-              _actTitleCtrl.clear();
-              _actDescCtrl.clear();
-              Navigator.pop(ctx);
-              AppModals.showSuccessDialog(
-                context: context,
-                title: 'Activity Published',
-                message:
-                    'Activity successfully broadcasted to student portals.',
-              );
-            },
-            width: 140,
-            height: 40,
-          ),
-        ],
-      ),
+    CreateRequirementFlowDialog.show(
+      context,
+      initialSection: _selectedClassSection,
+      isPerformanceTask: false,
+      onRequirementCreated: () => setState(() {}),
     );
   }
 

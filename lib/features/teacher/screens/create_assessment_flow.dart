@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
 import '../../../core/theme/app_colors.dart';
 import '../../../data/mock_database.dart';
 import '../../../models/academic_models.dart';
@@ -41,10 +42,12 @@ class CreateAssessmentFlowDialog extends StatefulWidget {
   }
 
   @override
-  State<CreateAssessmentFlowDialog> createState() => _CreateAssessmentFlowDialogState();
+  State<CreateAssessmentFlowDialog> createState() =>
+      _CreateAssessmentFlowDialogState();
 }
 
-class _CreateAssessmentFlowDialogState extends State<CreateAssessmentFlowDialog> {
+class _CreateAssessmentFlowDialogState
+    extends State<CreateAssessmentFlowDialog> {
   // Steps:
   // 0: Selection of Assessment Type (Quiz vs Periodical Examination)
   // 1: Configure & Add Questions / Details
@@ -130,7 +133,8 @@ class _CreateAssessmentFlowDialogState extends State<CreateAssessmentFlowDialog>
         _descCtrl.text = 'Comprehensive examination covering General Mathematics core competencies.';
       } else {
         _titleCtrl.text = 'Quiz: Rational Functions & Domain/Range';
-        _descCtrl.text = 'Formative quiz on composite functions and asymptote evaluations.';
+        _descCtrl.text =
+            'Formative quiz on composite functions and asymptote evaluations.';
       }
     });
   }
@@ -155,7 +159,9 @@ class _CreateAssessmentFlowDialogState extends State<CreateAssessmentFlowDialog>
       return;
     }
     final planned = _questionCounts[_selectedQType] ?? 0;
-    final alreadyAdded = _questions.where((q) => q.type == _selectedQType).length;
+    final alreadyAdded = _questions
+        .where((q) => q.type == _selectedQType)
+        .length;
     if (planned == 0 || alreadyAdded >= planned) {
       AppModals.showErrorDialog(
         context: context,
@@ -168,10 +174,18 @@ class _CreateAssessmentFlowDialogState extends State<CreateAssessmentFlowDialog>
 
     if (_selectedQType == QuestionType.multipleChoice) {
       choices = [
-        _choiceACtrl.text.trim().isEmpty ? 'Option A' : _choiceACtrl.text.trim(),
-        _choiceBCtrl.text.trim().isEmpty ? 'Option B' : _choiceBCtrl.text.trim(),
-        _choiceCCtrl.text.trim().isEmpty ? 'Option C' : _choiceCCtrl.text.trim(),
-        _choiceDCtrl.text.trim().isEmpty ? 'Option D' : _choiceDCtrl.text.trim(),
+        _choiceACtrl.text.trim().isEmpty
+            ? 'Option A'
+            : _choiceACtrl.text.trim(),
+        _choiceBCtrl.text.trim().isEmpty
+            ? 'Option B'
+            : _choiceBCtrl.text.trim(),
+        _choiceCCtrl.text.trim().isEmpty
+            ? 'Option C'
+            : _choiceCCtrl.text.trim(),
+        _choiceDCtrl.text.trim().isEmpty
+            ? 'Option D'
+            : _choiceDCtrl.text.trim(),
       ];
     } else if (_selectedQType == QuestionType.trueFalse) {
       choices = ['True', 'False'];
@@ -180,23 +194,26 @@ class _CreateAssessmentFlowDialogState extends State<CreateAssessmentFlowDialog>
         AppModals.showErrorDialog(
           context: context,
           title: 'Matching Pairs Required',
-          message: 'Add at least one matching pair before adding this question.',
+          message:
+              'Add at least one matching pair before adding this question.',
         );
         return;
       }
     }
 
-    final correctAnswer = _selectedQType == QuestionType.multipleChoice ||
+    final correctAnswer =
+        _selectedQType == QuestionType.multipleChoice ||
             _selectedQType == QuestionType.trueFalse
         ? (_selectedChoiceAnswer ?? '')
         : _selectedQType == QuestionType.matching
-            ? _matchingPairs.entries.map((e) => '${e.key}=${e.value}').join('|')
-            : _qCorrectAnswerCtrl.text.trim();
+        ? _matchingPairs.entries.map((e) => '${e.key}=${e.value}').join('|')
+        : _qCorrectAnswerCtrl.text.trim();
     if (correctAnswer.isEmpty) {
       AppModals.showErrorDialog(
         context: context,
         title: 'Correct Answer Required',
-        message: 'Select or enter the correct answer before adding the question.',
+        message:
+            'Select or enter the correct answer before adding the question.',
       );
       return;
     }
@@ -233,7 +250,9 @@ class _CreateAssessmentFlowDialogState extends State<CreateAssessmentFlowDialog>
 
   bool get _canAddCurrentQuestion {
     final planned = _questionCounts[_selectedQType] ?? 0;
-    final added = _questions.where((question) => question.type == _selectedQType).length;
+    final added = _questions
+        .where((question) => question.type == _selectedQType)
+        .length;
     return planned > 0 && added < planned;
   }
 
@@ -241,11 +260,14 @@ class _CreateAssessmentFlowDialogState extends State<CreateAssessmentFlowDialog>
     final types = _configuredQuestionTypes;
     if (types.isEmpty) return;
     final currentIndex = types.indexOf(_selectedQType);
-    final currentCount = _questions.where((q) => q.type == _selectedQType).length;
+    final currentCount = _questions
+        .where((q) => q.type == _selectedQType)
+        .length;
     if (currentCount < (_questionCounts[_selectedQType] ?? 0)) return;
     for (var index = currentIndex + 1; index < types.length; index++) {
       final type = types[index];
-      if (_questions.where((q) => q.type == type).length < (_questionCounts[type] ?? 0)) {
+      if (_questions.where((q) => q.type == type).length <
+          (_questionCounts[type] ?? 0)) {
         _selectedQType = type;
         return;
       }
@@ -281,22 +303,30 @@ class _CreateAssessmentFlowDialogState extends State<CreateAssessmentFlowDialog>
       return;
     }
 
-    final plannedTotal = _questionCounts.values.fold<int>(0, (sum, count) => sum + count);
+    final plannedTotal = _questionCounts.values.fold<int>(
+      0,
+      (sum, count) => sum + count,
+    );
     if (_questions.length != plannedTotal) {
       AppModals.showErrorDialog(
         context: context,
         title: 'Incomplete Question Set',
-        message: 'Add all $plannedTotal planned questions before publishing. Current total: ${_questions.length}.',
+        message:
+            'Add all $plannedTotal planned questions before publishing. Current total: ${_questions.length}.',
       );
       return;
     }
 
-    final totalPoints = _questions.fold<double>(0, (sum, question) => sum + question.points);
+    final totalPoints = _questions.fold<double>(
+      0,
+      (sum, question) => sum + question.points,
+    );
     if (totalPoints > 100) {
       AppModals.showErrorDialog(
         context: context,
         title: 'Maximum Points Exceeded',
-        message: 'The total points for one quiz or examination cannot exceed 100.',
+        message:
+            'The total points for one quiz or examination cannot exceed 100.',
       );
       return;
     }
@@ -320,8 +350,11 @@ class _CreateAssessmentFlowDialogState extends State<CreateAssessmentFlowDialog>
 
     AppModals.showSuccessDialog(
       context: context,
-      title: _isExam ? 'Periodical Examination Published' : 'Quiz Assessment Published',
-      message: '${newAssessment.title} has been configured and published for ${newAssessment.section}. Duration: $duration mins, Total Points: ${newAssessment.totalPoints.toInt()} pts.',
+      title: _isExam
+          ? 'Periodical Examination Published'
+          : 'Quiz Assessment Published',
+      message:
+          '${newAssessment.title} has been configured and published for ${newAssessment.section}. Duration: $duration mins, Total Points: ${newAssessment.totalPoints.toInt()} pts.',
     );
   }
 
@@ -347,11 +380,15 @@ class _CreateAssessmentFlowDialogState extends State<CreateAssessmentFlowDialog>
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: _isExam ? AppColors.errorLight : AppColors.infoLight,
+                      color: _isExam
+                          ? AppColors.errorLight
+                          : AppColors.infoLight,
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Icon(
-                      _isExam ? Icons.description_outlined : Icons.quiz_outlined,
+                      _isExam
+                          ? Icons.description_outlined
+                          : Icons.quiz_outlined,
                       color: _isExam ? AppColors.error : AppColors.primary,
                       size: 22,
                     ),
@@ -365,25 +402,35 @@ class _CreateAssessmentFlowDialogState extends State<CreateAssessmentFlowDialog>
                           _currentStep == 0
                               ? 'Create New Assessment'
                               : _isExam
-                                  ? 'Configure Periodical Examination'
-                                  : 'Configure Unit Quiz',
-                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                              ? 'Configure Periodical Examination'
+                              : 'Configure Unit Quiz',
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.textPrimary,
+                          ),
                         ),
                         Text(
                           _currentStep == 0
                               ? 'Choose the assessment category for Senior High School'
                               : _currentStep == 1
-                                  ? 'Step 1: Define title, section, duration, and instructions'
-                                  : _currentStep == 2
-                                      ? 'Step 2: Define the question distribution'
-                                      : 'Step 3: Add questions and answer keys',
-                          style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                              ? 'Step 1: Define title, section, duration, and instructions'
+                              : _currentStep == 2
+                              ? 'Step 1: Define details and question distribution'
+                              : 'Step 3: Add questions and answer keys',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: AppColors.textSecondary,
+                          ),
                         ),
                       ],
                     ),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.close, color: AppColors.textSecondary),
+                    icon: const Icon(
+                      Icons.close,
+                      color: AppColors.textSecondary,
+                    ),
                     onPressed: () => Navigator.of(context).pop(),
                   ),
                 ],
@@ -395,10 +442,8 @@ class _CreateAssessmentFlowDialogState extends State<CreateAssessmentFlowDialog>
               child: _currentStep == 0
                   ? _buildTypeSelectionView()
                   : _currentStep == 1
-                      ? _buildBasicDetailsView()
-                      : _currentStep == 2
-                          ? _buildQuestionPlanView()
-                          : _buildQuestionBuilderView(),
+                  ? _buildBasicDetailsView()
+                  : _buildQuestionBuilderView(),
             ),
 
             // Footer / Bottom Actions
@@ -420,12 +465,14 @@ class _CreateAssessmentFlowDialogState extends State<CreateAssessmentFlowDialog>
                       icon: const Icon(Icons.arrow_back, size: 16),
                       label: Text(
                         _currentStep == 3
-                            ? 'Back to Question Setup'
-                            : _currentStep == 2
-                                ? 'Back to Details'
-                                : 'Back to Type Selection',
+                            ? 'Back to Details'
+                            : 'Back to Type Selection',
                       ),
-                      onPressed: () => setState(() => _currentStep--),
+                      onPressed: () => setState(
+                        () => _currentStep = _currentStep == 3
+                            ? 1
+                            : _currentStep - 1,
+                      ),
                     )
                   else
                     const SizedBox.shrink(),
@@ -433,26 +480,30 @@ class _CreateAssessmentFlowDialogState extends State<CreateAssessmentFlowDialog>
                     children: [
                       TextButton(
                         onPressed: () => Navigator.of(context).pop(),
-                        child: const Text('Cancel', style: TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.w600)),
+                        child: const Text(
+                          'Cancel',
+                          style: TextStyle(
+                            color: AppColors.textSecondary,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                       ),
                       const SizedBox(width: 12),
-                      if (_currentStep == 1 || _currentStep == 2)
+                      if (_currentStep == 1)
                         AppPrimaryButton(
-                          label: _currentStep == 1
-                              ? 'Continue to Question Setup'
-                              : 'Continue to Question Builder',
+                          label: 'Continue to Question Builder',
                           icon: Icons.arrow_forward,
                           height: 42,
-                          onPressed: _currentStep == 1
-                              ? _continueToQuestionSetup
-                              : _continueToQuestionBuilder,
+                          onPressed: _continueToQuestionBuilder,
                         ),
                       if (_currentStep == 3)
                         AppPrimaryButton(
                           label: _isExam ? 'Save Examination' : 'Save Quiz',
                           icon: Icons.check_circle_outline,
                           height: 42,
-                          backgroundColor: _isExam ? AppColors.error : AppColors.primary,
+                          backgroundColor: _isExam
+                              ? AppColors.error
+                              : AppColors.primary,
                           onPressed: _saveAssessment,
                         ),
                     ],
@@ -480,19 +531,25 @@ class _CreateAssessmentFlowDialogState extends State<CreateAssessmentFlowDialog>
                 border: OutlineInputBorder(),
               ),
               items: const [
-                DropdownMenuItem(value: 'ST1', child: Text('Summative Test 1 (ST1)')),
-                DropdownMenuItem(value: 'ST2', child: Text('Summative Test 2 (ST2)')),
-                DropdownMenuItem(value: 'TE', child: Text('Term Examination (TE)')),
+                DropdownMenuItem(
+                  value: 'ST1',
+                  child: Text('Summative Test 1 (ST1)'),
+                ),
+                DropdownMenuItem(
+                  value: 'ST2',
+                  child: Text('Summative Test 2 (ST2)'),
+                ),
+                DropdownMenuItem(
+                  value: 'TE',
+                  child: Text('Term Examination (TE)'),
+                ),
               ],
               onChanged: (value) {
                 if (value != null) setState(() => _setExamTitle(value));
               },
             )
           else
-            AppTextField(
-              label: 'Quiz Title',
-              controller: _titleCtrl,
-            ),
+            AppTextField(label: 'Quiz Title', controller: _titleCtrl),
           const SizedBox(height: 16),
           Row(
             children: [
@@ -513,8 +570,14 @@ class _CreateAssessmentFlowDialogState extends State<CreateAssessmentFlowDialog>
                     border: OutlineInputBorder(),
                   ),
                   items: const [
-                    DropdownMenuItem(value: 'Section A', child: Text('Section A')),
-                    DropdownMenuItem(value: 'Section B', child: Text('Section B')),
+                    DropdownMenuItem(
+                      value: 'Section A',
+                      child: Text('Section A'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'Section B',
+                      child: Text('Section B'),
+                    ),
                   ],
                   onChanged: (value) {
                     if (value != null) _sectionCtrl.text = value;
@@ -529,8 +592,62 @@ class _CreateAssessmentFlowDialogState extends State<CreateAssessmentFlowDialog>
             controller: _descCtrl,
             maxLines: 3,
           ),
+          const SizedBox(height: 24),
+          _buildQuestionPlanFields(),
         ],
       ),
+    );
+  }
+
+  Widget _buildQuestionPlanFields() {
+    const labels = {
+      QuestionType.multipleChoice: 'Multiple Choices',
+      QuestionType.trueFalse: 'True / False',
+      QuestionType.matching: 'Matching Type',
+      QuestionType.identification: 'Identification',
+    };
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Question Distribution',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 6),
+        const Text(
+          'Set how many questions to include for each question type.',
+          style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+        ),
+        const SizedBox(height: 16),
+        ..._questionCountCtrls.entries.map(
+          (entry) => Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    labels[entry.key]!,
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ),
+                SizedBox(
+                  width: 150,
+                  child: AppTextField(
+                    label: '',
+                    hint: 'Number of items',
+                    controller: entry.value,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                      LengthLimitingTextInputFormatter(3),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -590,7 +707,7 @@ class _CreateAssessmentFlowDialogState extends State<CreateAssessmentFlowDialog>
 
   Widget _buildQuestionPlanView() {
     final labels = {
-      QuestionType.multipleChoice: 'Multiple Choice',
+      QuestionType.multipleChoice: 'Multiple Choices',
       QuestionType.trueFalse: 'True / False',
       QuestionType.matching: 'Matching Type',
       QuestionType.identification: 'Identification',
@@ -601,7 +718,9 @@ class _CreateAssessmentFlowDialogState extends State<CreateAssessmentFlowDialog>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            _isExam ? 'Set Examination Question Distribution' : 'Set Quiz Question Distribution',
+            _isExam
+                ? 'Set Examination Question Distribution'
+                : 'Set Quiz Question Distribution',
             style: const TextStyle(fontSize: 19, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 6),
@@ -616,7 +735,10 @@ class _CreateAssessmentFlowDialogState extends State<CreateAssessmentFlowDialog>
               child: Row(
                 children: [
                   Expanded(
-                    child: Text(labels[type]!, style: const TextStyle(fontWeight: FontWeight.w600)),
+                    child: Text(
+                      labels[type]!,
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
                   ),
                   SizedBox(
                     width: 120,
@@ -630,7 +752,10 @@ class _CreateAssessmentFlowDialogState extends State<CreateAssessmentFlowDialog>
                         isDense: true,
                       ),
                       onChanged: (value) {
-                        setState(() => _questionCounts[type] = int.tryParse(value) ?? 0);
+                        setState(
+                          () =>
+                              _questionCounts[type] = int.tryParse(value) ?? 0,
+                        );
                       },
                     ),
                   ),
@@ -641,7 +766,10 @@ class _CreateAssessmentFlowDialogState extends State<CreateAssessmentFlowDialog>
           const SizedBox(height: 8),
           Text(
             'Total questions: ${_questionCounts.values.fold<int>(0, (sum, count) => sum + count)}',
-            style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary),
+            style: const TextStyle(
+              fontWeight: FontWeight.bold,
+              color: AppColors.primary,
+            ),
           ),
           const SizedBox(height: 24),
           Align(
@@ -664,7 +792,11 @@ class _CreateAssessmentFlowDialogState extends State<CreateAssessmentFlowDialog>
         children: [
           const Text(
             'Select Assessment Category',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: AppColors.textPrimary,
+            ),
           ),
           const SizedBox(height: 6),
           const Text(
@@ -683,8 +815,7 @@ class _CreateAssessmentFlowDialogState extends State<CreateAssessmentFlowDialog>
                     badge: 'FORMATIVE (15-20% WEIGHT)',
                     badgeColor: AppColors.infoLight,
                     badgeTextColor: AppColors.info,
-                    description:
-                        'Short assessment to evaluate student mastery of specific mathematical competencies, piecewise functions, or subtopics.',
+                    description: 'Short assessment to evaluate student mastery of specific mathematical competencies, piecewise functions, or subtopics.',
                     icon: Icons.quiz_outlined,
                     iconColor: AppColors.primary,
                     iconBgColor: const Color(0xFFEFF6FF),
@@ -706,8 +837,7 @@ class _CreateAssessmentFlowDialogState extends State<CreateAssessmentFlowDialog>
                     badge: 'SUMMATIVE (30-40% WEIGHT)',
                     badgeColor: AppColors.errorLight,
                     badgeTextColor: AppColors.error,
-                    description:
-                        'Official institutional quarterly or midterm examination. Integrated with answer keys, auto-checking, and item analysis.',
+                    description: 'Official institutional quarterly or midterm examination. Integrated with answer keys, auto-checking, and item analysis.',
                     icon: Icons.description_outlined,
                     iconColor: AppColors.error,
                     iconBgColor: const Color(0xFFFEF2F2),
@@ -765,23 +895,51 @@ class _CreateAssessmentFlowDialogState extends State<CreateAssessmentFlowDialog>
               children: [
                 Container(
                   padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(color: iconBgColor, borderRadius: BorderRadius.circular(12)),
+                  decoration: BoxDecoration(
+                    color: iconBgColor,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                   child: Icon(icon, color: iconColor, size: 28),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                  decoration: BoxDecoration(color: badgeColor, borderRadius: BorderRadius.circular(20)),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 5,
+                  ),
+                  decoration: BoxDecoration(
+                    color: badgeColor,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
                   child: Text(
                     badge,
-                    style: TextStyle(color: badgeTextColor, fontWeight: FontWeight.bold, fontSize: 10, letterSpacing: 0.5),
+                    style: TextStyle(
+                      color: badgeTextColor,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 10,
+                      letterSpacing: 0.5,
+                    ),
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 18),
-            Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+            Text(
+              title,
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: AppColors.textPrimary,
+              ),
+            ),
             const SizedBox(height: 8),
-            Text(description, style: const TextStyle(fontSize: 12, color: AppColors.textSecondary, height: 1.4)),
+            Text(
+              description,
+              style: const TextStyle(
+                fontSize: 12,
+                color: AppColors.textSecondary,
+                height: 1.4,
+              ),
+            ),
             const SizedBox(height: 16),
             const Divider(),
             const SizedBox(height: 12),
@@ -793,7 +951,13 @@ class _CreateAssessmentFlowDialogState extends State<CreateAssessmentFlowDialog>
                     const Icon(Icons.check, size: 14, color: AppColors.success),
                     const SizedBox(width: 8),
                     Expanded(
-                      child: Text(f, style: const TextStyle(fontSize: 11, color: AppColors.textPrimary)),
+                      child: Text(
+                        f,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
                     ),
                   ],
                 ),
@@ -809,7 +973,13 @@ class _CreateAssessmentFlowDialogState extends State<CreateAssessmentFlowDialog>
                   padding: const EdgeInsets.symmetric(vertical: 12),
                 ),
                 onPressed: onTap,
-                child: Text('Create ${title.split(" ")[0]}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                child: Text(
+                  'Create ${title.split(" ")[0]}',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                  ),
+                ),
               ),
             ),
           ],
@@ -822,6 +992,13 @@ class _CreateAssessmentFlowDialogState extends State<CreateAssessmentFlowDialog>
   // STEP 3: BUILD QUESTIONS
   // ==========================================
   Widget _buildQuestionBuilderView() {
+    const labels = <QuestionType, String>{
+      QuestionType.multipleChoice: 'Multiple Choices',
+      QuestionType.trueFalse: 'True / False',
+      QuestionType.matching: 'Matching Type',
+      QuestionType.identification: 'Identification',
+    };
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Column(
@@ -842,12 +1019,22 @@ class _CreateAssessmentFlowDialogState extends State<CreateAssessmentFlowDialog>
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      _isExam ? 'Answer Key & Question Items Setup' : 'Quiz Questions Builder',
-                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                      _isExam
+                          ? 'Answer Key & Question Items Setup'
+                          : 'Quiz Questions Builder',
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.textPrimary,
+                      ),
                     ),
                     Text(
                       'Added: ${_questions.length} question(s)',
-                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.primary),
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.primary,
+                      ),
                     ),
                   ],
                 ),
@@ -857,17 +1044,25 @@ class _CreateAssessmentFlowDialogState extends State<CreateAssessmentFlowDialog>
                 Row(
                   children: [
                     if (_configuredQuestionTypes.length > 1) ...[
-                      const Text('Question Type:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                      const Text(
+                        'Question Type:',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                       const SizedBox(width: 12),
                       DropdownButton<QuestionType>(
                         value: _configuredQuestionTypes.contains(_selectedQType)
                             ? _selectedQType
                             : _configuredQuestionTypes.first,
                         items: _configuredQuestionTypes
-                            .map((t) => DropdownMenuItem(
-                                  value: t,
-                                  child: Text(t.name.toUpperCase()),
-                                ))
+                            .map(
+                              (t) => DropdownMenuItem(
+                                value: t,
+                                child: Text(t.name.toUpperCase()),
+                              ),
+                            )
                             .toList(),
                         onChanged: (val) {
                           if (val != null) {
@@ -882,8 +1077,12 @@ class _CreateAssessmentFlowDialogState extends State<CreateAssessmentFlowDialog>
                     ],
                     if (_configuredQuestionTypes.length == 1)
                       Text(
-                        _configuredQuestionTypes.first.name.toUpperCase(),
-                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.primary),
+                        labels[_configuredQuestionTypes.first]!,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.primary,
+                        ),
                       ),
                     const Spacer(),
                     SizedBox(
@@ -891,8 +1090,13 @@ class _CreateAssessmentFlowDialogState extends State<CreateAssessmentFlowDialog>
                       child: TextField(
                         controller: _qPointsCtrl,
                         keyboardType: TextInputType.number,
-                        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                        decoration: const InputDecoration(labelText: 'Points', isDense: true),
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                        ],
+                        decoration: const InputDecoration(
+                          labelText: 'Points',
+                          isDense: true,
+                        ),
                       ),
                     ),
                   ],
@@ -914,39 +1118,81 @@ class _CreateAssessmentFlowDialogState extends State<CreateAssessmentFlowDialog>
                 if (_selectedQType == QuestionType.multipleChoice) ...[
                   Row(
                     children: [
-                      Expanded(child: TextField(controller: _choiceACtrl, decoration: const InputDecoration(labelText: 'Choice A', isDense: true))),
+                      Radio<String>(
+                        value: 'A',
+                        groupValue: _selectedChoiceAnswer,
+                        onChanged: (value) =>
+                            setState(() => _selectedChoiceAnswer = value),
+                      ),
+                      Expanded(
+                        child: TextField(
+                          controller: _choiceACtrl,
+                          decoration: const InputDecoration(
+                            labelText: 'Choice A',
+                            isDense: true,
+                          ),
+                        ),
+                      ),
                       const SizedBox(width: 12),
-                      Expanded(child: TextField(controller: _choiceBCtrl, decoration: const InputDecoration(labelText: 'Choice B', isDense: true))),
+                      Radio<String>(
+                        value: 'B',
+                        groupValue: _selectedChoiceAnswer,
+                        onChanged: (value) =>
+                            setState(() => _selectedChoiceAnswer = value),
+                      ),
+                      Expanded(
+                        child: TextField(
+                          controller: _choiceBCtrl,
+                          decoration: const InputDecoration(
+                            labelText: 'Choice B',
+                            isDense: true,
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 8),
                   Row(
                     children: [
-                      Expanded(child: TextField(controller: _choiceCCtrl, decoration: const InputDecoration(labelText: 'Choice C', isDense: true))),
+                      Radio<String>(
+                        value: 'C',
+                        groupValue: _selectedChoiceAnswer,
+                        onChanged: (value) =>
+                            setState(() => _selectedChoiceAnswer = value),
+                      ),
+                      Expanded(
+                        child: TextField(
+                          controller: _choiceCCtrl,
+                          decoration: const InputDecoration(
+                            labelText: 'Choice C',
+                            isDense: true,
+                          ),
+                        ),
+                      ),
                       const SizedBox(width: 12),
-                      Expanded(child: TextField(controller: _choiceDCtrl, decoration: const InputDecoration(labelText: 'Choice D', isDense: true))),
+                      Radio<String>(
+                        value: 'D',
+                        groupValue: _selectedChoiceAnswer,
+                        onChanged: (value) =>
+                            setState(() => _selectedChoiceAnswer = value),
+                      ),
+                      Expanded(
+                        child: TextField(
+                          controller: _choiceDCtrl,
+                          decoration: const InputDecoration(
+                            labelText: 'Choice D',
+                            isDense: true,
+                          ),
+                        ),
+                      ),
                     ],
-                  ),
-                  const SizedBox(height: 12),
-                  const Text('Select the correct answer:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                  ...[
-                    ['A', _choiceACtrl.text],
-                    ['B', _choiceBCtrl.text],
-                    ['C', _choiceCCtrl.text],
-                    ['D', _choiceDCtrl.text],
-                  ].map(
-                    (choice) => RadioListTile<String>(
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
-                      title: Text('${choice[0]}. ${choice[1].isEmpty ? 'Choice ${choice[0]}' : choice[1]}'),
-                      value: choice[0],
-                      groupValue: _selectedChoiceAnswer,
-                      onChanged: (value) => setState(() => _selectedChoiceAnswer = value),
-                    ),
                   ),
                 ],
                 if (_selectedQType == QuestionType.trueFalse) ...[
-                  const Text('Select the correct answer:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  const Text(
+                    'Select the correct answer:',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                  ),
                   ...['True', 'False'].map(
                     (answer) => RadioListTile<String>(
                       dense: true,
@@ -954,20 +1200,43 @@ class _CreateAssessmentFlowDialogState extends State<CreateAssessmentFlowDialog>
                       title: Text(answer),
                       value: answer,
                       groupValue: _selectedChoiceAnswer,
-                      onChanged: (value) => setState(() => _selectedChoiceAnswer = value),
+                      onChanged: (value) =>
+                          setState(() => _selectedChoiceAnswer = value),
                     ),
                   ),
                 ],
                 if (_selectedQType == QuestionType.matching) ...[
-                  const Text('Matching pairs', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  const Text(
+                    'Matching pairs',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                  ),
                   const SizedBox(height: 6),
                   Row(
                     children: [
-                      Expanded(child: TextField(controller: _matchingLeftCtrl, decoration: const InputDecoration(labelText: 'Item / Prompt', isDense: true))),
+                      Expanded(
+                        child: TextField(
+                          controller: _matchingLeftCtrl,
+                          decoration: const InputDecoration(
+                            labelText: 'Item / Prompt',
+                            isDense: true,
+                          ),
+                        ),
+                      ),
                       const SizedBox(width: 10),
-                      Expanded(child: TextField(controller: _matchingRightCtrl, decoration: const InputDecoration(labelText: 'Correct Match', isDense: true))),
+                      Expanded(
+                        child: TextField(
+                          controller: _matchingRightCtrl,
+                          decoration: const InputDecoration(
+                            labelText: 'Correct Match',
+                            isDense: true,
+                          ),
+                        ),
+                      ),
                       IconButton(
-                        icon: const Icon(Icons.add_circle, color: AppColors.primary),
+                        icon: const Icon(
+                          Icons.add_circle,
+                          color: AppColors.primary,
+                        ),
                         onPressed: () {
                           final left = _matchingLeftCtrl.text.trim();
                           final right = _matchingRightCtrl.text.trim();
@@ -988,10 +1257,14 @@ class _CreateAssessmentFlowDialogState extends State<CreateAssessmentFlowDialog>
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text(pair.value, style: const TextStyle(fontWeight: FontWeight.bold)),
+                          Text(
+                            pair.value,
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
                           IconButton(
                             icon: const Icon(Icons.close, size: 17),
-                            onPressed: () => setState(() => _matchingPairs.remove(pair.key)),
+                            onPressed: () =>
+                                setState(() => _matchingPairs.remove(pair.key)),
                           ),
                         ],
                       ),
@@ -1008,7 +1281,8 @@ class _CreateAssessmentFlowDialogState extends State<CreateAssessmentFlowDialog>
                           controller: _qCorrectAnswerCtrl,
                           decoration: const InputDecoration(
                             labelText: 'Official Correct Answer',
-                            hintText: 'Enter the answer used by the auto-checker',
+                            hintText:
+                                'Enter the answer used by the auto-checker',
                             isDense: true,
                             prefixIcon: Icon(Icons.vpn_key_outlined, size: 18),
                           ),
@@ -1020,7 +1294,9 @@ class _CreateAssessmentFlowDialogState extends State<CreateAssessmentFlowDialog>
                         icon: Icons.add,
                         height: 42,
                         width: 130,
-                        onPressed: _canAddCurrentQuestion ? _addQuestionToList : null,
+                        onPressed: _canAddCurrentQuestion
+                            ? _addQuestionToList
+                            : null,
                       ),
                     ],
                   )
@@ -1032,7 +1308,9 @@ class _CreateAssessmentFlowDialogState extends State<CreateAssessmentFlowDialog>
                       icon: Icons.add,
                       height: 42,
                       width: 130,
-                      onPressed: _canAddCurrentQuestion ? _addQuestionToList : null,
+                      onPressed: _canAddCurrentQuestion
+                          ? _addQuestionToList
+                          : null,
                     ),
                   ),
               ],
@@ -1042,7 +1320,10 @@ class _CreateAssessmentFlowDialogState extends State<CreateAssessmentFlowDialog>
 
           // Render List of Questions Added
           if (_questions.isNotEmpty) ...[
-            const Text('Configured Questions & Answer Keys:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+            const Text(
+              'Configured Questions & Answer Keys:',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+            ),
             const SizedBox(height: 8),
             ..._questions.asMap().entries.map((entry) {
               final idx = entry.key + 1;
@@ -1060,22 +1341,44 @@ class _CreateAssessmentFlowDialogState extends State<CreateAssessmentFlowDialog>
                     CircleAvatar(
                       radius: 12,
                       backgroundColor: AppColors.primary,
-                      child: Text('$idx', style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                      child: Text(
+                        '$idx',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(q.questionText, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                          Text(
+                            q.questionText,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                            ),
+                          ),
                           const SizedBox(height: 2),
-                          Text('Type: ${q.type.name.toUpperCase()} • Key: "${q.correctAnswer}" • Points: ${q.points}',
-                              style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+                          Text(
+                            'Type: ${q.type.name.toUpperCase()} • Key: "${q.correctAnswer}" • Points: ${q.points}',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
                         ],
                       ),
                     ),
                     IconButton(
-                      icon: const Icon(Icons.delete_outline, size: 18, color: AppColors.error),
+                      icon: const Icon(
+                        Icons.delete_outline,
+                        size: 18,
+                        color: AppColors.error,
+                      ),
                       onPressed: () {
                         setState(() => _questions.removeAt(entry.key));
                       },
