@@ -534,7 +534,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     final quizzesCount = quizzesAndExams.where((q) => !q.isExam).length;
     final examsCount = quizzesAndExams.where((q) => q.isExam).length;
     final totalAssessments = quizzesAndExams.length;
-    final todaysClassesCount = schedules.length;
+    final todaysClassesCount = 2;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
@@ -542,7 +542,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'Welcome back, Prof. Santos!',
+            'Welcome back, Ma\'am Karen!',
             style: TextStyle(
               fontSize: 22,
               fontWeight: FontWeight.bold,
@@ -574,7 +574,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
               Expanded(
                 child: _buildTopSummaryCard(
                   title: 'Students',
-                  mainValue: '${activeStudents.length * 27}',
+                  mainValue: '${activeStudents.length}',
                   subText: 'Across 2 sections (Grade 11)',
                   subColor: AppColors.primary,
                   icon: Icons.school_outlined,
@@ -641,39 +641,21 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                       ),
                       const SizedBox(height: 16),
                       _buildClassItem(
-                        subject: 'Mathematics 11 (General Math)',
+                        subject: 'General Mathematics',
                         sectionAndRoom:
                             'Grade 11 - Section A • Room 304 - Science Wing',
                         time: '07:30 AM - 09:00 AM',
                         isDone: true,
-                        attendanceStats: 'Attendance: 34 / 35 present',
+                        attendanceStats: 'Attendance: 4 / 5 present',
                       ),
                       const SizedBox(height: 12),
                       _buildClassItem(
-                        subject: 'Mathematics 11 (General Math)',
+                        subject: 'General Mathematics',
                         sectionAndRoom:
                             'Grade 11 - Section B • Room 305 - Science Wing',
                         time: '09:15 AM - 10:45 AM',
                         isDone: true,
-                        attendanceStats: 'Attendance: 35 / 35 present',
-                      ),
-                      const SizedBox(height: 12),
-                      _buildClassItem(
-                        subject: 'Business Mathematics',
-                        sectionAndRoom:
-                            'Grade 11 - Section A • Room 201 - Business Wing',
-                        time: '01:00 PM - 02:30 PM',
-                        isDone: false,
-                        attendanceStats: 'Scheduled (Not yet started)',
-                      ),
-                      const SizedBox(height: 12),
-                      _buildClassItem(
-                        subject: 'Basic Calculus & Statistics',
-                        sectionAndRoom:
-                            'Grade 11 - Section B • Room 102 - Humanities Wing',
-                        time: '02:45 PM - 04:15 PM',
-                        isDone: false,
-                        attendanceStats: 'Scheduled (Not yet started)',
+                        attendanceStats: 'Attendance: 5 / 5 present',
                       ),
                     ],
                   ),
@@ -1257,7 +1239,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                   MockDatabase.instance.updateStudent(
                     student.id,
                     student.fullName,
-                    student.studentId ?? '',
+                    student.lrn ?? student.studentId ?? '',
                     selectedTargetSection,
                   );
                 });
@@ -1312,7 +1294,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
               s.fullName.toLowerCase().contains(
                 _studentSearchQuery.toLowerCase(),
               ) ||
-              (s.studentId?.toLowerCase().contains(
+              (s.lrn?.toLowerCase().contains(
                     _studentSearchQuery.toLowerCase(),
                   ) ??
                   false);
@@ -1349,7 +1331,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
           cmp = aFirst.compareTo(bFirst);
           break;
         case 'lrn':
-          cmp = (a.studentId ?? '').compareTo(b.studentId ?? '');
+          cmp = (a.lrn ?? a.studentId ?? '').compareTo(b.lrn ?? b.studentId ?? '');
           break;
         case 'gender':
           cmp = (a.id.hashCode % 2).compareTo(b.id.hashCode % 2);
@@ -1791,7 +1773,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                                                 ? s.fullName.split(' ').first
                                                 : '');
                                         final lrn =
-                                            s.studentId ?? '123456789112';
+                                            s.lrn ?? s.studentId ?? 'N/A';
                                         final gender = (s.id.hashCode % 2 == 0)
                                             ? 'Male'
                                             : 'Female';
@@ -2384,7 +2366,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
 
   void _showEditStudentModal(BuildContext context, UserModel student) {
     _studentNameCtrl.text = student.fullName;
-    _studentIdCtrl.text = student.studentId ?? '';
+    _studentIdCtrl.text = student.lrn ?? student.studentId ?? '';
     _studentSectionCtrl.text = student.departmentOrSection ?? 'Section A';
 
     showDialog(
@@ -2403,7 +2385,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
               const SizedBox(height: 12),
               TextField(
                 controller: _studentIdCtrl,
-                decoration: const InputDecoration(labelText: 'Student ID'),
+                decoration: const InputDecoration(labelText: 'LRN'),
               ),
               const SizedBox(height: 12),
               TextField(
@@ -3449,7 +3431,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
       final query = _attendanceSearchQuery.trim().toLowerCase();
       return query.isEmpty ||
           _formatStudentDisplayName(student).toLowerCase().contains(query) ||
-          (student.studentId?.toLowerCase().contains(query) ?? false);
+          (student.lrn?.toLowerCase().contains(query) ?? false);
     }).toList();
 
     // Initialize temporary states for mock students if empty
@@ -4282,7 +4264,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                 indicatorColor: AppColors.primary,
                 indicatorWeight: 3,
                 tabs: [
-                  Tab(text: 'Written Work (WW)'),
+                  Tab(text: 'Written Works (WW)'),
                   Tab(text: 'Performance Tasks (PT)'),
                   Tab(text: 'Examinations (EX)'),
                 ],
@@ -4293,7 +4275,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
               child: TabBarView(
                 children: [
                   _buildUnifiedCategoryView(
-                    label: 'Written Work',
+                    label: 'Written Works',
                     items: writtenWork,
                     emptyMessage: 'No written work for this section yet.',
                     onCreate: () => _showUnifiedCreateChooser(context, 'WW'),
@@ -5363,6 +5345,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         'name': assessment.id == 'EX3'
             ? 'Term Examination (TE) • 40%'
             : assessment.title,
+        'weight': assessment.id == 'EX3' ? '40%' : '30%',
         'points': '${assessment.totalPoints.toStringAsFixed(0)} pts',
         'date': formatDate(assessment.scheduleDate),
       });
@@ -5561,11 +5544,25 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
             ),
           ),
           const SizedBox(height: 16),
-          ...gradeItems.entries.map(
-            (entry) => Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: _buildGradebookSection(entry.key, entry.value),
-            ),
+          ...gradeItems.entries.expand(
+            (entry) => entry.key == 'Examinations (EX)'
+                ? entry.value.map(
+                    (item) => Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: _buildGradebookSection(
+                        item['name']!,
+                        [item],
+                        showItemName: false,
+                        sectionWeight: item['weight'],
+                      ),
+                    ),
+                  )
+                : [
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: _buildGradebookSection(entry.key, entry.value),
+                    ),
+                  ],
           ),
         ],
       ),
@@ -5706,7 +5703,12 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     );
   }
 
-  Widget _buildGradebookSection(String title, List<Map<String, String>> items) {
+  Widget _buildGradebookSection(
+    String title,
+    List<Map<String, String>> items, {
+    bool showItemName = true,
+    String? sectionWeight,
+  }) {
     final isWrittenWork = title == 'Written Works (WW)';
     final isPerformance = title == 'Performance Task (PT)';
     final headerColor = isWrittenWork
@@ -5788,7 +5790,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                     borderRadius: BorderRadius.circular(14),
                   ),
                   child: Text(
-                    _gradebookSectionWeight(title),
+                    sectionWeight ?? _gradebookSectionWeight(title),
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 11,
@@ -5815,7 +5817,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      item['name']!,
+                      showItemName ? item['name']! : item['points']!,
                       style: const TextStyle(
                         color: Color(0xFF1E293B),
                         fontWeight: FontWeight.w600,
@@ -5962,7 +5964,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                       style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
                     subtitle: Text(
-                      'ID: ${s.studentId} • Calculated Quarter Grade',
+                      'LRN: ${s.lrn ?? s.studentId ?? 'N/A'} • Calculated Quarter Grade',
                     ),
                     trailing: Text(
                       '${grade.toStringAsFixed(1)} (${grade >= 90 ? 'Outstanding' : 'Satisfactory'})',

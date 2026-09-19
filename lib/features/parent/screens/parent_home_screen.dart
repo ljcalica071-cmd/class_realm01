@@ -155,7 +155,7 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
                       SizedBox(height: 4),
                       Text(linkedStudent.fullName, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                       SizedBox(height: 2),
-                      Text('Grade ${linkedStudent.gradeLevel} - ${linkedStudent.departmentOrSection} • ID: ${linkedStudent.studentId}', style: const TextStyle(fontSize: 13, color: AppColors.textSecondary)),
+                      Text('Grade ${linkedStudent.gradeLevel} - ${linkedStudent.departmentOrSection} • LRN: ${linkedStudent.lrn ?? linkedStudent.studentId ?? 'N/A'}', style: const TextStyle(fontSize: 13, color: AppColors.textSecondary)),
                     ],
                   ),
                 ),

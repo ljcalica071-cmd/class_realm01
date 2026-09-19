@@ -1386,6 +1386,17 @@ class MockDatabase {
     };
     final assessmentIds = ids[category] ?? const <String>[];
     if (assessmentIds.isEmpty) return 0;
+    if (category == 'Examinations') {
+      const componentWeights = {'EX1': 0.30, 'EX2': 0.30, 'EX3': 0.40};
+      return assessmentIds.fold<double>(
+            0,
+            (total, id) =>
+                total +
+                ((assessmentScores[id]?[studentId] ?? 0) / maxPoints[id]!) *
+                    (componentWeights[id] ?? 0),
+          ) *
+          100;
+    }
     final scores = assessmentIds.map(
       (id) => (assessmentScores[id]?[studentId] ?? 0) / maxPoints[id]!,
     );
@@ -1527,6 +1538,9 @@ class MockDatabase {
     required String parentGuardianName,
     required String parentGuardianContact,
   }) {
+    if (!RegExp(r'^\d{12}$').hasMatch(studentId)) {
+      return 'LRN must contain exactly 12 digits.';
+    }
     final username = generateUsername(firstName, lastName);
     final tempPassword = generateTempPassword(lastName, birthday);
     final fullName = [
@@ -1537,9 +1551,9 @@ class MockDatabase {
 
     // Duplicate checks
     if (users.any(
-      (u) => u.role == UserRole.student && u.studentId == studentId,
+      (u) => u.role == UserRole.student && u.lrn == studentId,
     )) {
-      return 'A student with Student ID "$studentId" already exists.';
+      return 'A student with LRN "$studentId" already exists.';
     }
     if (users.any(
       (u) => u.role == UserRole.student && u.username == username,
@@ -1638,10 +1652,12 @@ class MockDatabase {
       if (middleName.trim().isNotEmpty) middleName.trim(),
       lastName.trim(),
     ].join(' ');
+    if (!RegExp(r'^\d{12}$').hasMatch(studentId)) return;
     users[idx] = users[idx].copyWith(
       fullName: fullName,
       email: email,
       studentId: studentId,
+      lrn: studentId,
       departmentOrSection: section,
       firstName: firstName,
       middleName: middleName,

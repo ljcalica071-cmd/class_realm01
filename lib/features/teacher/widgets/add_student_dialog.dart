@@ -365,6 +365,10 @@ class _AddStudentDialogState extends State<AddStudentDialog> {
                         _studentIdCtrl,
                         'LRN (12-digit number) *',
                         keyboardType: TextInputType.number,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                          LengthLimitingTextInputFormatter(12),
+                        ],
                         validator: (v) {
                           if (v == null || v.isEmpty) return 'LRN is required';
                           if (v.length != 12 || int.tryParse(v) == null)
@@ -509,12 +513,14 @@ class _AddStudentDialogState extends State<AddStudentDialog> {
     String label, {
     bool required = true,
     TextInputType? keyboardType,
+    List<TextInputFormatter>? inputFormatters,
     String? Function(String?)? validator,
     void Function(String)? onChanged,
   }) {
     return TextFormField(
       controller: ctrl,
       keyboardType: keyboardType,
+      inputFormatters: inputFormatters,
       onChanged: onChanged,
       validator:
           validator ??

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../data/mock_database.dart';
@@ -56,7 +57,7 @@ class _EditStudentDialogState extends State<EditStudentDialog> {
     _middleNameCtrl = TextEditingController(text: s.middleName ?? '');
     _lastNameCtrl = TextEditingController(text: s.lastName ?? '');
     _emailCtrl = TextEditingController(text: s.email);
-    _studentIdCtrl = TextEditingController(text: s.studentId ?? '');
+    _studentIdCtrl = TextEditingController(text: s.lrn ?? s.studentId ?? '');
     _gradeLevelCtrl = TextEditingController(text: s.gradeLevel ?? '11');
     _sectionCtrl = TextEditingController(text: s.departmentOrSection ?? '');
     _guardianNameCtrl = TextEditingController(text: s.parentGuardianName ?? '');
@@ -221,6 +222,10 @@ class _EditStudentDialogState extends State<EditStudentDialog> {
                         _studentIdCtrl,
                         'LRN (12-digit number) *',
                         keyboardType: TextInputType.number,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                          LengthLimitingTextInputFormatter(12),
+                        ],
                         validator: (v) {
                           if (v == null || v.isEmpty) return 'LRN is required';
                           if (v.length != 12 || int.tryParse(v) == null)
@@ -347,11 +352,13 @@ class _EditStudentDialogState extends State<EditStudentDialog> {
     String label, {
     bool required = true,
     TextInputType? keyboardType,
+    List<TextInputFormatter>? inputFormatters,
     String? Function(String?)? validator,
   }) {
     return TextFormField(
       controller: ctrl,
       keyboardType: keyboardType,
+      inputFormatters: inputFormatters,
       validator:
           validator ??
           (required
