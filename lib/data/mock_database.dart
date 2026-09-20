@@ -282,7 +282,7 @@ class MockDatabase {
         'T001': 'teacher123',
         for (final record in studentRecords) record['id']!: 'student123',
         for (final record in studentRecords)
-          'P${record['id']}'.toLowerCase(): 'parent123',
+          'P${record['id']}': 'parent123',
       });
 
     final attendanceDates = [
@@ -651,7 +651,40 @@ class MockDatabase {
         endTime: '09:00 AM',
       ),
     ];
-    notifications = [];
+    notifications = [
+      AppNotificationModel(
+        id: 'notif_sub_1',
+        title: 'New Submission: Performance Task 1',
+        message: 'Student Alyssa M. Reyes (A01) has submitted "Functions Project Portfolio".',
+        timestamp: now.subtract(const Duration(hours: 2)),
+        isRead: false,
+        type: 'submission',
+      ),
+      AppNotificationModel(
+        id: 'notif_sub_2',
+        title: 'New Submission: Written Work 1',
+        message: 'Student Nathan P. Garcia (B01) has submitted "Functions Activity Worksheet".',
+        timestamp: now.subtract(const Duration(hours: 5)),
+        isRead: false,
+        type: 'submission',
+      ),
+      AppNotificationModel(
+        id: 'notif_att_1',
+        title: 'Alert: Low Attendance',
+        message: 'Student Daniel J. Mendoza (A04) has dropped below 80% attendance this month.',
+        timestamp: now.subtract(const Duration(days: 1)),
+        isRead: false,
+        type: 'attendance_alert',
+      ),
+      AppNotificationModel(
+        id: 'notif_att_2',
+        title: 'RFID Attendance Log',
+        message: 'RFID Reader "Gate 1" synced 45 student logs at 07:45 AM.',
+        timestamp: now.subtract(const Duration(hours: 10)),
+        isRead: true,
+        type: 'system',
+      ),
+    ];
   }
 
   double categoryAverageFor(String studentId, String category) {
