@@ -3602,15 +3602,6 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
             color: const Color(0xFFF3F6FC),
             iconColor: const Color(0xFF1A56DB),
           ),
-          const SizedBox(height: 12),
-          _buildClassroomInfoTile(
-            icon: Icons.person_outline,
-            text: teacherName,
-            color: const Color(0xFFEFFDF5),
-            iconColor: const Color(0xFF166534),
-            borderColor: const Color(0xFFB9F6CA),
-            textColor: const Color(0xFF166534),
-          ),
           const SizedBox(height: 16),
           const Text(
             'SUBJECT',
@@ -4377,7 +4368,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
             width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
             decoration: const BoxDecoration(
-              color: Color(0xFF107B41),
+              color: Color(0xFF1A56DB),
               borderRadius: BorderRadius.only(
                 topLeft: Radius.circular(8),
                 topRight: Radius.circular(8),
@@ -4391,7 +4382,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                     Icon(Icons.calendar_today, color: Colors.white, size: 20),
                     SizedBox(width: 8),
                     Text(
-                      'Take Attendance',
+                      'Take Attendance & RFID Logs',
                       style: TextStyle(
                         color: Colors.white,
                         fontSize: 18,
@@ -4402,7 +4393,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '$_attendanceClassFilter',
+                  _attendanceClassFilter,
                   style: const TextStyle(color: Colors.white70, fontSize: 13),
                 ),
               ],
@@ -4416,7 +4407,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
               ElevatedButton(
                 style: ElevatedButton.styleFrom(
                   backgroundColor: _selectedAttendanceView == 'Take Attendance'
-                      ? const Color(0xFF107B41)
+                      ? const Color(0xFF1A56DB)
                       : Colors.white,
                   foregroundColor: _selectedAttendanceView == 'Take Attendance'
                       ? Colors.white
@@ -4441,7 +4432,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
               ElevatedButton(
                 style: ElevatedButton.styleFrom(
                   backgroundColor: _selectedAttendanceView == 'View History'
-                      ? const Color(0xFF107B41)
+                      ? const Color(0xFF1A56DB)
                       : Colors.white,
                   foregroundColor: _selectedAttendanceView == 'View History'
                       ? Colors.white
@@ -4843,13 +4834,56 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                     const SizedBox(width: 12),
                     // Student name
                     Expanded(
-                      child: Text(
-                        _formatStudentDisplayName(student),
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                          color: Color(0xFF1E293B),
-                        ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _formatStudentDisplayName(student),
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                              color: Color(0xFF1E293B),
+                            ),
+                          ),
+                          Row(
+                            children: [
+                              const Icon(
+                                Icons.nfc_outlined,
+                                size: 12,
+                                color: Color(0xFF64748B),
+                              ),
+                              const SizedBox(width: 4),
+                              const Text(
+                                'RFID Ready • ESP32 Sync Active',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: Color(0xFF64748B),
+                                ),
+                              ),
+                              if (currentStatus == AttendanceStatus.present) ...[
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFE8F5E9),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: const Text(
+                                    'Logged via RFID',
+                                    style: TextStyle(
+                                      fontSize: 9,
+                                      color: Color(0xFF2E7D32),
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ],
                       ),
                     ),
                     // Rounded check buttons row
@@ -4921,7 +4955,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
             children: [
               ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF107B41),
+                  backgroundColor: const Color(0xFF1A56DB),
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(
                     horizontal: 24,
@@ -4940,7 +4974,8 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                   AppModals.showSuccessDialog(
                     context: context,
                     title: 'Attendance Saved',
-                    message: 'Roster attendance has been committed successfully to system logs.',
+                    message:
+                        'Roster attendance has been committed successfully to system logs.',
                   );
                 },
               ),
@@ -4964,9 +4999,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                 ),
                 onPressed: () {
                   setState(() {
-                    for (var s in activeStudents) {
-                      _tempAttendanceStates[s.id] = AttendanceStatus.present;
-                    }
+                    _tempAttendanceStates.clear();
                   });
                 },
               ),
@@ -6778,24 +6811,28 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: AppColors.border),
       ),
-      child: Wrap(
-        spacing: 16,
-        runSpacing: 12,
-        children: [
-          _buildGradebookDropdown(
-            label: 'Grading Period',
-            value: 'Quarter 1',
-            options: const ['Quarter 1', 'Quarter 2', 'Quarter 3', 'Quarter 4'],
-          ),
-          _buildGradebookDropdown(
-            label: 'Class',
-            value: 'Grade 11 - Section A - General Mathematics',
-            options: const [
-              'Grade 11 - Section A - General Mathematics',
-              'Grade 11 - Section B - General Mathematics',
-            ],
-          ),
-        ],
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            _buildGradebookDropdown(
+              label: 'Grading Period',
+              value: 'Quarter 1',
+              options: const ['Quarter 1', 'Quarter 2', 'Quarter 3', 'Quarter 4'],
+              width: 200,
+            ),
+            const SizedBox(width: 16),
+            _buildGradebookDropdown(
+              label: 'Class',
+              value: 'Grade 11 - Section A - General Mathematics',
+              options: const [
+                'Grade 11 - Section A - General Mathematics',
+                'Grade 11 - Section B - General Mathematics',
+              ],
+              width: 380,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -6822,11 +6859,12 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     required String label,
     required String value,
     required List<String> options,
-    double width = 300,
+    double width = 350,
   }) {
     return SizedBox(
       width: width,
       child: DropdownButtonFormField<String>(
+        isExpanded: true,
         initialValue: value,
         decoration: InputDecoration(
           labelText: label.isEmpty ? null : label,
