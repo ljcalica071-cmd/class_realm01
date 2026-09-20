@@ -7,7 +7,6 @@ import '../../../models/academic_models.dart';
 import '../../../routes/app_routes.dart';
 import '../../../widgets/common/status_badge.dart';
 import '../../../widgets/common/sync_status_badge.dart';
-import '../../../widgets/common/app_modals.dart';
 
 class ParentHomeScreen extends StatefulWidget {
   const ParentHomeScreen({super.key});
@@ -20,27 +19,54 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
   int _currentIndex = 0;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
+  UserModel? _findLinkedStudent(UserModel parent) {
+    final linkedId = parent.linkedStudentId;
+    if (linkedId == null) return null;
+    for (final user in MockDatabase.instance.users) {
+      if (user.role == UserRole.student && user.id == linkedId) {
+        return user;
+      }
+
+    }
+
+    return null;
+  }
+
+  Widget _noLinkedStudent() {
+    return const Center(
+      child: Padding(
+        padding: EdgeInsets.all(24),
+        child: Text(
+          'No linked student found. Please contact the school administrator.',
+          textAlign: TextAlign.center,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final attendance = MockDatabase.instance.attendanceRecords;
-    final notifications = MockDatabase.instance.notifications;
+    final notifications = MockDatabase.instance.notifications
+        .where(
+          (notification) =>
+              notification.type == 'attendance' &&
+              notification.title == 'Attendance Confirmed',
+        )
+        .toList();
     final parent =
         MockDatabase.instance.currentUser ??
         MockDatabase.instance.users.firstWhere(
           (u) => u.role == UserRole.parent,
         );
-    final linkedStudent = MockDatabase.instance.users.firstWhere(
-      (u) => u.id == parent.linkedStudentId,
-      orElse: () => MockDatabase.instance.users.firstWhere(
-        (u) => u.role == UserRole.student,
-      ),
-    );
+    final linkedStudent = _findLinkedStudent(parent);
     final linkedAttendance = attendance
         .where(
           (record) =>
-              record.studentId == linkedStudent.id ||
-              record.studentId == linkedStudent.lrn ||
-              record.studentId == linkedStudent.studentId,
+              linkedStudent != null &&
+              (record.studentId == linkedStudent.id ||
+                  record.studentId == linkedStudent.lrn ||
+                  record.studentId == linkedStudent.studentId),
         )
         .toList();
     final teacher = MockDatabase.instance.users.firstWhere(
@@ -48,7 +74,7 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
     );
 
     final List<Widget> pages = [
-      _buildStudentOverviewTab(attendance, linkedStudent, teacher),
+      _buildStudentOverviewTab(linkedStudent, teacher),
       _buildAttendanceLogTab(linkedAttendance),
       _buildGradesTab(),
       _buildNotificationsTab(notifications),
@@ -122,12 +148,7 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
         MockDatabase.instance.users.firstWhere(
           (u) => u.role == UserRole.parent,
         );
-    final linkedStudent = MockDatabase.instance.users.firstWhere(
-      (u) => u.id == parent.linkedStudentId,
-      orElse: () => MockDatabase.instance.users.firstWhere(
-        (u) => u.role == UserRole.student,
-      ),
-    );
+    final linkedStudent = _findLinkedStudent(parent);
     final teacher = MockDatabase.instance.users.firstWhere(
       (u) => u.role == UserRole.teacher,
     );
@@ -160,7 +181,9 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
                   ),
                 ),
                 Text(
-                  'Linked Student: ${linkedStudent.fullName} (${linkedStudent.departmentOrSection})',
+                  linkedStudent == null
+                      ? 'No linked student'
+                      : 'Linked Student: ${linkedStudent.fullName} (${linkedStudent.departmentOrSection})',
                   style: const TextStyle(color: Colors.white70, fontSize: 12),
                 ),
               ],
@@ -171,10 +194,11 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
             title: const Text("Student's Schedule"),
             onTap: () {
               Navigator.pop(context);
-              AppModals.showSuccessDialog(
-                context: context,
-                title: 'Class Schedule',
-                message: 'General Mathematics: Mon/Wed 07:30 AM.',
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => _buildSchedulePage(linkedStudent),
+                ),
               );
             },
           ),
@@ -183,10 +207,9 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
             title: const Text("Teacher Contact"),
             onTap: () {
               Navigator.pop(context);
-              AppModals.showSuccessDialog(
-                context: context,
-                title: 'Adviser Contact',
-                message: '${teacher.fullName} • ${teacher.email}',
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => _buildTeacherContactPage(teacher)),
               );
             },
           ),
@@ -207,22 +230,113 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
     );
   }
 
+  Widget _buildSchedulePage(UserModel? linkedStudent) {
+    final schedules = linkedStudent == null
+        ? <ScheduleModel>[]
+        : MockDatabase.instance.scheduleForSection(
+            linkedStudent.departmentOrSection ?? '',
+          );
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Student Schedule'),
+        backgroundColor: AppColors.primary,
+        foregroundColor: Colors.white,
+      ),
+      body: Container(
+        color: AppColors.background,
+        child: linkedStudent == null
+            ? const Center(child: Text('No linked student found.'))
+            : schedules.isEmpty
+            ? const Center(child: Text('No schedule records found.'))
+            : ListView.separated(
+                padding: const EdgeInsets.all(16),
+                itemCount: schedules.length,
+                separatorBuilder: (_, __) => const SizedBox(height: 10),
+                itemBuilder: (_, index) {
+                  final item = schedules[index];
+                  return Card(
+                    child: ListTile(
+                      leading: const Icon(
+                        Icons.schedule_outlined,
+                        color: AppColors.primary,
+                      ),
+                      title: Text(
+                        item.subject,
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      subtitle: Text(
+                        '${item.dayOfWeek} • ${item.room}',
+                      ),
+                      trailing: Text(
+                        '${item.startTime}\n${item.endTime}',
+                        textAlign: TextAlign.end,
+                      ),
+                    ),
+                  );
+                },
+              ),
+      ),
+    );
+  }
+
+  Widget _buildTeacherContactPage(UserModel teacher) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Teacher Contact'),
+        backgroundColor: AppColors.primary,
+        foregroundColor: Colors.white,
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Card(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(
+                  Icons.contact_phone_outlined,
+                  size: 42,
+                  color: AppColors.primary,
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Adviser / Teacher',
+                  style: TextStyle(color: AppColors.textSecondary),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  teacher.fullName,
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.email_outlined),
+                  title: const Text('Email'),
+                  subtitle: Text(teacher.email),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildStudentOverviewTab(
-    List<AttendanceRecord> attendance,
-    UserModel linkedStudent,
+    UserModel? linkedStudent,
     UserModel teacher,
   ) {
+    if (linkedStudent == null) return _noLinkedStudent();
+
     final quarterGrade = MockDatabase.instance.quarterlyGradeFor(
       linkedStudent.id,
     );
-    final latestAttendance = attendance.isEmpty ? null : attendance.first;
-    final attendanceStatus = latestAttendance?.status == AttendanceStatus.late
-        ? 'Late'
-        : latestAttendance?.status == AttendanceStatus.absent
-        ? 'Absent'
-        : latestAttendance?.status == AttendanceStatus.excused
-        ? 'Excused'
-        : 'Present';
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -272,67 +386,6 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
                       ),
                     ],
                   ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 24),
-          const Text(
-            "Today's Attendance Status",
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppColors.border),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  children: [
-                    Icon(
-                      latestAttendance?.status == AttendanceStatus.absent
-                          ? Icons.cancel
-                          : Icons.check_circle,
-                      color: latestAttendance?.status == AttendanceStatus.absent
-                          ? AppColors.error
-                          : AppColors.success,
-                      size: 28,
-                    ),
-                    SizedBox(width: 12),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Time In: ${latestAttendance?.timeIn ?? '--:--'}',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                          ),
-                        ),
-                        Text(
-                          latestAttendance?.method ?? 'No attendance record',
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: AppColors.textSecondary,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-                StatusBadge(
-                  text: attendanceStatus,
-                  backgroundColor: attendanceStatus == 'Absent'
-                      ? AppColors.errorLight
-                      : AppColors.successLight,
-                  textColor: attendanceStatus == 'Absent'
-                      ? AppColors.error
-                      : AppColors.success,
                 ),
               ],
             ),
@@ -405,26 +458,34 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    att.studentName,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 15,
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      att.studentName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Time In: ${att.timeIn} • Method: ${att.method}',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: AppColors.textSecondary,
+                    const SizedBox(height: 4),
+                    Text(
+                      '${att.date.toLocal().toString().split(' ').first} • '
+                      'Time In: ${att.timeIn} • Method: ${att.method}',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.textSecondary,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
+              const SizedBox(width: 8),
               StatusBadge.fromAttendance(att.status),
             ],
           ),
@@ -439,12 +500,8 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
         MockDatabase.instance.users.firstWhere(
           (u) => u.role == UserRole.parent,
         );
-    final student = MockDatabase.instance.users.firstWhere(
-      (u) => u.id == parent.linkedStudentId,
-      orElse: () => MockDatabase.instance.users.firstWhere(
-        (u) => u.role == UserRole.student,
-      ),
-    );
+    final student = _findLinkedStudent(parent);
+    if (student == null) return _noLinkedStudent();
     final database = MockDatabase.instance;
     return Padding(
       padding: const EdgeInsets.all(16),
@@ -535,12 +592,7 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
   }
 
   Widget _buildProfileTab(UserModel parent) {
-    final linkedStudent = MockDatabase.instance.users.firstWhere(
-      (u) => u.id == parent.linkedStudentId,
-      orElse: () => MockDatabase.instance.users.firstWhere(
-        (u) => u.role == UserRole.student,
-      ),
-    );
+    final linkedStudent = _findLinkedStudent(parent);
     return Padding(
       padding: const EdgeInsets.all(24),
       child: Column(
@@ -564,7 +616,9 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
             leading: const Icon(Icons.family_restroom),
             title: const Text('Linked Student'),
             subtitle: Text(
-              '${linkedStudent.fullName} (${linkedStudent.departmentOrSection})',
+              linkedStudent == null
+                  ? 'No linked student'
+                  : '${linkedStudent.fullName} (${linkedStudent.departmentOrSection})',
             ),
           ),
           ListTile(

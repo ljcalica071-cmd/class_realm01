@@ -13,6 +13,7 @@ class SyncStatusBadge extends StatefulWidget {
 class _SyncStatusBadgeState extends State<SyncStatusBadge> {
   @override
   Widget build(BuildContext context) {
+    final isCompact = MediaQuery.sizeOf(context).width < 380;
     final status = MockDatabase.instance.syncStatus;
     Color bg;
     Color fg;
@@ -79,17 +80,25 @@ class _SyncStatusBadgeState extends State<SyncStatusBadge> {
           decoration: BoxDecoration(
             color: bg,
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: fg.withOpacity(0.3)),
+            border: Border.all(color: fg.withValues(alpha: 0.3)),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(icon, size: 14, color: fg),
-              const SizedBox(width: 6),
-              Text(
-                label,
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: fg),
-              ),
+              if (!isCompact) ...[
+                const SizedBox(width: 6),
+                Text(
+                  label,
+                  maxLines: 1,
+                  softWrap: false,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: fg,
+                  ),
+                ),
+              ],
             ],
           ),
         ),

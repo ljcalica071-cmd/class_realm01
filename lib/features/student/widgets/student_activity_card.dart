@@ -36,37 +36,63 @@ class StudentActivityCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                child: Text(
-                  activity.title,
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                ),
-              ),
-              if (submission != null)
-                StatusBadge(
-                  text:
-                      submission.status == ActivityStatus.graded
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final status = submission != null
+                  ? StatusBadge(
+                      text: submission.status == ActivityStatus.graded
                           ? 'Graded'
                           : 'Submitted',
-                  backgroundColor:
-                      submission.status == ActivityStatus.graded
-                          ? AppColors.successLight
-                          : AppColors.infoLight,
-                  textColor:
-                      submission.status == ActivityStatus.graded
+                      backgroundColor:
+                          submission.status == ActivityStatus.graded
+                              ? AppColors.successLight
+                              : AppColors.infoLight,
+                      textColor: submission.status == ActivityStatus.graded
                           ? AppColors.success
                           : AppColors.info,
-                )
-              else if (isPastDeadline)
-                const StatusBadge(
-                  text: 'Missing',
-                  backgroundColor: AppColors.errorLight,
-                  textColor: AppColors.error,
-                ),
-            ],
+                    )
+                  : isPastDeadline
+                  ? const StatusBadge(
+                      text: 'Missing',
+                      backgroundColor: AppColors.errorLight,
+                      textColor: AppColors.error,
+                    )
+                  : null;
+              if (constraints.maxWidth < 300 && status != null) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      activity.title,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    status,
+                  ],
+                );
+              }
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Text(
+                      activity.title,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ),
+                  if (status != null) ...[
+                    const SizedBox(width: 8),
+                    status,
+                  ],
+                ],
+              );
+            },
           ),
           const SizedBox(height: 4),
           Text(
@@ -99,7 +125,7 @@ class StudentActivityCard extends StatelessWidget {
                         : activity.isRequirement
                         ? 'Upload Performance Task'
                         : 'Upload & Submit Document',
-                height: 44,
+                height: 56,
                 onPressed: () {
                   if (activity.id == 'WW3') {
                     final quiz = MockDatabase.instance.quizzesAndExams.firstWhere(

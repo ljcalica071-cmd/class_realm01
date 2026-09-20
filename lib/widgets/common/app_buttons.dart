@@ -48,7 +48,18 @@ class AppPrimaryButton extends StatelessWidget {
                     Icon(icon, size: 18),
                     const SizedBox(width: 8),
                   ],
-                  Text(label, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                  Flexible(
+                    child: Text(
+                      label,
+                      textAlign: TextAlign.center,
+                      maxLines: 2,
+                      overflow: TextOverflow.visible,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ),
                 ],
               ),
       ),
@@ -92,7 +103,18 @@ class AppSecondaryButton extends StatelessWidget {
               Icon(icon, size: 18, color: AppColors.textSecondary),
               const SizedBox(width: 8),
             ],
-            Text(label, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+            Flexible(
+              child: Text(
+                label,
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.visible,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
+                ),
+              ),
+            ),
           ],
         ),
       ),
