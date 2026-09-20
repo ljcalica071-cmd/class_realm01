@@ -1,3 +1,6 @@
+// Legacy question-planning helpers remain available for future wiring.
+// ignore_for_file: unused_element, unused_element_parameter
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 

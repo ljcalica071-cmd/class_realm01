@@ -1,3 +1,6 @@
+// Legacy prototype tabs remain available for future wiring.
+// ignore_for_file: unused_element, unused_element_parameter
+
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_colors.dart';
@@ -196,11 +199,6 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                       _buildNavItem(5, 'Attendance', Icons.fact_check_outlined),
                       _buildNavItem(7, 'Item Analysis', Icons.insights),
                       _buildNavItem(9, 'Grades', Icons.grade_outlined),
-                      _buildNavItem(
-                        10,
-                        'Academic Reports',
-                        Icons.assessment_outlined,
-                      ),
                       const SizedBox(height: 8),
                       _buildSectionHeader('INSIGHTS & MANAGEMENT'),
                       _buildNavItem(
@@ -1660,7 +1658,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                         : null,
                   ),
                   DropdownButtonFormField<String>(
-                    value: relationship,
+                    initialValue: relationship,
                     decoration: const InputDecoration(
                       labelText: 'Relationship to Student',
                     ),
@@ -1677,7 +1675,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                     validator: (value) => value == null ? 'Required' : null,
                   ),
                   DropdownButtonFormField<String>(
-                    value: linkedStudentId,
+                    initialValue: linkedStudentId,
                     decoration: const InputDecoration(
                       labelText: 'Linked Student',
                     ),
@@ -4136,50 +4134,6 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
           ),
           const SizedBox(height: 16),
 
-          // Dropdown Row
-          Row(
-            children: [
-              const Text(
-                'Class / Section:  ',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AppColors.border),
-                ),
-                child: DropdownButtonHideUnderline(
-                  child: DropdownButton<String>(
-                    value: _attendanceClassFilter,
-                    style: const TextStyle(
-                      color: Color(0xFF1A56DB),
-                      fontWeight: FontWeight.w600,
-                      fontSize: 13,
-                    ),
-                    items:
-                        [
-                              'Grade 11 - Section A • General Mathematics',
-                              'Grade 11 - Section B • General Mathematics',
-                            ]
-                            .map(
-                              (val) => DropdownMenuItem(
-                                value: val,
-                                child: Text(val),
-                              ),
-                            )
-                            .toList(),
-                    onChanged: (v) {
-                      if (v != null) setState(() => _attendanceClassFilter = v);
-                    },
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-
           // Tab View Headers
           Row(
             children: [
@@ -4236,44 +4190,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
           ),
           const SizedBox(height: 20),
 
-          // Compact search for the attendance roster
-          SizedBox(
-            width: 320,
-            child: TextField(
-              onChanged: (value) =>
-                  setState(() => _attendanceSearchQuery = value),
-              style: const TextStyle(fontSize: 13),
-              decoration: InputDecoration(
-                hintText: 'Search student name or LRN',
-                hintStyle: const TextStyle(
-                  fontSize: 12,
-                  color: Color(0xFF94A3B8),
-                ),
-                prefixIcon: const Icon(Icons.search, size: 18),
-                suffixIcon: _attendanceSearchQuery.isEmpty
-                    ? null
-                    : IconButton(
-                        icon: const Icon(Icons.clear, size: 16),
-                        onPressed: () =>
-                            setState(() => _attendanceSearchQuery = ''),
-                      ),
-                isDense: true,
-                filled: true,
-                fillColor: Colors.white,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-
-          // Attendance Config Row Header Card
+          // Search bar (Left side of date picker)
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -4285,6 +4202,37 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
               children: [
                 Row(
                   children: [
+                    // Search Student Input
+                    SizedBox(
+                      width: 280,
+                      child: TextField(
+                        onChanged: (value) =>
+                            setState(() => _attendanceSearchQuery = value),
+                        style: const TextStyle(fontSize: 13),
+                        decoration: InputDecoration(
+                          hintText: 'Search student name or LRN',
+                          hintStyle: const TextStyle(
+                            fontSize: 12,
+                            color: Color(0xFF94A3B8),
+                          ),
+                          prefixIcon: const Icon(Icons.search, size: 18),
+                          isDense: true,
+                          filled: true,
+                          fillColor: Colors.white,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide:
+                                const BorderSide(color: Color(0xFFE2E8F0)),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide:
+                                const BorderSide(color: Color(0xFFE2E8F0)),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
                     // Date Picker Input Box
                     InkWell(
                       onTap: () async {
@@ -4392,72 +4340,143 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                   ],
                 ),
                 const SizedBox(height: 16),
-                // Buttons row: Group by Gender, Sort, Holiday, Mark all present, Mark all absent
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: [
-                      _buildHeaderConfigButton(
-                        label: 'Group by Gender',
-                        icon: Icons.grid_view_outlined,
-                        onPressed: () {},
+                // Config Buttons Row (Aligned with Class Dropdown)
+                Row(
+                  children: [
+                    // Class / Section Dropdown Aligned Here
+                    const Text(
+                      'Class / Section:  ',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                        color: Color(0xFF64748B),
                       ),
-                      const SizedBox(width: 8),
-                      _buildHeaderConfigButton(
-                        label: 'Sort: A-Z',
-                        icon: Icons.sort_by_alpha,
-                        onPressed: () {},
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: const Color(0xFFE2E8F0)),
                       ),
-                      const SizedBox(width: 8),
-                      _buildHeaderConfigButton(
-                        label: 'Holiday / Suspension',
-                        icon: Icons.celebration_outlined,
-                        onPressed: () {
-                          AppModals.showSuccessDialog(
-                            context: context,
-                            title: 'Holiday Registered',
-                            message: 'All students will be marked excused for today.',
-                          );
-                        },
-                      ),
-                      const SizedBox(width: 24),
-                      TextButton(
-                        onPressed: () {
-                          setState(() {
-                            for (var s in activeStudents) {
-                              _tempAttendanceStates[s.id] =
-                                  AttendanceStatus.present;
-                            }
-                          });
-                        },
-                        child: const Text(
-                          'Mark All Present',
-                          style: TextStyle(
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<String>(
+                          value: _attendanceClassFilter,
+                          style: const TextStyle(
+                            color: Color(0xFF1A56DB),
                             fontWeight: FontWeight.bold,
-                            color: Color(0xFF107B41),
+                            fontSize: 12,
                           ),
+                          isDense: true,
+                          items:
+                              [
+                                    'Grade 11 - Section A • General Mathematics',
+                                    'Grade 11 - Section B • General Mathematics',
+                                  ]
+                                  .map(
+                                    (val) => DropdownMenuItem(
+                                      value: val,
+                                      child: Text(val),
+                                    ),
+                                  )
+                                  .toList(),
+                          onChanged: (v) {
+                            if (v != null)
+                              setState(() => _attendanceClassFilter = v);
+                          },
                         ),
                       ),
-                      const SizedBox(width: 12),
-                      TextButton(
-                        onPressed: () {
-                          setState(() {
-                            for (var s in activeStudents) {
-                              _tempAttendanceStates[s.id] =
-                                  AttendanceStatus.absent;
-                            }
-                          });
-                        },
-                        child: const Text(
-                          'Mark All Absent',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: Colors.red,
-                          ),
+                    ),
+                    const Spacer(),
+                    _buildHeaderConfigButton(
+                      label: 'Group by Gender',
+                      icon: Icons.grid_view_outlined,
+                      onPressed: () {},
+                    ),
+                    const SizedBox(width: 8),
+                    _buildHeaderConfigButton(
+                      label: 'Sort: A-Z',
+                      icon: Icons.sort_by_alpha,
+                      onPressed: () {},
+                    ),
+                    const SizedBox(width: 8),
+                    _buildHeaderConfigButton(
+                      label: 'Holiday / Suspension',
+                      icon: Icons.celebration_outlined,
+                      onPressed: () {
+                        AppModals.showSuccessDialog(
+                          context: context,
+                          title: 'Holiday Registered',
+                          message:
+                              'All students will be marked excused for today.',
+                        );
+                      },
+                    ),
+                    const SizedBox(width: 16),
+                    // MARK ALL PRESENT BUTTON
+                    ElevatedButton(
+                      onPressed: () {
+                        setState(() {
+                          for (var s in activeStudents) {
+                            _tempAttendanceStates[s.id] =
+                                AttendanceStatus.present;
+                          }
+                        });
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.white,
+                        foregroundColor: const Color(0xFF107B41),
+                        elevation: 0,
+                        side: const BorderSide(color: Color(0xFF107B41)),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 8,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
                         ),
                       ),
-                    ],
-                  ),
+                      child: const Text(
+                        'Mark All Present',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    // MARK ALL ABSENT BUTTON
+                    ElevatedButton(
+                      onPressed: () {
+                        setState(() {
+                          for (var s in activeStudents) {
+                            _tempAttendanceStates[s.id] =
+                                AttendanceStatus.absent;
+                          }
+                        });
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.white,
+                        foregroundColor: Colors.red,
+                        elevation: 0,
+                        side: const BorderSide(color: Colors.red),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 8,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      child: const Text(
+                        'Mark All Absent',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -4601,7 +4620,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                         const SizedBox(width: 8),
                         // EXCUSED check
                         _buildAttendanceActionButton(
-                          icon: Icons.remove,
+                          icon: Icons.assignment_turned_in_outlined,
                           color: const Color(0xFF64748B),
                           isActive: currentStatus == AttendanceStatus.excused,
                           onPressed: () {
@@ -6772,6 +6791,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
               separatorBuilder: (_, __) => const SizedBox(height: 12),
               itemBuilder: (ctx, i) {
                 final mat = materials[i];
+                final isPdf = mat.fileName.toLowerCase().endsWith('.pdf');
                 return Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
@@ -6781,9 +6801,13 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                   ),
                   child: Row(
                     children: [
-                      const Icon(
-                        Icons.picture_as_pdf,
-                        color: AppColors.error,
+                      Icon(
+                        isPdf
+                            ? Icons.picture_as_pdf
+                            : Icons.description_outlined,
+                        color: isPdf
+                            ? AppColors.error
+                            : const Color(0xFF2563EB),
                         size: 36,
                       ),
                       const SizedBox(width: 16),
