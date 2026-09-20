@@ -1811,18 +1811,8 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                                               ),
                                               _buildDataCell(
                                                 width: colStatusWidth,
-                                                child: Row(
-                                                  children: [
-                                                    const Icon(
-                                                      Icons.warning_amber_rounded,
-                                                      color: Colors.orange,
-                                                      size: 16,
-                                                    ),
-                                                    const SizedBox(width: 4),
-                                                    StatusBadge.fromAccountStatus(
-                                                      p.status,
-                                                    ),
-                                                  ],
+                                                child: StatusBadge.fromAccountStatus(
+                                                  p.status,
                                                 ),
                                               ),
                                               _buildDataCell(
@@ -2726,7 +2716,8 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                                               _buildDataCell(
                                                 width: colLrnWidth,
                                                 child: Text(
-                                                  lrn,
+                                                  lrn.replaceAll(' ', ''),
+                                                  maxLines: 1,
                                                   style: const TextStyle(
                                                     fontSize: 13,
                                                     fontFamily: 'monospace',
@@ -6015,20 +6006,144 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   }
 
   // --- 7. Item Analysis ---
+  String _selectedItemAnalysisAssessment = 'Summative Test 1 (ST1)';
+
   Widget _buildItemAnalysisTab(List<QuizOrExamModel> quizzes) {
+    final Map<String, List<Map<String, dynamic>>> mockItemData = {
+      'Summative Test 1 (ST1)': [
+        {
+          'q': '1',
+          'concept': 'Domain of rational function',
+          'correct': 8,
+          'wrong': 2,
+          'percent': '80%',
+          'difficulty': 'Easy'
+        },
+        {
+          'q': '2',
+          'concept': 'Vertical asymptote properties',
+          'correct': 6,
+          'wrong': 4,
+          'percent': '60%',
+          'difficulty': 'Moderate'
+        },
+        {
+          'q': '3',
+          'concept': 'Piecewise function evaluation',
+          'correct': 7,
+          'wrong': 3,
+          'percent': '70%',
+          'difficulty': 'Moderate'
+        },
+      ],
+      'Summative Test 2 (ST2)': [
+        {
+          'q': '1',
+          'concept': 'Exponential growth modeling',
+          'correct': 9,
+          'wrong': 1,
+          'percent': '90%',
+          'difficulty': 'Easy'
+        },
+        {
+          'q': '2',
+          'concept': 'Logarithmic properties',
+          'correct': 5,
+          'wrong': 5,
+          'percent': '50%',
+          'difficulty': 'Hard'
+        },
+      ],
+      'Term Examination (TE)': [
+        {
+          'q': '1',
+          'concept': 'Comprehensive Functions',
+          'correct': 7,
+          'wrong': 3,
+          'percent': '70%',
+          'difficulty': 'Moderate'
+        },
+        {
+          'q': '2',
+          'concept': 'Inverse Functions',
+          'correct': 8,
+          'wrong': 2,
+          'percent': '80%',
+          'difficulty': 'Easy'
+        },
+        {
+          'q': '3',
+          'concept': 'Compound Interest Applications',
+          'correct': 4,
+          'wrong': 6,
+          'percent': '40%',
+          'difficulty': 'Hard'
+        },
+        {
+          'q': '4',
+          'concept': 'Exponential Equations',
+          'correct': 6,
+          'wrong': 4,
+          'percent': '60%',
+          'difficulty': 'Moderate'
+        },
+      ],
+    };
+
+    final currentData =
+        mockItemData[_selectedItemAnalysisAssessment] ?? mockItemData.values.first;
+
     return Padding(
       padding: const EdgeInsets.all(24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Item Analysis Dashboard',
-            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 6),
-          const Text(
-            'Evaluate question difficulty index and student correctness percentages.',
-            style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Item Analysis Dashboard',
+                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 6),
+                  const Text(
+                    'Evaluate question difficulty index and student correctness percentages.',
+                    style:
+                        TextStyle(fontSize: 14, color: AppColors.textSecondary),
+                  ),
+                ],
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppColors.border),
+                ),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    value: _selectedItemAnalysisAssessment,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.primary,
+                    ),
+                    items: mockItemData.keys
+                        .map(
+                          (e) => DropdownMenuItem(value: e, child: Text(e)),
+                        )
+                        .toList(),
+                    onChanged: (v) {
+                      if (v != null)
+                        setState(() => _selectedItemAnalysisAssessment = v);
+                    },
+                  ),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 24),
           Container(
@@ -6041,105 +6156,108 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Quiz 1: Functions & Domain/Range - Item Breakdown',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                Text(
+                  '$_selectedItemAnalysisAssessment - Item Breakdown',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
                 ),
                 const SizedBox(height: 16),
                 Table(
-                  border: TableBorder.all(color: AppColors.border, width: 1),
+                  border: TableBorder.all(
+                    color: AppColors.border,
+                    width: 1,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
                   columnWidths: const {
-                    0: FlexColumnWidth(1),
-                    1: FlexColumnWidth(3),
+                    0: IntrinsicColumnWidth(),
+                    1: FlexColumnWidth(4),
                     2: FlexColumnWidth(1),
                     3: FlexColumnWidth(1),
+                    4: FlexColumnWidth(1.5),
+                    5: FlexColumnWidth(1.5),
                   },
-                  children: const [
+                  children: [
                     TableRow(
-                      decoration: BoxDecoration(color: AppColors.background),
+                      decoration: const BoxDecoration(color: Color(0xFFF8FAFC)),
                       children: [
-                        Padding(
-                          padding: EdgeInsets.all(10),
-                          child: Text(
-                            'Q #',
-                            style: TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                        ),
-                        Padding(
-                          padding: EdgeInsets.all(10),
-                          child: Text(
-                            'Question Concept',
-                            style: TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                        ),
-                        Padding(
-                          padding: EdgeInsets.all(10),
-                          child: Text(
-                            '% Correct',
-                            style: TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                        ),
-                        Padding(
-                          padding: EdgeInsets.all(10),
-                          child: Text(
-                            'Difficulty',
-                            style: TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                        ),
+                        _buildTableHeader('Q #'),
+                        _buildTableHeader('Question Concept'),
+                        _buildTableHeader('Correct'),
+                        _buildTableHeader('Wrong'),
+                        _buildTableHeader('% Correct'),
+                        _buildTableHeader('Difficulty'),
                       ],
                     ),
-                    TableRow(
-                      children: [
-                        Padding(padding: EdgeInsets.all(10), child: Text('1')),
-                        Padding(
-                          padding: EdgeInsets.all(10),
-                          child: Text('Domain of rational function'),
-                        ),
-                        Padding(
-                          padding: EdgeInsets.all(10),
-                          child: Text('85%'),
-                        ),
-                        Padding(
-                          padding: EdgeInsets.all(10),
-                          child: Text(
-                            'Easy',
-                            style: TextStyle(
-                              color: AppColors.success,
+                    ...currentData.map((item) {
+                      final diffColor = item['difficulty'] == 'Easy'
+                          ? AppColors.success
+                          : (item['difficulty'] == 'Moderate'
+                              ? AppColors.warning
+                              : AppColors.error);
+                      return TableRow(
+                        children: [
+                          _buildTableCell(item['q'].toString()),
+                          _buildTableCell(item['concept'].toString()),
+                          _buildTableCell(
+                            item['correct'].toString(),
+                            alignment: Alignment.center,
+                          ),
+                          _buildTableCell(
+                            item['wrong'].toString(),
+                            alignment: Alignment.center,
+                          ),
+                          _buildTableCell(
+                            item['percent'].toString(),
+                            alignment: Alignment.center,
+                            textStyle: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.primary,
+                            ),
+                          ),
+                          _buildTableCell(
+                            item['difficulty'].toString(),
+                            alignment: Alignment.center,
+                            textStyle: TextStyle(
+                              color: diffColor,
                               fontWeight: FontWeight.bold,
                             ),
                           ),
-                        ),
-                      ],
-                    ),
-                    TableRow(
-                      children: [
-                        Padding(padding: EdgeInsets.all(10), child: Text('2')),
-                        Padding(
-                          padding: EdgeInsets.all(10),
-                          child: Text('Vertical asymptote properties'),
-                        ),
-                        Padding(
-                          padding: EdgeInsets.all(10),
-                          child: Text('65%'),
-                        ),
-                        Padding(
-                          padding: EdgeInsets.all(10),
-                          child: Text(
-                            'Moderate',
-                            style: TextStyle(
-                              color: AppColors.warning,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
+                        ],
+                      );
+                    }),
                   ],
                 ),
               ],
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildTableHeader(String label) {
+    return Padding(
+      padding: const EdgeInsets.all(12),
+      child: Text(
+        label,
+        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+      ),
+    );
+  }
+
+  Widget _buildTableCell(
+    String text, {
+    Alignment alignment = Alignment.centerLeft,
+    TextStyle? textStyle,
+  }) {
+    return Container(
+      alignment: alignment,
+      padding: const EdgeInsets.all(12),
+      child: Text(
+        text,
+        style: textStyle ?? const TextStyle(fontSize: 13),
       ),
     );
   }
@@ -7026,6 +7144,24 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
           .compareTo(MockDatabase.instance.quarterlyGradeFor(b.id)));
     }
 
+    String getDescriptor(double grade) {
+      if (grade >= 90) return 'Outstanding';
+      if (grade >= 85) return 'Very Satisfactory';
+      if (grade >= 80) return 'Satisfactory';
+      if (grade >= 75) return 'Fairly Satisfactory';
+      return 'Did Not Meet Expectations';
+    }
+
+    String getRemarks(double grade) {
+      return grade >= 75 ? 'Passed' : 'Failed';
+    }
+
+    Color getGradeColor(double grade) {
+      if (grade >= 90) return AppColors.success;
+      if (grade >= 75) return const Color(0xFF1D4ED8);
+      return AppColors.error;
+    }
+
     return Padding(
       padding: const EdgeInsets.all(24),
       child: Column(
@@ -7067,37 +7203,197 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: AppColors.border),
               ),
-              child: ListView.separated(
-                itemCount: filteredList.length,
-                separatorBuilder: (_, __) => const Divider(height: 1),
-                itemBuilder: (ctx, i) {
-                  final s = filteredList[i];
-                  final grade = MockDatabase.instance.quarterlyGradeFor(s.id);
-                  return ListTile(
-                    leading: CircleAvatar(
-                      backgroundColor: AppColors.accent,
-                      child: Text(
-                        s.fullName.substring(0, 1),
-                        style: const TextStyle(color: Colors.white),
+              child: Column(
+                children: [
+                  // Table Header
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 12,
+                      horizontal: 16,
+                    ),
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFF8FAFC),
+                      border: Border(
+                        bottom: BorderSide(color: AppColors.border),
                       ),
                     ),
-                    title: Text(
-                      s.fullName,
-                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    child: const Row(
+                      children: [
+                        Expanded(
+                          flex: 3,
+                          child: Text(
+                            'STUDENT NAME',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                              color: Color(0xFF64748B),
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          flex: 2,
+                          child: Text(
+                            'LRN',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                              color: Color(0xFF64748B),
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          flex: 1,
+                          child: Center(
+                            child: Text(
+                              'GRADE',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                                color: Color(0xFF64748B),
+                              ),
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          flex: 2,
+                          child: Center(
+                            child: Text(
+                              'DESCRIPTOR',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                                color: Color(0xFF64748B),
+                              ),
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          flex: 1,
+                          child: Center(
+                            child: Text(
+                              'REMARKS',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                                color: Color(0xFF64748B),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                    subtitle: Text(
-                      'Section: ${s.departmentOrSection ?? 'N/A'} • LRN: ${s.lrn ?? s.studentId ?? 'N/A'}',
+                  ),
+                  Expanded(
+                    child: ListView.separated(
+                      itemCount: filteredList.length,
+                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      itemBuilder: (ctx, i) {
+                        final s = filteredList[i];
+                        final grade =
+                            MockDatabase.instance.quarterlyGradeFor(s.id);
+                        final descriptor = getDescriptor(grade);
+                        final remarks = getRemarks(grade);
+                        final color = getGradeColor(grade);
+
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(
+                            vertical: 12,
+                            horizontal: 16,
+                          ),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                flex: 3,
+                                child: Row(
+                                  children: [
+                                    CircleAvatar(
+                                      radius: 14,
+                                      backgroundColor: AppColors.accent,
+                                      child: Text(
+                                        s.fullName.substring(0, 1),
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 11,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Text(
+                                      s.fullName,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Expanded(
+                                flex: 2,
+                                child: Text(
+                                  s.lrn ?? s.studentId ?? 'N/A',
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    fontFamily: 'monospace',
+                                  ),
+                                ),
+                              ),
+                              Expanded(
+                                flex: 1,
+                                child: Center(
+                                  child: Text(
+                                    grade.toStringAsFixed(1),
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.bold,
+                                      color: color,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              Expanded(
+                                flex: 2,
+                                child: Center(
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 4,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: color.withValues(alpha: 0.1),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Text(
+                                      descriptor,
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                        color: color,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              Expanded(
+                                flex: 1,
+                                child: Center(
+                                  child: Text(
+                                    remarks,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                      color: color,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
                     ),
-                    trailing: Text(
-                      '${grade.toStringAsFixed(1)} (${grade >= 90 ? 'Outstanding' : 'Satisfactory'})',
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.success,
-                      ),
-                    ),
-                  );
-                },
+                  ),
+                ],
               ),
             ),
           ),

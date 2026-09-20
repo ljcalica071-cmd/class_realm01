@@ -43,7 +43,7 @@ class StatusBadge extends StatelessWidget {
         );
       case AccountStatus.archived:
         return const StatusBadge(
-          text: 'Archived (Inactive)',
+          text: 'Inactive',
           backgroundColor: Color(0xFFF1F5F9),
           textColor: AppColors.textSecondary,
           icon: Icons.archive_outlined,
