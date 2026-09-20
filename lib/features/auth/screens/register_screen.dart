@@ -72,90 +72,109 @@ class _RegisterScreenState extends State<RegisterScreen> {
         backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
       ),
-      body: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Container(
-            constraints: const BoxConstraints(maxWidth: 540),
-            padding: const EdgeInsets.all(32),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: AppColors.border),
+      body: Container(
+        width: double.infinity,
+        height: double.infinity,
+        decoration: const BoxDecoration(
+          image: DecorationImage(
+            image: AssetImage('lib/school.jpg'),
+            fit: BoxFit.cover,
+            colorFilter: ColorFilter.mode(
+              Colors.black54,
+              BlendMode.darken,
             ),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const Text(
-                    'Create Account in ClassRealm',
-                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
-                  ),
-                  const SizedBox(height: 6),
-                  const Text(
-                    'Teacher registration is available for the web portal only. Student and parent accounts are created by the teacher.',
-                    style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
-                  ),
-                  const SizedBox(height: 20),
-
-                  AppTextField(
-                    label: 'Full Name',
-                    hint: 'Karen P. Gonzaga',
-                    controller: _nameController,
-                    prefixIcon: Icons.badge_outlined,
-                    validator: (v) => v == null || v.isEmpty ? 'Full name is required' : null,
-                  ),
-                  const SizedBox(height: 16),
-                  AppTextField(
-                    label: 'Institutional / Personal Email',
-                    hint: 'user@barretto-shs.edu.ph',
-                    controller: _emailController,
-                    prefixIcon: Icons.email_outlined,
-                    keyboardType: TextInputType.emailAddress,
-                    validator: (v) => v == null || !v.contains('@') ? 'Valid email is required' : null,
-                  ),
-                  const SizedBox(height: 16),
-
-                  const SizedBox(height: 16),
-                  AppTextField(
-                    label: 'Contact Number',
-                    hint: '+63 917 123 4567',
-                    controller: _contactController,
-                    prefixIcon: Icons.phone_outlined,
-                    keyboardType: TextInputType.phone,
-                  ),
-                  const SizedBox(height: 16),
-                  AppTextField(
-                    label: 'Username',
-                    hint: 'Choose a username',
-                    controller: _usernameController,
-                    prefixIcon: Icons.person_outline,
-                    validator: (v) => v == null || v.isEmpty ? 'Username is required' : null,
-                  ),
-                  const SizedBox(height: 16),
-                  AppTextField(
-                    label: 'Password',
-                    hint: '••••••••',
-                    controller: _passwordController,
-                    obscureText: true,
-                    prefixIcon: Icons.lock_outline,
-                    validator: (v) => v == null || v.length < 6 ? 'Password must be at least 6 characters' : null,
-                  ),
-                  const SizedBox(height: 24),
-                  AppPrimaryButton(
-                    label: 'Submit Teacher Registration Request',
-                    isLoading: _isLoading,
-                    onPressed: _handleRegister,
-                  ),
-                  const SizedBox(height: 16),
-                  Center(
-                    child: TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text('Already have an account? Sign In', style: TextStyle(color: AppColors.primary)),
-                    ),
+          ),
+        ),
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: Container(
+              constraints: const BoxConstraints(maxWidth: 540),
+              padding: const EdgeInsets.all(32),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.2),
+                    blurRadius: 20,
                   ),
                 ],
+              ),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Text(
+                      'Create Account in ClassRealm',
+                      style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                    ),
+                    const SizedBox(height: 6),
+                    const Text(
+                      'Teacher registration is available for the web portal only. Student and parent accounts are created by the teacher.',
+                      style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                    ),
+                    const SizedBox(height: 20),
+
+                    AppTextField(
+                      label: 'Full Name',
+                      hint: 'Karen P. Gonzaga',
+                      controller: _nameController,
+                      prefixIcon: Icons.badge_outlined,
+                      validator: (v) => v == null || v.isEmpty ? 'Full name is required' : null,
+                    ),
+                    const SizedBox(height: 16),
+                    AppTextField(
+                      label: 'Institutional / Personal Email',
+                      hint: 'user@barretto-shs.edu.ph',
+                      controller: _emailController,
+                      prefixIcon: Icons.email_outlined,
+                      keyboardType: TextInputType.emailAddress,
+                      validator: (v) => v == null || !v.contains('@') ? 'Valid email is required' : null,
+                    ),
+                    const SizedBox(height: 16),
+
+                    const SizedBox(height: 16),
+                    AppTextField(
+                      label: 'Contact Number',
+                      hint: '+63 917 123 4567',
+                      controller: _contactController,
+                      prefixIcon: Icons.phone_outlined,
+                      keyboardType: TextInputType.phone,
+                    ),
+                    const SizedBox(height: 16),
+                    AppTextField(
+                      label: 'Username',
+                      hint: 'Choose a username',
+                      controller: _usernameController,
+                      prefixIcon: Icons.person_outline,
+                      validator: (v) => v == null || v.isEmpty ? 'Username is required' : null,
+                    ),
+                    const SizedBox(height: 16),
+                    AppTextField(
+                      label: 'Password',
+                      hint: '••••••••',
+                      controller: _passwordController,
+                      obscureText: true,
+                      prefixIcon: Icons.lock_outline,
+                      validator: (v) => v == null || v.length < 6 ? 'Password must be at least 6 characters' : null,
+                    ),
+                    const SizedBox(height: 24),
+                    AppPrimaryButton(
+                      label: 'Submit Teacher Registration Request',
+                      isLoading: _isLoading,
+                      onPressed: _handleRegister,
+                    ),
+                    const SizedBox(height: 16),
+                    Center(
+                      child: TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text('Already have an account? Sign In', style: TextStyle(color: AppColors.primary)),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),

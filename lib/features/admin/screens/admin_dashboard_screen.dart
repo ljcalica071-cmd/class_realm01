@@ -45,7 +45,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   alignment: Alignment.centerLeft,
                   child: Row(
                     children: [
-                      const Icon(Icons.school, color: Colors.white, size: 28),
+                      Image.asset(
+                        'lib/school_logo.png',
+                        width: 32,
+                        height: 32,
+                      ),
                       if (_isSidebarExpanded) ...[
                         const SizedBox(width: 12),
                         const Expanded(
@@ -325,7 +329,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     );
   }
 
-  Widget _buildStatCard(String title, String value, IconData icon, Color color) {
+  Widget _buildStatCard(String title, String value, IconData? icon, Color color, {Widget? customIcon}) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -344,7 +348,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
-                child: Icon(icon, color: color, size: 20),
+                child: customIcon ?? Icon(icon, color: color, size: 20),
               ),
             ],
           ),
@@ -586,7 +590,19 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             children: [
               Expanded(child: _buildStatCard('Active Teachers', '${teachers.where((t) => t.status == AccountStatus.active).length}', Icons.verified_user, AppColors.success)),
               const SizedBox(width: 20),
-              Expanded(child: _buildStatCard('Enrolled Students', '${students.length}', Icons.school, AppColors.primary)),
+              Expanded(
+                child: _buildStatCard(
+                  'Enrolled Students',
+                  '${students.length}',
+                  null,
+                  AppColors.primary,
+                  customIcon: Image.asset(
+                    'lib/school_logo.png',
+                    width: 20,
+                    height: 20,
+                  ),
+                ),
+              ),
               const SizedBox(width: 20),
               Expanded(child: _buildStatCard('Linked Parents', '${parents.length}', Icons.family_restroom, AppColors.accent)),
             ],

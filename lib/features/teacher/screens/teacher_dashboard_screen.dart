@@ -132,7 +132,11 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                   alignment: Alignment.centerLeft,
                   child: Row(
                     children: [
-                      const Icon(Icons.school, color: Colors.white, size: 28),
+                      Image.asset(
+                        'lib/school_logo.png',
+                        width: 32,
+                        height: 32,
+                      ),
                       if (_isSidebarExpanded) ...[
                         const SizedBox(width: 12),
                         const Expanded(
@@ -669,7 +673,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                       _buildClassItem(
                         subject: 'General Mathematics',
                         sectionAndRoom:
-                            'Grade 11 - Section A • Room 304 - Science Wing',
+                            'Grade 11 - Section A • Room 304',
                         time: '07:30 AM - 09:00 AM',
                         isDone: true,
                         attendanceStats: 'Attendance: 4 / 5 present',
@@ -678,7 +682,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                       _buildClassItem(
                         subject: 'General Mathematics',
                         sectionAndRoom:
-                            'Grade 11 - Section B • Room 305 - Science Wing',
+                            'Grade 11 - Section B • Room 305',
                         time: '09:15 AM - 10:45 AM',
                         isDone: true,
                         attendanceStats: 'Attendance: 5 / 5 present',
@@ -7927,7 +7931,11 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
             ),
             const Divider(),
             ListTile(
-              leading: const Icon(Icons.school),
+              leading: Image.asset(
+                'lib/school_logo.png',
+                width: 24,
+                height: 24,
+              ),
               title: const Text('School Institution'),
               subtitle: const Text('Eduardo Barretto Senior Integrated School'),
             ),

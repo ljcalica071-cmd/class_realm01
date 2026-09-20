@@ -354,7 +354,11 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
                 CircleAvatar(
                   backgroundColor: AppColors.primaryLight,
                   radius: 28,
-                  child: Icon(Icons.school, color: Colors.white, size: 30),
+                  child: Icon(
+                    Icons.account_circle,
+                    color: Colors.white,
+                    size: 40,
+                  ),
                 ),
                 SizedBox(width: 16),
                 Expanded(

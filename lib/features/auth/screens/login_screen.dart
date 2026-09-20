@@ -121,19 +121,18 @@ class _LoginScreenState extends State<LoginScreen> {
     return Scaffold(
       body: Stack(
         children: [
-          // Background Gradient & Academic Watermark Layer
+          // Background Image with Overlay
           Container(
             width: double.infinity,
             height: double.infinity,
             decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  Color(0xFF0F172A), // Dark Midnight Blue/Grey
-                  Color(0xFF1E3A8A), // Deep Royal Blue
-                  Color(0xFF0F172A),
-                ],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
+              image: DecorationImage(
+                image: AssetImage('lib/school.jpg'),
+                fit: BoxFit.cover,
+                colorFilter: ColorFilter.mode(
+                  Colors.black54,
+                  BlendMode.darken,
+                ),
               ),
             ),
           ),
@@ -157,7 +156,11 @@ class _LoginScreenState extends State<LoginScreen> {
             top: -100,
             child: Opacity(
               opacity: 0.03,
-              child: Icon(Icons.school, size: 500, color: Colors.white),
+              child: Image.asset(
+                'lib/school_logo.png',
+                width: 500,
+                height: 500,
+              ),
             ),
           ),
 
@@ -184,18 +187,21 @@ class _LoginScreenState extends State<LoginScreen> {
                 Row(
                   children: [
                     Container(
-                      padding: const EdgeInsets.all(16),
+                      padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: Colors.white.withOpacity(0.2),
-                        ),
-                      ),
-                      child: const Icon(
-                        Icons.school_rounded,
-                        size: 48,
                         color: Colors.white,
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.2),
+                            blurRadius: 10,
+                          ),
+                        ],
+                      ),
+                      child: Image.asset(
+                        'lib/school_logo.png',
+                        width: 56,
+                        height: 56,
                       ),
                     ),
                     const SizedBox(width: 16),
@@ -273,15 +279,15 @@ class _LoginScreenState extends State<LoginScreen> {
               child: Column(
                 children: [
                   Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.1),
+                    padding: const EdgeInsets.all(8),
+                    decoration: const BoxDecoration(
+                      color: Colors.white,
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(
-                      Icons.school_rounded,
-                      size: 40,
-                      color: Colors.white,
+                    child: Image.asset(
+                      'lib/school_logo.png',
+                      width: 48,
+                      height: 48,
                     ),
                   ),
                   const SizedBox(height: 14),

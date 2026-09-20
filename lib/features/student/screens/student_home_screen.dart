@@ -118,10 +118,14 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                const CircleAvatar(
+                CircleAvatar(
                   backgroundColor: Colors.white,
                   radius: 28,
-                  child: Icon(Icons.school, size: 32, color: AppColors.primary),
+                  child: Image.asset(
+                    'lib/school_logo.png',
+                    width: 40,
+                    height: 40,
+                  ),
                 ),
                 const SizedBox(height: 10),
                 Text(

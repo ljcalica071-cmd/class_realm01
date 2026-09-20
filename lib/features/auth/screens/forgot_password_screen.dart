@@ -97,117 +97,136 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
       ),
-      body: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Container(
-            constraints: const BoxConstraints(maxWidth: 480),
-            padding: const EdgeInsets.all(32),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: AppColors.border),
+      body: Container(
+        width: double.infinity,
+        height: double.infinity,
+        decoration: const BoxDecoration(
+          image: DecorationImage(
+            image: AssetImage('lib/school.jpg'),
+            fit: BoxFit.cover,
+            colorFilter: ColorFilter.mode(
+              Colors.black54,
+              BlendMode.darken,
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const Icon(Icons.lock_reset, size: 48, color: AppColors.primary),
-                const SizedBox(height: 16),
-                Text(
-                  _step == 1
-                      ? 'Forgot Your Password?'
-                      : _step == 2
-                          ? 'Enter Verification Code'
-                          : 'Set New Password',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  _step == 1
-                      ? 'Enter your registered school email address to receive a secure OTP verification code.'
-                      : _step == 2
-                          ? 'We have sent a 6-digit confirmation code to ${_emailController.text}.'
-                          : 'Create a secure new password for your Eduardo Barretto SHS account.',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
-                ),
-                const SizedBox(height: 24),
-
-                // Step 1: Email Input
-                if (_step == 1) ...[
-                  AppTextField(
-                    label: 'Registered Email Address',
-                    hint: 'user@barretto-shs.edu.ph',
-                    controller: _emailController,
-                    prefixIcon: Icons.email_outlined,
-                    keyboardType: TextInputType.emailAddress,
-                  ),
-                  const SizedBox(height: 24),
-                  AppPrimaryButton(
-                    label: 'Send Verification OTP',
-                    isLoading: _isLoading,
-                    onPressed: _handleSendOtp,
+          ),
+        ),
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: Container(
+              constraints: const BoxConstraints(maxWidth: 480),
+              padding: const EdgeInsets.all(32),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.2),
+                    blurRadius: 20,
                   ),
                 ],
-
-                // Step 2: OTP Input
-                if (_step == 2) ...[
-                  AppTextField(
-                    label: '6-Digit OTP Code',
-                    hint: '123456',
-                    controller: _otpController,
-                    prefixIcon: Icons.security,
-                    keyboardType: TextInputType.number,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Icon(Icons.lock_reset, size: 48, color: AppColors.primary),
+                  const SizedBox(height: 16),
+                  Text(
+                    _step == 1
+                        ? 'Forgot Your Password?'
+                        : _step == 2
+                            ? 'Enter Verification Code'
+                            : 'Set New Password',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    _step == 1
+                        ? 'Enter your registered school email address to receive a secure OTP verification code.'
+                        : _step == 2
+                            ? 'We have sent a 6-digit confirmation code to ${_emailController.text}.'
+                            : 'Create a secure new password for your Eduardo Barretto SHS account.',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
                   ),
                   const SizedBox(height: 24),
-                  AppPrimaryButton(
-                    label: 'Verify Code',
-                    isLoading: _isLoading,
-                    onPressed: _handleVerifyOtp,
-                  ),
-                  const SizedBox(height: 12),
+
+                  // Step 1: Email Input
+                  if (_step == 1) ...[
+                    AppTextField(
+                      label: 'Registered Email Address',
+                      hint: 'user@barretto-shs.edu.ph',
+                      controller: _emailController,
+                      prefixIcon: Icons.email_outlined,
+                      keyboardType: TextInputType.emailAddress,
+                    ),
+                    const SizedBox(height: 24),
+                    AppPrimaryButton(
+                      label: 'Send Verification OTP',
+                      isLoading: _isLoading,
+                      onPressed: _handleSendOtp,
+                    ),
+                  ],
+
+                  // Step 2: OTP Input
+                  if (_step == 2) ...[
+                    AppTextField(
+                      label: '6-Digit OTP Code',
+                      hint: '123456',
+                      controller: _otpController,
+                      prefixIcon: Icons.security,
+                      keyboardType: TextInputType.number,
+                    ),
+                    const SizedBox(height: 24),
+                    AppPrimaryButton(
+                      label: 'Verify Code',
+                      isLoading: _isLoading,
+                      onPressed: _handleVerifyOtp,
+                    ),
+                    const SizedBox(height: 12),
+                    Center(
+                      child: TextButton(
+                        onPressed: () => setState(() => _step = 1),
+                        child: const Text('Resend OTP or Change Email', style: TextStyle(color: AppColors.primary, fontSize: 12)),
+                      ),
+                    ),
+                  ],
+
+                  // Step 3: New Password Input
+                  if (_step == 3) ...[
+                    AppTextField(
+                      label: 'New Password',
+                      hint: '••••••••',
+                      controller: _newPassController,
+                      obscureText: true,
+                      prefixIcon: Icons.lock_outline,
+                    ),
+                    const SizedBox(height: 16),
+                    AppTextField(
+                      label: 'Confirm New Password',
+                      hint: '••••••••',
+                      controller: _confirmPassController,
+                      obscureText: true,
+                      prefixIcon: Icons.lock_reset,
+                    ),
+                    const SizedBox(height: 24),
+                    AppPrimaryButton(
+                      label: 'Update Password & Login',
+                      isLoading: _isLoading,
+                      onPressed: _handleResetPassword,
+                    ),
+                  ],
+
+                  const SizedBox(height: 16),
                   Center(
                     child: TextButton(
-                      onPressed: () => setState(() => _step = 1),
-                      child: const Text('Resend OTP or Change Email', style: TextStyle(color: AppColors.primary, fontSize: 12)),
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Back to Sign In', style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
                     ),
                   ),
                 ],
-
-                // Step 3: New Password Input
-                if (_step == 3) ...[
-                  AppTextField(
-                    label: 'New Password',
-                    hint: '••••••••',
-                    controller: _newPassController,
-                    obscureText: true,
-                    prefixIcon: Icons.lock_outline,
-                  ),
-                  const SizedBox(height: 16),
-                  AppTextField(
-                    label: 'Confirm New Password',
-                    hint: '••••••••',
-                    controller: _confirmPassController,
-                    obscureText: true,
-                    prefixIcon: Icons.lock_reset,
-                  ),
-                  const SizedBox(height: 24),
-                  AppPrimaryButton(
-                    label: 'Update Password & Login',
-                    isLoading: _isLoading,
-                    onPressed: _handleResetPassword,
-                  ),
-                ],
-
-                const SizedBox(height: 16),
-                Center(
-                  child: TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('Back to Sign In', style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
         ),
