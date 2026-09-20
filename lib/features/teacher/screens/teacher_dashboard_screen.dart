@@ -28,6 +28,7 @@ class TeacherDashboardScreen extends StatefulWidget {
 
 class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   int _selectedIndex = 0;
+  String? _monitoringAssessmentId;
   bool _isSidebarExpanded = true;
   bool _showArchivedStudents = false;
   bool _showNewSchoolYearForm = false;
@@ -207,6 +208,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                       const SizedBox(height: 8),
                       _buildSectionHeader('MONITORING & EVALUATION'),
                       _buildNavItem(5, 'Attendance', Icons.fact_check_outlined),
+                      _buildNavItem(20, 'Assessment Monitoring', Icons.security),
                       _buildNavItem(7, 'Item Analysis', Icons.insights),
                       _buildNavItem(9, 'Grades', Icons.grade_outlined),
                       const SizedBox(height: 8),
@@ -426,6 +428,8 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         return 'Notifications & Institutional Alerts';
       case 16:
         return 'Faculty Educator Profile';
+      case 20:
+        return 'Assessment Monitoring & Anti-Cheating Logs';
       default:
         return 'Teacher Portal';
     }
@@ -536,6 +540,8 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         return _buildScheduleTab(schedules);
       case 15:
         return _buildNotificationsTab();
+      case 20:
+        return _buildAssessmentMonitoringTab(quizzesAndExams);
       case 16:
         return _buildProfileTab();
       default:
@@ -5847,6 +5853,183 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                 ),
               ],
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAssessmentMonitoringTab(List<QuizOrExamModel> quizzes) {
+    if (_monitoringAssessmentId == null && quizzes.isNotEmpty) {
+      _monitoringAssessmentId = quizzes.first.id;
+    }
+
+    final results = MockDatabase.instance.assessmentResults
+        .where((r) => r.assessmentId == _monitoringAssessmentId)
+        .toList();
+
+    return Padding(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Assessment Monitoring Dashboard',
+            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'Monitor student progress, completion status, and anti-cheating violations in real-time.',
+            style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
+          ),
+          const SizedBox(height: 24),
+
+          // Assessment Selector
+          Row(
+            children: [
+              const Text('Select Assessment: ',
+                  style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(width: 12),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppColors.border),
+                ),
+                child: DropdownButton<String>(
+                  value: _monitoringAssessmentId,
+                  underline: const SizedBox(),
+                  items: quizzes
+                      .map((q) => DropdownMenuItem(
+                            value: q.id,
+                            child: Text(q.title),
+                          ))
+                      .toList(),
+                  onChanged: (val) =>
+                      setState(() => _monitoringAssessmentId = val),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+
+          // Results Table
+          Expanded(
+            child: Container(
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: SingleChildScrollView(
+                child: DataTable(
+                  showCheckboxColumn: false,
+                  columns: const [
+                    DataColumn(
+                        label: Text('Student',
+                            style: TextStyle(fontWeight: FontWeight.bold))),
+                    DataColumn(
+                        label: Text('Submission Time',
+                            style: TextStyle(fontWeight: FontWeight.bold))),
+                    DataColumn(
+                        label: Text('Duration',
+                            style: TextStyle(fontWeight: FontWeight.bold))),
+                    DataColumn(
+                        label: Text('Status',
+                            style: TextStyle(fontWeight: FontWeight.bold))),
+                    DataColumn(
+                        label: Text('Score',
+                            style: TextStyle(fontWeight: FontWeight.bold))),
+                    DataColumn(
+                        label: Text('Violations',
+                            style: TextStyle(fontWeight: FontWeight.bold))),
+                  ],
+                  rows: results.map((res) {
+                    final status = res.violationCount == 0
+                        ? 'Normal'
+                        : res.violationCount == 1
+                            ? 'Warning'
+                            : res.violationCount == 2
+                                ? 'Suspicious'
+                                : 'Auto-Submitted';
+                    final statusColor = res.violationCount == 0
+                        ? AppColors.success
+                        : res.violationCount == 1
+                            ? AppColors.warning
+                            : AppColors.error;
+
+                    return DataRow(
+                      onSelectChanged: (_) => _showViolationDetail(res),
+                      cells: [
+                        DataCell(Text(res.studentName)),
+                        DataCell(Text(res.submittedAt.toString().substring(11, 16))),
+                        DataCell(Text('${res.durationTakenMinutes}m')),
+                        DataCell(StatusBadge(
+                            text: status,
+                            backgroundColor: statusColor.withValues(alpha: 0.1),
+                            textColor: statusColor)),
+                        DataCell(Text(
+                            '${res.scoreEarned.toInt()} / ${res.totalPoints.toInt()}')),
+                        DataCell(Text(res.violationCount.toString(),
+                            style: TextStyle(
+                                color: res.violationCount > 0
+                                    ? AppColors.error
+                                    : null,
+                                fontWeight: res.violationCount > 0
+                                    ? FontWeight.bold
+                                    : null))),
+                      ],
+                    );
+                  }).toList(),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showViolationDetail(AssessmentResultModel result) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Violation History: ${result.studentName}'),
+        content: SizedBox(
+          width: 400,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Total Violations: ${result.violationCount}',
+                  style: const TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 16),
+              if (result.violationLog.isEmpty)
+                const Text('No violations recorded for this session.')
+              else
+                ...result.violationLog.map((v) => Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Row(
+                        children: [
+                          Text(
+                            '[${v['time'].toString().substring(11, 19)}]',
+                            style: const TextStyle(
+                                color: AppColors.textSecondary, fontSize: 12),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(child: Text(v['event'] ?? 'Unknown Event')),
+                        ],
+                      ),
+                    )),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('CLOSE'),
           ),
         ],
       ),

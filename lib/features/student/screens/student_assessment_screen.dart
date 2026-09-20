@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../data/mock_database.dart';
@@ -14,42 +15,120 @@ class StudentAssessmentScreen extends StatefulWidget {
   static Future<void> start(BuildContext context, QuizOrExamModel assessment) {
     return Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => StudentAssessmentScreen(assessment: assessment)),
+      MaterialPageRoute(
+        builder: (_) => StudentAssessmentScreen(assessment: assessment),
+      ),
     );
   }
 
   @override
-  State<StudentAssessmentScreen> createState() => _StudentAssessmentScreenState();
+  State<StudentAssessmentScreen> createState() =>
+      _StudentAssessmentScreenState();
 }
 
-class _StudentAssessmentScreenState extends State<StudentAssessmentScreen> {
-  int _currentStep = 0; // 0: Rules Acknowledgment, 1: Answering Questions, 2: Result Summary
+class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
+    with WidgetsBindingObserver {
+  int _currentStep =
+      0; // 0: Rules Acknowledgment, 1: Answering Questions, 2: Result Summary
   bool _rulesAccepted = false;
   int _currentQuestionIndex = 0;
   final Map<String, String> _studentAnswers = {};
   int _violations = 0;
+  final List<Map<String, dynamic>> _violationLog = [];
   bool _isSubmitting = false;
+
+  Timer? _timer;
+  int _secondsRemaining = 0;
+  DateTime? _startTime;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     for (var q in widget.assessment.questions) {
       _studentAnswers[q.id] = '';
     }
+    _secondsRemaining = widget.assessment.durationMinutes * 60;
   }
 
-  void _submitAssessment() {
-    // Check if unanswered
-    final unansweredCount = _studentAnswers.values.where((a) => a.trim().isEmpty).length;
-    if (unansweredCount > 0) {
-      AppModals.showErrorDialog(
-        context: context,
-        title: 'Unanswered Questions',
-        message: 'You still have $unansweredCount unanswered question(s). Please review before submitting.',
-      );
-      return;
+  @override
+  void dispose() {
+    _timer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (_currentStep == 1 && !_isSubmitting) {
+      if (state == AppLifecycleState.paused ||
+          state == AppLifecycleState.inactive) {
+        _recordViolation('Tab/window focus lost (Backgrounded)');
+      } else if (state == AppLifecycleState.resumed) {
+        _recordViolation('Returned to assessment');
+      }
+    }
+  }
+
+  void _startTimer() {
+    _startTime = DateTime.now();
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) return;
+      setState(() {
+        if (_secondsRemaining > 0) {
+          _secondsRemaining--;
+        } else {
+          _timer?.cancel();
+          _submitAssessment(autoSubmit: true);
+        }
+      });
+    });
+  }
+
+  void _recordViolation(String event) {
+    if (!mounted) return;
+    setState(() {
+      _violations++;
+      _violationLog.add({'time': DateTime.now(), 'event': event});
+
+      if (_violations >= 3) {
+        AppModals.showErrorDialog(
+          context: context,
+          title: 'Assessment Locked',
+          message:
+              'Multiple violations detected. Your assessment has been automatically submitted.',
+        );
+        _submitAssessment(autoSubmit: true);
+      } else {
+        AppModals.showWarningDialog(
+          context: context,
+          title: 'Violation Detected',
+          message:
+              'Warning: $event.\nViolation $_violations of 3. Further violations will result in automatic submission.',
+        );
+      }
+    });
+  }
+
+  void _submitAssessment({bool autoSubmit = false}) {
+    if (_isSubmitting) return;
+
+    if (!autoSubmit) {
+      // Check if unanswered
+      final unansweredCount =
+          _studentAnswers.values.where((a) => a.trim().isEmpty).length;
+      if (unansweredCount > 0) {
+        AppModals.showErrorDialog(
+          context: context,
+          title: 'Unanswered Questions',
+          message:
+              'You still have $unansweredCount unanswered question(s). Please review before submitting.',
+        );
+        return;
+      }
     }
 
+    _timer?.cancel();
     setState(() => _isSubmitting = true);
 
     // Auto-check against answer key
@@ -57,13 +136,22 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen> {
     for (var q in widget.assessment.questions) {
       final studentAns = (_studentAnswers[q.id] ?? '').trim().toLowerCase();
       final correctAns = q.correctAnswer.trim().toLowerCase();
-      final isMatching = q.type == QuestionType.matching &&
-          q.matchingPairs.entries.every((pair) =>
-              studentAns.contains('${pair.key.toLowerCase()}=${pair.value.toLowerCase()}'));
+      final isMatching =
+          q.type == QuestionType.matching &&
+          q.matchingPairs.entries.every(
+            (pair) => studentAns.contains(
+              '${pair.key.toLowerCase()}=${pair.value.toLowerCase()}',
+            ),
+          );
       if (studentAns == correctAns || isMatching) {
         scoreEarned += q.points;
       }
     }
+
+    final durationTaken =
+        _startTime != null
+            ? DateTime.now().difference(_startTime!).inMinutes
+            : 0;
 
     Future.delayed(const Duration(milliseconds: 800), () {
       if (!mounted) return;
@@ -73,10 +161,14 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen> {
       });
 
       // Store result in MockDatabase
-      final student = MockDatabase.instance.currentUser ??
-          MockDatabase.instance.users.firstWhere((u) => u.role == UserRole.student);
+      final student =
+          MockDatabase.instance.currentUser ??
+          MockDatabase.instance.users.firstWhere(
+            (u) => u.role == UserRole.student,
+          );
       MockDatabase.instance.assessmentResults.removeWhere(
-        (r) => r.assessmentId == widget.assessment.id && r.studentId == student.id,
+        (r) =>
+            r.assessmentId == widget.assessment.id && r.studentId == student.id,
       );
       MockDatabase.instance.assessmentResults.add(
         AssessmentResultModel(
@@ -85,8 +177,9 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen> {
           studentId: student.id,
           studentName: student.fullName,
           submittedAt: DateTime.now(),
-          durationTakenMinutes: 12,
+          durationTakenMinutes: durationTaken,
           violationCount: _violations,
+          violationLog: List.from(_violationLog),
           answers: Map.from(_studentAnswers),
           scoreEarned: scoreEarned,
           totalPoints: widget.assessment.totalPoints,
@@ -97,34 +190,87 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen> {
     });
   }
 
+  String _formatTime(int totalSeconds) {
+    final minutes = totalSeconds ~/ 60;
+    final seconds = totalSeconds % 60;
+    return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+  }
+
   @override
   Widget build(BuildContext context) {
+    final isOnline = MockDatabase.instance.isOnline;
+
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.assessment.title),
-        backgroundColor: widget.assessment.isExam ? AppColors.error : AppColors.primary,
+        backgroundColor:
+            widget.assessment.isExam ? AppColors.error : AppColors.primary,
         foregroundColor: Colors.white,
       ),
-      body: Container(
-        color: AppColors.background,
-        child: Center(
-          child: Container(
-            constraints: const BoxConstraints(maxWidth: 800),
-            margin: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: AppColors.border),
-            ),
-            child: Column(
-              children: [
-                if (_currentStep == 0) _buildRulesView(),
-                if (_currentStep == 1) _buildAnsweringView(),
-                if (_currentStep == 2) _buildResultView(),
-              ],
+      body: Stack(
+        children: [
+          Container(
+            color: AppColors.background,
+            child: Center(
+              child: Container(
+                constraints: const BoxConstraints(maxWidth: 800),
+                margin: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: AppColors.border),
+                ),
+                child: Column(
+                  children: [
+                    if (_currentStep == 0) _buildRulesView(),
+                    if (_currentStep == 1) _buildAnsweringView(),
+                    if (_currentStep == 2) _buildResultView(),
+                  ],
+                ),
+              ),
             ),
           ),
-        ),
+          if (!isOnline && _currentStep < 2)
+            Container(
+              color: Colors.black.withValues(alpha: 0.6),
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.all(32),
+                  margin: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.wifi_off,
+                        size: 64,
+                        color: AppColors.error,
+                      ),
+                      const SizedBox(height: 24),
+                      Text(
+                        widget.assessment.isExam
+                            ? 'Internet connection lost. Your examination session requires an active internet connection.'
+                            : 'Internet connection lost. Quiz access is temporarily unavailable.',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'Please reconnect to the internet to continue.',
+                        style: TextStyle(color: AppColors.textSecondary),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -138,30 +284,63 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen> {
           children: [
             Row(
               children: [
-                Icon(widget.assessment.isExam ? Icons.description : Icons.quiz, color: widget.assessment.isExam ? AppColors.error : AppColors.primary, size: 32),
+                Icon(
+                  widget.assessment.isExam ? Icons.description : Icons.quiz,
+                  color:
+                      widget.assessment.isExam
+                          ? AppColors.error
+                          : AppColors.primary,
+                  size: 32,
+                ),
                 const SizedBox(width: 14),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(widget.assessment.title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                      Text('Subject: ${widget.assessment.subject} • Section: ${widget.assessment.section}', style: const TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+                      Text(
+                        widget.assessment.title,
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      Text(
+                        'Subject: ${widget.assessment.subject} • Section: ${widget.assessment.section}',
+                        style: const TextStyle(
+                          color: AppColors.textSecondary,
+                          fontSize: 13,
+                        ),
+                      ),
                     ],
                   ),
                 ),
               ],
             ),
             const Divider(height: 32),
-            const Text('Assessment Rules & Guidelines:', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            const Text(
+              'Assessment Rules & Guidelines:',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
             const SizedBox(height: 12),
-            _buildRuleBullet('Time Limit: ${widget.assessment.durationMinutes} minutes timer.'),
-            _buildRuleBullet('Total Questions: ${widget.assessment.questions.length} items (${widget.assessment.totalPoints.toInt()} total points).'),
-            _buildRuleBullet('Internet Requirement: Stable connection recommended. Answers are saved locally in real-time.'),
-            _buildRuleBullet('Anti-Cheating Policy: Switching tabs or minimizing the browser will be recorded as a violation.'),
+            _buildRuleBullet(
+              'Time Limit: ${widget.assessment.durationMinutes} minutes timer.',
+            ),
+            _buildRuleBullet(
+              'Total Questions: ${widget.assessment.questions.length} items (${widget.assessment.totalPoints.toInt()} total points).',
+            ),
+            _buildRuleBullet(
+              'Internet Requirement: Active internet connection required throughout the assessment.',
+            ),
+            _buildRuleBullet(
+              'Anti-Cheating Policy: Switching tabs or minimizing the browser will be recorded as a violation.',
+            ),
             const Spacer(),
             CheckboxListTile(
               contentPadding: EdgeInsets.zero,
-              title: const Text('I have read and understood the assessment rules and guidelines.', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+              title: const Text(
+                'I have read and understood the assessment rules and guidelines.',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+              ),
               value: _rulesAccepted,
               activeColor: AppColors.primary,
               onChanged: (val) => setState(() => _rulesAccepted = val ?? false),
@@ -172,12 +351,22 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen> {
               height: 48,
               child: ElevatedButton(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: widget.assessment.isExam ? AppColors.error : AppColors.primary,
+                  backgroundColor:
+                      widget.assessment.isExam
+                          ? AppColors.error
+                          : AppColors.primary,
                 ),
-                onPressed: _rulesAccepted
-                    ? () => setState(() => _currentStep = 1)
-                    : null,
-                child: const Text('START ASSESSMENT', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+                onPressed:
+                    _rulesAccepted
+                        ? () {
+                          setState(() => _currentStep = 1);
+                          _startTimer();
+                        }
+                        : null,
+                child: const Text(
+                  'START ASSESSMENT',
+                  style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.2),
+                ),
               ),
             ),
           ],
@@ -194,7 +383,12 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen> {
         children: [
           const Icon(Icons.arrow_right, color: AppColors.primary),
           const SizedBox(width: 6),
-          Expanded(child: Text(text, style: const TextStyle(fontSize: 14, color: AppColors.textSecondary))),
+          Expanded(
+            child: Text(
+              text,
+              style: const TextStyle(fontSize: 14, color: AppColors.textSecondary),
+            ),
+          ),
         ],
       ),
     );
@@ -217,14 +411,33 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('Question ${_currentQuestionIndex + 1} of $totalQ', style: const TextStyle(fontWeight: FontWeight.bold)),
+                Text(
+                  'Question ${_currentQuestionIndex + 1} of $totalQ',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
                 Row(
                   children: [
-                    const Icon(Icons.timer_outlined, size: 18, color: AppColors.warning),
+                    const Icon(
+                      Icons.timer_outlined,
+                      size: 18,
+                      color: AppColors.warning,
+                    ),
                     const SizedBox(width: 6),
-                    Text('${widget.assessment.durationMinutes}:00 remaining', style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.warning)),
+                    Text(
+                      '${_formatTime(_secondsRemaining)} remaining',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.warning,
+                      ),
+                    ),
                     const SizedBox(width: 16),
-                    Text('Violations: $_violations', style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.error)),
+                    Text(
+                      'Violations: $_violations',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.error,
+                      ),
+                    ),
                   ],
                 ),
               ],
@@ -241,31 +454,80 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen> {
                   Row(
                     children: [
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(color: AppColors.primaryLight.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(6)),
-                        child: Text('${q.points} Points', style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 11)),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.primaryLight.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          '${q.points} Points',
+                          style: const TextStyle(
+                            color: AppColors.primary,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 11,
+                          ),
+                        ),
                       ),
                       const SizedBox(width: 10),
-                      Text(q.type.name.toUpperCase(), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.textSecondary)),
+                      Text(
+                        q.type.name.toUpperCase(),
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                      const Spacer(),
+                      TextButton.icon(
+                        icon: const Icon(Icons.copy, size: 14),
+                        label: const Text(
+                          'Simulate: Copy attempt detected',
+                          style: TextStyle(fontSize: 10),
+                        ),
+                        onPressed: () => _recordViolation('Copy attempt detected'),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 16),
-                  Text(q.questionText, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+                  Text(
+                    q.questionText,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
                   const SizedBox(height: 24),
 
                   // Choices or text input
-                  if (q.type == QuestionType.multipleChoice || q.type == QuestionType.trueFalse) ...[
+                  if (q.type == QuestionType.multipleChoice ||
+                      q.type == QuestionType.trueFalse) ...[
                     ...q.choices.map((choice) {
                       final isSelected = _studentAnswers[q.id] == choice;
                       return Container(
                         margin: const EdgeInsets.only(bottom: 12),
                         decoration: BoxDecoration(
-                          color: isSelected ? AppColors.primary.withValues(alpha: 0.08) : Colors.white,
+                          color:
+                              isSelected
+                                  ? AppColors.primary.withValues(alpha: 0.08)
+                                  : Colors.white,
                           borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: isSelected ? AppColors.primary : AppColors.border, width: isSelected ? 2 : 1),
+                          border: Border.all(
+                            color: isSelected ? AppColors.primary : AppColors.border,
+                            width: isSelected ? 2 : 1,
+                          ),
                         ),
                         child: RadioListTile<String>(
-                          title: Text(choice, style: TextStyle(fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
+                          title: Text(
+                            choice,
+                            style: TextStyle(
+                              fontWeight:
+                                  isSelected ? FontWeight.bold : FontWeight.normal,
+                            ),
+                          ),
                           value: choice,
                           groupValue: _studentAnswers[q.id],
                           activeColor: AppColors.primary,
@@ -277,38 +539,54 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen> {
                     }),
                   ] else if (q.type == QuestionType.matching) ...[
                     Column(
-                      children: q.matchingPairs.keys.map((left) {
-                        final options = q.matchingPairs.values.toList();
-                        final current = _studentAnswers[q.id]
-                            ?.split('|')
-                            .firstWhere(
-                              (entry) => entry.startsWith('$left='),
-                              orElse: () => '',
-                            )
-                            .split('=')
-                            .skip(1)
-                            .join('=');
-                        return DropdownButtonFormField<String>(
-                          initialValue: options.contains(current) ? current : null,
-                          decoration: InputDecoration(labelText: left),
-                          items: options
-                              .map((option) => DropdownMenuItem(value: option, child: Text(option)))
-                              .toList(),
-                          onChanged: (value) {
-                            if (value == null) return;
-                            final answers = (_studentAnswers[q.id] ?? '')
-                                .split('|')
-                                .where((entry) => entry.isNotEmpty && !entry.startsWith('$left='))
-                                .toList();
-                            answers.add('$left=$value');
-                            setState(() => _studentAnswers[q.id] = answers.join('|'));
-                          },
-                        );
-                      }).toList(),
+                      children:
+                          q.matchingPairs.keys.map((left) {
+                            final options = q.matchingPairs.values.toList();
+                            final current = _studentAnswers[q.id]
+                                ?.split('|')
+                                .firstWhere(
+                                  (entry) => entry.startsWith('$left='),
+                                  orElse: () => '',
+                                )
+                                .split('=')
+                                .skip(1)
+                                .join('=');
+                            return DropdownButtonFormField<String>(
+                              value:
+                                  options.contains(current) ? current : null,
+                              decoration: InputDecoration(labelText: left),
+                              items:
+                                  options
+                                      .map(
+                                        (option) => DropdownMenuItem(
+                                          value: option,
+                                          child: Text(option),
+                                        ),
+                                      )
+                                      .toList(),
+                              onChanged: (value) {
+                                if (value == null) return;
+                                final answers = (_studentAnswers[q.id] ?? '')
+                                    .split('|')
+                                    .where(
+                                      (entry) =>
+                                          entry.isNotEmpty &&
+                                          !entry.startsWith('$left='),
+                                    )
+                                    .toList();
+                                answers.add('$left=$value');
+                                setState(
+                                  () => _studentAnswers[q.id] = answers.join('|'),
+                                );
+                              },
+                            );
+                          }).toList(),
                     ),
                   ] else ...[
                     TextField(
-                      controller: TextEditingController(text: _studentAnswers[q.id]),
+                      controller: TextEditingController(
+                        text: _studentAnswers[q.id],
+                      ),
                       onChanged: (val) => _studentAnswers[q.id] = val,
                       decoration: const InputDecoration(
                         labelText: 'Type your answer here',
@@ -333,12 +611,18 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen> {
                 OutlinedButton.icon(
                   icon: const Icon(Icons.arrow_back, size: 16),
                   label: const Text('Previous'),
-                  onPressed: _currentQuestionIndex > 0 ? () => setState(() => _currentQuestionIndex--) : null,
+                  onPressed:
+                      _currentQuestionIndex > 0
+                          ? () => setState(() => _currentQuestionIndex--)
+                          : null,
                 ),
                 // Number bubbles
                 Row(
                   children: List.generate(totalQ, (idx) {
-                    final isAnswered = (_studentAnswers[widget.assessment.questions[idx].id] ?? '').trim().isNotEmpty;
+                    final isAnswered =
+                        (_studentAnswers[widget.assessment.questions[idx].id] ?? '')
+                            .trim()
+                            .isNotEmpty;
                     final isCurrent = idx == _currentQuestionIndex;
                     return InkWell(
                       onTap: () => setState(() => _currentQuestionIndex = idx),
@@ -348,18 +632,26 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen> {
                         height: 32,
                         alignment: Alignment.center,
                         decoration: BoxDecoration(
-                          color: isCurrent
-                              ? AppColors.primary
-                              : isAnswered
+                          color:
+                              isCurrent
+                                  ? AppColors.primary
+                                  : isAnswered
                                   ? AppColors.successLight
                                   : AppColors.background,
                           borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: isCurrent ? AppColors.primary : AppColors.border),
+                          border: Border.all(
+                            color: isCurrent ? AppColors.primary : AppColors.border,
+                          ),
                         ),
                         child: Text(
                           '${idx + 1}',
                           style: TextStyle(
-                            color: isCurrent ? Colors.white : isAnswered ? AppColors.success : AppColors.textPrimary,
+                            color:
+                                isCurrent
+                                    ? Colors.white
+                                    : isAnswered
+                                    ? AppColors.success
+                                    : AppColors.textPrimary,
                             fontWeight: FontWeight.bold,
                             fontSize: 12,
                           ),
@@ -393,8 +685,11 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen> {
   }
 
   Widget _buildResultView() {
-    final student = MockDatabase.instance.currentUser ??
-        MockDatabase.instance.users.firstWhere((u) => u.role == UserRole.student);
+    final student =
+        MockDatabase.instance.currentUser ??
+        MockDatabase.instance.users.firstWhere(
+          (u) => u.role == UserRole.student,
+        );
     final result = MockDatabase.instance.assessmentResults.firstWhere(
       (r) => r.assessmentId == widget.assessment.id && r.studentId == student.id,
       orElse: () => AssessmentResultModel(
@@ -405,8 +700,8 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen> {
         submittedAt: DateTime.now(),
         durationTakenMinutes: 10,
         answers: {},
-        scoreEarned: 18,
-        totalPoints: 20,
+        scoreEarned: 0,
+        totalPoints: widget.assessment.totalPoints,
         isReleased: widget.assessment.resultsReleased,
       ),
     );
@@ -419,31 +714,65 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen> {
           children: [
             Container(
               padding: const EdgeInsets.all(16),
-              decoration: const BoxDecoration(color: AppColors.successLight, shape: BoxShape.circle),
-              child: const Icon(Icons.check_circle, size: 56, color: AppColors.success),
+              decoration: const BoxDecoration(
+                color: AppColors.successLight,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.check_circle,
+                size: 56,
+                color: AppColors.success,
+              ),
             ),
             const SizedBox(height: 20),
-            const Text('Assessment Submitted Successfully!', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+            const Text(
+              'Assessment Submitted Successfully!',
+              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+            ),
             const SizedBox(height: 8),
-            Text(widget.assessment.title, style: const TextStyle(fontSize: 14, color: AppColors.textSecondary)),
+            Text(
+              widget.assessment.title,
+              style: const TextStyle(fontSize: 14, color: AppColors.textSecondary),
+            ),
             const SizedBox(height: 24),
-
             if (widget.assessment.resultsReleased || result.isReleased) ...[
               Container(
                 padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(color: AppColors.background, borderRadius: BorderRadius.circular(12), border: Border.all(color: AppColors.border)),
+                decoration: BoxDecoration(
+                  color: AppColors.background,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppColors.border),
+                ),
                 child: Column(
                   children: [
-                    Text('Score Obtained: ${result.scoreEarned.toInt()} / ${result.totalPoints.toInt()}', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: AppColors.primary)),
+                    Text(
+                      'Score Obtained: ${result.scoreEarned.toInt()} / ${result.totalPoints.toInt()}',
+                      style: const TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.primary,
+                      ),
+                    ),
                     const SizedBox(height: 6),
-                    Text('Percentage: ${result.percentage.toStringAsFixed(1)}%', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.success)),
+                    Text(
+                      'Percentage: ${result.percentage.toStringAsFixed(1)}%',
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.success,
+                      ),
+                    ),
                   ],
                 ),
               ),
             ] else ...[
               Container(
                 padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(color: AppColors.warningLight, borderRadius: BorderRadius.circular(12), border: Border.all(color: AppColors.warning.withValues(alpha: 0.3))),
+                decoration: BoxDecoration(
+                  color: AppColors.warningLight,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppColors.warning.withValues(alpha: 0.3)),
+                ),
                 child: const Text(
                   'Your assessment has been submitted and recorded. Official results and answer breakdowns will be available once the teacher releases the results.',
                   textAlign: TextAlign.center,

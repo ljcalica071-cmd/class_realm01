@@ -97,6 +97,56 @@ class AppModals {
     );
   }
 
+  static Future<void> showWarningDialog({
+    required BuildContext context,
+    required String title,
+    required String message,
+  }) {
+    return showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: const BoxDecoration(
+                color: AppColors.warningLight,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.warning_amber_outlined,
+                  color: AppColors.warning, size: 24),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                title,
+                style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textPrimary),
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          message,
+          style: const TextStyle(
+              fontSize: 14, color: AppColors.textSecondary, height: 1.4),
+        ),
+        actions: [
+          AppPrimaryButton(
+            label: 'OK',
+            backgroundColor: AppColors.warning,
+            onPressed: () => Navigator.of(ctx).pop(),
+            width: 100,
+            height: 40,
+          ),
+        ],
+      ),
+    );
+  }
+
   static Future<bool?> showConfirmDialog({
     required BuildContext context,
     required String title,

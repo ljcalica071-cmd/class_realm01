@@ -301,6 +301,7 @@ class AssessmentResultModel {
   final DateTime submittedAt;
   final int durationTakenMinutes;
   final int violationCount;
+  final List<Map<String, dynamic>> violationLog;
   final Map<String, String> answers; // questionId -> student answer
   final double scoreEarned;
   final double totalPoints;
@@ -315,12 +316,45 @@ class AssessmentResultModel {
     required this.submittedAt,
     required this.durationTakenMinutes,
     this.violationCount = 0,
+    this.violationLog = const [],
     required this.answers,
     required this.scoreEarned,
     required this.totalPoints,
     this.isReleased = false,
     this.needsTeacherReview = false,
   });
+
+  AssessmentResultModel copyWith({
+    String? id,
+    String? assessmentId,
+    String? studentId,
+    String? studentName,
+    DateTime? submittedAt,
+    int? durationTakenMinutes,
+    int? violationCount,
+    List<Map<String, dynamic>>? violationLog,
+    Map<String, String>? answers,
+    double? scoreEarned,
+    double? totalPoints,
+    bool? isReleased,
+    bool? needsTeacherReview,
+  }) {
+    return AssessmentResultModel(
+      id: id ?? this.id,
+      assessmentId: assessmentId ?? this.assessmentId,
+      studentId: studentId ?? this.studentId,
+      studentName: studentName ?? this.studentName,
+      submittedAt: submittedAt ?? this.submittedAt,
+      durationTakenMinutes: durationTakenMinutes ?? this.durationTakenMinutes,
+      violationCount: violationCount ?? this.violationCount,
+      violationLog: violationLog ?? this.violationLog,
+      answers: answers ?? this.answers,
+      scoreEarned: scoreEarned ?? this.scoreEarned,
+      totalPoints: totalPoints ?? this.totalPoints,
+      isReleased: isReleased ?? this.isReleased,
+      needsTeacherReview: needsTeacherReview ?? this.needsTeacherReview,
+    );
+  }
 
   double get percentage =>
       totalPoints > 0 ? (scoreEarned / totalPoints) * 100 : 0.0;
@@ -481,6 +515,7 @@ class LearningMaterialModel {
   final String fileSize;
   final DateTime uploadedAt;
   final String description;
+  final String section;
 
   LearningMaterialModel({
     required this.id,
@@ -491,6 +526,7 @@ class LearningMaterialModel {
     required this.fileSize,
     required this.uploadedAt,
     required this.description,
+    required this.section,
   });
 }
 
