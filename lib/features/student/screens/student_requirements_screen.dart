@@ -24,7 +24,7 @@ class _StudentRequirementsScreenState extends State<StudentRequirementsScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Academic Requirements'),
+        title: const Text('Performance Task'),
         backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
       ),

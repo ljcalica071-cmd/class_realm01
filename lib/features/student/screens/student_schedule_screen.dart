@@ -23,7 +23,7 @@ class StudentScheduleScreen extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('My Class Schedule'),
+        title: const Text('My Schedule'),
         backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
       ),

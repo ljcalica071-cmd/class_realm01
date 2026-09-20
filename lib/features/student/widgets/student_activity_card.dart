@@ -6,6 +6,7 @@ import '../../../models/user_model.dart';
 import '../../../widgets/common/status_badge.dart';
 import '../../../widgets/common/app_buttons.dart';
 import '../../../widgets/common/app_modals.dart';
+import '../screens/student_assessment_screen.dart';
 
 class StudentActivityCard extends StatelessWidget {
   final ActivityModel activity;
@@ -72,28 +73,55 @@ class StudentActivityCard extends StatelessWidget {
             activity.description,
             style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
           ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              const Icon(Icons.access_time, size: 14, color: AppColors.error),
+              const SizedBox(width: 4),
+              Text(
+                'Due: ${_formatDeadline(activity.deadline)}',
+                style: const TextStyle(
+                  color: AppColors.error,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
           const SizedBox(height: 12),
           if (submission == null && !isPastDeadline)
-            AppPrimaryButton(
-              label:
-                  activity.isRequirement
-                      ? 'Upload Requirement'
-                      : 'Upload & Submit Document',
-              height: 40,
-              onPressed: () {
-                MockDatabase.instance.submitActivity(
-                  activity.id,
-                  student.id,
-                  student.fullName,
-                  '${student.id}_Solution.pdf',
-                );
-                AppModals.showSuccessDialog(
-                  context: context,
-                  title: 'Submission Successful',
-                  message: 'File uploaded and status updated to Submitted.',
-                );
-                onSubmitted();
-              },
+            SizedBox(
+              width: double.infinity,
+              child: AppPrimaryButton(
+                label:
+                    activity.id == 'WW3'
+                        ? 'Start Quiz'
+                        : activity.isRequirement
+                        ? 'Upload Performance Task'
+                        : 'Upload & Submit Document',
+                height: 44,
+                onPressed: () {
+                  if (activity.id == 'WW3') {
+                    final quiz = MockDatabase.instance.quizzesAndExams.firstWhere(
+                      (q) => q.id == 'WW3',
+                    );
+                    StudentAssessmentScreen.start(context, quiz).then((_) => onSubmitted());
+                  } else {
+                    MockDatabase.instance.submitActivity(
+                      activity.id,
+                      student.id,
+                      student.fullName,
+                      '${student.id}_Solution.pdf',
+                    );
+                    AppModals.showSuccessDialog(
+                      context: context,
+                      title: 'Submission Successful',
+                      message: 'File uploaded and status updated to Submitted.',
+                    );
+                    onSubmitted();
+                  }
+                },
+              ),
             )
           else if (submission?.status == ActivityStatus.graded)
             Row(
@@ -131,5 +159,26 @@ class StudentActivityCard extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  String _formatDeadline(DateTime date) {
+    final months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    final hour = date.hour > 12 ? date.hour - 12 : date.hour == 0 ? 12 : date.hour;
+    final period = date.hour >= 12 ? 'PM' : 'AM';
+    final minute = date.minute.toString().padLeft(2, '0');
+    return '${months[date.month - 1]} ${date.day}, ${date.year} at $hour:$minute $period';
   }
 }

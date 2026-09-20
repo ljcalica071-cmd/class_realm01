@@ -329,50 +329,56 @@ class MockDatabase {
           ),
     ];
 
-    DateTime due(int day) => DateTime(2026, 9, day, 16, 0);
+    DateTime due(int day, [int hour = 16]) => DateTime(2026, 9, day, hour, 0);
     activities = [
       ActivityModel(
         id: 'WW1',
         title: 'Functions Activity',
-        description: '',
+        description: 'Introduction to basic functions.',
         subject: currentSubject,
         section: 'Section A, Section B',
-        deadline: due(22),
-        sectionDeadlines: {'Section A': due(22), 'Section B': due(22)},
+        deadline: due(22, 23),
+        sectionDeadlines: {'Section A': due(22, 23), 'Section B': due(22, 23)},
         maxScore: 20,
         totalStudents: 10,
       ),
       ActivityModel(
         id: 'WW2',
         title: 'Function Operations',
-        description: '',
+        description: 'Operations on composite functions.',
         subject: currentSubject,
         section: 'Section A, Section B',
-        deadline: due(24),
-        sectionDeadlines: {'Section A': due(24), 'Section B': due(24)},
+        deadline: due(24, 23),
+        sectionDeadlines: {'Section A': due(24, 23), 'Section B': due(24, 23)},
         maxScore: 20,
         totalStudents: 10,
       ),
       ActivityModel(
         id: 'WW3',
         title: 'Functions Quiz',
-        description: '',
+        description: 'Quiz on Functions and Operations',
         subject: currentSubject,
         section: 'Section A, Section B',
-        deadline: due(26),
-        sectionDeadlines: {'Section A': due(26), 'Section B': due(26)},
+        deadline: DateTime(2026, 9, 26, 23, 59),
+        sectionDeadlines: {
+          'Section A': DateTime(2026, 9, 26, 23, 59),
+          'Section B': DateTime(2026, 9, 26, 23, 59),
+        },
         maxScore: 30,
         totalStudents: 10,
       ),
       ActivityModel(
         id: 'PT1',
         title: 'Functions Project',
-        description: '',
+        description: 'Create a portfolio of functions.',
         instructions: 'Complete the Functions Project.',
         subject: currentSubject,
         section: 'Section A, Section B',
-        deadline: due(30),
-        sectionDeadlines: {'Section A': due(30), 'Section B': due(30)},
+        deadline: DateTime(2026, 9, 30, 17, 0),
+        sectionDeadlines: {
+          'Section A': DateTime(2026, 9, 30, 17, 0),
+          'Section B': DateTime(2026, 9, 30, 17, 0),
+        },
         maxScore: 100,
         isRequirement: true,
         totalStudents: 10,
@@ -463,6 +469,21 @@ class MockDatabase {
         );
     final now = DateTime.now();
     quizzesAndExams = [
+      QuizOrExamModel(
+        id: 'WW3',
+        title: 'Functions Quiz',
+        description: 'Quiz on Functions and Operations',
+        subject: currentSubject,
+        section: 'Section A, Section B',
+        isExam: false,
+        durationMinutes: 30,
+        scheduleDate: DateTime(2026, 9, 26, 23, 59),
+        sectionDeadlines: {
+          'Section A': DateTime(2026, 9, 26, 23, 59),
+          'Section B': DateTime(2026, 9, 26, 23, 59),
+        },
+        questions: questions('WW3', 5, 6),
+      ),
       QuizOrExamModel(
         id: 'EX1',
         title: 'ST1',
@@ -568,18 +589,6 @@ class MockDatabase {
         section: 'Section B',
       ),
       LearningMaterialModel(
-        id: 'mat_3',
-        title: 'Interactive GeoGebra Asymptote Visualizer',
-        category: 'Interactive Web Link',
-        topic: 'Graphing Lab',
-        fileName: 'https://geogebra.org/m/classrealm-asymptotes',
-        fileSize: 'Cloud URL',
-        uploadedAt: DateTime(2026, 9, 18),
-        description:
-            'Manipulate numerator and denominator coefficients in real time.',
-        section: 'Section A',
-      ),
-      LearningMaterialModel(
         id: 'mat_lp_1',
         title: 'Lesson Plan: Rational Functions',
         category: 'DOCX Document',
@@ -651,7 +660,29 @@ class MockDatabase {
         endTime: '09:00 AM',
       ),
     ];
-    notifications = [];
+    notifications = [
+      AppNotificationModel(
+        id: 'notif_g1',
+        title: 'Work Graded: Functions Activity',
+        message: 'Ma\'am Karen has graded your submission for "Functions Activity".',
+        timestamp: now.subtract(const Duration(hours: 2)),
+        type: 'grade',
+      ),
+      AppNotificationModel(
+        id: 'notif_g2',
+        title: 'Score Released: Functions Quiz',
+        message: 'Your results for "Functions Quiz" are now available.',
+        timestamp: now.subtract(const Duration(hours: 5)),
+        type: 'grade',
+      ),
+      AppNotificationModel(
+        id: 'notif_a1',
+        title: 'Attendance Confirmed',
+        message: 'Your attendance for today has been recorded as PRESENT.',
+        timestamp: now.subtract(const Duration(days: 1)),
+        type: 'attendance',
+      ),
+    ];
   }
 
   double categoryAverageFor(String studentId, String category) {

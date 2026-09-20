@@ -30,7 +30,7 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
   @override
   Widget build(BuildContext context) {
     final activities = MockDatabase.instance.activitiesOnly;
-    final quizzes = MockDatabase.instance.quizzesAndExams;
+    final quizzes = MockDatabase.instance.quizzesAndExams.where((q) => q.id != 'WW3').toList();
     final notifications = MockDatabase.instance.notifications;
     final student =
         MockDatabase.instance.currentUser ??
@@ -50,7 +50,7 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
       key: _scaffoldKey,
       appBar: AppBar(
         title: const Text(
-          'ClassRealm Student Portal',
+          'ClassRealm',
           style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
         ),
         backgroundColor: AppColors.primary,
@@ -85,12 +85,12 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
           BottomNavigationBarItem(
             icon: Icon(Icons.assignment_outlined),
             activeIcon: Icon(Icons.assignment),
-            label: 'Activities',
+            label: 'Written Works',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.quiz_outlined),
             activeIcon: Icon(Icons.quiz),
-            label: 'Quiz/Exam',
+            label: 'Exam',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.notifications_outlined),
@@ -152,7 +152,7 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
           ),
           ListTile(
             leading: const Icon(Icons.schedule_outlined),
-            title: const Text('Class Schedule'),
+            title: const Text('My Schedule'),
             onTap: () {
               Navigator.pop(context);
               Navigator.push(
@@ -174,7 +174,7 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
           ),
           ListTile(
             leading: const Icon(Icons.assignment_turned_in_outlined),
-            title: const Text('Academic Requirements'),
+            title: const Text('Performance Task'),
             onTap: () {
               Navigator.pop(context);
               Navigator.push(
@@ -187,7 +187,7 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
           ),
           ListTile(
             leading: const Icon(Icons.grade_outlined),
-            title: const Text('Published Grades'),
+            title: const Text('My Grades'),
             onTap: () {
               Navigator.pop(context);
               Navigator.push(
@@ -279,7 +279,7 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
           ),
           const SizedBox(height: 20),
           const Text(
-            'Pending Activities & Tasks',
+            'Pending Written Works',
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 12),
@@ -351,11 +351,6 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
                     q.title,
                     style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                   ),
-                  StatusBadge(
-                    text: q.isExam ? 'EXAM' : 'QUIZ',
-                    backgroundColor: AppColors.infoLight,
-                    textColor: AppColors.info,
-                  ),
                 ],
               ),
               const SizedBox(height: 4),
@@ -368,13 +363,16 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
               ),
               const SizedBox(height: 12),
               if (result == null)
-                AppPrimaryButton(
-                  label: 'Start ${q.isExam ? "Examination" : "Quiz"}',
-                  height: 40,
-                  onPressed: () async {
-                    await StudentAssessmentScreen.start(context, q);
-                    setState(() {});
-                  },
+                SizedBox(
+                  width: double.infinity,
+                  child: AppPrimaryButton(
+                    label: 'Start ${q.isExam ? "Examination" : "Quiz"}',
+                    height: 44,
+                    onPressed: () async {
+                      await StudentAssessmentScreen.start(context, q);
+                      setState(() {});
+                    },
+                  ),
                 )
               else if (!result.isReleased)
                 const StatusBadge(
@@ -517,27 +515,6 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
             leading: const Icon(Icons.class_),
             title: const Text('Section'),
             subtitle: Text(student.departmentOrSection ?? 'Section A'),
-          ),
-          const Divider(height: 40),
-          const Text(
-            'DEMO CONTROLS',
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.bold,
-              color: AppColors.textSecondary,
-              letterSpacing: 1.1,
-            ),
-          ),
-          SwitchListTile(
-            title: const Text('Simulated Online Status'),
-            subtitle: const Text('Toggle for Quiz/Exam connectivity demo'),
-            value: MockDatabase.instance.isOnline,
-            activeColor: AppColors.primary,
-            onChanged: (val) {
-              setState(() {
-                MockDatabase.instance.isOnline = val;
-              });
-            },
           ),
         ],
       ),

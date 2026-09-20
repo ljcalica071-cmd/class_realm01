@@ -24,7 +24,7 @@ class StudentGradesScreen extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('My Academic Grades'),
+        title: const Text('My Grades'),
         backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
       ),
@@ -90,7 +90,7 @@ class StudentGradesScreen extends StatelessWidget {
                         .toList();
                 final subjectQuizzes =
                     MockDatabase.instance.quizzesAndExams
-                        .where((q) => q.subject == subject)
+                        .where((q) => q.subject == subject && q.id != 'WW3')
                         .toList();
 
                 return Column(
@@ -112,7 +112,7 @@ class StudentGradesScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 16),
                     _buildGradeSection(
-                      'Performance Tasks (PT)',
+                      'Performance Task (PT)',
                       subjectActivities.where((a) => a.isRequirement).toList(),
                       submissions,
                     ),
