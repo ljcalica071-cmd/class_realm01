@@ -269,6 +269,7 @@ class MockDatabase {
           role: UserRole.parent,
           linkedStudentId: record['id'],
           contactNumber: record['parentPhone'],
+          parentGuardianRelationship: record['relationship'],
         );
       }),
     ];
@@ -1445,6 +1446,58 @@ class MockDatabase {
 
   void logout() {
     currentUser = null;
+  }
+
+  String? createParentAccount({
+    required String fullName,
+    required String email,
+    required String contactNumber,
+    required String relationship,
+    required String linkedStudentId,
+  }) {
+    if (users.any(
+      (user) =>
+          user.role == UserRole.parent &&
+          (user.email.toLowerCase() == email.toLowerCase() ||
+              user.linkedStudentId == linkedStudentId),
+    )) {
+      return 'A parent account is already linked to this student or email.';
+    }
+
+    final id = 'P${DateTime.now().millisecondsSinceEpoch}';
+    users.add(
+      UserModel(
+        id: id,
+        username: id.toLowerCase(),
+        fullName: fullName,
+        email: email,
+        role: UserRole.parent,
+        linkedStudentId: linkedStudentId,
+        contactNumber: contactNumber,
+        parentGuardianRelationship: relationship,
+      ),
+    );
+    _mockPasswords[id] = 'parent123';
+    return null;
+  }
+
+  void updateParentAccount({
+    required String id,
+    required String fullName,
+    required String email,
+    required String contactNumber,
+    required String relationship,
+    required String linkedStudentId,
+  }) {
+    final idx = users.indexWhere((user) => user.id == id);
+    if (idx == -1) return;
+    users[idx] = users[idx].copyWith(
+      fullName: fullName,
+      email: email,
+      contactNumber: contactNumber,
+      parentGuardianRelationship: relationship,
+      linkedStudentId: linkedStudentId,
+    );
   }
 
   // Teacher Approval / Rejection

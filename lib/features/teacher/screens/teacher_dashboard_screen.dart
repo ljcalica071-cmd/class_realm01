@@ -86,6 +86,9 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     final allStudents = MockDatabase.instance.users
         .where((u) => u.role == UserRole.student)
         .toList();
+    final parents = MockDatabase.instance.users
+        .where((u) => u.role == UserRole.parent)
+        .toList();
     final activeStudents = allStudents.where((u) => !u.isArchived).toList();
     final archivedStudents = allStudents.where((u) => u.isArchived).toList();
 
@@ -170,6 +173,11 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                         'Manage Students',
                         Icons.groups_outlined,
                       ),
+                      _buildNavItem(
+                        19,
+                        'Manage Parents',
+                        Icons.family_restroom_outlined,
+                      ),
                       const SizedBox(height: 8),
                       _buildSectionHeader('TEACHING'),
                       _buildNavItem(1, 'Classwork', Icons.assignment_outlined),
@@ -186,7 +194,6 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                       const SizedBox(height: 8),
                       _buildSectionHeader('MONITORING & EVALUATION'),
                       _buildNavItem(5, 'Attendance', Icons.fact_check_outlined),
-                      _buildNavItem(6, 'Exam Checker', Icons.checklist_rtl),
                       _buildNavItem(7, 'Item Analysis', Icons.insights),
                       _buildNavItem(9, 'Grades', Icons.grade_outlined),
                       _buildNavItem(
@@ -212,7 +219,6 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                         Icons.notifications_outlined,
                       ),
                       _buildNavItem(16, 'Profile', Icons.person_outline),
-                      _buildNavItem(11, 'Settings', Icons.settings_outlined),
                     ],
                   ),
                 ),
@@ -331,6 +337,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                     child: _buildTeacherBodyContent(
                       activeStudents,
                       archivedStudents,
+                      parents,
                       activities,
                       quizzesAndExams,
                       attendance,
@@ -377,6 +384,8 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         return 'Classroom Setup';
       case 18:
         return 'Gradebook';
+      case 19:
+        return 'Manage Parents / Guardians';
       case 0:
         return 'Teacher Dashboard Overview';
       case 1:
@@ -462,6 +471,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   Widget _buildTeacherBodyContent(
     List<UserModel> activeStudents,
     List<UserModel> archivedStudents,
+    List<UserModel> parents,
     List<ActivityModel> activities,
     List<QuizOrExamModel> quizzesAndExams,
     List<AttendanceRecord> attendance,
@@ -510,6 +520,8 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         return _buildGradebookTab();
       case 12:
         return _buildStudentManagementTab(activeStudents, archivedStudents);
+      case 19:
+        return _buildParentManagementTab(parents);
       case 13:
         return _buildPerformanceTab(activeStudents);
       case 14:
@@ -1282,6 +1294,553 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     final middleName = student.middleName?.trim() ?? '';
     final middleInitial = middleName.isEmpty ? '' : ' ${middleName[0]}.';
     return '$lastName, $firstName$middleInitial';
+  }
+
+  Widget _buildParentManagementTab(List<UserModel> parents) {
+    final query = _studentSearchQuery.trim().toLowerCase();
+    final displayList = parents.where((parent) {
+      final linkedStudent = MockDatabase.instance.users
+          .where((user) => user.id == parent.linkedStudentId)
+          .firstOrNull;
+      return query.isEmpty ||
+          parent.fullName.toLowerCase().contains(query) ||
+          parent.email.toLowerCase().contains(query) ||
+          (parent.contactNumber ?? '').contains(query) ||
+          (linkedStudent?.fullName.toLowerCase().contains(query) ?? false);
+    }).toList();
+
+    return Padding(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Manage Parents / Guardians',
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF1A56DB),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                icon: const Icon(Icons.person_add_alt_1, size: 18),
+                label: const Text(
+                  'Add Parent',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                onPressed: _showAddParentDialog,
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'View and manage parent or guardian accounts linked to enrolled students.',
+            style: TextStyle(color: AppColors.textSecondary),
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            onChanged: (value) => setState(() => _studentSearchQuery = value),
+            decoration: InputDecoration(
+              hintText: 'Search by parent name, student, email, or contact...',
+              prefixIcon: const Icon(Icons.search, size: 20),
+              filled: true,
+              fillColor: Colors.white,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: BorderSide(color: AppColors.border),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Expanded(
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
+              ),
+              child: displayList.isEmpty
+                  ? const Center(
+                      child: Text('No parent or guardian accounts found.'),
+                    )
+                  : SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: SizedBox(
+                        width: 1460,
+                        child: Column(
+                          children: [
+                            Container(
+                              height: 48,
+                              color: const Color(0xFF1A56DB),
+                              child: Row(
+                                children: [
+                                  _buildHeaderCell(
+                                    width: 56,
+                                    child: const Center(
+                                      child: Text(
+                                        '#',
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  _buildHeaderCell(
+                                    width: 190,
+                                    child: const Text(
+                                      'LAST NAME',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                  _buildHeaderCell(
+                                    width: 170,
+                                    child: const Text(
+                                      'FIRST NAME',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                  _buildHeaderCell(
+                                    width: 170,
+                                    child: const Text(
+                                      'RELATIONSHIP',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                  _buildHeaderCell(
+                                    width: 220,
+                                    child: const Text(
+                                      'LINKED STUDENT',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                  _buildHeaderCell(
+                                    width: 130,
+                                    child: const Text(
+                                      'SECTION',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                  _buildHeaderCell(
+                                    width: 250,
+                                    child: const Text(
+                                      'EMAIL',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                  _buildHeaderCell(
+                                    width: 160,
+                                    child: const Text(
+                                      'CONTACT NO.',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                  _buildHeaderCell(
+                                    width: 120,
+                                    child: const Text(
+                                      'STATUS',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                  _buildHeaderCell(
+                                    width: 180,
+                                    hasRightBorder: false,
+                                    child: const Center(
+                                      child: Text(
+                                        'ACTIONS',
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Expanded(
+                              child: ListView.builder(
+                                itemCount: displayList.length,
+                                itemBuilder: (context, index) {
+                                  final parent = displayList[index];
+                                  final student = MockDatabase.instance.users
+                                      .where(
+                                        (user) =>
+                                            user.id == parent.linkedStudentId,
+                                      )
+                                      .firstOrNull;
+                                  final nameParts = parent.fullName
+                                      .trim()
+                                      .split(' ');
+                                  final lastName = nameParts.isEmpty
+                                      ? parent.fullName
+                                      : nameParts.last;
+                                  final firstName = nameParts.length > 1
+                                      ? nameParts
+                                            .sublist(0, nameParts.length - 1)
+                                            .join(' ')
+                                      : '';
+                                  final cells = [
+                                    '${index + 1}',
+                                    lastName,
+                                    firstName,
+                                    parent.parentGuardianRelationship ??
+                                        'Parent/Guardian',
+                                    student?.fullName ?? 'Unlinked student',
+                                    student?.departmentOrSection ?? 'Unlinked',
+                                    parent.email,
+                                    parent.contactNumber ?? 'N/A',
+                                    parent.status.name,
+                                  ];
+                                  return Container(
+                                    height: 58,
+                                    color: index.isOdd
+                                        ? const Color(0xFFFBFDFF)
+                                        : Colors.white,
+                                    child: Row(
+                                      children: [
+                                        for (var i = 0; i < cells.length; i++)
+                                          _buildDataCell(
+                                            width: [
+                                              56.0,
+                                              190.0,
+                                              170.0,
+                                              170.0,
+                                              220.0,
+                                              130.0,
+                                              250.0,
+                                              160.0,
+                                              120.0,
+                                            ][i],
+                                            child: Text(
+                                              cells[i],
+                                              overflow: TextOverflow.ellipsis,
+                                              style: TextStyle(
+                                                fontWeight: i == 1
+                                                    ? FontWeight.bold
+                                                    : FontWeight.normal,
+                                              ),
+                                            ),
+                                          ),
+                                        _buildDataCell(
+                                          width: 180,
+                                          hasRightBorder: false,
+                                          child: Row(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.center,
+                                            children: [
+                                              IconButton(
+                                                tooltip: 'Edit parent',
+                                                icon: const Icon(
+                                                  Icons.edit_outlined,
+                                                  size: 18,
+                                                ),
+                                                color: const Color(0xFF1A56DB),
+                                                onPressed: () =>
+                                                    _showEditParentDialog(
+                                                      parent,
+                                                    ),
+                                              ),
+                                              IconButton(
+                                                tooltip: 'Deactivate parent',
+                                                icon: const Icon(
+                                                  Icons.block_outlined,
+                                                  size: 18,
+                                                ),
+                                                color: AppColors.error,
+                                                onPressed: () {
+                                                  MockDatabase.instance
+                                                      .deactivateStudent(
+                                                        parent.id,
+                                                      );
+                                                  setState(() {});
+                                                },
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showAddParentDialog() async {
+    final formKey = GlobalKey<FormState>();
+    final nameController = TextEditingController();
+    final emailController = TextEditingController();
+    final contactController = TextEditingController();
+    String? relationship;
+    String? linkedStudentId;
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Add Parent / Guardian'),
+          content: SizedBox(
+            width: 460,
+            child: Form(
+              key: formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextFormField(
+                    controller: nameController,
+                    decoration: const InputDecoration(
+                      labelText: 'Parent / Guardian Name',
+                    ),
+                    validator: (value) => value == null || value.trim().isEmpty
+                        ? 'Required'
+                        : null,
+                  ),
+                  TextFormField(
+                    controller: emailController,
+                    decoration: const InputDecoration(labelText: 'Email'),
+                    validator: (value) => value == null || value.trim().isEmpty
+                        ? 'Required'
+                        : null,
+                  ),
+                  TextFormField(
+                    controller: contactController,
+                    decoration: const InputDecoration(
+                      labelText: 'Contact Number',
+                    ),
+                    validator: (value) => value == null || value.trim().isEmpty
+                        ? 'Required'
+                        : null,
+                  ),
+                  DropdownButtonFormField<String>(
+                    value: relationship,
+                    decoration: const InputDecoration(
+                      labelText: 'Relationship to Student',
+                    ),
+                    items: const ['Mother', 'Father', 'Guardian', 'Other']
+                        .map(
+                          (value) => DropdownMenuItem(
+                            value: value,
+                            child: Text(value),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (value) =>
+                        setDialogState(() => relationship = value),
+                    validator: (value) => value == null ? 'Required' : null,
+                  ),
+                  DropdownButtonFormField<String>(
+                    value: linkedStudentId,
+                    decoration: const InputDecoration(
+                      labelText: 'Linked Student',
+                    ),
+                    items: MockDatabase.instance.users
+                        .where((user) => user.role == UserRole.student)
+                        .map(
+                          (student) => DropdownMenuItem(
+                            value: student.id,
+                            child: Text(student.fullName),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (value) =>
+                        setDialogState(() => linkedStudentId = value),
+                    validator: (value) => value == null ? 'Required' : null,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                if (!formKey.currentState!.validate()) return;
+                MockDatabase.instance.createParentAccount(
+                  fullName: nameController.text.trim(),
+                  email: emailController.text.trim(),
+                  contactNumber: contactController.text.trim(),
+                  relationship: relationship!,
+                  linkedStudentId: linkedStudentId!,
+                );
+                Navigator.pop(dialogContext);
+                setState(() {});
+              },
+              child: const Text('Create Account'),
+            ),
+          ],
+        ),
+      ),
+    );
+    nameController.dispose();
+    emailController.dispose();
+    contactController.dispose();
+  }
+
+  Future<void> _showEditParentDialog(UserModel parent) async {
+    final formKey = GlobalKey<FormState>();
+    final nameController = TextEditingController(text: parent.fullName);
+    final emailController = TextEditingController(text: parent.email);
+    final contactController = TextEditingController(
+      text: parent.contactNumber ?? '',
+    );
+    String? relationship = parent.parentGuardianRelationship;
+    String? linkedStudentId = parent.linkedStudentId;
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Edit Parent / Guardian'),
+          content: SizedBox(
+            width: 460,
+            child: Form(
+              key: formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextFormField(
+                    controller: nameController,
+                    decoration: const InputDecoration(
+                      labelText: 'Parent / Guardian Name',
+                    ),
+                    validator: (value) => value == null || value.trim().isEmpty
+                        ? 'Required'
+                        : null,
+                  ),
+                  TextFormField(
+                    controller: emailController,
+                    decoration: const InputDecoration(labelText: 'Email'),
+                    validator: (value) => value == null || value.trim().isEmpty
+                        ? 'Required'
+                        : null,
+                  ),
+                  TextFormField(
+                    controller: contactController,
+                    decoration: const InputDecoration(
+                      labelText: 'Contact Number',
+                    ),
+                    validator: (value) => value == null || value.trim().isEmpty
+                        ? 'Required'
+                        : null,
+                  ),
+                  DropdownButtonFormField<String>(
+                    initialValue: relationship,
+                    decoration: const InputDecoration(
+                      labelText: 'Relationship to Student',
+                    ),
+                    items: const ['Mother', 'Father', 'Guardian', 'Other']
+                        .map(
+                          (value) => DropdownMenuItem(
+                            value: value,
+                            child: Text(value),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (value) =>
+                        setDialogState(() => relationship = value),
+                    validator: (value) => value == null ? 'Required' : null,
+                  ),
+                  DropdownButtonFormField<String>(
+                    initialValue: linkedStudentId,
+                    decoration: const InputDecoration(
+                      labelText: 'Linked Student',
+                    ),
+                    items: MockDatabase.instance.users
+                        .where((user) => user.role == UserRole.student)
+                        .map(
+                          (student) => DropdownMenuItem(
+                            value: student.id,
+                            child: Text(student.fullName),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (value) =>
+                        setDialogState(() => linkedStudentId = value),
+                    validator: (value) => value == null ? 'Required' : null,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                if (!formKey.currentState!.validate()) return;
+                MockDatabase.instance.updateParentAccount(
+                  id: parent.id,
+                  fullName: nameController.text.trim(),
+                  email: emailController.text.trim(),
+                  contactNumber: contactController.text.trim(),
+                  relationship: relationship!,
+                  linkedStudentId: linkedStudentId!,
+                );
+                Navigator.pop(dialogContext);
+                setState(() {});
+              },
+              child: const Text('Save Changes'),
+            ),
+          ],
+        ),
+      ),
+    );
+    nameController.dispose();
+    emailController.dispose();
+    contactController.dispose();
   }
 
   Widget _buildStudentManagementTab(
@@ -3323,8 +3882,6 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   }
 
   Widget _buildClassroomCard(String section) {
-    final teacherName =
-        MockDatabase.instance.currentUser?.fullName ?? 'Karen P. Gonzaga';
     final gradeLevel = _classroomGrades[section] ?? 'Grade 11';
     final subject = _classroomSubjects[section] ?? 'General Mathematics';
     final studentCount = _classroomStudentCounts[section] ?? 0;
@@ -3411,36 +3968,6 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                     color: Color(0xFF334155),
                     fontWeight: FontWeight.w600,
                     fontSize: 13,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-            decoration: BoxDecoration(
-              color: const Color(0xFFEFFDF5),
-              border: Border.all(color: const Color(0xFFB9F6CA)),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Row(
-              children: [
-                const Icon(
-                  Icons.person_outline,
-                  size: 16,
-                  color: Color(0xFF166534),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    teacherName,
-                    style: const TextStyle(
-                      color: Color(0xFF166534),
-                      fontWeight: FontWeight.bold,
-                      fontSize: 12,
-                    ),
                   ),
                 ),
               ],
@@ -6455,7 +6982,18 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
 
   // --- 16. Profile ---
   Widget _buildProfileTab() {
-    final t = MockDatabase.instance.currentUser!;
+    final t =
+        MockDatabase.instance.currentUser ??
+        MockDatabase.instance.users.firstWhere(
+          (user) => user.id == 'T001' || user.role == UserRole.teacher,
+          orElse: () => const UserModel(
+            id: 'T001',
+            username: 'teacher',
+            fullName: 'Teacher',
+            email: 'teacher@classrealm.edu',
+            role: UserRole.teacher,
+          ),
+        );
     return Padding(
       padding: const EdgeInsets.all(24),
       child: Container(
@@ -6488,6 +7026,12 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
             ),
             const Divider(),
             ListTile(
+              leading: const Icon(Icons.badge_outlined),
+              title: const Text('Username / Faculty ID'),
+              subtitle: Text(t.username),
+            ),
+            const Divider(),
+            ListTile(
               leading: const Icon(Icons.school),
               title: const Text('School Institution'),
               subtitle: const Text('Eduardo Barretto Senior Integrated School'),
@@ -6497,6 +7041,12 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
               leading: const Icon(Icons.science),
               title: const Text('Department / Subject Specialization'),
               subtitle: Text(t.departmentOrSection ?? 'General Mathematics'),
+            ),
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.manage_accounts_outlined),
+              title: const Text('Role'),
+              subtitle: Text(t.role.name),
             ),
           ],
         ),

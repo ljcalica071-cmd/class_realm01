@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+
 import '../../../core/theme/app_colors.dart';
 import '../../../data/mock_database.dart';
 import '../../../models/user_model.dart';
@@ -60,7 +61,8 @@ class _LoginScreenState extends State<LoginScreen> {
         AppModals.showErrorDialog(
           context: context,
           title: 'Account Deactivated',
-          message: 'Your account has been deactivated. Please contact your teacher.',
+          message:
+              'Your account has been deactivated. Please contact your teacher.',
         );
         return;
       }
@@ -155,11 +157,7 @@ class _LoginScreenState extends State<LoginScreen> {
             top: -100,
             child: Opacity(
               opacity: 0.03,
-              child: Icon(
-                Icons.school,
-                size: 500,
-                color: Colors.white,
-              ),
+              child: Icon(Icons.school, size: 500, color: Colors.white),
             ),
           ),
 
@@ -190,7 +188,9 @@ class _LoginScreenState extends State<LoginScreen> {
                       decoration: BoxDecoration(
                         color: Colors.white.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: Colors.white.withOpacity(0.2)),
+                        border: Border.all(
+                          color: Colors.white.withOpacity(0.2),
+                        ),
                       ),
                       child: const Icon(
                         Icons.school_rounded,
@@ -297,10 +297,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   const Text(
                     'One Realm for Every Learning Journey.',
                     textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: Colors.white70,
-                      fontSize: 11,
-                    ),
+                    style: TextStyle(color: Colors.white70, fontSize: 11),
                   ),
                 ],
               ),
@@ -325,12 +322,7 @@ class _LoginScreenState extends State<LoginScreen> {
       padding: EdgeInsets.all(isMobile ? 24 : 36),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: isMobile
-            ? const BorderRadius.only(
-                topLeft: Radius.circular(32),
-                topRight: Radius.circular(32),
-              )
-            : BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(isMobile ? 32 : 24),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.15),
@@ -388,10 +380,13 @@ class _LoginScreenState extends State<LoginScreen> {
             // Username input
             TextFormField(
               controller: _usernameController,
-              validator: (v) => v == null || v.isEmpty ? 'Username is required' : null,
+              validator: (v) =>
+                  v == null || v.isEmpty ? 'Username is required' : null,
               decoration: InputDecoration(
                 filled: true,
-                fillColor: const Color(0xFFEFF6FF), // Soft light-blue/indigo tint
+                fillColor: const Color(
+                  0xFFEFF6FF,
+                ), // Soft light-blue/indigo tint
                 prefixIcon: const Icon(Icons.person, color: AppColors.primary),
                 hintText: 'Username / Account ID',
                 border: OutlineInputBorder(
@@ -404,7 +399,10 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+                  borderSide: const BorderSide(
+                    color: AppColors.primary,
+                    width: 1.5,
+                  ),
                 ),
               ),
             ),
@@ -414,7 +412,8 @@ class _LoginScreenState extends State<LoginScreen> {
             TextFormField(
               controller: _passwordController,
               obscureText: _obscurePassword,
-              validator: (v) => v == null || v.isEmpty ? 'Password is required' : null,
+              validator: (v) =>
+                  v == null || v.isEmpty ? 'Password is required' : null,
               decoration: InputDecoration(
                 filled: true,
                 fillColor: const Color(0xFFEFF6FF),
@@ -425,7 +424,8 @@ class _LoginScreenState extends State<LoginScreen> {
                     color: AppColors.textSecondary,
                     size: 20,
                   ),
-                  onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                  onPressed: () =>
+                      setState(() => _obscurePassword = !_obscurePassword),
                 ),
                 hintText: 'Password',
                 border: OutlineInputBorder(
@@ -438,7 +438,10 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+                  borderSide: const BorderSide(
+                    color: AppColors.primary,
+                    width: 1.5,
+                  ),
                 ),
               ),
             ),
@@ -516,12 +519,16 @@ class _LoginScreenState extends State<LoginScreen> {
                 OutlinedButton(
                   style: OutlinedButton.styleFrom(
                     side: const BorderSide(color: AppColors.border),
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 8,
+                    ),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(6),
                     ),
                   ),
-                  onPressed: () => Navigator.pushNamed(context, AppRoutes.forgotPassword),
+                  onPressed: () =>
+                      Navigator.pushNamed(context, AppRoutes.forgotPassword),
                   child: const Text(
                     'Recover My Account',
                     style: TextStyle(
