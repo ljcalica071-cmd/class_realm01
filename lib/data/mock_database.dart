@@ -515,7 +515,34 @@ class MockDatabase {
       GradingCriteria(id: 'PT', name: 'Performance Task', percentage: 50),
       GradingCriteria(id: 'EX', name: 'Examinations', percentage: 30),
     ];
-    lessonPlans = [];
+    lessonPlans = [
+      LessonPlanModel(
+        id: 'LP1',
+        topic: 'Functions and Relations',
+        gradeLevel: 'Grade 11',
+        subject: currentSubject,
+        duration: '60 mins',
+        objectives: 'Understand domain and range.',
+        materials: 'PDF: Module_1_Functions.pdf',
+        procedure: 'Discussion and exercises.',
+        assessment: 'Quiz 1',
+        assignment: 'Problem Set 1',
+        createdAt: DateTime(2026, 9, 15),
+      ),
+      LessonPlanModel(
+        id: 'LP2',
+        topic: 'Rational Functions',
+        gradeLevel: 'Grade 11',
+        subject: currentSubject,
+        duration: '90 mins',
+        objectives: 'Graph rational functions.',
+        materials: 'DOCX: Rational_Functions_Guide.docx',
+        procedure: 'Step-by-step graphing.',
+        assessment: 'Quiz 2',
+        assignment: 'Graphing Activity',
+        createdAt: DateTime(2026, 9, 18),
+      ),
+    ];
     materials = [
       LearningMaterialModel(
         id: 'mat_1',
@@ -525,8 +552,7 @@ class MockDatabase {
         fileName: 'GenMath_Module_1_Functions.pdf',
         fileSize: '3.4 MB',
         uploadedAt: DateTime(2026, 9, 10),
-        description:
-            'Complete syllabus and conceptual exercises for piecewise and inverse functions.',
+        description: 'Complete syllabus and conceptual exercises for piecewise and inverse functions.',
         section: 'Section A',
       ),
       LearningMaterialModel(
@@ -537,8 +563,7 @@ class MockDatabase {
         fileName: 'Lesson_2_Rational_Functions_Slides.pptx',
         fileSize: '8.1 MB',
         uploadedAt: DateTime(2026, 9, 15),
-        description:
-            'Official slide deck used in class discussion with animated graphs.',
+        description: 'Official slide deck used in class discussion with animated graphs.',
         section: 'Section B',
       ),
       LearningMaterialModel(
@@ -551,6 +576,39 @@ class MockDatabase {
         uploadedAt: DateTime(2026, 9, 18),
         description:
             'Manipulate numerator and denominator coefficients in real time.',
+        section: 'Section A',
+      ),
+      LearningMaterialModel(
+        id: 'mat_lp_1',
+        title: 'Lesson Plan: Rational Functions',
+        category: 'DOCX Document',
+        topic: 'Rational Functions',
+        fileName: 'LP_Rational_Functions_Grade_11.docx',
+        fileSize: '42 KB',
+        uploadedAt: DateTime(2026, 9, 16),
+        description: 'Daily lesson plan for Grade 11 General Mathematics on rational functions and asymptotes.',
+        section: 'Section A',
+      ),
+      LearningMaterialModel(
+        id: 'mat_lp_2',
+        title: 'Lesson Plan: Exponential Growth',
+        category: 'DOCX Document',
+        topic: 'Exponential Growth',
+        fileName: 'LP_Exponential_Growth_Grade_11.docx',
+        fileSize: '38 KB',
+        uploadedAt: DateTime(2026, 9, 14),
+        description: 'Classroom-ready lesson plan covering exponential growth and compound interest models.',
+        section: 'Section B',
+      ),
+      LearningMaterialModel(
+        id: 'mat_lp_3',
+        title: 'Lesson Plan: Functions Assessment',
+        category: 'PDF Document',
+        topic: 'Functions Review',
+        fileName: 'LP_Functions_Review_Assessment.pdf',
+        fileSize: '1.2 MB',
+        uploadedAt: DateTime(2026, 9, 12),
+        description: 'Printable PDF lesson plan and assessment guide for the Functions review lesson.',
         section: 'Section A',
       ),
     ];
