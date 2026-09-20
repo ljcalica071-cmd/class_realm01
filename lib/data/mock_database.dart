@@ -514,8 +514,57 @@ class MockDatabase {
       GradingCriteria(id: 'PT', name: 'Performance Task', percentage: 50),
       GradingCriteria(id: 'EX', name: 'Examinations', percentage: 30),
     ];
-    lessonPlans = [];
-    materials = [];
+
+    lessonPlans = [
+      LessonPlanModel(
+        id: 'LP1',
+        topic: 'Functions and Relations',
+        gradeLevel: 'Grade 11',
+        subject: currentSubject,
+        duration: '60 mins',
+        objectives: 'Understand domain and range.',
+        materials: 'PDF: Module_1_Functions.pdf',
+        procedure: 'Discussion and exercises.',
+        assessment: 'Quiz 1',
+        assignment: 'Problem Set 1',
+        createdAt: now.subtract(const Duration(days: 5)),
+      ),
+      LessonPlanModel(
+        id: 'LP2',
+        topic: 'Rational Functions',
+        gradeLevel: 'Grade 11',
+        subject: currentSubject,
+        duration: '90 mins',
+        objectives: 'Graph rational functions.',
+        materials: 'DOCX: Rational_Functions_Guide.docx',
+        procedure: 'Step-by-step graphing.',
+        assessment: 'Quiz 2',
+        assignment: 'Graphing Activity',
+        createdAt: now.subtract(const Duration(days: 2)),
+      ),
+    ];
+
+    materials = [
+      LearningMaterialModel(
+        id: 'mat_1',
+        title: 'Module 1: Functions',
+        category: 'PDF',
+        topic: 'Functions',
+        fileName: 'GenMath_Module1.pdf',
+        fileSize: '1.2 MB',
+        uploadedAt: now.subtract(const Duration(days: 10)),
+      ),
+      LearningMaterialModel(
+        id: 'mat_2',
+        title: 'Rational Functions Practice',
+        category: 'DOCX',
+        topic: 'Rational Functions',
+        fileName: 'Practice_Exercises.docx',
+        fileSize: '800 KB',
+        uploadedAt: now.subtract(const Duration(days: 4)),
+      ),
+    ];
+
     schedules = [];
     notifications = [];
   }
