@@ -50,6 +50,16 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   String _newClassSchoolYear = 'SY 2026-2027';
   String _newClassGradeLevel = 'Grade 11';
   String _studentSearchQuery = '';
+  String _parentSearchQuery = '';
+  final Set<String> _selectedParentIds = {};
+  String _parentSortColumn = 'lastName';
+  bool _parentSortAscending = true;
+  String _selectedClassFilter = '— Select a class —';
+  String _sortColumn = 'lastName';
+  bool _sortAscending = true;
+  final Set<String> _selectedStudentIds = {};
+  String _gradesSectionFilter = 'All Sections';
+  String _gradesRankingOrder = 'None';
   String _selectedClassSection = 'Section A';
   ActivityModel? _viewingSubmissionsFor;
 
@@ -2424,28 +2434,12 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                                               // LRN
                                               _buildDataCell(
                                                 width: colLrnWidth,
-                                                child: Container(
-                                                  padding:
-                                                      const EdgeInsets.symmetric(
-                                                        horizontal: 8,
-                                                        vertical: 3,
-                                                      ),
-                                                  decoration: BoxDecoration(
-                                                    color: const Color(
-                                                      0xFFF1F5F9,
-                                                    ),
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                          4,
-                                                        ),
-                                                  ),
-                                                  child: Text(
-                                                    lrn,
-                                                    style: const TextStyle(
-                                                      fontSize: 12,
-                                                      fontFamily: 'monospace',
-                                                      color: Color(0xFF475569),
-                                                    ),
+                                                child: Text(
+                                                  lrn,
+                                                  style: const TextStyle(
+                                                    fontSize: 13,
+                                                    fontFamily: 'monospace',
+                                                    color: Color(0xFF475569),
                                                   ),
                                                 ),
                                               ),
@@ -6549,14 +6543,53 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
 
   // --- 9. Grades ---
   Widget _buildGradesTab(List<UserModel> students) {
+    var filteredList = students.where((s) {
+      if (_gradesSectionFilter == 'All Sections') return true;
+      return s.departmentOrSection == _gradesSectionFilter;
+    }).toList();
+
+    if (_gradesRankingOrder == 'Highest to Lowest') {
+      filteredList.sort((a, b) => MockDatabase.instance
+          .quarterlyGradeFor(b.id)
+          .compareTo(MockDatabase.instance.quarterlyGradeFor(a.id)));
+    } else if (_gradesRankingOrder == 'Lowest to Highest') {
+      filteredList.sort((a, b) => MockDatabase.instance
+          .quarterlyGradeFor(a.id)
+          .compareTo(MockDatabase.instance.quarterlyGradeFor(b.id)));
+    }
+
     return Padding(
       padding: const EdgeInsets.all(24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Quarterly Grades Computation',
-            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Quarterly Grades Computation',
+                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+              ),
+              Row(
+                children: [
+                  _buildGradesFilterDropdown(
+                    label: 'Section:',
+                    value: _gradesSectionFilter,
+                    items: ['All Sections', ...MockDatabase.instance.sections],
+                    onChanged: (val) =>
+                        setState(() => _gradesSectionFilter = val!),
+                  ),
+                  const SizedBox(width: 16),
+                  _buildGradesFilterDropdown(
+                    label: 'Ranking:',
+                    value: _gradesRankingOrder,
+                    items: ['None', 'Highest to Lowest', 'Lowest to Highest'],
+                    onChanged: (val) =>
+                        setState(() => _gradesRankingOrder = val!),
+                  ),
+                ],
+              ),
+            ],
           ),
           const SizedBox(height: 16),
           Expanded(
@@ -6567,10 +6600,10 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                 border: Border.all(color: AppColors.border),
               ),
               child: ListView.separated(
-                itemCount: students.length,
+                itemCount: filteredList.length,
                 separatorBuilder: (_, __) => const Divider(height: 1),
                 itemBuilder: (ctx, i) {
-                  final s = students[i];
+                  final s = filteredList[i];
                   final grade = MockDatabase.instance.quarterlyGradeFor(s.id);
                   return ListTile(
                     leading: CircleAvatar(
@@ -6585,7 +6618,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                       style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
                     subtitle: Text(
-                      'LRN: ${s.lrn ?? s.studentId ?? 'N/A'} • Calculated Quarter Grade',
+                      'Section: ${s.departmentOrSection ?? 'N/A'} • LRN: ${s.lrn ?? s.studentId ?? 'N/A'}',
                     ),
                     trailing: Text(
                       '${grade.toStringAsFixed(1)} (${grade >= 90 ? 'Outstanding' : 'Satisfactory'})',
@@ -6602,6 +6635,42 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildGradesFilterDropdown({
+    required String label,
+    required String value,
+    required List<String> items,
+    required ValueChanged<String?> onChanged,
+  }) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+        ),
+        const SizedBox(width: 8),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              value: value,
+              isDense: true,
+              style: const TextStyle(fontSize: 13, color: AppColors.primary),
+              items: items
+                  .map((e) => DropdownMenuItem(value: e, child: Text(e)))
+                  .toList(),
+              onChanged: onChanged,
+            ),
+          ),
+        ),
+      ],
     );
   }
 
