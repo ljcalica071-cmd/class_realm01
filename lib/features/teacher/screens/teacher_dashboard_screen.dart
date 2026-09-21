@@ -2,6 +2,7 @@
 // ignore_for_file: unused_element, unused_element_parameter
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../data/mock_database.dart';
@@ -64,6 +65,12 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   String _selectedClassSection = 'Section A';
   ActivityModel? _viewingSubmissionsFor;
 
+  // Gradebook weighting state
+  bool _isEditingWeights = false;
+  final _weightWWCtrl = TextEditingController(text: '20');
+  final _weightPTCtrl = TextEditingController(text: '50');
+  final _weightEXCtrl = TextEditingController(text: '30');
+
   // Controllers for CRUD forms
   final _studentNameCtrl = TextEditingController();
   final _studentIdCtrl = TextEditingController();
@@ -92,6 +99,9 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     _schoolYearEndCtrl.dispose();
     _classSectionCtrl.dispose();
     _classSubjectCtrl.dispose();
+    _weightWWCtrl.dispose();
+    _weightPTCtrl.dispose();
+    _weightEXCtrl.dispose();
     super.dispose();
   }
 
@@ -6735,25 +6745,50 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                         ),
                       ),
                       const SizedBox(height: 10),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: [
-                          _buildGradebookInfoChip(
-                            'DepEd Order No. 015, s. 2026',
-                            const Color(0xFFE8F8F0),
-                            const Color(0xFF166534),
-                          ),
-                          _buildGradeWeightChip('WW', '20%'),
-                          _buildGradeWeightChip('PT', '50%'),
-                          _buildGradeWeightChip('EX', '30%'),
-                          _buildGradebookInfoChip(
-                            'EX = ST-1:30 + ST-2:30 + TE:40',
-                            const Color(0xFFF3F0FF),
-                            const Color(0xFF6D28D9),
-                          ),
-                        ],
-                      ),
+                      if (_isEditingWeights)
+                        _buildGradeWeightEditor()
+                      else
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: [
+                                  _buildGradebookInfoChip(
+                                    'DepEd Order No. 015, s. 2026',
+                                    const Color(0xFFE8F8F0),
+                                    const Color(0xFF166534),
+                                  ),
+                                  _buildGradeWeightChip(
+                                    'WW',
+                                    '${_weightWWCtrl.text}%',
+                                  ),
+                                  _buildGradeWeightChip(
+                                    'PT',
+                                    '${_weightPTCtrl.text}%',
+                                  ),
+                                  _buildGradeWeightChip(
+                                    'EX',
+                                    '${_weightEXCtrl.text}%',
+                                  ),
+                                  _buildGradebookInfoChip(
+                                    'EX = ST-1:30% + ST-2:30% + EX:40%',
+                                    const Color(0xFFF3F0FF),
+                                    const Color(0xFF6D28D9),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            AppSecondaryButton(
+                              label: 'Edit Weights',
+                              icon: Icons.tune,
+                              height: 36,
+                              onPressed:
+                                  () => setState(() => _isEditingWeights = true),
+                            ),
+                          ],
+                        ),
                     ],
                   ),
                 ),
@@ -6836,6 +6871,173 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
       'Dec',
     ];
     return months[month - 1];
+  }
+
+  Widget _buildGradeWeightEditor() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF1F5F9),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Row(
+        children: [
+          const Text(
+            'WW',
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 13,
+              color: Color(0xFF334155),
+            ),
+          ),
+          const SizedBox(width: 8),
+          _buildWeightInputField(_weightWWCtrl),
+          const SizedBox(width: 6),
+          const Text(
+            '%',
+            style: TextStyle(
+              fontSize: 12,
+              color: Color(0xFF64748B),
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(width: 20),
+          const Text(
+            'PT',
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 13,
+              color: Color(0xFF334155),
+            ),
+          ),
+          const SizedBox(width: 8),
+          _buildWeightInputField(_weightPTCtrl),
+          const SizedBox(width: 6),
+          const Text(
+            '%',
+            style: TextStyle(
+              fontSize: 12,
+              color: Color(0xFF64748B),
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(width: 20),
+          const Text(
+            'EX',
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 13,
+              color: Color(0xFF334155),
+            ),
+          ),
+          const SizedBox(width: 8),
+          _buildWeightInputField(_weightEXCtrl),
+          const SizedBox(width: 6),
+          const Text(
+            '%  =',
+            style: TextStyle(
+              fontSize: 12,
+              color: Color(0xFF64748B),
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(width: 8),
+          const Text(
+            '100%',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w900,
+              color: Color(0xFF059669),
+            ),
+          ),
+          const Spacer(),
+          TextButton(
+            onPressed: () => setState(() => _isEditingWeights = false),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(
+                color: Color(0xFF64748B),
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          ElevatedButton(
+            onPressed: () {
+              final ww = int.tryParse(_weightWWCtrl.text) ?? 0;
+              final pt = int.tryParse(_weightPTCtrl.text) ?? 0;
+              final ex = int.tryParse(_weightEXCtrl.text) ?? 0;
+              final total = ww + pt + ex;
+
+              if (total != 100) {
+                AppModals.showErrorDialog(
+                  context: context,
+                  title: 'Invalid Configuration',
+                  message:
+                      'The total percentage must equal exactly 100%. Current total: $total%',
+                );
+                return;
+              }
+
+              setState(() => _isEditingWeights = false);
+              AppModals.showSuccessDialog(
+                context: context,
+                title: 'Weights Updated',
+                message:
+                    'Gradebook weighting criteria has been updated successfully.',
+              );
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF1E3A8A),
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              elevation: 0,
+            ),
+            child: const Text(
+              'Save',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWeightInputField(TextEditingController controller) {
+    return Container(
+      width: 50,
+      height: 28,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(15),
+        border: Border.all(color: const Color(0xFFCBD5E1)),
+      ),
+      alignment: Alignment.center,
+      child: TextField(
+        controller: controller,
+        textAlign: TextAlign.center,
+        keyboardType: TextInputType.number,
+        inputFormatters: [
+          FilteringTextInputFormatter.digitsOnly,
+          LengthLimitingTextInputFormatter(2),
+        ],
+        decoration: const InputDecoration(
+          isDense: true,
+          contentPadding: EdgeInsets.zero,
+          border: InputBorder.none,
+        ),
+        style: const TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.bold,
+          color: Color(0xFF1E293B),
+        ),
+      ),
+    );
   }
 
   Widget _buildGradebookDropdown({
