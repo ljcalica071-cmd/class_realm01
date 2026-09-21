@@ -6443,12 +6443,12 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                       child: Row(
                         children: [
                           Text(
-                            '[${v['time'].toString().substring(11, 19)}]',
+                            '[${v['timestamp'] ?? 'N/A'}]',
                             style: const TextStyle(
                                 color: AppColors.textSecondary, fontSize: 12),
                           ),
                           const SizedBox(width: 8),
-                          Expanded(child: Text(v['event'] ?? 'Unknown Event')),
+                          Expanded(child: Text(v['type'] ?? 'Violation')),
                         ],
                       ),
                     )),
@@ -7921,35 +7921,88 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
 
   // --- 14. Schedule ---
   Widget _buildScheduleTab(List<ScheduleModel> schedules) {
+    final sortedSchedules = List<ScheduleModel>.from(schedules);
+    const dayOrder = {
+      'Monday': 1,
+      'Tuesday': 2,
+      'Wednesday': 3,
+      'Thursday': 4,
+      'Friday': 5,
+      'Saturday': 6,
+      'Sunday': 7,
+    };
+    sortedSchedules.sort((a, b) {
+      final dayA = dayOrder[a.dayOfWeek] ?? 8;
+      final dayB = dayOrder[b.dayOfWeek] ?? 8;
+      if (dayA != dayB) return dayA.compareTo(dayB);
+      return a.startTime.compareTo(b.startTime);
+    });
+
     return Padding(
       padding: const EdgeInsets.all(24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Class Schedule & Timetable',
-            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Class Schedule & Timetable',
+                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                  ),
+                  SizedBox(height: 4),
+                  Text(
+                    'Manage your weekly teaching hours and room assignments.',
+                    style:
+                        TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                  ),
+                ],
+              ),
+              AppPrimaryButton(
+                label: 'Add Schedule Entry',
+                icon: Icons.add,
+                onPressed: () => _showScheduleEntryDialog(context),
+                height: 40,
+              ),
+            ],
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 24),
           Expanded(
             child: ListView.separated(
-              itemCount: schedules.length,
+              itemCount: sortedSchedules.length,
               separatorBuilder: (_, __) => const SizedBox(height: 12),
               itemBuilder: (ctx, i) {
-                final s = schedules[i];
+                final s = sortedSchedules[i];
                 return Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(color: AppColors.border),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.02),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
                   ),
                   child: Row(
                     children: [
-                      const Icon(
-                        Icons.calendar_today,
-                        color: AppColors.primary,
-                        size: 32,
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withValues(alpha: 0.1),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.calendar_today,
+                          color: AppColors.primary,
+                          size: 24,
+                        ),
                       ),
                       const SizedBox(width: 16),
                       Expanded(
@@ -7961,6 +8014,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                               style: const TextStyle(
                                 fontWeight: FontWeight.bold,
                                 fontSize: 16,
+                                color: AppColors.textPrimary,
                               ),
                             ),
                             const SizedBox(height: 4),
@@ -7971,17 +8025,64 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                                 color: AppColors.textSecondary,
                               ),
                             ),
-                            const SizedBox(height: 4),
-                            Text(
-                              '${s.dayOfWeek} • ${s.startTime} - ${s.endTime}',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w600,
-                                fontSize: 13,
-                                color: AppColors.primary,
-                              ),
+                            const SizedBox(height: 6),
+                            Row(
+                              children: [
+                                const Icon(
+                                  Icons.access_time,
+                                  size: 14,
+                                  color: AppColors.primary,
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  '${s.dayOfWeek} • ${s.startTime} - ${s.endTime}',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 13,
+                                    color: AppColors.primary,
+                                  ),
+                                ),
+                              ],
                             ),
                           ],
                         ),
+                      ),
+                      Row(
+                        children: [
+                          IconButton(
+                            icon: const Icon(
+                              Icons.edit_outlined,
+                              size: 20,
+                              color: AppColors.primary,
+                            ),
+                            onPressed: () =>
+                                _showScheduleEntryDialog(context, schedule: s),
+                            tooltip: 'Edit entry',
+                          ),
+                          IconButton(
+                            icon: const Icon(
+                              Icons.delete_outline,
+                              size: 20,
+                              color: AppColors.error,
+                            ),
+                            onPressed: () async {
+                              final confirm = await AppModals.showConfirmDialog(
+                                context: context,
+                                title: 'Delete Schedule Entry',
+                                message:
+                                    'Are you sure you want to remove this entry for ${s.section}?',
+                                confirmLabel: 'Delete',
+                                confirmColor: AppColors.error,
+                              );
+                              if (confirm == true) {
+                                setState(() {
+                                  MockDatabase.instance.deleteSchedule(s.id);
+                                });
+                              }
+                            },
+                            tooltip: 'Delete entry',
+                          ),
+                        ],
                       ),
                     ],
                   ),
@@ -7990,6 +8091,108 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  void _showScheduleEntryDialog(BuildContext context, {ScheduleModel? schedule}) {
+    final isEditing = schedule != null;
+    final subjectCtrl =
+        TextEditingController(text: schedule?.subject ?? 'General Mathematics');
+    final roomCtrl = TextEditingController(text: schedule?.room ?? '');
+    final startCtrl = TextEditingController(text: schedule?.startTime ?? '');
+    final endCtrl = TextEditingController(text: schedule?.endTime ?? '');
+    String selectedSection = schedule?.section ?? _classroomSections.first;
+    String selectedDay = schedule?.dayOfWeek ?? 'Monday';
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setModalState) => AlertDialog(
+          title: Text(isEditing ? 'Edit Schedule Entry' : 'Add Schedule Entry'),
+          content: SingleChildScrollView(
+            child: SizedBox(
+              width: 450,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _buildSetupField('SUBJECT', subjectCtrl),
+                  const SizedBox(height: 16),
+                  DropdownButtonFormField<String>(
+                    value: selectedSection,
+                    decoration: const InputDecoration(
+                      labelText: 'SECTION',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: _classroomSections
+                        .map(
+                          (s) => DropdownMenuItem(value: s, child: Text(s)),
+                        )
+                        .toList(),
+                    onChanged: (v) => setModalState(() => selectedSection = v!),
+                  ),
+                  const SizedBox(height: 16),
+                  _buildSetupField('ROOM / VENUE', roomCtrl),
+                  const SizedBox(height: 16),
+                  DropdownButtonFormField<String>(
+                    value: selectedDay,
+                    decoration: const InputDecoration(
+                      labelText: 'DAY OF WEEK',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: const [
+                      'Monday',
+                      'Tuesday',
+                      'Wednesday',
+                      'Thursday',
+                      'Friday',
+                      'Saturday',
+                    ].map((d) => DropdownMenuItem(value: d, child: Text(d))).toList(),
+                    onChanged: (v) => setModalState(() => selectedDay = v!),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(child: _buildSetupField('START TIME', startCtrl)),
+                      const SizedBox(width: 16),
+                      Expanded(child: _buildSetupField('END TIME', endCtrl)),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            AppPrimaryButton(
+              label: isEditing ? 'Update Entry' : 'Add Entry',
+              onPressed: () {
+                final newSchedule = ScheduleModel(
+                  id: schedule?.id ?? 'sch_${DateTime.now().millisecondsSinceEpoch}',
+                  subject: subjectCtrl.text.trim(),
+                  section: selectedSection,
+                  room: roomCtrl.text.trim(),
+                  dayOfWeek: selectedDay,
+                  startTime: startCtrl.text.trim(),
+                  endTime: endCtrl.text.trim(),
+                );
+                setState(() {
+                  if (isEditing) {
+                    MockDatabase.instance.updateSchedule(newSchedule);
+                  } else {
+                    MockDatabase.instance.addSchedule(newSchedule);
+                  }
+                });
+                Navigator.pop(ctx);
+              },
+              width: 120,
+              height: 40,
+            ),
+          ],
+        ),
       ),
     );
   }

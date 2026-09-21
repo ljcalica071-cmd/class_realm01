@@ -502,7 +502,51 @@ class MockDatabase {
       ),
     ];
     examReviews = [];
-    assessmentResults = [];
+    assessmentResults = [
+      AssessmentResultModel(
+        id: 'res_A01',
+        assessmentId: 'EX1',
+        studentId: 'A01',
+        studentName: 'Alyssa M. Reyes',
+        submittedAt: now.subtract(const Duration(days: 9, hours: 2)),
+        durationTakenMinutes: 45,
+        violationCount: 0,
+        answers: {},
+        scoreEarned: 42,
+        totalPoints: 50,
+        isReleased: true,
+      ),
+      AssessmentResultModel(
+        id: 'res_A02',
+        assessmentId: 'EX1',
+        studentId: 'A02',
+        studentName: 'Joshua L. Navarro',
+        submittedAt: now.subtract(const Duration(days: 9, hours: 1)),
+        durationTakenMinutes: 55,
+        violationCount: 2,
+        violationLog: [
+          {'type': 'Tab Switch', 'timestamp': '10:15 AM'},
+          {'type': 'Tab Switch', 'timestamp': '10:18 AM'},
+        ],
+        answers: {},
+        scoreEarned: 39,
+        totalPoints: 50,
+        isReleased: true,
+      ),
+      AssessmentResultModel(
+        id: 'res_B01',
+        assessmentId: 'EX1',
+        studentId: 'B01',
+        studentName: 'Nathan P. Garcia',
+        submittedAt: now.subtract(const Duration(days: 10)),
+        durationTakenMinutes: 50,
+        violationCount: 0,
+        answers: {},
+        scoreEarned: 43,
+        totalPoints: 50,
+        isReleased: true,
+      ),
+    ];
     gradingCriteria = [
       GradingCriteria(id: 'WW', name: 'Written Works', percentage: 20),
       GradingCriteria(id: 'PT', name: 'Performance Task', percentage: 50),
@@ -1128,6 +1172,22 @@ class MockDatabase {
 
   void deleteQuizOrExam(String id) {
     quizzesAndExams.removeWhere((q) => q.id == id);
+  }
+
+  // Schedule Actions
+  void addSchedule(ScheduleModel schedule) {
+    schedules.add(schedule);
+  }
+
+  void updateSchedule(ScheduleModel schedule) {
+    final idx = schedules.indexWhere((s) => s.id == schedule.id);
+    if (idx != -1) {
+      schedules[idx] = schedule;
+    }
+  }
+
+  void deleteSchedule(String id) {
+    schedules.removeWhere((s) => s.id == id);
   }
 
   // AI Lesson Plan Simulation Generator
