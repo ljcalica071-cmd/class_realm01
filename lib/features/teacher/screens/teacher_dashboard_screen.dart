@@ -722,30 +722,9 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                       ),
                       const Divider(height: 1),
                       _buildQuickActionTile(
-                        title: 'Create Classwork',
-                        icon: Icons.add_circle_outline,
-                        onTap: () {
-                          setState(() => _selectedIndex = 1);
-                          _showUnifiedCreateChooser(context);
-                        },
-                      ),
-                      const Divider(height: 1),
-                      _buildQuickActionTile(
-                        title: 'Check Submissions & Auto-Score',
-                        icon: Icons.task_alt_outlined,
-                        onTap: () => setState(() => _selectedIndex = 6),
-                      ),
-                      const Divider(height: 1),
-                      _buildQuickActionTile(
-                        title: 'Create Quiz / Exam',
-                        icon: Icons.description_outlined,
-                        onTap: () {
-                          setState(() => _selectedIndex = 1);
-                          CreateAssessmentFlowDialog.show(
-                            context,
-                            onAssessmentCreated: () => setState(() {}),
-                          );
-                        },
+                        title: 'Assessment Monitoring',
+                        icon: Icons.analytics_outlined,
+                        onTap: () => setState(() => _selectedIndex = 20),
                       ),
                       const Divider(height: 1),
                       _buildQuickActionTile(
