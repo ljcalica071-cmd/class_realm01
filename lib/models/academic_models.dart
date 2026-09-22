@@ -536,8 +536,8 @@ class ScheduleModel {
   final String section;
   final String room;
   final String dayOfWeek; // 'Monday', 'Tuesday', etc.
-  final String startTime;
-  final String endTime;
+  final String startTime; // "HH:MM AM/PM"
+  final String endTime; // "HH:MM AM/PM"
 
   ScheduleModel({
     required this.id,
@@ -548,6 +548,48 @@ class ScheduleModel {
     required this.startTime,
     required this.endTime,
   });
+
+  int get startMinutes => _parseTimeToMinutes(startTime);
+  int get endMinutes => _parseTimeToMinutes(endTime);
+  int get durationMinutes => endMinutes - startMinutes;
+
+  int _parseTimeToMinutes(String time) {
+    try {
+      final parts = time.split(' ');
+      if (parts.length < 2) return 0;
+      final hm = parts[0].split(':');
+      int h = int.parse(hm[0]);
+      final m = int.parse(hm[1]);
+      final ampm = parts[1].toUpperCase();
+
+      if (ampm == 'PM' && h != 12) h += 12;
+      if (ampm == 'AM' && h == 12) h = 0;
+
+      return h * 60 + m;
+    } catch (e) {
+      return 0;
+    }
+  }
+
+  ScheduleModel copyWith({
+    String? id,
+    String? subject,
+    String? section,
+    String? room,
+    String? dayOfWeek,
+    String? startTime,
+    String? endTime,
+  }) {
+    return ScheduleModel(
+      id: id ?? this.id,
+      subject: subject ?? this.subject,
+      section: section ?? this.section,
+      room: room ?? this.room,
+      dayOfWeek: dayOfWeek ?? this.dayOfWeek,
+      startTime: startTime ?? this.startTime,
+      endTime: endTime ?? this.endTime,
+    );
+  }
 }
 
 class AppNotificationModel {
