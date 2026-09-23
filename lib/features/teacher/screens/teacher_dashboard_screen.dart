@@ -1269,6 +1269,91 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     );
   }
 
+  void _showBulkTransferSectionDialog(BuildContext context) {
+    String selectedTargetSection = MockDatabase.instance.sections.first;
+    final selectedCount = _selectedStudentIds.length;
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setModalState) => AlertDialog(
+          title: const Text('Transfer Section'),
+          content: SizedBox(
+            width: 420,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Transfer $selectedCount selected student(s) to another section.',
+                  style: const TextStyle(color: AppColors.textSecondary),
+                ),
+                const SizedBox(height: 20),
+                const Text(
+                  'Select Destination Section:',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<String>(
+                  initialValue: selectedTargetSection,
+                  decoration: const InputDecoration(
+                    border: OutlineInputBorder(),
+                  ),
+                  items: MockDatabase.instance.sections
+                      .map(
+                        (section) => DropdownMenuItem(
+                          value: section,
+                          child: Text(section),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (value) {
+                    if (value != null) {
+                      setModalState(() => selectedTargetSection = value);
+                    }
+                  },
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                setState(() {
+                  for (final id in _selectedStudentIds) {
+                    final student = MockDatabase.instance.users.firstWhere(
+                      (user) => user.id == id,
+                    );
+                    MockDatabase.instance.updateStudent(
+                      id,
+                      student.fullName,
+                      student.lrn ?? student.studentId ?? '',
+                      selectedTargetSection,
+                    );
+                  }
+                  _selectedStudentIds.clear();
+                });
+                Navigator.pop(dialogContext);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      '$selectedCount student(s) transferred to $selectedTargetSection.',
+                    ),
+                  ),
+                );
+              },
+              child: const Text('Transfer Section'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   int _calculateAge(DateTime birthday) {
     final today = DateTime.now();
     var age = today.year - birthday.year;
@@ -2419,9 +2504,10 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                     fontSize: 13,
                   ),
                 ),
-                onPressed: () => setState(
-                  () => _showArchivedStudents = !_showArchivedStudents,
-                ),
+                onPressed: () => setState(() {
+                  _showArchivedStudents = !_showArchivedStudents;
+                  _selectedStudentIds.clear();
+                }),
               ),
             ],
           ),
@@ -2803,7 +2889,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                                                       s.status,
                                                     ),
                                               ),
-                                              // ACTIONS (Edit, Transfer, Archive)
+                                              // Actions vary between active and archived students.
                                               _buildDataCell(
                                                 width: colActionsWidth,
                                                 hasRightBorder: false,
@@ -2811,51 +2897,50 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                                                   mainAxisSize:
                                                       MainAxisSize.min,
                                                   children: [
-                                                    // Edit icon button
-                                                    IconButton(
-                                                      tooltip: 'Edit Student Details',
-                                                      icon: const Icon(
-                                                        Icons.edit_outlined,
-                                                        color: Color(
-                                                          0xFF64748B,
-                                                        ),
-                                                        size: 18,
-                                                      ),
-                                                      splashRadius: 18,
-                                                      onPressed: () =>
-                                                          EditStudentDialog.show(
-                                                            context,
-                                                            student: s,
-                                                            onStudentUpdated:
-                                                                () => setState(
-                                                                  () {},
-                                                                ),
+                                                    if (!_showArchivedStudents) ...[
+                                                      IconButton(
+                                                        tooltip: 'Edit Student Details',
+                                                        icon: const Icon(
+                                                          Icons.edit_outlined,
+                                                          color: Color(
+                                                            0xFF64748B,
                                                           ),
-                                                    ),
-                                                    // Transfer to another section icon button
-                                                    IconButton(
-                                                      tooltip: 'Transfer to another section',
-                                                      icon: const Icon(
-                                                        Icons.swap_horiz,
-                                                        color: Color(
-                                                          0xFF1A56DB,
+                                                          size: 18,
                                                         ),
-                                                        size: 18,
+                                                        splashRadius: 18,
+                                                        onPressed: () =>
+                                                            EditStudentDialog.show(
+                                                              context,
+                                                              student: s,
+                                                              onStudentUpdated:
+                                                                  () =>
+                                                                      setState(
+                                                                        () {},
+                                                                      ),
+                                                            ),
                                                       ),
-                                                      splashRadius: 18,
-                                                      onPressed: () =>
-                                                          _showTransferSectionDialog(
-                                                            context,
-                                                            s,
+                                                      IconButton(
+                                                        tooltip: 'Transfer to another section',
+                                                        icon: const Icon(
+                                                          Icons.swap_horiz,
+                                                          color: Color(
+                                                            0xFF1A56DB,
                                                           ),
-                                                    ),
-                                                    // Archive / Delete or Restore button
-                                                    if (!_showArchivedStudents)
+                                                          size: 18,
+                                                        ),
+                                                        splashRadius: 18,
+                                                        onPressed: () =>
+                                                            _showTransferSectionDialog(
+                                                              context,
+                                                              s,
+                                                            ),
+                                                      ),
                                                       IconButton(
                                                         tooltip:
                                                             'Archive Student',
                                                         icon: const Icon(
-                                                          Icons.delete_outline,
+                                                          Icons
+                                                              .archive_outlined,
                                                           color: Color(
                                                             0xFF94A3B8,
                                                           ),
@@ -2897,10 +2982,11 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                                                             );
                                                           }
                                                         },
-                                                      )
-                                                    else
+                                                      ),
+                                                    ] else ...[
                                                       IconButton(
-                                                        tooltip: 'Restore',
+                                                        tooltip:
+                                                            'Recover Student',
                                                         icon: const Icon(
                                                           Icons.restore,
                                                           color:
@@ -2918,12 +3004,47 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                                                           );
                                                           AppModals.showSuccessDialog(
                                                             context: context,
-                                                            title: 'Restored',
+                                                            title: 'Recovered',
                                                             message:
-                                                                '${s.fullName} restored.',
+                                                                '${s.fullName} recovered.',
                                                           );
                                                         },
                                                       ),
+                                                      IconButton(
+                                                        tooltip: 'Permanently delete student',
+                                                        icon: const Icon(
+                                                          Icons
+                                                              .delete_forever_outlined,
+                                                          color:
+                                                              AppColors.error,
+                                                          size: 18,
+                                                        ),
+                                                        splashRadius: 18,
+                                                        onPressed: () async {
+                                                          final confirm =
+                                                              await AppModals.showConfirmDialog(
+                                                                context:
+                                                                    context,
+                                                                title: 'Permanently Delete Student',
+                                                                message:
+                                                                    'This will permanently delete ${s.fullName}. This action cannot be undone.',
+                                                                confirmLabel: 'Permanent Delete',
+                                                                confirmColor:
+                                                                    AppColors
+                                                                        .error,
+                                                              );
+                                                          if (confirm == true) {
+                                                            setState(
+                                                              () => MockDatabase
+                                                                  .instance
+                                                                  .permanentlyDeleteStudent(
+                                                                    s.id,
+                                                                  ),
+                                                            );
+                                                          }
+                                                        },
+                                                      ),
+                                                    ],
                                                   ],
                                                 ),
                                               ),
@@ -2996,67 +3117,189 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                               ),
                             ),
                             const SizedBox(width: 16),
-                            TextButton(
-                              style: TextButton.styleFrom(
-                                foregroundColor: Colors.white70,
-                              ),
-                              onPressed: () =>
-                                  setState(() => _selectedStudentIds.clear()),
-                              child: const Text(
-                                'Clear',
-                                style: TextStyle(fontWeight: FontWeight.bold),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            ElevatedButton.icon(
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: AppColors.error,
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                  vertical: 8,
+                            if (_showArchivedStudents) ...[
+                              ElevatedButton.icon(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.success,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 8,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
                                 ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(20),
+                                icon: const Icon(Icons.restore, size: 16),
+                                label: const Text(
+                                  'Recover',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                  ),
                                 ),
-                              ),
-                              icon: const Icon(Icons.delete_outline, size: 16),
-                              label: const Text(
-                                'Remove Selected',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 13,
-                                ),
-                              ),
-                              onPressed: () async {
-                                final messenger = ScaffoldMessenger.of(context);
-                                final selectedCount =
-                                    _selectedStudentIds.length;
-                                final confirm = await AppModals.showConfirmDialog(
-                                  context: context,
-                                  title: 'Remove Selected Students',
-                                  message:
-                                      'Are you sure you want to archive $selectedCount selected student(s)?',
-                                  confirmLabel: 'Remove Selected',
-                                  confirmColor: AppColors.error,
-                                );
-                                if (confirm == true) {
+                                onPressed: () {
+                                  final selectedCount =
+                                      _selectedStudentIds.length;
                                   setState(() {
-                                    for (var id in _selectedStudentIds) {
-                                      MockDatabase.instance.archiveStudent(id);
+                                    for (final id in _selectedStudentIds) {
+                                      MockDatabase.instance.restoreStudent(id);
                                     }
                                     _selectedStudentIds.clear();
                                   });
-                                  messenger.showSnackBar(
+                                  ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(
                                       content: Text(
-                                        '$selectedCount student(s) moved to archive.',
+                                        '$selectedCount student(s) recovered.',
                                       ),
                                     ),
                                   );
-                                }
-                              },
-                            ),
+                                },
+                              ),
+                              const SizedBox(width: 8),
+                              ElevatedButton.icon(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.error,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 8,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                ),
+                                icon: const Icon(
+                                  Icons.delete_forever_outlined,
+                                  size: 16,
+                                ),
+                                label: const Text(
+                                  'Permanent delete',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                                onPressed: () async {
+                                  final selectedCount =
+                                      _selectedStudentIds.length;
+                                  final confirm = await AppModals.showConfirmDialog(
+                                    context: context,
+                                    title: 'Permanent delete',
+                                    message:
+                                        'Permanently delete $selectedCount selected student(s)? This action cannot be undone.',
+                                    confirmLabel: 'Permanent delete',
+                                    confirmColor: AppColors.error,
+                                  );
+                                  if (confirm == true) {
+                                    setState(() {
+                                      for (final id in _selectedStudentIds) {
+                                        MockDatabase.instance
+                                            .permanentlyDeleteStudent(id);
+                                      }
+                                      _selectedStudentIds.clear();
+                                    });
+                                  }
+                                },
+                              ),
+                              const SizedBox(width: 8),
+                              TextButton(
+                                style: TextButton.styleFrom(
+                                  foregroundColor: Colors.white70,
+                                ),
+                                onPressed: () =>
+                                    setState(() => _selectedStudentIds.clear()),
+                                child: const Text(
+                                  'Cancel',
+                                  style: TextStyle(fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                            ] else ...[
+                              TextButton(
+                                style: TextButton.styleFrom(
+                                  foregroundColor: Colors.white70,
+                                ),
+                                onPressed: () =>
+                                    setState(() => _selectedStudentIds.clear()),
+                                child: const Text(
+                                  'Cancel',
+                                  style: TextStyle(fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              TextButton.icon(
+                                style: TextButton.styleFrom(
+                                  foregroundColor: Colors.white,
+                                ),
+                                icon: const Icon(Icons.swap_horiz, size: 16),
+                                label: const Text(
+                                  'Transfer Section',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                                onPressed: () =>
+                                    _showBulkTransferSectionDialog(context),
+                              ),
+                              const SizedBox(width: 8),
+                              ElevatedButton.icon(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.error,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 8,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                ),
+                                icon: const Icon(
+                                  Icons.archive_outlined,
+                                  size: 16,
+                                ),
+                                label: const Text(
+                                  'Archive selected',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                                onPressed: () async {
+                                  final messenger = ScaffoldMessenger.of(
+                                    context,
+                                  );
+                                  final selectedCount =
+                                      _selectedStudentIds.length;
+                                  final confirm = await AppModals.showConfirmDialog(
+                                    context: context,
+                                    title: 'Archive selected students',
+                                    message:
+                                        'Are you sure you want to archive $selectedCount selected student(s)?',
+                                    confirmLabel: 'Archive selected',
+                                    confirmColor: AppColors.error,
+                                  );
+                                  if (confirm == true) {
+                                    setState(() {
+                                      for (final id in _selectedStudentIds) {
+                                        MockDatabase.instance.archiveStudent(
+                                          id,
+                                        );
+                                      }
+                                      _selectedStudentIds.clear();
+                                    });
+                                    messenger.showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                          '$selectedCount student(s) moved to archive.',
+                                        ),
+                                      ),
+                                    );
+                                  }
+                                },
+                              ),
+                            ],
                           ],
                         ),
                       ),

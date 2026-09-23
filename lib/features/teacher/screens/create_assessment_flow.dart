@@ -179,11 +179,13 @@ class _CreateAssessmentFlowDialogState
   }
 
   void _addQuestionToList() {
-    if (_qTextCtrl.text.trim().isEmpty) {
+    final isMatching = _selectedQType == QuestionType.matching;
+    if (_qTextCtrl.text.trim().isEmpty && !isMatching) {
       AppModals.showErrorDialog(
         context: context,
         title: 'Incomplete Question',
-        message: 'Please provide question text and the correct answer before adding.',
+        message:
+            'Please provide question text and the correct answer before adding.',
       );
       return;
     }
@@ -238,6 +240,8 @@ class _CreateAssessmentFlowDialogState
         );
         return;
       }
+      // For matching type, choices are the options students can pick from (Column B)
+      choices = _matchingPairs.values.toList();
     }
 
     final correctAnswer =
@@ -261,7 +265,9 @@ class _CreateAssessmentFlowDialogState
       _questions.add(
         QuestionModel(
           id: 'q_${DateTime.now().millisecondsSinceEpoch}',
-          questionText: _qTextCtrl.text.trim(),
+          questionText: isMatching && _qTextCtrl.text.trim().isEmpty
+              ? 'Match the items in Column A with the correct items in Column B.'
+              : _qTextCtrl.text.trim(),
           type: _selectedQType,
           choices: choices,
           correctAnswer: correctAnswer,
