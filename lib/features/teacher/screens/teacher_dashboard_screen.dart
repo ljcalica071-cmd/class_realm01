@@ -142,11 +142,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                   alignment: Alignment.centerLeft,
                   child: Row(
                     children: [
-                      Image.asset(
-                        'lib/school_logo.png',
-                        width: 32,
-                        height: 32,
-                      ),
+                      Image.asset('lib/school_logo.png', width: 32, height: 32),
                       if (_isSidebarExpanded) ...[
                         const SizedBox(width: 12),
                         const Expanded(
@@ -222,7 +218,11 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                       const SizedBox(height: 8),
                       _buildSectionHeader('MONITORING & EVALUATION'),
                       _buildNavItem(5, 'Attendance', Icons.fact_check_outlined),
-                      _buildNavItem(20, 'Assessment Monitoring', Icons.security),
+                      _buildNavItem(
+                        20,
+                        'Assessment Monitoring',
+                        Icons.security,
+                      ),
                       _buildNavItem(7, 'Item Analysis', Icons.insights),
                       _buildNavItem(9, 'Grades', Icons.grade_outlined),
                       const SizedBox(height: 8),
@@ -234,7 +234,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                       ),
                       _buildNavItem(
                         14,
-                        'Schedule',
+                        'My Schedule',
                         Icons.calendar_today_outlined,
                       ),
                       _buildNavItem(
@@ -305,8 +305,8 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                       const SizedBox(width: 16),
                       IconButton(
                         icon: const Icon(
-                          Icons.notifications_outlined,
-                          color: AppColors.textSecondary,
+                          Icons.campaign_outlined,
+                          color: AppColors.primary,
                         ),
                         onPressed: () => setState(() => _selectedIndex = 15),
                       ),
@@ -405,45 +405,39 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   String _getTeacherTitle(int index) {
     switch (index) {
       case 17:
-        return 'Classroom Setup';
+        return 'Classroom';
       case 18:
-        return 'Gradebook';
+        return 'Grades Management';
       case 19:
-        return 'Manage Parents / Guardians';
+        return 'Parent Directory';
       case 0:
-        return 'Teacher Dashboard Overview';
+        return 'Dashboard Overview';
       case 1:
-        return 'Classwork';
+        return 'Assessments';
       case 3:
-        return 'AI Lesson Planning Generator';
+        return 'Lesson Planning';
       case 4:
-        return 'Learning Materials Repository';
+        return 'Materials Repository';
       case 5:
-        return 'Attendance Tracker & RFID Logs';
+        return 'Attendance Logs';
       case 6:
-        return 'Exam Auto-Checker & Scoring';
+        return 'Exam Checker';
       case 7:
-        return 'Item Analysis Dashboard';
+        return 'Item Analysis';
       case 8:
-        return 'Teacher-Defined Grading Weights';
+        return 'Grading Weights';
       case 9:
-        return 'Student Grades & Component Breakdown';
-      case 10:
-        return 'Academic & DepEd Quarterly Reports';
-      case 11:
-        return 'Settings';
-      case 12:
-        return 'Student Management & Roster';
+        return 'Student Achievement Records';
       case 13:
-        return 'Performance Analytics';
+        return 'Institutional Analytics';
       case 14:
-        return 'Class Schedule & Timetable';
+        return 'My Teaching Schedule';
       case 15:
-        return 'Notifications & Institutional Alerts';
+        return 'Message & Alert Center';
       case 16:
-        return 'Faculty Educator Profile';
+        return 'Faculty Profile';
       case 20:
-        return 'Assessment Monitoring & Anti-Cheating Logs';
+        return 'Assessment Monitoring';
       default:
         return 'Teacher Portal';
     }
@@ -682,8 +676,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                       const SizedBox(height: 16),
                       _buildClassItem(
                         subject: 'General Mathematics',
-                        sectionAndRoom:
-                            'Grade 11 - Section A • Room 304',
+                        sectionAndRoom: 'Grade 11 - Section A • Room 304',
                         time: '07:30 AM - 09:00 AM',
                         isDone: true,
                         attendanceStats: 'Attendance: 4 / 5 present',
@@ -691,8 +684,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                       const SizedBox(height: 12),
                       _buildClassItem(
                         subject: 'General Mathematics',
-                        sectionAndRoom:
-                            'Grade 11 - Section B • Room 305',
+                        sectionAndRoom: 'Grade 11 - Section B • Room 305',
                         time: '09:15 AM - 10:45 AM',
                         isDone: true,
                         attendanceStats: 'Attendance: 5 / 5 present',
@@ -726,21 +718,21 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                       ),
                       const SizedBox(height: 16),
                       _buildQuickActionTile(
-                        title: 'Mark Attendance',
+                        title: 'Record Attendance',
                         icon: Icons.checklist_rtl_outlined,
                         onTap: () => setState(() => _selectedIndex = 5),
                       ),
                       const Divider(height: 1),
                       _buildQuickActionTile(
-                        title: 'Assessment Monitoring',
-                        icon: Icons.analytics_outlined,
-                        onTap: () => setState(() => _selectedIndex = 20),
+                        title: 'Create Classwork',
+                        icon: Icons.assignment_outlined,
+                        onTap: () => _showUnifiedCreateChooser(context),
                       ),
                       const Divider(height: 1),
                       _buildQuickActionTile(
-                        title: 'Generate Lesson Plan with AI',
-                        icon: Icons.auto_awesome_outlined,
-                        onTap: () => setState(() => _selectedIndex = 3),
+                        title: 'Add Assessment',
+                        icon: Icons.post_add_outlined,
+                        onTap: () => _showUnifiedCreateChooser(context),
                       ),
                     ],
                   ),
@@ -1277,6 +1269,91 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     );
   }
 
+  void _showBulkTransferSectionDialog(BuildContext context) {
+    String selectedTargetSection = MockDatabase.instance.sections.first;
+    final selectedCount = _selectedStudentIds.length;
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setModalState) => AlertDialog(
+          title: const Text('Transfer Section'),
+          content: SizedBox(
+            width: 420,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Transfer $selectedCount selected student(s) to another section.',
+                  style: const TextStyle(color: AppColors.textSecondary),
+                ),
+                const SizedBox(height: 20),
+                const Text(
+                  'Select Destination Section:',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<String>(
+                  initialValue: selectedTargetSection,
+                  decoration: const InputDecoration(
+                    border: OutlineInputBorder(),
+                  ),
+                  items: MockDatabase.instance.sections
+                      .map(
+                        (section) => DropdownMenuItem(
+                          value: section,
+                          child: Text(section),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (value) {
+                    if (value != null) {
+                      setModalState(() => selectedTargetSection = value);
+                    }
+                  },
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                setState(() {
+                  for (final id in _selectedStudentIds) {
+                    final student = MockDatabase.instance.users.firstWhere(
+                      (user) => user.id == id,
+                    );
+                    MockDatabase.instance.updateStudent(
+                      id,
+                      student.fullName,
+                      student.lrn ?? student.studentId ?? '',
+                      selectedTargetSection,
+                    );
+                  }
+                  _selectedStudentIds.clear();
+                });
+                Navigator.pop(dialogContext);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      '$selectedCount student(s) transferred to $selectedTargetSection.',
+                    ),
+                  ),
+                );
+              },
+              child: const Text('Transfer Section'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   int _calculateAge(DateTime birthday) {
     final today = DateTime.now();
     var age = today.year - birthday.year;
@@ -1308,11 +1385,12 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
           p.fullName.toLowerCase().contains(_parentSearchQuery.toLowerCase()) ||
           p.email.toLowerCase().contains(_parentSearchQuery.toLowerCase()) ||
           (p.contactNumber ?? '').contains(_parentSearchQuery) ||
-          (linkedStudent?.fullName
-                  .toLowerCase()
-                  .contains(_parentSearchQuery.toLowerCase()) ??
+          (linkedStudent?.fullName.toLowerCase().contains(
+                _parentSearchQuery.toLowerCase(),
+              ) ??
               false);
-      final matchesClass = _selectedClassFilter == '— Select a class —' ||
+      final matchesClass =
+          _selectedClassFilter == '— Select a class —' ||
           (linkedStudent?.departmentOrSection == _selectedClassFilter);
       return matchesSearch && matchesClass;
     }).toList();
@@ -1345,7 +1423,8 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
       return _parentSortAscending ? cmp : -cmp;
     });
 
-    bool allSelected = displayList.isNotEmpty &&
+    bool allSelected =
+        displayList.isNotEmpty &&
         displayList.every((p) => _selectedParentIds.contains(p.id));
 
     const colCheckWidth = 48.0;
@@ -1360,7 +1439,8 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     const colStatusWidth = 140.0;
     const colActionsWidth = 120.0;
 
-    const totalTableWidth = colCheckWidth +
+    const totalTableWidth =
+        colCheckWidth +
         colNumWidth +
         colLastNameWidth +
         colFirstNameWidth +
@@ -1674,21 +1754,37 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                             ),
                             Expanded(
                               child: displayList.isEmpty
-                                  ? const Center(child: Text('No parents found.'))
+                                  ? const Center(
+                                      child: Text('No parents found.'),
+                                    )
                                   : ListView.builder(
                                       itemCount: displayList.length,
                                       itemBuilder: (ctx, i) {
                                         final p = displayList[i];
-                                        final isSelected =
-                                            _selectedParentIds.contains(p.id);
+                                        final isSelected = _selectedParentIds
+                                            .contains(p.id);
                                         final linkedStudent = MockDatabase
-                                            .instance.users
-                                            .where((user) =>
-                                                user.id == p.linkedStudentId)
+                                            .instance
+                                            .users
+                                            .where(
+                                              (user) =>
+                                                  user.id == p.linkedStudentId,
+                                            )
                                             .firstOrNull;
-                                        final nameParts = p.fullName.trim().split(' ');
-                                        final lastName = nameParts.isEmpty ? p.fullName : nameParts.last;
-                                        final firstName = nameParts.length > 1 ? nameParts.sublist(0, nameParts.length - 1).join(' ') : '';
+                                        final nameParts = p.fullName
+                                            .trim()
+                                            .split(' ');
+                                        final lastName = nameParts.isEmpty
+                                            ? p.fullName
+                                            : nameParts.last;
+                                        final firstName = nameParts.length > 1
+                                            ? nameParts
+                                                  .sublist(
+                                                    0,
+                                                    nameParts.length - 1,
+                                                  )
+                                                  .join(' ')
+                                            : '';
 
                                         return Container(
                                           height: 52,
@@ -1714,9 +1810,9 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                                                     onChanged: (val) => setState(
                                                       () => val == true
                                                           ? _selectedParentIds
-                                                              .add(p.id)
+                                                                .add(p.id)
                                                           : _selectedParentIds
-                                                              .remove(p.id),
+                                                                .remove(p.id),
                                                     ),
                                                   ),
                                                 ),
@@ -1804,9 +1900,10 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                                               ),
                                               _buildDataCell(
                                                 width: colStatusWidth,
-                                                child: StatusBadge.fromAccountStatus(
-                                                  p.status,
-                                                ),
+                                                child:
+                                                    StatusBadge.fromAccountStatus(
+                                                      p.status,
+                                                    ),
                                               ),
                                               _buildDataCell(
                                                 width: colActionsWidth,
@@ -1819,12 +1916,13 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                                                       icon: const Icon(
                                                         Icons.edit_outlined,
                                                         size: 18,
-                                                        color: AppColors.primary,
+                                                        color:
+                                                            AppColors.primary,
                                                       ),
                                                       onPressed: () =>
                                                           _showEditParentDialog(
-                                                        p,
-                                                      ),
+                                                            p,
+                                                          ),
                                                     ),
                                                     IconButton(
                                                       icon: const Icon(
@@ -1834,24 +1932,27 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                                                       ),
                                                       onPressed: () async {
                                                         final confirm =
-                                                            await AppModals
-                                                                .showConfirmDialog(
-                                                          context: context,
-                                                          title:
-                                                              'Remove Parent Account',
-                                                          message:
-                                                              'Are you sure you want to remove the account for ${p.fullName}?',
-                                                          confirmLabel: 'Remove',
-                                                          confirmColor:
-                                                              AppColors.warning,
-                                                        );
+                                                            await AppModals.showConfirmDialog(
+                                                              context: context,
+                                                              title: 'Remove Parent Account',
+                                                              message:
+                                                                  'Are you sure you want to remove the account for ${p.fullName}?',
+                                                              confirmLabel:
+                                                                  'Remove',
+                                                              confirmColor:
+                                                                  AppColors
+                                                                      .warning,
+                                                            );
                                                         if (confirm == true) {
                                                           setState(() {
                                                             MockDatabase
-                                                                .instance.users
+                                                                .instance
+                                                                .users
                                                                 .removeWhere(
-                                                              (u) => u.id == p.id,
-                                                            );
+                                                                  (u) =>
+                                                                      u.id ==
+                                                                      p.id,
+                                                                );
                                                           });
                                                         }
                                                       },
@@ -1884,13 +1985,13 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     final icon = !isCurrent ? ' ↕' : (_parentSortAscending ? ' ▴' : ' ▾');
     return InkWell(
       onTap: () => setState(() {
-            if (_parentSortColumn == columnKey) {
-              _parentSortAscending = !_parentSortAscending;
-            } else {
-              _parentSortColumn = columnKey;
-              _parentSortAscending = true;
-            }
-          }),
+        if (_parentSortColumn == columnKey) {
+          _parentSortAscending = !_parentSortAscending;
+        } else {
+          _parentSortColumn = columnKey;
+          _parentSortAscending = true;
+        }
+      }),
       child: Text(
         '$title$icon',
         style: TextStyle(
@@ -2238,13 +2339,26 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
-                'Manage Students',
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.textPrimary,
-                ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Manage Students',
+                    style: TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'View and manage your student directory, update profiles, and handle account archives.',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
               ),
               Row(
                 children: [
@@ -2390,9 +2504,10 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                     fontSize: 13,
                   ),
                 ),
-                onPressed: () => setState(
-                  () => _showArchivedStudents = !_showArchivedStudents,
-                ),
+                onPressed: () => setState(() {
+                  _showArchivedStudents = !_showArchivedStudents;
+                  _selectedStudentIds.clear();
+                }),
               ),
             ],
           ),
@@ -2774,7 +2889,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                                                       s.status,
                                                     ),
                                               ),
-                                              // ACTIONS (Edit, Transfer, Archive)
+                                              // Actions vary between active and archived students.
                                               _buildDataCell(
                                                 width: colActionsWidth,
                                                 hasRightBorder: false,
@@ -2782,51 +2897,50 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                                                   mainAxisSize:
                                                       MainAxisSize.min,
                                                   children: [
-                                                    // Edit icon button
-                                                    IconButton(
-                                                      tooltip: 'Edit Student Details',
-                                                      icon: const Icon(
-                                                        Icons.edit_outlined,
-                                                        color: Color(
-                                                          0xFF64748B,
-                                                        ),
-                                                        size: 18,
-                                                      ),
-                                                      splashRadius: 18,
-                                                      onPressed: () =>
-                                                          EditStudentDialog.show(
-                                                            context,
-                                                            student: s,
-                                                            onStudentUpdated:
-                                                                () => setState(
-                                                                  () {},
-                                                                ),
+                                                    if (!_showArchivedStudents) ...[
+                                                      IconButton(
+                                                        tooltip: 'Edit Student Details',
+                                                        icon: const Icon(
+                                                          Icons.edit_outlined,
+                                                          color: Color(
+                                                            0xFF64748B,
                                                           ),
-                                                    ),
-                                                    // Transfer to another section icon button
-                                                    IconButton(
-                                                      tooltip: 'Transfer to another section',
-                                                      icon: const Icon(
-                                                        Icons.swap_horiz,
-                                                        color: Color(
-                                                          0xFF1A56DB,
+                                                          size: 18,
                                                         ),
-                                                        size: 18,
+                                                        splashRadius: 18,
+                                                        onPressed: () =>
+                                                            EditStudentDialog.show(
+                                                              context,
+                                                              student: s,
+                                                              onStudentUpdated:
+                                                                  () =>
+                                                                      setState(
+                                                                        () {},
+                                                                      ),
+                                                            ),
                                                       ),
-                                                      splashRadius: 18,
-                                                      onPressed: () =>
-                                                          _showTransferSectionDialog(
-                                                            context,
-                                                            s,
+                                                      IconButton(
+                                                        tooltip: 'Transfer to another section',
+                                                        icon: const Icon(
+                                                          Icons.swap_horiz,
+                                                          color: Color(
+                                                            0xFF1A56DB,
                                                           ),
-                                                    ),
-                                                    // Archive / Delete or Restore button
-                                                    if (!_showArchivedStudents)
+                                                          size: 18,
+                                                        ),
+                                                        splashRadius: 18,
+                                                        onPressed: () =>
+                                                            _showTransferSectionDialog(
+                                                              context,
+                                                              s,
+                                                            ),
+                                                      ),
                                                       IconButton(
                                                         tooltip:
                                                             'Archive Student',
                                                         icon: const Icon(
-                                                          Icons.delete_outline,
+                                                          Icons
+                                                              .archive_outlined,
                                                           color: Color(
                                                             0xFF94A3B8,
                                                           ),
@@ -2868,10 +2982,11 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                                                             );
                                                           }
                                                         },
-                                                      )
-                                                    else
+                                                      ),
+                                                    ] else ...[
                                                       IconButton(
-                                                        tooltip: 'Restore',
+                                                        tooltip:
+                                                            'Recover Student',
                                                         icon: const Icon(
                                                           Icons.restore,
                                                           color:
@@ -2889,12 +3004,47 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                                                           );
                                                           AppModals.showSuccessDialog(
                                                             context: context,
-                                                            title: 'Restored',
+                                                            title: 'Recovered',
                                                             message:
-                                                                '${s.fullName} restored.',
+                                                                '${s.fullName} recovered.',
                                                           );
                                                         },
                                                       ),
+                                                      IconButton(
+                                                        tooltip: 'Permanently delete student',
+                                                        icon: const Icon(
+                                                          Icons
+                                                              .delete_forever_outlined,
+                                                          color:
+                                                              AppColors.error,
+                                                          size: 18,
+                                                        ),
+                                                        splashRadius: 18,
+                                                        onPressed: () async {
+                                                          final confirm =
+                                                              await AppModals.showConfirmDialog(
+                                                                context:
+                                                                    context,
+                                                                title: 'Permanently Delete Student',
+                                                                message:
+                                                                    'This will permanently delete ${s.fullName}. This action cannot be undone.',
+                                                                confirmLabel: 'Permanent Delete',
+                                                                confirmColor:
+                                                                    AppColors
+                                                                        .error,
+                                                              );
+                                                          if (confirm == true) {
+                                                            setState(
+                                                              () => MockDatabase
+                                                                  .instance
+                                                                  .permanentlyDeleteStudent(
+                                                                    s.id,
+                                                                  ),
+                                                            );
+                                                          }
+                                                        },
+                                                      ),
+                                                    ],
                                                   ],
                                                 ),
                                               ),
@@ -2967,67 +3117,189 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                               ),
                             ),
                             const SizedBox(width: 16),
-                            TextButton(
-                              style: TextButton.styleFrom(
-                                foregroundColor: Colors.white70,
-                              ),
-                              onPressed: () =>
-                                  setState(() => _selectedStudentIds.clear()),
-                              child: const Text(
-                                'Clear',
-                                style: TextStyle(fontWeight: FontWeight.bold),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            ElevatedButton.icon(
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: AppColors.error,
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                  vertical: 8,
+                            if (_showArchivedStudents) ...[
+                              ElevatedButton.icon(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.success,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 8,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
                                 ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(20),
+                                icon: const Icon(Icons.restore, size: 16),
+                                label: const Text(
+                                  'Recover',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                  ),
                                 ),
-                              ),
-                              icon: const Icon(Icons.delete_outline, size: 16),
-                              label: const Text(
-                                'Remove Selected',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 13,
-                                ),
-                              ),
-                              onPressed: () async {
-                                final messenger = ScaffoldMessenger.of(context);
-                                final selectedCount =
-                                    _selectedStudentIds.length;
-                                final confirm = await AppModals.showConfirmDialog(
-                                  context: context,
-                                  title: 'Remove Selected Students',
-                                  message:
-                                      'Are you sure you want to archive $selectedCount selected student(s)?',
-                                  confirmLabel: 'Remove Selected',
-                                  confirmColor: AppColors.error,
-                                );
-                                if (confirm == true) {
+                                onPressed: () {
+                                  final selectedCount =
+                                      _selectedStudentIds.length;
                                   setState(() {
-                                    for (var id in _selectedStudentIds) {
-                                      MockDatabase.instance.archiveStudent(id);
+                                    for (final id in _selectedStudentIds) {
+                                      MockDatabase.instance.restoreStudent(id);
                                     }
                                     _selectedStudentIds.clear();
                                   });
-                                  messenger.showSnackBar(
+                                  ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(
                                       content: Text(
-                                        '$selectedCount student(s) moved to archive.',
+                                        '$selectedCount student(s) recovered.',
                                       ),
                                     ),
                                   );
-                                }
-                              },
-                            ),
+                                },
+                              ),
+                              const SizedBox(width: 8),
+                              ElevatedButton.icon(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.error,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 8,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                ),
+                                icon: const Icon(
+                                  Icons.delete_forever_outlined,
+                                  size: 16,
+                                ),
+                                label: const Text(
+                                  'Permanent delete',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                                onPressed: () async {
+                                  final selectedCount =
+                                      _selectedStudentIds.length;
+                                  final confirm = await AppModals.showConfirmDialog(
+                                    context: context,
+                                    title: 'Permanent delete',
+                                    message:
+                                        'Permanently delete $selectedCount selected student(s)? This action cannot be undone.',
+                                    confirmLabel: 'Permanent delete',
+                                    confirmColor: AppColors.error,
+                                  );
+                                  if (confirm == true) {
+                                    setState(() {
+                                      for (final id in _selectedStudentIds) {
+                                        MockDatabase.instance
+                                            .permanentlyDeleteStudent(id);
+                                      }
+                                      _selectedStudentIds.clear();
+                                    });
+                                  }
+                                },
+                              ),
+                              const SizedBox(width: 8),
+                              TextButton(
+                                style: TextButton.styleFrom(
+                                  foregroundColor: Colors.white70,
+                                ),
+                                onPressed: () =>
+                                    setState(() => _selectedStudentIds.clear()),
+                                child: const Text(
+                                  'Cancel',
+                                  style: TextStyle(fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                            ] else ...[
+                              TextButton(
+                                style: TextButton.styleFrom(
+                                  foregroundColor: Colors.white70,
+                                ),
+                                onPressed: () =>
+                                    setState(() => _selectedStudentIds.clear()),
+                                child: const Text(
+                                  'Cancel',
+                                  style: TextStyle(fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              TextButton.icon(
+                                style: TextButton.styleFrom(
+                                  foregroundColor: Colors.white,
+                                ),
+                                icon: const Icon(Icons.swap_horiz, size: 16),
+                                label: const Text(
+                                  'Transfer Section',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                                onPressed: () =>
+                                    _showBulkTransferSectionDialog(context),
+                              ),
+                              const SizedBox(width: 8),
+                              ElevatedButton.icon(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.error,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 8,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                ),
+                                icon: const Icon(
+                                  Icons.archive_outlined,
+                                  size: 16,
+                                ),
+                                label: const Text(
+                                  'Archive selected',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                                onPressed: () async {
+                                  final messenger = ScaffoldMessenger.of(
+                                    context,
+                                  );
+                                  final selectedCount =
+                                      _selectedStudentIds.length;
+                                  final confirm = await AppModals.showConfirmDialog(
+                                    context: context,
+                                    title: 'Archive selected students',
+                                    message:
+                                        'Are you sure you want to archive $selectedCount selected student(s)?',
+                                    confirmLabel: 'Archive selected',
+                                    confirmColor: AppColors.error,
+                                  );
+                                  if (confirm == true) {
+                                    setState(() {
+                                      for (final id in _selectedStudentIds) {
+                                        MockDatabase.instance.archiveStudent(
+                                          id,
+                                        );
+                                      }
+                                      _selectedStudentIds.clear();
+                                    });
+                                    messenger.showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                          '$selectedCount student(s) moved to archive.',
+                                        ),
+                                      ),
+                                    );
+                                  }
+                                },
+                              ),
+                            ],
                           ],
                         ),
                       ),
@@ -3528,16 +3800,16 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   }) {
     return Container(
       width: 300,
-      padding: const EdgeInsets.fromLTRB(18, 0, 18, 18),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: const Color(0xFFE2E8F0)),
-        boxShadow: const [
+        boxShadow: [
           BoxShadow(
-            color: Color(0x120F172A),
-            blurRadius: 10,
-            offset: Offset(0, 3),
+            color: Colors.black.withValues(alpha: 0.08),
+            blurRadius: 15,
+            offset: const Offset(0, 5),
           ),
         ],
       ),
@@ -3545,16 +3817,6 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
-            height: 4,
-            margin: const EdgeInsets.only(bottom: 14),
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                colors: [Color(0xFF1D4ED8), Color(0xFFF59E0B)],
-              ),
-              borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-            ),
-          ),
           Row(
             children: [
               _buildClassroomBadge(gradeLevel),
@@ -3568,6 +3830,16 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                     fontWeight: FontWeight.bold,
                   ),
                 ),
+              ),
+              IconButton(
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                icon: const Icon(
+                  Icons.edit_outlined,
+                  size: 18,
+                  color: Color(0xFF64748B),
+                ),
+                onPressed: () {},
               ),
               IconButton(
                 visualDensity: VisualDensity.compact,
@@ -4481,13 +4753,15 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                           fillColor: Colors.white,
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(8),
-                            borderSide:
-                                const BorderSide(color: Color(0xFFE2E8F0)),
+                            borderSide: const BorderSide(
+                              color: Color(0xFFE2E8F0),
+                            ),
                           ),
                           enabledBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(8),
-                            borderSide:
-                                const BorderSide(color: Color(0xFFE2E8F0)),
+                            borderSide: const BorderSide(
+                              color: Color(0xFFE2E8F0),
+                            ),
                           ),
                         ),
                       ),
@@ -4853,7 +5127,8 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                                   color: Color(0xFF64748B),
                                 ),
                               ),
-                              if (currentStatus == AttendanceStatus.present) ...[
+                              if (currentStatus ==
+                                  AttendanceStatus.present) ...[
                                 const SizedBox(width: 8),
                                 Container(
                                   padding: const EdgeInsets.symmetric(
@@ -4967,8 +5242,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                   AppModals.showSuccessDialog(
                     context: context,
                     title: 'Attendance Saved',
-                    message:
-                        'Roster attendance has been committed successfully to system logs.',
+                    message: 'Roster attendance has been committed successfully to system logs.',
                   );
                 },
               ),
@@ -6043,7 +6317,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
           'correct': 8,
           'wrong': 2,
           'percent': '80%',
-          'difficulty': 'Easy'
+          'difficulty': 'Easy',
         },
         {
           'q': '2',
@@ -6051,7 +6325,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
           'correct': 6,
           'wrong': 4,
           'percent': '60%',
-          'difficulty': 'Moderate'
+          'difficulty': 'Moderate',
         },
         {
           'q': '3',
@@ -6059,7 +6333,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
           'correct': 7,
           'wrong': 3,
           'percent': '70%',
-          'difficulty': 'Moderate'
+          'difficulty': 'Moderate',
         },
       ],
       'Summative Test 2 (ST2)': [
@@ -6069,7 +6343,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
           'correct': 9,
           'wrong': 1,
           'percent': '90%',
-          'difficulty': 'Easy'
+          'difficulty': 'Easy',
         },
         {
           'q': '2',
@@ -6077,7 +6351,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
           'correct': 5,
           'wrong': 5,
           'percent': '50%',
-          'difficulty': 'Hard'
+          'difficulty': 'Hard',
         },
       ],
       'Term Examination (TE)': [
@@ -6087,7 +6361,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
           'correct': 7,
           'wrong': 3,
           'percent': '70%',
-          'difficulty': 'Moderate'
+          'difficulty': 'Moderate',
         },
         {
           'q': '2',
@@ -6095,7 +6369,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
           'correct': 8,
           'wrong': 2,
           'percent': '80%',
-          'difficulty': 'Easy'
+          'difficulty': 'Easy',
         },
         {
           'q': '3',
@@ -6103,7 +6377,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
           'correct': 4,
           'wrong': 6,
           'percent': '40%',
-          'difficulty': 'Hard'
+          'difficulty': 'Hard',
         },
         {
           'q': '4',
@@ -6111,13 +6385,14 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
           'correct': 6,
           'wrong': 4,
           'percent': '60%',
-          'difficulty': 'Moderate'
+          'difficulty': 'Moderate',
         },
       ],
     };
 
     final currentData =
-        mockItemData[_selectedItemAnalysisAssessment] ?? mockItemData.values.first;
+        mockItemData[_selectedItemAnalysisAssessment] ??
+        mockItemData.values.first;
 
     return Padding(
       padding: const EdgeInsets.all(24),
@@ -6137,8 +6412,10 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                   const SizedBox(height: 6),
                   const Text(
                     'Evaluate question difficulty index and student correctness percentages.',
-                    style:
-                        TextStyle(fontSize: 14, color: AppColors.textSecondary),
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: AppColors.textSecondary,
+                    ),
                   ),
                 ],
               ),
@@ -6158,9 +6435,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                       color: AppColors.primary,
                     ),
                     items: mockItemData.keys
-                        .map(
-                          (e) => DropdownMenuItem(value: e, child: Text(e)),
-                        )
+                        .map((e) => DropdownMenuItem(value: e, child: Text(e)))
                         .toList(),
                     onChanged: (v) {
                       if (v != null)
@@ -6220,8 +6495,8 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                       final diffColor = item['difficulty'] == 'Easy'
                           ? AppColors.success
                           : (item['difficulty'] == 'Moderate'
-                              ? AppColors.warning
-                              : AppColors.error);
+                                ? AppColors.warning
+                                : AppColors.error);
                       return TableRow(
                         children: [
                           _buildTableCell(item['q'].toString()),
@@ -6281,10 +6556,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     return Container(
       alignment: alignment,
       padding: const EdgeInsets.all(12),
-      child: Text(
-        text,
-        style: textStyle ?? const TextStyle(fontSize: 13),
-      ),
+      child: Text(text, style: textStyle ?? const TextStyle(fontSize: 13)),
     );
   }
 
@@ -6316,8 +6588,10 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
           // Assessment Selector
           Row(
             children: [
-              const Text('Select Assessment: ',
-                  style: TextStyle(fontWeight: FontWeight.bold)),
+              const Text(
+                'Select Assessment: ',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
               const SizedBox(width: 12),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -6330,10 +6604,10 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                   value: _monitoringAssessmentId,
                   underline: const SizedBox(),
                   items: quizzes
-                      .map((q) => DropdownMenuItem(
-                            value: q.id,
-                            child: Text(q.title),
-                          ))
+                      .map(
+                        (q) =>
+                            DropdownMenuItem(value: q.id, child: Text(q.title)),
+                      )
                       .toList(),
                   onChanged: (val) =>
                       setState(() => _monitoringAssessmentId = val),
@@ -6357,58 +6631,89 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                   showCheckboxColumn: false,
                   columns: const [
                     DataColumn(
-                        label: Text('Student',
-                            style: TextStyle(fontWeight: FontWeight.bold))),
+                      label: Text(
+                        'Student',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ),
                     DataColumn(
-                        label: Text('Submission Time',
-                            style: TextStyle(fontWeight: FontWeight.bold))),
+                      label: Text(
+                        'Submission Time',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ),
                     DataColumn(
-                        label: Text('Duration',
-                            style: TextStyle(fontWeight: FontWeight.bold))),
+                      label: Text(
+                        'Duration',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ),
                     DataColumn(
-                        label: Text('Status',
-                            style: TextStyle(fontWeight: FontWeight.bold))),
+                      label: Text(
+                        'Status',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ),
                     DataColumn(
-                        label: Text('Score',
-                            style: TextStyle(fontWeight: FontWeight.bold))),
+                      label: Text(
+                        'Score',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ),
                     DataColumn(
-                        label: Text('Violations',
-                            style: TextStyle(fontWeight: FontWeight.bold))),
+                      label: Text(
+                        'Violations',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ),
                   ],
                   rows: results.map((res) {
                     final status = res.violationCount == 0
                         ? 'Normal'
                         : res.violationCount == 1
-                            ? 'Warning'
-                            : res.violationCount == 2
-                                ? 'Suspicious'
-                                : 'Auto-Submitted';
+                        ? 'Warning'
+                        : res.violationCount == 2
+                        ? 'Suspicious'
+                        : 'Auto-Submitted';
                     final statusColor = res.violationCount == 0
                         ? AppColors.success
                         : res.violationCount == 1
-                            ? AppColors.warning
-                            : AppColors.error;
+                        ? AppColors.warning
+                        : AppColors.error;
 
                     return DataRow(
                       onSelectChanged: (_) => _showViolationDetail(res),
                       cells: [
                         DataCell(Text(res.studentName)),
-                        DataCell(Text(res.submittedAt.toString().substring(11, 16))),
+                        DataCell(
+                          Text(res.submittedAt.toString().substring(11, 16)),
+                        ),
                         DataCell(Text('${res.durationTakenMinutes}m')),
-                        DataCell(StatusBadge(
+                        DataCell(
+                          StatusBadge(
                             text: status,
                             backgroundColor: statusColor.withValues(alpha: 0.1),
-                            textColor: statusColor)),
-                        DataCell(Text(
-                            '${res.scoreEarned.toInt()} / ${res.totalPoints.toInt()}')),
-                        DataCell(Text(res.violationCount.toString(),
+                            textColor: statusColor,
+                          ),
+                        ),
+                        DataCell(
+                          Text(
+                            '${res.scoreEarned.toInt()} / ${res.totalPoints.toInt()}',
+                          ),
+                        ),
+                        DataCell(
+                          Text(
+                            res.violationCount.toString(),
                             style: TextStyle(
-                                color: res.violationCount > 0
-                                    ? AppColors.error
-                                    : null,
-                                fontWeight: res.violationCount > 0
-                                    ? FontWeight.bold
-                                    : null))),
+                              color: res.violationCount > 0
+                                  ? AppColors.error
+                                  : null,
+                              fontWeight: res.violationCount > 0
+                                  ? FontWeight.bold
+                                  : null,
+                            ),
+                          ),
+                        ),
                       ],
                     );
                   }).toList(),
@@ -6432,26 +6737,32 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Total Violations: ${result.violationCount}',
-                  style: const TextStyle(fontWeight: FontWeight.bold)),
+              Text(
+                'Total Violations: ${result.violationCount}',
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
               const SizedBox(height: 16),
               if (result.violationLog.isEmpty)
                 const Text('No violations recorded for this session.')
               else
-                ...result.violationLog.map((v) => Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: Row(
-                        children: [
-                          Text(
-                            '[${v['timestamp'] ?? 'N/A'}]',
-                            style: const TextStyle(
-                                color: AppColors.textSecondary, fontSize: 12),
+                ...result.violationLog.map(
+                  (v) => Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Row(
+                      children: [
+                        Text(
+                          '[${v['timestamp'] ?? 'N/A'}]',
+                          style: const TextStyle(
+                            color: AppColors.textSecondary,
+                            fontSize: 12,
                           ),
-                          const SizedBox(width: 8),
-                          Expanded(child: Text(v['type'] ?? 'Violation')),
-                        ],
-                      ),
-                    )),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(child: Text(v['type'] ?? 'Violation')),
+                      ],
+                    ),
+                  ),
+                ),
             ],
           ),
         ),
@@ -6569,11 +6880,12 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
       }
 
       gradeItems['Examinations (EX)']!.add({
-        'name': assessment.id == 'EX3'
-            ? 'Term Examination (TE) • 40%'
+        'header': assessment.id == 'EX3'
+            ? 'Term Examination'
             : assessment.title,
+        'name': assessment.title,
         'weight': assessment.id == 'EX3' ? '40%' : '30%',
-        'points': '${assessment.totalPoints.toStringAsFixed(0)} pts',
+        'points': '${assessment.totalPoints.toStringAsFixed(0)}pts',
         'date': formatDate(assessment.scheduleDate),
       });
     }
@@ -6642,19 +6954,6 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                         width: 270,
                       ),
                     ],
-                  ),
-                ),
-                ElevatedButton.icon(
-                  onPressed: () {},
-                  icon: const Icon(Icons.file_download_outlined, size: 16),
-                  label: const Text('Export Grades'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF059669),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 12,
-                    ),
                   ),
                 ),
               ],
@@ -6738,7 +7037,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                       ),
                       const SizedBox(height: 8),
                       const Text(
-                        'Build the grade from written work, performance tasks and exams. SmartClass computes it and your E-Class Record shows the full DepEd computation.',
+                        'Build the grade from written work, performance tasks and exams. ClassRealm computes it based on the weighted components defined below.',
                         style: TextStyle(
                           color: Color(0xFF94A3B8),
                           fontSize: 10,
@@ -6784,8 +7083,8 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                               label: 'Edit Weights',
                               icon: Icons.tune,
                               height: 36,
-                              onPressed:
-                                  () => setState(() => _isEditingWeights = true),
+                              onPressed: () =>
+                                  setState(() => _isEditingWeights = true),
                             ),
                           ],
                         ),
@@ -6802,9 +7101,9 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                     (item) => Padding(
                       padding: const EdgeInsets.only(bottom: 12),
                       child: _buildGradebookSection(
-                        item['name']!,
+                        item['header'] ?? item['name']!,
                         [item],
-                        showItemName: false,
+                        showItemName: true,
                         sectionWeight: item['weight'],
                       ),
                     ),
@@ -6836,7 +7135,12 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
             _buildGradebookDropdown(
               label: 'Grading Period',
               value: 'Quarter 1',
-              options: const ['Quarter 1', 'Quarter 2', 'Quarter 3', 'Quarter 4'],
+              options: const [
+                'Quarter 1',
+                'Quarter 2',
+                'Quarter 3',
+                'Quarter 4',
+              ],
               width: 200,
             ),
             const SizedBox(width: 16),
@@ -6985,8 +7289,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
               AppModals.showSuccessDialog(
                 context: context,
                 title: 'Weights Updated',
-                message:
-                    'Gradebook weighting criteria has been updated successfully.',
+                message: 'Gradebook weighting criteria has been updated successfully.',
               );
             },
             style: ElevatedButton.styleFrom(
@@ -7233,11 +7536,6 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
               ),
               child: Row(
                 children: [
-                  const Icon(
-                    Icons.drag_indicator,
-                    color: Color(0xFFCBD5E1),
-                    size: 18,
-                  ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
@@ -7249,34 +7547,10 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                       ),
                     ),
                   ),
-                  IconButton(
-                    onPressed: () {},
-                    icon: const Icon(
-                      Icons.edit_outlined,
-                      size: 17,
-                      color: Color(0xFF94A3B8),
-                    ),
-                    tooltip: 'Edit grade item',
-                    visualDensity: VisualDensity.compact,
-                  ),
-                  IconButton(
-                    onPressed: () {},
-                    icon: const Icon(
-                      Icons.copy_outlined,
-                      size: 17,
-                      color: Color(0xFF94A3B8),
-                    ),
-                    tooltip: 'Duplicate grade item',
-                    visualDensity: VisualDensity.compact,
-                  ),
                   OutlinedButton.icon(
                     onPressed: () {},
-                    icon: const Icon(Icons.edit_outlined, size: 15),
-                    label: Text(
-                      title.contains('Summative')
-                          ? 'Enter Scores'
-                          : 'View Scores',
-                    ),
+                    icon: const Icon(Icons.remove_red_eye_outlined, size: 15),
+                    label: const Text('View Scores'),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: const Color(0xFF1D4ED8),
                       padding: const EdgeInsets.symmetric(
@@ -7293,16 +7567,6 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                       ),
                     ),
                   ),
-                  IconButton(
-                    onPressed: () {},
-                    icon: const Icon(
-                      Icons.delete_outline,
-                      size: 17,
-                      color: Color(0xFF94A3B8),
-                    ),
-                    tooltip: 'Delete grade item',
-                    visualDensity: VisualDensity.compact,
-                  ),
                   const SizedBox(width: 14),
                   Container(
                     padding: const EdgeInsets.symmetric(
@@ -7310,14 +7574,14 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                       vertical: 5,
                     ),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFFFF7ED),
-                      border: Border.all(color: const Color(0xFFFED7AA)),
+                      color: const Color(0xFFF1F5F9),
+                      border: Border.all(color: const Color(0xFFE2E8F0)),
                       borderRadius: BorderRadius.circular(16),
                     ),
                     child: Text(
                       item['points']!,
                       style: const TextStyle(
-                        color: Color(0xFFC2410C),
+                        color: Color(0xFF475569),
                         fontSize: 11,
                         fontWeight: FontWeight.bold,
                       ),
@@ -7358,13 +7622,17 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     }).toList();
 
     if (_gradesRankingOrder == 'Highest to Lowest') {
-      filteredList.sort((a, b) => MockDatabase.instance
-          .quarterlyGradeFor(b.id)
-          .compareTo(MockDatabase.instance.quarterlyGradeFor(a.id)));
+      filteredList.sort(
+        (a, b) => MockDatabase.instance
+            .quarterlyGradeFor(b.id)
+            .compareTo(MockDatabase.instance.quarterlyGradeFor(a.id)),
+      );
     } else if (_gradesRankingOrder == 'Lowest to Highest') {
-      filteredList.sort((a, b) => MockDatabase.instance
-          .quarterlyGradeFor(a.id)
-          .compareTo(MockDatabase.instance.quarterlyGradeFor(b.id)));
+      filteredList.sort(
+        (a, b) => MockDatabase.instance
+            .quarterlyGradeFor(a.id)
+            .compareTo(MockDatabase.instance.quarterlyGradeFor(b.id)),
+      );
     }
 
     String getDescriptor(double grade) {
@@ -7512,8 +7780,9 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                       separatorBuilder: (_, __) => const Divider(height: 1),
                       itemBuilder: (ctx, i) {
                         final s = filteredList[i];
-                        final grade =
-                            MockDatabase.instance.quarterlyGradeFor(s.id);
+                        final grade = MockDatabase.instance.quarterlyGradeFor(
+                          s.id,
+                        );
                         final descriptor = getDescriptor(grade);
                         final remarks = getRemarks(grade);
                         final color = getGradeColor(grade);
@@ -7956,8 +8225,10 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                   SizedBox(height: 4),
                   Text(
                     'Manage your weekly teaching hours and room assignments.',
-                    style:
-                        TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: AppColors.textSecondary,
+                    ),
                   ),
                 ],
               ),
@@ -8095,10 +8366,14 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     );
   }
 
-  void _showScheduleEntryDialog(BuildContext context, {ScheduleModel? schedule}) {
+  void _showScheduleEntryDialog(
+    BuildContext context, {
+    ScheduleModel? schedule,
+  }) {
     final isEditing = schedule != null;
-    final subjectCtrl =
-        TextEditingController(text: schedule?.subject ?? 'General Mathematics');
+    final subjectCtrl = TextEditingController(
+      text: schedule?.subject ?? 'General Mathematics',
+    );
     final roomCtrl = TextEditingController(text: schedule?.room ?? '');
     final startCtrl = TextEditingController(text: schedule?.startTime ?? '');
     final endCtrl = TextEditingController(text: schedule?.endTime ?? '');
@@ -8125,9 +8400,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                       border: OutlineInputBorder(),
                     ),
                     items: _classroomSections
-                        .map(
-                          (s) => DropdownMenuItem(value: s, child: Text(s)),
-                        )
+                        .map((s) => DropdownMenuItem(value: s, child: Text(s)))
                         .toList(),
                     onChanged: (v) => setModalState(() => selectedSection = v!),
                   ),
@@ -8140,20 +8413,27 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                       labelText: 'DAY OF WEEK',
                       border: OutlineInputBorder(),
                     ),
-                    items: const [
-                      'Monday',
-                      'Tuesday',
-                      'Wednesday',
-                      'Thursday',
-                      'Friday',
-                      'Saturday',
-                    ].map((d) => DropdownMenuItem(value: d, child: Text(d))).toList(),
+                    items:
+                        const [
+                              'Monday',
+                              'Tuesday',
+                              'Wednesday',
+                              'Thursday',
+                              'Friday',
+                              'Saturday',
+                            ]
+                            .map(
+                              (d) => DropdownMenuItem(value: d, child: Text(d)),
+                            )
+                            .toList(),
                     onChanged: (v) => setModalState(() => selectedDay = v!),
                   ),
                   const SizedBox(height: 16),
                   Row(
                     children: [
-                      Expanded(child: _buildSetupField('START TIME', startCtrl)),
+                      Expanded(
+                        child: _buildSetupField('START TIME', startCtrl),
+                      ),
                       const SizedBox(width: 16),
                       Expanded(child: _buildSetupField('END TIME', endCtrl)),
                     ],
@@ -8171,7 +8451,9 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
               label: isEditing ? 'Update Entry' : 'Add Entry',
               onPressed: () {
                 final newSchedule = ScheduleModel(
-                  id: schedule?.id ?? 'sch_${DateTime.now().millisecondsSinceEpoch}',
+                  id:
+                      schedule?.id ??
+                      'sch_${DateTime.now().millisecondsSinceEpoch}',
                   subject: subjectCtrl.text.trim(),
                   section: selectedSection,
                   room: roomCtrl.text.trim(),

@@ -179,11 +179,13 @@ class _CreateAssessmentFlowDialogState
   }
 
   void _addQuestionToList() {
-    if (_qTextCtrl.text.trim().isEmpty) {
+    final isMatching = _selectedQType == QuestionType.matching;
+    if (_qTextCtrl.text.trim().isEmpty && !isMatching) {
       AppModals.showErrorDialog(
         context: context,
         title: 'Incomplete Question',
-        message: 'Please provide question text and the correct answer before adding.',
+        message:
+            'Please provide question text and the correct answer before adding.',
       );
       return;
     }
@@ -238,6 +240,8 @@ class _CreateAssessmentFlowDialogState
         );
         return;
       }
+      // For matching type, choices are the options students can pick from (Column B)
+      choices = _matchingPairs.values.toList();
     }
 
     final correctAnswer =
@@ -261,7 +265,9 @@ class _CreateAssessmentFlowDialogState
       _questions.add(
         QuestionModel(
           id: 'q_${DateTime.now().millisecondsSinceEpoch}',
-          questionText: _qTextCtrl.text.trim(),
+          questionText: isMatching && _qTextCtrl.text.trim().isEmpty
+              ? 'Match the items in Column A with the correct items in Column B.'
+              : _qTextCtrl.text.trim(),
           type: _selectedQType,
           choices: choices,
           correctAnswer: correctAnswer,
@@ -1224,15 +1230,18 @@ class _CreateAssessmentFlowDialogState
                 const SizedBox(height: 12),
 
                 // Question Text
-                TextField(
-                  controller: _qTextCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Enter Question Statement',
-                    hintText: 'e.g. Find the horizontal asymptote of f(x) = (3x + 1) / (2x - 5)',
-                    isDense: true,
+                if (_selectedQType != QuestionType.matching)
+                  TextField(
+                    controller: _qTextCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Enter Question Statement',
+                      hintText:
+                          'e.g. Find the horizontal asymptote of f(x) = (3x + 1) / (2x - 5)',
+                      isDense: true,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 12),
+                if (_selectedQType != QuestionType.matching)
+                  const SizedBox(height: 12),
 
                 // Multiple choice options if type is multiple choice
                 if (_selectedQType == QuestionType.multipleChoice) ...[
@@ -1333,6 +1342,21 @@ class _CreateAssessmentFlowDialogState
                   const SizedBox(height: 6),
                   Row(
                     children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade200,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          '${_matchingPairs.length + 1}',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
                       Expanded(
                         child: TextField(
                           controller: _matchingLeftCtrl,
@@ -1370,21 +1394,34 @@ class _CreateAssessmentFlowDialogState
                       ),
                     ],
                   ),
-                  ..._matchingPairs.entries.map(
-                    (pair) => ListTile(
+                  const SizedBox(height: 10),
+                  ..._matchingPairs.entries.toList().asMap().entries.map(
+                    (entry) => ListTile(
                       dense: true,
-                      title: Text(pair.key),
+                      leading: CircleAvatar(
+                        radius: 12,
+                        backgroundColor: AppColors.primary.withValues(alpha: 0.1),
+                        child: Text(
+                          '${entry.key + 1}',
+                          style: const TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                      ),
+                      title: Text(entry.value.key),
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Text(
-                            pair.value,
+                            entry.value.value,
                             style: const TextStyle(fontWeight: FontWeight.bold),
                           ),
                           IconButton(
                             icon: const Icon(Icons.close, size: 17),
-                            onPressed: () =>
-                                setState(() => _matchingPairs.remove(pair.key)),
+                            onPressed: () => setState(
+                                () => _matchingPairs.remove(entry.value.key)),
                           ),
                         ],
                       ),
