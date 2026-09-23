@@ -30,7 +30,9 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
   @override
   Widget build(BuildContext context) {
     final activities = MockDatabase.instance.activitiesOnly;
-    final quizzes = MockDatabase.instance.quizzesAndExams.where((q) => q.id != 'WW3').toList();
+    final quizzes = MockDatabase.instance.quizzesAndExams
+        .where((q) => q.id != 'WW3' && q.title != 'Functions Quiz')
+        .toList();
     final notifications = MockDatabase.instance.notifications;
     final student =
         MockDatabase.instance.currentUser ??
@@ -57,7 +59,9 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
         foregroundColor: Colors.white,
         leading: IconButton(
           icon: const Icon(Icons.menu),
-          onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+          onPressed: () {
+            _scaffoldKey.currentState?.openDrawer();
+          },
         ),
         actions: const [
           Center(

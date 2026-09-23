@@ -354,6 +354,20 @@ class MockDatabase {
         totalStudents: 10,
       ),
       ActivityModel(
+        id: 'WW3',
+        title: 'Functions Quiz',
+        description: 'Quiz on Functions and Operations',
+        subject: currentSubject,
+        section: 'Section A, Section B',
+        deadline: DateTime(2026, 9, 26, 23, 59),
+        sectionDeadlines: {
+          'Section A': DateTime(2026, 9, 26, 23, 59),
+          'Section B': DateTime(2026, 9, 26, 23, 59),
+        },
+        maxScore: 30,
+        totalStudents: 10,
+      ),
+      ActivityModel(
         id: 'PT1',
         title: 'Functions Project',
         description: 'Create a portfolio of functions.',
@@ -455,6 +469,21 @@ class MockDatabase {
         );
     final now = DateTime.now();
     quizzesAndExams = [
+      QuizOrExamModel(
+        id: 'WW3',
+        title: 'Functions Quiz',
+        description: 'Quiz on Functions and Operations',
+        subject: currentSubject,
+        section: 'Section A, Section B',
+        isExam: false,
+        durationMinutes: 30,
+        scheduleDate: DateTime(2026, 9, 26, 23, 59),
+        sectionDeadlines: {
+          'Section A': DateTime(2026, 9, 26, 23, 59),
+          'Section B': DateTime(2026, 9, 26, 23, 59),
+        },
+        questions: questions('WW3', 5, 6),
+      ),
       QuizOrExamModel(
         id: 'EX1',
         title: 'ST1',

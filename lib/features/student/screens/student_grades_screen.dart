@@ -90,7 +90,7 @@ class StudentGradesScreen extends StatelessWidget {
                         .toList();
                 final subjectQuizzes =
                     MockDatabase.instance.quizzesAndExams
-                        .where((q) => q.subject == subject && q.id != 'WW3')
+                        .where((q) => q.subject == subject && q.id != 'WW3' && q.title != 'Functions Quiz')
                         .toList();
 
                 return Column(
