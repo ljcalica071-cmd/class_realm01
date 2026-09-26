@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
-import '../../../core/theme/app_colors.dart';
-import '../../../data/mock_database.dart';
-import '../../../models/user_model.dart';
-import '../../../routes/app_routes.dart';
-import '../../../widgets/common/app_buttons.dart';
-import '../../../widgets/common/app_modals.dart';
-import '../../../widgets/common/app_text_field.dart';
+import 'package:class_realm/data/mock_database.dart';
+import 'package:class_realm/models/user_model.dart';
+import 'package:class_realm/routes/app_routes.dart';
+import 'package:class_realm/widgets/common/app_buttons.dart';
+import 'package:class_realm/widgets/common/app_modals.dart';
+import 'package:class_realm/widgets/common/app_text_field.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -66,21 +65,24 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Eduardo Barretto SHS - Registration'),
-        backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
+        backgroundColor: theme.colorScheme.primary,
+        foregroundColor: theme.colorScheme.onPrimary,
       ),
       body: Container(
         width: double.infinity,
         height: double.infinity,
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           image: DecorationImage(
-            image: AssetImage('lib/school.jpg'),
+            image: const AssetImage('assets/images/auth/school.jpg'),
             fit: BoxFit.cover,
             colorFilter: ColorFilter.mode(
-              Colors.black54,
+              isDark ? Colors.black87 : Colors.black54,
               BlendMode.darken,
             ),
           ),
@@ -92,11 +94,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
               constraints: const BoxConstraints(maxWidth: 540),
               padding: const EdgeInsets.all(32),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: theme.colorScheme.surface,
                 borderRadius: BorderRadius.circular(20),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.2),
+                    color: Colors.black.withValues(alpha: 0.2),
                     blurRadius: 20,
                   ),
                 ],
@@ -106,14 +108,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    const Text(
+                    Text(
                       'Create Account in ClassRealm',
-                      style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                      style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface),
                     ),
                     const SizedBox(height: 6),
-                    const Text(
+                    Text(
                       'Teacher registration is available for the web portal only. Student and parent accounts are created by the teacher.',
-                      style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                      style: TextStyle(fontSize: 13, color: theme.colorScheme.onSurface.withValues(alpha: 0.6)),
                     ),
                     const SizedBox(height: 20),
 
@@ -170,7 +172,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     Center(
                       child: TextButton(
                         onPressed: () => Navigator.pop(context),
-                        child: const Text('Already have an account? Sign In', style: TextStyle(color: AppColors.primary)),
+                        child: Text('Already have an account? Sign In', style: TextStyle(color: theme.colorScheme.primary)),
                       ),
                     ),
                   ],

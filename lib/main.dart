@@ -21,22 +21,31 @@ class ClassRealmApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'ClassRealm',
-      debugShowCheckedModeBanner: false,
-      theme: AppTheme.lightTheme,
-      initialRoute: AppRoutes.login,
-      routes: {
-        AppRoutes.login: (context) => const LoginScreen(),
-        AppRoutes.register: (context) =>
-            kIsWeb ? const RegisterScreen() : const LoginScreen(),
-        AppRoutes.forgotPassword: (context) => const ForgotPasswordScreen(),
-        AppRoutes.pendingAccount: (context) => const PendingAccountScreen(),
-        AppRoutes.firstLogin: (context) => const FirstLoginScreen(),
-        AppRoutes.adminDashboard: (context) => const AdminDashboardScreen(),
-        AppRoutes.teacherDashboard: (context) => const TeacherDashboardScreen(),
-        AppRoutes.studentHome: (context) => const StudentHomeScreen(),
-        AppRoutes.parentHome: (context) => const ParentHomeScreen(),
+    return ValueListenableBuilder<ThemeMode>(
+      valueListenable: AppTheme.themeModeNotifier,
+      builder: (context, themeMode, _) {
+        return MaterialApp(
+          title: 'ClassRealm',
+          debugShowCheckedModeBanner: false,
+          theme: AppTheme.lightTheme,
+          darkTheme: AppTheme.darkTheme,
+          themeMode: themeMode, // Auto switches based on device setting or manual toggle
+          themeAnimationDuration: const Duration(milliseconds: 600),
+          themeAnimationCurve: Curves.easeInOut,
+          initialRoute: AppRoutes.login,
+          routes: {
+            AppRoutes.login: (context) => const LoginScreen(),
+            AppRoutes.register: (context) =>
+                kIsWeb ? const RegisterScreen() : const LoginScreen(),
+            AppRoutes.forgotPassword: (context) => const ForgotPasswordScreen(),
+            AppRoutes.pendingAccount: (context) => const PendingAccountScreen(),
+            AppRoutes.firstLogin: (context) => const FirstLoginScreen(),
+            AppRoutes.adminDashboard: (context) => const AdminDashboardScreen(),
+            AppRoutes.teacherDashboard: (context) => const TeacherDashboardScreen(),
+            AppRoutes.studentHome: (context) => const StudentHomeScreen(),
+            AppRoutes.parentHome: (context) => const ParentHomeScreen(),
+          },
+        );
       },
     );
   }

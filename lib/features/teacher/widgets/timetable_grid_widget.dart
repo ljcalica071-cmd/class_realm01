@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../../../models/academic_models.dart';
+import 'package:class_realm/models/academic_models.dart';
 
 class TimetableGridWidget extends StatelessWidget {
   final List<ScheduleModel> schedules;

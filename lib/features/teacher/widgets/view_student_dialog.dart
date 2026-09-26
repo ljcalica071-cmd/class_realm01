@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
-import '../../../core/theme/app_colors.dart';
-import '../../../models/user_model.dart';
-import '../../../widgets/common/status_badge.dart';
+import 'package:class_realm/models/user_model.dart';
+import 'package:class_realm/widgets/common/status_badge.dart';
 
 class ViewStudentDialog extends StatelessWidget {
   final UserModel student;
@@ -17,6 +16,7 @@ class ViewStudentDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final s = student;
     final birthdayText = s.birthday == null
         ? 'N/A'
@@ -35,10 +35,10 @@ class ViewStudentDialog extends StatelessWidget {
               children: [
                 CircleAvatar(
                   radius: 28,
-                  backgroundColor: AppColors.primary,
+                  backgroundColor: theme.colorScheme.primary,
                   child: Text(
                     s.fullName.isNotEmpty ? s.fullName[0] : '?',
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 22),
+                    style: TextStyle(color: theme.colorScheme.surface, fontWeight: FontWeight.bold, fontSize: 22),
                   ),
                 ),
                 const SizedBox(width: 16),
@@ -46,14 +46,14 @@ class ViewStudentDialog extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(s.fullName, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+                      Text(s.fullName, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface)),
                       const SizedBox(height: 4),
                       StatusBadge.fromAccountStatus(s.status),
                     ],
                   ),
                 ),
                 IconButton(
-                  icon: const Icon(Icons.close, color: AppColors.textSecondary),
+                  icon: Icon(Icons.close, color: theme.colorScheme.onSurface.withValues(alpha: 0.6)),
                   onPressed: () => Navigator.of(context).pop(),
                 ),
               ],
@@ -76,7 +76,7 @@ class ViewStudentDialog extends StatelessWidget {
               alignment: Alignment.centerRight,
               child: TextButton(
                 onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Close', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
+                child: Text('Close', style: TextStyle(color: theme.colorScheme.primary, fontWeight: FontWeight.bold)),
               ),
             ),
           ],
@@ -95,18 +95,19 @@ class _InfoRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
         children: [
-          Icon(icon, size: 16, color: AppColors.textSecondary),
+          Icon(icon, size: 16, color: theme.colorScheme.onSurface.withValues(alpha: 0.6)),
           const SizedBox(width: 10),
           SizedBox(
             width: 120,
-            child: Text(label, style: const TextStyle(fontSize: 13, color: AppColors.textSecondary)),
+            child: Text(label, style: TextStyle(fontSize: 13, color: theme.colorScheme.onSurface.withValues(alpha: 0.6))),
           ),
           Expanded(
-            child: Text(value, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+            child: Text(value, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: theme.colorScheme.onSurface)),
           ),
         ],
       ),

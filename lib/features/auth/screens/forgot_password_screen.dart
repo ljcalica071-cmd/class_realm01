@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
-import '../../../core/theme/app_colors.dart';
-import '../../../routes/app_routes.dart';
-import '../../../widgets/common/app_buttons.dart';
-import '../../../widgets/common/app_modals.dart';
-import '../../../widgets/common/app_text_field.dart';
+import 'package:class_realm/routes/app_routes.dart';
+import 'package:class_realm/widgets/common/app_buttons.dart';
+import 'package:class_realm/widgets/common/app_modals.dart';
+import 'package:class_realm/widgets/common/app_text_field.dart';
 
 class ForgotPasswordScreen extends StatefulWidget {
   const ForgotPasswordScreen({super.key});
@@ -91,21 +90,24 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Account Recovery & Password Reset'),
-        backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
+        backgroundColor: theme.colorScheme.primary,
+        foregroundColor: theme.colorScheme.onPrimary,
       ),
       body: Container(
         width: double.infinity,
         height: double.infinity,
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           image: DecorationImage(
-            image: AssetImage('lib/school.jpg'),
+            image: const AssetImage('assets/images/auth/school.jpg'),
             fit: BoxFit.cover,
             colorFilter: ColorFilter.mode(
-              Colors.black54,
+              isDark ? Colors.black87 : Colors.black54,
               BlendMode.darken,
             ),
           ),
@@ -117,11 +119,11 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
               constraints: const BoxConstraints(maxWidth: 480),
               padding: const EdgeInsets.all(32),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: theme.colorScheme.surface,
                 borderRadius: BorderRadius.circular(20),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.2),
+                    color: Colors.black.withValues(alpha: 0.2),
                     blurRadius: 20,
                   ),
                 ],
@@ -129,7 +131,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Icon(Icons.lock_reset, size: 48, color: AppColors.primary),
+                  Icon(Icons.lock_reset, size: 48, color: theme.colorScheme.primary),
                   const SizedBox(height: 16),
                   Text(
                     _step == 1
@@ -138,7 +140,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                             ? 'Enter Verification Code'
                             : 'Set New Password',
                     textAlign: TextAlign.center,
-                    style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface),
                   ),
                   const SizedBox(height: 8),
                   Text(
@@ -148,7 +150,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                             ? 'We have sent a 6-digit confirmation code to ${_emailController.text}.'
                             : 'Create a secure new password for your Eduardo Barretto SHS account.',
                     textAlign: TextAlign.center,
-                    style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                    style: TextStyle(fontSize: 13, color: theme.colorScheme.onSurface.withValues(alpha: 0.6)),
                   ),
                   const SizedBox(height: 24),
 
@@ -188,7 +190,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                     Center(
                       child: TextButton(
                         onPressed: () => setState(() => _step = 1),
-                        child: const Text('Resend OTP or Change Email', style: TextStyle(color: AppColors.primary, fontSize: 12)),
+                        child: Text('Resend OTP or Change Email', style: TextStyle(color: theme.colorScheme.primary, fontSize: 12)),
                       ),
                     ),
                   ],
@@ -222,7 +224,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                   Center(
                     child: TextButton(
                       onPressed: () => Navigator.pop(context),
-                      child: const Text('Back to Sign In', style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+                      child: Text('Back to Sign In', style: TextStyle(color: theme.colorScheme.onSurface.withValues(alpha: 0.6), fontSize: 13)),
                     ),
                   ),
                 ],

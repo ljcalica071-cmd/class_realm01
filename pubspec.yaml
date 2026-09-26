@@ -38,8 +38,7 @@ dependencies:
   flutter_screenutil: ^5.9.3
   google_fonts: ^8.2.1
   flutter_animate: ^4.5.2
-  lucide_icons: ^0.257.0
-
+  lucide_icons_flutter: ^3.1.20
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -63,8 +62,8 @@ flutter:
   uses-material-design: true
 
   assets:
-    - lib/school_logo.png
-    - lib/school.jpg
+    - assets/branding/
+    - assets/images/auth/
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
