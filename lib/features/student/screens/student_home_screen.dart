@@ -1,20 +1,18 @@
 import 'package:flutter/material.dart';
-import '../../../core/theme/app_colors.dart';
-import '../../../data/mock_database.dart';
-import '../../../models/user_model.dart';
-import '../../../models/academic_models.dart';
-import '../../../routes/app_routes.dart';
-import '../../../widgets/common/status_badge.dart';
-import '../../../widgets/common/sync_status_badge.dart';
-import '../../../widgets/common/app_buttons.dart';
-import 'student_assessment_screen.dart';
-import 'student_requirements_screen.dart';
-import 'student_attendance_screen.dart';
-import 'student_schedule_screen.dart';
-import 'student_learning_materials_screen.dart';
-import 'student_grades_screen.dart';
-import 'student_settings_screen.dart';
-import '../widgets/student_activity_card.dart';
+import 'package:class_realm/core/theme/app_theme.dart';
+import 'package:class_realm/data/mock_database.dart';
+import 'package:class_realm/models/user_model.dart';
+import 'package:class_realm/models/academic_models.dart';
+import 'package:class_realm/routes/app_routes.dart';
+import 'package:class_realm/shared/widgets/shared_widgets.dart';
+import 'package:class_realm/features/student/sub_features/academics/screens/student_assessment_screen.dart';
+import 'package:class_realm/features/student/sub_features/tasks/screens/student_requirements_screen.dart';
+import 'package:class_realm/features/student/sub_features/schedule/screens/student_attendance_screen.dart';
+import 'package:class_realm/features/student/sub_features/schedule/screens/student_schedule_screen.dart';
+import 'package:class_realm/features/student/sub_features/academics/screens/student_learning_materials_screen.dart';
+import 'package:class_realm/features/student/sub_features/academics/screens/student_grades_screen.dart';
+import 'package:class_realm/features/student/sub_features/profile/screens/student_settings_screen.dart';
+import 'package:class_realm/features/student/shared/widgets/student_activity_card.dart';
 
 class StudentHomeScreen extends StatefulWidget {
   const StudentHomeScreen({super.key});
@@ -39,28 +37,40 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
         );
 
     final List<Widget> pages = [
-      _buildHomeTab(activities, quizzes),
-      _buildActivitiesTab(activities),
-      _buildQuizExamTab(quizzes),
-      _buildNotificationsTab(notifications),
-      _buildProfileTab(student),
+      _buildHomeTab(context, activities, quizzes),
+      _buildActivitiesTab(context, activities),
+      _buildQuizExamTab(context, quizzes),
+      _buildNotificationsTab(context, notifications),
+      _buildProfileTab(context, student),
     ];
 
     return Scaffold(
       key: _scaffoldKey,
       appBar: AppBar(
         title: const Text(
-          'ClassRealm',
+          'Student',
           style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
         ),
-        backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
+        // Let the AppBarTheme in app_theme.dart handle colors
         leading: IconButton(
           icon: const Icon(Icons.menu),
           onPressed: () => _scaffoldKey.currentState?.openDrawer(),
         ),
-        actions: const [
-          Center(
+        actions: [
+          IconButton(
+            icon: Icon(
+              Theme.of(context).brightness == Brightness.dark
+                  ? Icons.light_mode_outlined
+                  : Icons.dark_mode_outlined,
+            ),
+            tooltip: 'Toggle Theme',
+            onPressed: () {
+              final isDark = Theme.of(context).brightness == Brightness.dark;
+              AppTheme.themeModeNotifier.value =
+                  isDark ? ThemeMode.light : ThemeMode.dark;
+            },
+          ),
+          const Center(
             child: Padding(
               padding: EdgeInsets.symmetric(horizontal: 12),
               child: SyncStatusBadge(),
@@ -74,8 +84,8 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
         currentIndex: _currentIndex,
         onTap: (idx) => setState(() => _currentIndex = idx),
         type: BottomNavigationBarType.fixed,
-        selectedItemColor: AppColors.primary,
-        unselectedItemColor: AppColors.textSecondary,
+        selectedItemColor: Theme.of(context).colorScheme.primary,
+        unselectedItemColor: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
         items: const [
           BottomNavigationBarItem(
             icon: Icon(Icons.home_outlined),
@@ -108,12 +118,13 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
   }
 
   Widget _buildStudentDrawer(BuildContext context, UserModel student) {
+    final theme = Theme.of(context);
     return Drawer(
       child: ListView(
         padding: EdgeInsets.zero,
         children: [
           DrawerHeader(
-            decoration: const BoxDecoration(color: AppColors.primary),
+            decoration: BoxDecoration(color: theme.colorScheme.primary),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.end,
@@ -122,7 +133,7 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
                   backgroundColor: Colors.white,
                   radius: 28,
                   child: Image.asset(
-                    'lib/school_logo.png',
+                    'assets/branding/school_logo.png',
                     width: 40,
                     height: 40,
                   ),
@@ -213,8 +224,8 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
           ),
           const Divider(),
           ListTile(
-            leading: const Icon(Icons.logout, color: AppColors.error),
-            title: const Text('Logout', style: TextStyle(color: AppColors.error)),
+            leading: const Icon(Icons.logout, color: AppTheme.catRed),
+            title: const Text('Logout', style: TextStyle(color: AppTheme.catRed)),
             onTap: () {
               MockDatabase.instance.logout();
               Navigator.pushReplacementNamed(context, AppRoutes.login);
@@ -226,9 +237,11 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
   }
 
   Widget _buildHomeTab(
+    BuildContext context,
     List<ActivityModel> activities,
     List<QuizOrExamModel> quizzes,
   ) {
+    final theme = Theme.of(context);
     final student =
         MockDatabase.instance.currentUser ??
         MockDatabase.instance.users.firstWhere(
@@ -242,8 +255,8 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [AppColors.primary, AppColors.primaryDark],
+              gradient: LinearGradient(
+                colors: [theme.colorScheme.primary, theme.colorScheme.primary.withValues(alpha: 0.8)],
               ),
               borderRadius: BorderRadius.circular(16),
             ),
@@ -277,7 +290,7 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
                     ],
                   ),
                 ),
-                const Icon(Icons.verified, color: AppColors.success, size: 36),
+                const Icon(Icons.verified, color: AppTheme.catGreen, size: 36),
               ],
             ),
           ),
@@ -302,7 +315,7 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
     );
   }
 
-  Widget _buildActivitiesTab(List<ActivityModel> activities) {
+  Widget _buildActivitiesTab(BuildContext context, List<ActivityModel> activities) {
     final student =
         MockDatabase.instance.currentUser ??
         MockDatabase.instance.users.firstWhere(
@@ -312,7 +325,7 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
     return ListView.separated(
       padding: const EdgeInsets.all(16),
       itemCount: activities.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 12),
+      separatorBuilder: (_, _) => const SizedBox(height: 12),
       itemBuilder: (ctx, i) {
         return StudentActivityCard(
           activity: activities[i],
@@ -323,7 +336,8 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
     );
   }
 
-  Widget _buildQuizExamTab(List<QuizOrExamModel> quizzes) {
+  Widget _buildQuizExamTab(BuildContext context, List<QuizOrExamModel> quizzes) {
+    final theme = Theme.of(context);
     final student =
         MockDatabase.instance.currentUser ??
         MockDatabase.instance.users.firstWhere(
@@ -333,7 +347,7 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
     return ListView.separated(
       padding: const EdgeInsets.all(16),
       itemCount: quizzes.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 12),
+      separatorBuilder: (_, _) => const SizedBox(height: 12),
       itemBuilder: (ctx, i) {
         final q = quizzes[i];
         final result = MockDatabase.instance.resultFor(q.id, student.id);
@@ -341,9 +355,9 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
         return Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: theme.colorScheme.surface,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppColors.border),
+            border: Border.all(color: theme.colorScheme.onSurface.withValues(alpha: 0.12)),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -360,8 +374,8 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
               const SizedBox(height: 4),
               Text(
                 q.description,
-                style: const TextStyle(
-                  color: AppColors.textSecondary,
+                style: TextStyle(
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                   fontSize: 13,
                 ),
               ),
@@ -369,9 +383,8 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
               if (result == null)
                 SizedBox(
                   width: double.infinity,
-                  child: AppPrimaryButton(
+                  child: AppButton.primary(
                     label: 'Start ${q.isExam ? "Examination" : "Quiz"}',
-                    height: 44,
                     onPressed: () async {
                       await StudentAssessmentScreen.start(context, q);
                       setState(() {});
@@ -379,10 +392,10 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
                   ),
                 )
               else if (!result.isReleased)
-                const StatusBadge(
+                StatusBadge(
                   text: 'Submitted — awaiting release',
-                  backgroundColor: AppColors.warningLight,
-                  textColor: AppColors.warning,
+                  backgroundColor: AppTheme.catOrange.withValues(alpha: 0.1),
+                  textColor: AppTheme.catOrange,
                 )
               else
                 Row(
@@ -390,15 +403,13 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
                   children: [
                     Text(
                       'Score: ${result.scoreEarned.toInt()} / ${result.totalPoints.toInt()}',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontWeight: FontWeight.bold,
-                        color: AppColors.primary,
+                        color: theme.colorScheme.primary,
                       ),
                     ),
                     AppSecondaryButton(
                       label: 'View Result',
-                      height: 36,
-                      width: 120,
                       onPressed: () {
                         StudentAssessmentScreen.start(context, q);
                       },
@@ -412,18 +423,19 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
     );
   }
 
-  Widget _buildNotificationsTab(List<AppNotificationModel> notifications) {
+  Widget _buildNotificationsTab(BuildContext context, List<AppNotificationModel> notifications) {
+    final theme = Theme.of(context);
     return ListView.separated(
       padding: const EdgeInsets.all(16),
       itemCount: notifications.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 12),
+      separatorBuilder: (_, _) => const SizedBox(height: 12),
       itemBuilder: (ctx, i) {
         final n = notifications[i];
         return Container(
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: theme.colorScheme.surface,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppColors.border),
+            border: Border.all(color: theme.colorScheme.onSurface.withValues(alpha: 0.12)),
           ),
           child: InkWell(
             onTap: () {
@@ -451,7 +463,7 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: AppColors.primary.withValues(alpha: 0.1),
+                      color: theme.colorScheme.primary.withValues(alpha: 0.1),
                       shape: BoxShape.circle,
                     ),
                     child: Icon(
@@ -460,7 +472,7 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
                           : n.type == 'grade'
                           ? Icons.grade_outlined
                           : Icons.assignment_outlined,
-                      color: AppColors.primary,
+                      color: theme.colorScheme.primary,
                       size: 20,
                     ),
                   ),
@@ -476,8 +488,8 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
                         const SizedBox(height: 4),
                         Text(
                           n.message,
-                          style: const TextStyle(
-                            color: AppColors.textSecondary,
+                          style: TextStyle(
+                            color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                             fontSize: 13,
                           ),
                         ),
@@ -493,22 +505,23 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
     );
   }
 
-  Widget _buildProfileTab(UserModel student) {
+  Widget _buildProfileTab(BuildContext context, UserModel student) {
+    final theme = Theme.of(context);
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Column(
         children: [
-          const CircleAvatar(
+          CircleAvatar(
             radius: 40,
-            backgroundColor: AppColors.primary,
-            child: Icon(Icons.person, size: 48, color: Colors.white),
+            backgroundColor: theme.colorScheme.primary,
+            child: Icon(Icons.person, size: 48, color: theme.colorScheme.onPrimary),
           ),
           const SizedBox(height: 16),
           Text(
             student.fullName,
             style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
           ),
-          Text(student.email, style: const TextStyle(color: AppColors.textSecondary)),
+          Text(student.email, style: TextStyle(color: theme.colorScheme.onSurface.withValues(alpha: 0.6))),
           const SizedBox(height: 24),
           ListTile(
             leading: const Icon(Icons.badge),

@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import '../../../core/theme/app_colors.dart';
-import '../../../data/mock_database.dart';
-import '../../../routes/app_routes.dart';
-import '../../../widgets/common/app_buttons.dart';
-import '../../../widgets/common/app_modals.dart';
+import 'package:class_realm/core/theme/app_theme.dart';
+import 'package:class_realm/data/mock_database.dart';
+import 'package:class_realm/routes/app_routes.dart';
+import 'package:class_realm/widgets/common/app_buttons.dart';
+import 'package:class_realm/widgets/common/app_modals.dart';
 
 class FirstLoginScreen extends StatefulWidget {
   const FirstLoginScreen({super.key});
@@ -72,16 +72,21 @@ class _FirstLoginScreenState extends State<FirstLoginScreen> {
     final user = MockDatabase.instance.currentUser;
     final size = MediaQuery.of(context).size;
     final isDesktop = size.width >= 900;
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
 
     return Scaffold(
       body: Container(
         width: double.infinity,
         height: double.infinity,
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Color(0xFF0F172A), Color(0xFF1E3A8A), Color(0xFF0F172A)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
+        decoration: BoxDecoration(
+          image: DecorationImage(
+            image: const AssetImage('assets/images/auth/school.jpg'),
+            fit: BoxFit.cover,
+            colorFilter: ColorFilter.mode(
+              isDark ? Colors.black87 : Colors.black54,
+              BlendMode.darken,
+            ),
           ),
         ),
         child: Center(
@@ -92,11 +97,11 @@ class _FirstLoginScreenState extends State<FirstLoginScreen> {
               constraints: BoxConstraints(maxWidth: isDesktop ? 520 : 480),
               padding: const EdgeInsets.all(36),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: theme.colorScheme.surface,
                 borderRadius: BorderRadius.circular(24),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.15),
+                    color: Colors.black.withValues(alpha: 0.15),
                     blurRadius: 30,
                     offset: const Offset(0, 10),
                   ),
@@ -118,16 +123,16 @@ class _FirstLoginScreenState extends State<FirstLoginScreen> {
                       child: const Icon(Icons.lock_reset_outlined, color: Color(0xFF7C3AED), size: 32),
                     ),
                     const SizedBox(height: 16),
-                    const Text(
+                    Text(
                       'Set New Password',
                       textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                      style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface),
                     ),
                     const SizedBox(height: 8),
                     Text(
                       'Welcome to ClassRealm${user != null ? ', ${user.firstName ?? user.fullName}' : ''}. For security, you must create a new password before accessing your account.',
                       textAlign: TextAlign.center,
-                      style: const TextStyle(fontSize: 13, color: AppColors.textSecondary, height: 1.5),
+                      style: TextStyle(fontSize: 13, color: theme.colorScheme.onSurface.withValues(alpha: 0.6), height: 1.5),
                     ),
                     const SizedBox(height: 8),
                     Container(
@@ -135,7 +140,7 @@ class _FirstLoginScreenState extends State<FirstLoginScreen> {
                       decoration: BoxDecoration(
                         color: const Color(0xFFFEF3C7),
                         borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: const Color(0xFFF59E0B).withOpacity(0.4)),
+                        border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.4)),
                       ),
                       child: const Text(
                         '⚠️ Prototype: Password changes are simulated in-memory only.',
@@ -152,18 +157,18 @@ class _FirstLoginScreenState extends State<FirstLoginScreen> {
                       validator: (v) => (v == null || v.isEmpty) ? 'Temporary password is required' : null,
                       decoration: InputDecoration(
                         filled: true,
-                        fillColor: const Color(0xFFEFF6FF),
+                        fillColor: theme.scaffoldBackgroundColor,
                         labelText: 'Temporary Password',
-                        prefixIcon: const Icon(Icons.vpn_key_outlined, color: AppColors.primary),
+                        prefixIcon: Icon(Icons.vpn_key_outlined, color: theme.colorScheme.primary),
                         suffixIcon: IconButton(
-                          icon: Icon(_obscureTemp ? Icons.visibility : Icons.visibility_off, size: 20, color: AppColors.textSecondary),
+                          icon: Icon(_obscureTemp ? Icons.visibility : Icons.visibility_off, size: 20, color: theme.colorScheme.onSurface.withValues(alpha: 0.6)),
                           onPressed: () => setState(() => _obscureTemp = !_obscureTemp),
                         ),
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
                         enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.primary, width: 1.5)),
-                        errorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.error)),
-                        focusedErrorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.error, width: 1.5)),
+                        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: theme.colorScheme.primary, width: 1.5)),
+                        errorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppTheme.catRed)),
+                        focusedErrorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppTheme.catRed, width: 1.5)),
                       ),
                     ),
                     const SizedBox(height: 16),
@@ -179,18 +184,18 @@ class _FirstLoginScreenState extends State<FirstLoginScreen> {
                       },
                       decoration: InputDecoration(
                         filled: true,
-                        fillColor: const Color(0xFFEFF6FF),
+                        fillColor: theme.scaffoldBackgroundColor,
                         labelText: 'New Password',
-                        prefixIcon: const Icon(Icons.lock_outline, color: AppColors.primary),
+                        prefixIcon: Icon(Icons.lock_outline, color: theme.colorScheme.primary),
                         suffixIcon: IconButton(
-                          icon: Icon(_obscureNew ? Icons.visibility : Icons.visibility_off, size: 20, color: AppColors.textSecondary),
+                          icon: Icon(_obscureNew ? Icons.visibility : Icons.visibility_off, size: 20, color: theme.colorScheme.onSurface.withValues(alpha: 0.6)),
                           onPressed: () => setState(() => _obscureNew = !_obscureNew),
                         ),
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
                         enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.primary, width: 1.5)),
-                        errorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.error)),
-                        focusedErrorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.error, width: 1.5)),
+                        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: theme.colorScheme.primary, width: 1.5)),
+                        errorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppTheme.catRed)),
+                        focusedErrorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppTheme.catRed, width: 1.5)),
                       ),
                     ),
                     const SizedBox(height: 16),
@@ -206,18 +211,18 @@ class _FirstLoginScreenState extends State<FirstLoginScreen> {
                       },
                       decoration: InputDecoration(
                         filled: true,
-                        fillColor: const Color(0xFFEFF6FF),
+                        fillColor: theme.scaffoldBackgroundColor,
                         labelText: 'Confirm New Password',
-                        prefixIcon: const Icon(Icons.lock_outline, color: AppColors.primary),
+                        prefixIcon: Icon(Icons.lock_outline, color: theme.colorScheme.primary),
                         suffixIcon: IconButton(
-                          icon: Icon(_obscureConfirm ? Icons.visibility : Icons.visibility_off, size: 20, color: AppColors.textSecondary),
+                          icon: Icon(_obscureConfirm ? Icons.visibility : Icons.visibility_off, size: 20, color: theme.colorScheme.onSurface.withValues(alpha: 0.6)),
                           onPressed: () => setState(() => _obscureConfirm = !_obscureConfirm),
                         ),
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
                         enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.primary, width: 1.5)),
-                        errorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.error)),
-                        focusedErrorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.error, width: 1.5)),
+                        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: theme.colorScheme.primary, width: 1.5)),
+                        errorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppTheme.catRed)),
+                        focusedErrorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppTheme.catRed, width: 1.5)),
                       ),
                     ),
                     const SizedBox(height: 28),
@@ -234,9 +239,9 @@ class _FirstLoginScreenState extends State<FirstLoginScreen> {
                         MockDatabase.instance.logout();
                         Navigator.pushReplacementNamed(context, AppRoutes.login);
                       },
-                      child: const Text(
+                      child: Text(
                         'Back to Login',
-                        style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                        style: TextStyle(color: theme.colorScheme.onSurface.withValues(alpha: 0.6), fontSize: 13),
                       ),
                     ),
                   ],

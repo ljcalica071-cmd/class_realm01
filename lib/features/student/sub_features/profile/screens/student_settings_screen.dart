@@ -1,0 +1,126 @@
+import 'package:flutter/material.dart';
+import 'package:class_realm/shared/widgets/shared_widgets.dart';
+
+class StudentSettingsScreen extends StatefulWidget {
+  const StudentSettingsScreen({super.key});
+
+  @override
+  State<StudentSettingsScreen> createState() => _StudentSettingsScreenState();
+}
+
+class _StudentSettingsScreenState extends State<StudentSettingsScreen> {
+  bool _notificationsEnabled = true;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Settings'),
+        backgroundColor: theme.colorScheme.primary,
+        foregroundColor: theme.colorScheme.onPrimary,
+      ),
+      body: Container(
+        color: theme.scaffoldBackgroundColor,
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            _buildSectionHeader(theme, 'PREFERENCES'),
+            Container(
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surface,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: theme.colorScheme.onSurface.withValues(alpha: 0.12)),
+              ),
+              child: Column(
+                children: [
+                  SwitchListTile(
+                    title: const Text('Enable Notifications'),
+                    subtitle: const Text('Receive alerts for activities and grades'),
+                    value: _notificationsEnabled,
+                    activeThumbColor: theme.colorScheme.primary,
+                    onChanged: (val) => setState(() => _notificationsEnabled = val),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+            _buildSectionHeader(theme, 'SECURITY'),
+            Container(
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surface,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: theme.colorScheme.onSurface.withValues(alpha: 0.12)),
+              ),
+              child: Column(
+                children: [
+                  ListTile(
+                    leading: const Icon(Icons.lock_outline),
+                    title: const Text('Change Password'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () {
+                      AppModals.showSuccessDialog(
+                        context: context,
+                        title: 'Feature Simulated',
+                        message:
+                            'The password change flow is available during the first-time login. This settings option is for demonstration only.',
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+            _buildSectionHeader(theme, 'ABOUT'),
+            Container(
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surface,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: theme.colorScheme.onSurface.withValues(alpha: 0.12)),
+              ),
+              child: Column(
+                children: const [
+                  ListTile(
+                    title: Text('App Version'),
+                    trailing: Text('1.0.0 (Prototype)'),
+                  ),
+                  Divider(height: 1),
+                  ListTile(
+                    title: Text('Terms of Service'),
+                    trailing: Icon(Icons.open_in_new, size: 18),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 40),
+            AppButton.primary(
+              label: 'Save Changes',
+              onPressed: () {
+                AppModals.showSuccessDialog(
+                  context: context,
+                  title: 'Settings Saved',
+                  message: 'Your preferences have been updated successfully.',
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSectionHeader(ThemeData theme, String title) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 8, bottom: 8, top: 8),
+      child: Text(
+        title,
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.bold,
+          color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+          letterSpacing: 1.1,
+        ),
+      ),
+    );
+  }
+}
