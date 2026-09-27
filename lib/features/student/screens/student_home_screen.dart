@@ -11,6 +11,7 @@ import 'package:class_realm/features/student/sub_features/schedule/screens/stude
 import 'package:class_realm/features/student/sub_features/schedule/screens/student_schedule_screen.dart';
 import 'package:class_realm/features/student/sub_features/academics/screens/student_learning_materials_screen.dart';
 import 'package:class_realm/features/student/sub_features/academics/screens/student_grades_screen.dart';
+import 'package:class_realm/features/student/sub_features/academics/screens/student_academic_performance_screen.dart';
 import 'package:class_realm/features/student/sub_features/profile/screens/student_settings_screen.dart';
 import 'package:class_realm/features/student/shared/widgets/student_activity_card.dart';
 
@@ -53,7 +54,6 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
           'Student',
           style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
         ),
-        // Let the AppBarTheme in app_theme.dart handle colors
         leading: IconButton(
           icon: const Icon(Icons.menu),
           onPressed: () {
@@ -70,8 +70,9 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
             tooltip: 'Toggle Theme',
             onPressed: () {
               final isDark = Theme.of(context).brightness == Brightness.dark;
-              AppTheme.themeModeNotifier.value =
-                  isDark ? ThemeMode.light : ThemeMode.dark;
+              AppTheme.themeModeNotifier.value = isDark
+                  ? ThemeMode.light
+                  : ThemeMode.dark;
             },
           ),
           const Center(
@@ -89,7 +90,8 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
         onTap: (idx) => setState(() => _currentIndex = idx),
         type: BottomNavigationBarType.fixed,
         selectedItemColor: Theme.of(context).colorScheme.primary,
-        unselectedItemColor: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+        unselectedItemColor: Theme.of(context).colorScheme.onSurface
+            .withValues(alpha: 0.6),
         items: const [
           BottomNavigationBarItem(
             icon: Icon(Icons.home_outlined),
@@ -165,7 +167,9 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
               Navigator.pop(context);
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (_) => const StudentAttendanceScreen()),
+                MaterialPageRoute(
+                  builder: (_) => const StudentAttendanceScreen(),
+                ),
               );
             },
           ),
@@ -176,7 +180,9 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
               Navigator.pop(context);
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (_) => const StudentScheduleScreen()),
+                MaterialPageRoute(
+                  builder: (_) => const StudentScheduleScreen(),
+                ),
               );
             },
           ),
@@ -187,7 +193,9 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
               Navigator.pop(context);
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (_) => const StudentLearningMaterialsScreen()),
+                MaterialPageRoute(
+                  builder: (_) => const StudentLearningMaterialsScreen(),
+                ),
               );
             },
           ),
@@ -216,20 +224,38 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
             },
           ),
           ListTile(
+            leading: const Icon(Icons.school_outlined),
+            title: const Text('My Acad Performance'),
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const StudentAcademicPerformanceScreen(),
+                ),
+              );
+            },
+          ),
+          ListTile(
             leading: const Icon(Icons.settings_outlined),
             title: const Text('Settings'),
             onTap: () {
               Navigator.pop(context);
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (_) => const StudentSettingsScreen()),
+                MaterialPageRoute(
+                  builder: (_) => const StudentSettingsScreen(),
+                ),
               );
             },
           ),
           const Divider(),
           ListTile(
             leading: const Icon(Icons.logout, color: AppTheme.catRed),
-            title: const Text('Logout', style: TextStyle(color: AppTheme.catRed)),
+            title: const Text(
+              'Logout',
+              style: TextStyle(color: AppTheme.catRed),
+            ),
             onTap: () {
               MockDatabase.instance.logout();
               Navigator.pushReplacementNamed(context, AppRoutes.login);
@@ -251,16 +277,21 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
         MockDatabase.instance.users.firstWhere(
           (u) => u.role == UserRole.student,
         );
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Top Welcome Profile Card
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
               gradient: LinearGradient(
-                colors: [theme.colorScheme.primary, theme.colorScheme.primary.withValues(alpha: 0.8)],
+                colors: [
+                  theme.colorScheme.primary,
+                  theme.colorScheme.primary.withValues(alpha: 0.8),
+                ],
               ),
               borderRadius: BorderRadius.circular(16),
             ),
@@ -299,6 +330,33 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
             ),
           ),
           const SizedBox(height: 20),
+
+          // Announcements Section (In the middle, above Pending Written Works)
+          Row(
+            children: [
+              Icon(
+                Icons.campaign_outlined,
+                size: 22,
+                color: theme.colorScheme.onSurface,
+              ),
+              const SizedBox(width: 8),
+              const Text(
+                'Announcements',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          _buildAnnouncementCard(
+            context,
+            icon: Icons.waving_hand_outlined,
+            title: 'Welcome to A.Y. 2026-2027!',
+            descriptionText: 'Happy First Day of Classes! Welcome back to ClassRealm. Make sure to check your class schedule and learning materials to prepare for your daily sessions.',
+            accentColor: theme.colorScheme.primary,
+          ),
+          const SizedBox(height: 20),
+
+          // Pending Written Works Section
           const Text(
             'Pending Written Works',
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
@@ -319,7 +377,94 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
     );
   }
 
-  Widget _buildActivitiesTab(BuildContext context, List<ActivityModel> activities) {
+  Widget _buildAnnouncementCard(
+    BuildContext context, {
+    required IconData icon,
+    required String title,
+    required String descriptionText,
+    required Color accentColor,
+  }) {
+    final theme = Theme.of(context);
+    return Container(
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: theme.colorScheme.onSurface.withValues(alpha: 0.12),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Left Accent Border
+              Container(width: 5, color: accentColor),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Circular Icon Container
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: accentColor.withValues(alpha: 0.12),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(icon, color: accentColor, size: 20),
+                      ),
+                      const SizedBox(width: 14),
+                      // Text Content
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              title,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 15,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              descriptionText,
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: theme.colorScheme.onSurface.withValues(
+                                  alpha: 0.75,
+                                ),
+                                height: 1.35,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildActivitiesTab(
+    BuildContext context,
+    List<ActivityModel> activities,
+  ) {
     final student =
         MockDatabase.instance.currentUser ??
         MockDatabase.instance.users.firstWhere(
@@ -340,7 +485,10 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
     );
   }
 
-  Widget _buildQuizExamTab(BuildContext context, List<QuizOrExamModel> quizzes) {
+  Widget _buildQuizExamTab(
+    BuildContext context,
+    List<QuizOrExamModel> quizzes,
+  ) {
     final theme = Theme.of(context);
     final student =
         MockDatabase.instance.currentUser ??
@@ -361,7 +509,9 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
           decoration: BoxDecoration(
             color: theme.colorScheme.surface,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: theme.colorScheme.onSurface.withValues(alpha: 0.12)),
+            border: Border.all(
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.12),
+            ),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -371,7 +521,10 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
                 children: [
                   Text(
                     q.title,
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
                   ),
                 ],
               ),
@@ -427,7 +580,10 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
     );
   }
 
-  Widget _buildNotificationsTab(BuildContext context, List<AppNotificationModel> notifications) {
+  Widget _buildNotificationsTab(
+    BuildContext context,
+    List<AppNotificationModel> notifications,
+  ) {
     final theme = Theme.of(context);
     return ListView.separated(
       padding: const EdgeInsets.all(16),
@@ -439,7 +595,9 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
           decoration: BoxDecoration(
             color: theme.colorScheme.surface,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: theme.colorScheme.onSurface.withValues(alpha: 0.12)),
+            border: Border.all(
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.12),
+            ),
           ),
           child: InkWell(
             onTap: () {
@@ -455,7 +613,9 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
               } else if (n.type == 'grade') {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (_) => const StudentGradesScreen()),
+                  MaterialPageRoute(
+                    builder: (_) => const StudentGradesScreen(),
+                  ),
                 );
               }
             },
@@ -493,7 +653,9 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
                         Text(
                           n.message,
                           style: TextStyle(
-                            color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                            color: theme.colorScheme.onSurface.withValues(
+                              alpha: 0.6,
+                            ),
                             fontSize: 13,
                           ),
                         ),
@@ -518,14 +680,23 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
           CircleAvatar(
             radius: 40,
             backgroundColor: theme.colorScheme.primary,
-            child: Icon(Icons.person, size: 48, color: theme.colorScheme.onPrimary),
+            child: Icon(
+              Icons.person,
+              size: 48,
+              color: theme.colorScheme.onPrimary,
+            ),
           ),
           const SizedBox(height: 16),
           Text(
             student.fullName,
             style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
           ),
-          Text(student.email, style: TextStyle(color: theme.colorScheme.onSurface.withValues(alpha: 0.6))),
+          Text(
+            student.email,
+            style: TextStyle(
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+            ),
+          ),
           const SizedBox(height: 24),
           ListTile(
             leading: const Icon(Icons.badge),

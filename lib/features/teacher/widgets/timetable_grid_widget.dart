@@ -5,11 +5,7 @@ class TimetableGridWidget extends StatelessWidget {
   final List<ScheduleModel> schedules;
   final Function(ScheduleModel)? onEdit;
 
-  const TimetableGridWidget({
-    super.key,
-    required this.schedules,
-    this.onEdit,
-  });
+  const TimetableGridWidget({super.key, required this.schedules, this.onEdit});
 
   static const int startHour = 7;
   static const int endHour = 20; // Expanded for full range
@@ -64,15 +60,17 @@ class TimetableGridWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final double maxWidth =
-            constraints.maxWidth.isFinite ? constraints.maxWidth : 1400.0;
+        final double maxWidth = constraints.maxWidth.isFinite
+            ? constraints.maxWidth
+            : 1400.0;
         final double minDayWidth = 110.0;
         final double calculatedDayWidth =
             (maxWidth - timeColumnWidth) / days.length;
-        final double dayWidth =
-            calculatedDayWidth < minDayWidth ? minDayWidth : calculatedDayWidth;
+        final double dayWidth = calculatedDayWidth < minDayWidth
+            ? minDayWidth
+            : calculatedDayWidth;
         final double totalGridWidth =
-            timeColumnWidth + (dayWidth * days.length);
+            timeColumnWidth + (dayWidth * days.length) + 16.0;
         final bool needsHorizontalScroll = totalGridWidth > maxWidth;
 
         if (schedules.isEmpty) {
@@ -82,8 +80,11 @@ class TimetableGridWidget extends StatelessWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.calendar_month_outlined,
-                      size: 48, color: Color(0xFF94A3B8)),
+                  const Icon(
+                    Icons.calendar_month_outlined,
+                    size: 48,
+                    color: Color(0xFF94A3B8),
+                  ),
                   const SizedBox(height: 16),
                   const Text(
                     'No schedule entries yet',
@@ -96,10 +97,7 @@ class TimetableGridWidget extends StatelessWidget {
                   const SizedBox(height: 4),
                   Text(
                     'Tap "Add Schedule Entry" to get started',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: Colors.grey.shade400,
-                    ),
+                    style: TextStyle(fontSize: 13, color: Colors.grey.shade400),
                   ),
                 ],
               ),
@@ -137,10 +135,7 @@ class TimetableGridWidget extends StatelessWidget {
           return SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             physics: const BouncingScrollPhysics(),
-            child: SizedBox(
-              width: totalGridWidth,
-              child: gridContent,
-            ),
+            child: SizedBox(width: totalGridWidth, child: gridContent),
           );
         }
 
@@ -159,22 +154,24 @@ class TimetableGridWidget extends StatelessWidget {
       child: Row(
         children: [
           const SizedBox(width: timeColumnWidth),
-          ...days.map((day) => Container(
-                width: dayWidth,
-                alignment: Alignment.center,
-                decoration: const BoxDecoration(
-                  border: Border(left: BorderSide(color: Color(0xFFE2E8F0))),
+          ...days.map(
+            (day) => Container(
+              width: dayWidth,
+              alignment: Alignment.center,
+              decoration: const BoxDecoration(
+                border: Border(left: BorderSide(color: Color(0xFFE2E8F0))),
+              ),
+              child: Text(
+                day.substring(0, 3).toUpperCase(),
+                style: const TextStyle(
+                  fontWeight: FontWeight.w900,
+                  fontSize: 13,
+                  color: Color(0xFF475569),
+                  letterSpacing: 1.2,
                 ),
-                child: Text(
-                  day.substring(0, 3).toUpperCase(),
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w900,
-                    fontSize: 13,
-                    color: Color(0xFF475569),
-                    letterSpacing: 1.2,
-                  ),
-                ),
-              )),
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -190,7 +187,9 @@ class TimetableGridWidget extends StatelessWidget {
           decoration: BoxDecoration(
             border: Border(
               bottom: BorderSide(
-                color: isHourStart ? const Color(0xFFE2E8F0) : const Color(0xFFF1F5F9),
+                color: isHourStart
+                    ? const Color(0xFFE2E8F0)
+                    : const Color(0xFFF1F5F9),
                 width: 1.0,
               ),
             ),
@@ -205,22 +204,24 @@ class TimetableGridWidget extends StatelessWidget {
                   isHourStart ? _formatTimeLabel(index) : '',
                   style: TextStyle(
                     fontSize: 11,
-                    color: isHourStart ? const Color(0xFF1E293B) : const Color(0xFF94A3B8),
+                    color: isHourStart
+                        ? const Color(0xFF1E293B)
+                        : const Color(0xFF94A3B8),
                     fontWeight: FontWeight.bold,
                   ),
                 ),
               ),
-              ...List.generate(days.length, (d) => Container(
-                    width: dayWidth,
-                    decoration: const BoxDecoration(
-                      border: Border(
-                        left: BorderSide(
-                          color: Color(0xFFF1F5F9),
-                          width: 1,
-                        ),
-                      ),
+              ...List.generate(
+                days.length,
+                (d) => Container(
+                  width: dayWidth,
+                  decoration: const BoxDecoration(
+                    border: Border(
+                      left: BorderSide(color: Color(0xFFF1F5F9), width: 1),
                     ),
-                  )),
+                  ),
+                ),
+              ),
             ],
           ),
         );
@@ -235,7 +236,7 @@ class TimetableGridWidget extends StatelessWidget {
     // Precise shading calculation
     final double pixelsPerMinute = rowHeight / 30;
     final int startMinutesRelative = s.startMinutes - (startHour * 60);
-    
+
     if (startMinutesRelative < 0) return const SizedBox.shrink();
 
     final double topOffset = startMinutesRelative * pixelsPerMinute;
