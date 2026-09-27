@@ -66,8 +66,14 @@ class TimetableGridWidget extends StatelessWidget {
       builder: (context, constraints) {
         final double maxWidth =
             constraints.maxWidth.isFinite ? constraints.maxWidth : 1400.0;
-        final double availableWidth = maxWidth - timeColumnWidth;
-        final double dayWidth = availableWidth / days.length;
+        final double minDayWidth = 110.0;
+        final double calculatedDayWidth =
+            (maxWidth - timeColumnWidth) / days.length;
+        final double dayWidth =
+            calculatedDayWidth < minDayWidth ? minDayWidth : calculatedDayWidth;
+        final double totalGridWidth =
+            timeColumnWidth + (dayWidth * days.length);
+        final bool needsHorizontalScroll = totalGridWidth > maxWidth;
 
         if (schedules.isEmpty) {
           return Center(
@@ -101,7 +107,8 @@ class TimetableGridWidget extends StatelessWidget {
           );
         }
 
-        return Container(
+        Widget gridContent = Container(
+          width: totalGridWidth,
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(12),
@@ -125,6 +132,19 @@ class TimetableGridWidget extends StatelessWidget {
             ],
           ),
         );
+
+        if (needsHorizontalScroll) {
+          return SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            physics: const BouncingScrollPhysics(),
+            child: SizedBox(
+              width: totalGridWidth,
+              child: gridContent,
+            ),
+          );
+        }
+
+        return gridContent;
       },
     );
   }
@@ -260,7 +280,7 @@ class TimetableGridWidget extends StatelessWidget {
                       s.subject,
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
-                        fontSize: 15, // Pinalaki ang text
+                        fontSize: 15,
                         color: textColor,
                         height: 1.2,
                       ),
@@ -276,7 +296,6 @@ class TimetableGridWidget extends StatelessWidget {
                         fontWeight: FontWeight.w600,
                       ),
                     ),
-                    // Walang oras sa loob ng block
                   ],
                 ),
               ),
