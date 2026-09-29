@@ -37,12 +37,22 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
   void _handleApproveTeacher(UserModel teacher) {
     setState(() {
-      MockDatabase.instance.updateTeacherStatus(teacher.id, AccountStatus.active);
+      MockDatabase.instance.updateTeacherStatus(teacher.id, AccountStatus.pendingFirstLogin);
     });
+    final lastName = (teacher.lastName ?? teacher.fullName.split(' ').last).toLowerCase();
+    String formattedBday = '19950101';
+    if (teacher.birthday != null) {
+      formattedBday = teacher.birthday!.year.toString() +
+          teacher.birthday!.month.toString().padLeft(2, '0') +
+          teacher.birthday!.day.toString().padLeft(2, '0');
+    }
+    final tempPass = '$lastName$formattedBday';
+
     AppModals.showSuccessDialog(
       context: context,
       title: 'Teacher Approved',
-      message: '${teacher.fullName} has been successfully approved.',
+      message:
+          '${teacher.fullName} has been approved.\n\nAccount Status: Pending First Login\nGenerated Temporary Password: $tempPass\n\nThe teacher will be forced to change this password upon their first login.',
     );
   }
 
@@ -99,14 +109,15 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Exclude mock demo accounts so Admin only manages real registered records
     final teachers = MockDatabase.instance.users
-        .where((u) => u.role == UserRole.teacher)
+        .where((u) => u.role == UserRole.teacher && u.id != 'T001')
         .toList();
     final students = MockDatabase.instance.users
-        .where((u) => u.role == UserRole.student)
+        .where((u) => u.role == UserRole.student && !u.id.startsWith('A'))
         .toList();
     final parents = MockDatabase.instance.users
-        .where((u) => u.role == UserRole.parent)
+        .where((u) => u.role == UserRole.parent && !u.id.startsWith('P'))
         .toList();
     final pendingTeachers = teachers
         .where((t) => t.status == AccountStatus.pending)

@@ -78,7 +78,11 @@ class _LoginScreenState extends State<LoginScreen> {
           Navigator.pushReplacementNamed(context, AppRoutes.adminDashboard);
           break;
         case UserRole.teacher:
-          Navigator.pushReplacementNamed(context, AppRoutes.teacherDashboard);
+          if (!user.isSetupComplete) {
+            Navigator.pushReplacementNamed(context, AppRoutes.academicSetup);
+          } else {
+            Navigator.pushReplacementNamed(context, AppRoutes.teacherDashboard);
+          }
           break;
         case UserRole.student:
           Navigator.pushReplacementNamed(context, AppRoutes.studentHome);
@@ -433,7 +437,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
                     TextButton(
-                      onPressed: () {},
+                      onPressed: () => Navigator.pushNamed(context, AppRoutes.register),
                       style: TextButton.styleFrom(
                         padding: EdgeInsets.zero,
                         minimumSize: const Size(0, 0),

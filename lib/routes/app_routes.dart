@@ -5,7 +5,8 @@ class AppRoutes {
   static const String pendingAccount = '/pending-account';
   static const String firstLogin = '/student/first-login';
 
-  // Dashboards
+  // Dashboards & Wizards
+  static const String academicSetup = '/teacher/academic-setup';
   static const String adminDashboard = '/admin/dashboard';
   static const String teacherDashboard = '/teacher/dashboard';
   static const String studentHome = '/student/home';

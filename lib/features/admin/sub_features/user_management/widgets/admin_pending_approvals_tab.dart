@@ -77,7 +77,7 @@ class AdminPendingApprovalsTab extends StatelessWidget {
                                     ),
                                   ),
                                   Text(
-                                    '${t.email} • ${t.departmentOrSection}',
+                                    '${t.email} • ${t.departmentOrSection ?? "Pending Academic Setup"}',
                                     style: TextStyle(
                                       color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                                       fontSize: 13,

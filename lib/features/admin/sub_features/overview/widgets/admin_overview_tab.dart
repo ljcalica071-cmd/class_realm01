@@ -140,7 +140,7 @@ class AdminOverviewTab extends StatelessWidget {
                               t.fullName,
                               style: const TextStyle(fontWeight: FontWeight.bold),
                             ),
-                            subtitle: Text('${t.email} • ${t.departmentOrSection}'),
+                            subtitle: Text('${t.email} • ${t.departmentOrSection ?? "Pending Academic Setup"}'),
                             trailing: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [

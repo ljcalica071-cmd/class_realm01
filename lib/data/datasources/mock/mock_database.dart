@@ -231,6 +231,7 @@ class MockDatabase {
         email: 'karen.gonzaga@classrealm.edu',
         role: UserRole.teacher,
         departmentOrSection: 'General Mathematics',
+        isSetupComplete: true,
       ),
       ...studentRecords.map((record) {
         final fullName =
@@ -957,6 +958,17 @@ class MockDatabase {
     final idx = users.indexWhere((u) => u.id == teacherId);
     if (idx != -1) {
       users[idx] = users[idx].copyWith(status: newStatus);
+      if (newStatus == AccountStatus.pendingFirstLogin) {
+        final teacher = users[idx];
+        final lastName = (teacher.lastName ?? teacher.fullName.split(' ').last).toLowerCase();
+        String formattedBday = '19950101';
+        if (teacher.birthday != null) {
+          formattedBday = teacher.birthday!.year.toString() +
+              teacher.birthday!.month.toString().padLeft(2, '0') +
+              teacher.birthday!.day.toString().padLeft(2, '0');
+        }
+        _mockPasswords[teacherId] = '$lastName$formattedBday';
+      }
     }
   }
 
@@ -1058,6 +1070,9 @@ class MockDatabase {
     required String studentId,
     required String gender,
     required String contactNumber,
+    required String parentName,
+    required String parentContactNumber,
+    required String parentRelationship,
   }) {
     if (!RegExp(r'^\d{12}$').hasMatch(studentId)) {
       return 'LRN must contain exactly 12 digits.';
@@ -1106,9 +1121,29 @@ class MockDatabase {
       contactNumber: contactNumber,
       gradeLevel: '11',
       password: tempPassword,
+      parentGuardianName: parentName,
+      parentGuardianContact: parentContactNumber,
+      parentGuardianRelationship: parentRelationship,
     );
     users.add(newStudent);
     _mockPasswords[id] = tempPassword;
+    
+    // Auto-create Parent Account
+    final parentId = 'P$studentId';
+    final parentEmail = 'parent.$studentId@classrealm.edu';
+    final newParent = UserModel(
+      id: parentId,
+      username: parentId.toLowerCase(),
+      fullName: parentName,
+      email: parentEmail,
+      role: UserRole.parent,
+      linkedStudentId: id,
+      contactNumber: parentContactNumber,
+      parentGuardianRelationship: parentRelationship,
+    );
+    users.add(newParent);
+    _mockPasswords[parentId] = 'parent123'; // Default mock password for parents
+    
     return null; // success
   }
 
@@ -1161,6 +1196,9 @@ class MockDatabase {
     required String gender,
     required String contactNumber,
     required DateTime birthday,
+    required String parentName,
+    required String parentContactNumber,
+    required String parentRelationship,
   }) {
     final idx = users.indexWhere((u) => u.id == id);
     if (idx == -1) return;
@@ -1183,7 +1221,20 @@ class MockDatabase {
       gender: gender,
       contactNumber: contactNumber,
       gradeLevel: users[idx].gradeLevel ?? '11',
+      parentGuardianName: parentName,
+      parentGuardianContact: parentContactNumber,
+      parentGuardianRelationship: parentRelationship,
     );
+
+    // Update Linked Parent Account if exists
+    final parentIdx = users.indexWhere((u) => u.role == UserRole.parent && u.linkedStudentId == id);
+    if (parentIdx != -1) {
+      users[parentIdx] = users[parentIdx].copyWith(
+        fullName: parentName,
+        contactNumber: parentContactNumber,
+        parentGuardianRelationship: parentRelationship,
+      );
+    }
   }
 
   // Activity Submission & Creation

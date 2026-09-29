@@ -1,0 +1,53 @@
+Trying to open Excel as ZIP archive...
+Successfully opened ZIP.
+Sheets found:
+ - None
+ - None
+ - None
+ - None
+ - None
+ - None
+ - INSTRUCTIONS
+ - INPUT DATA
+ - Term 1
+ - Term 2
+ - Term 3
+ - FINAL GRADES
+ - HELPER
+ - None
+ - None
+ - None
+ - _xlnm._FilterDatabase
+ - _xlnm._FilterDatabase
+ - _xlnm._FilterDatabase
+ - _xlnm._FilterDatabase
+ - _xlnm._FilterDatabase
+ - PERFORMANCETASKS
+ - _xlnm.Print_Area
+ - _xlnm.Print_Area
+ - PT
+ - QA
+ - QUARTERLYASSESSMENT
+ - SUBJECTS
+ - Transmu_Table
+ - WRITTENWORKS
+ - WW
+ - None
+ - None
+ - None
+ - None
+ - microsoft.com:RD
+ - microsoft.com:Single
+ - microsoft.com:FV
+ - microsoft.com:CNMTM
+ - microsoft.com:LET_WF
+ - microsoft.com:LAMBDA_WF
+ - microsoft.com:ARRAYTEXT_WF
+
+Checking for Data Validations (Dropdowns) in sheets...
+Found data validation rules in xl/worksheets/sheet1.xml
+Found data validation rules in xl/worksheets/sheet2.xml
+Found data validation rules in xl/worksheets/sheet3.xml
+Found data validation rules in xl/worksheets/sheet4.xml
+Found data validation rules in xl/worksheets/sheet5.xml
+Found data validation rules in xl/worksheets/sheet6.xml

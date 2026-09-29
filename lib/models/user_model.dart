@@ -27,6 +27,7 @@ class UserModel {
   final String? parentGuardianRelationship;
   final String? parentGuardianContact;
   final String? password; // mock only — not for production
+  final bool isSetupComplete;
 
   const UserModel({
     required this.id,
@@ -42,6 +43,7 @@ class UserModel {
     this.linkedStudentId,
     this.contactNumber,
     this.isArchived = false,
+    this.isSetupComplete = false,
     this.firstName,
     this.middleName,
     this.lastName,
@@ -78,6 +80,7 @@ class UserModel {
     String? parentGuardianRelationship,
     String? parentGuardianContact,
     String? password,
+    bool? isSetupComplete,
   }) {
     return UserModel(
       id: id ?? this.id,
@@ -93,6 +96,7 @@ class UserModel {
       linkedStudentId: linkedStudentId ?? this.linkedStudentId,
       contactNumber: contactNumber ?? this.contactNumber,
       isArchived: isArchived ?? this.isArchived,
+      isSetupComplete: isSetupComplete ?? this.isSetupComplete,
       firstName: firstName ?? this.firstName,
       middleName: middleName ?? this.middleName,
       lastName: lastName ?? this.lastName,

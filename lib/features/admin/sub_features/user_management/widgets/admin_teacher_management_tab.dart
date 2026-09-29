@@ -163,11 +163,44 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: theme.colorScheme.onSurface.withValues(alpha: 0.12)),
               ),
-              child: ListView.separated(
-                itemCount: filtered.length,
-                separatorBuilder: (_, _) => const Divider(height: 1),
-                itemBuilder: (ctx, i) {
-                  final t = filtered[i];
+              child: filtered.isEmpty
+                  ? Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(32.0),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.school_outlined,
+                              size: 48,
+                              color: theme.colorScheme.onSurface.withValues(alpha: 0.3),
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              'No registered teachers found.',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                                color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Newly registered faculty will appear here once submitted and approved.',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                  : ListView.separated(
+                      itemCount: filtered.length,
+                      separatorBuilder: (_, _) => const Divider(height: 1),
+                      itemBuilder: (ctx, i) {
+                        final t = filtered[i];
                   return ListTile(
                     leading: CircleAvatar(
                       backgroundColor: theme.colorScheme.primary,

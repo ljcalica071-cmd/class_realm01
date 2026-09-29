@@ -7,6 +7,7 @@ class AppModals {
     required BuildContext context,
     required String title,
     required String message,
+    VoidCallback? onConfirm,
   }) {
     final theme = Theme.of(context);
     return showDialog(
@@ -40,7 +41,10 @@ class AppModals {
           AppPrimaryButton(
             label: 'OK',
             backgroundColor: AppTheme.catRed,
-            onPressed: () => Navigator.of(ctx).pop(),
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              if (onConfirm != null) onConfirm();
+            },
             width: 100,
             height: 40,
           ),

@@ -466,10 +466,17 @@ This is the **critical onboarding flow** that every teacher must complete before
 
 **Subject Catalog (pre-loaded in system — sourced from DepEd strengthened SHS curriculum):**
 
-The system will store the official subject list as reference data. This includes Core Subjects (e.g., Communications, Filipino History, Basic Math & Science, Computing, Life Skills) and Applied/Specialized subjects by track (Academic / TechPro). The Admin or the system seeds this catalog.
+The system will store the official subject list as reference data. The setup reflects the Excel E-Class Record templates:
+1. **Curriculum Type Selection:** Teacher chooses "Strengthened SHS (New)" or "Old Curriculum".
+2. **If Strengthened SHS:** Teacher selects from dropdowns:
+   - **Subject Category:** `SSHS - CORE`, `SSHS - ACADEMIC`, `SSHS - TECH-PRO`, etc.
+   - **Cluster:** Filters based on Category (e.g., `CORE`, `ARTS, SOCIAL SCIENCES, AND HUMANITIES`, `BUSINESS AND ENTREPRENEURSHIP`).
+   - **Subject:** Filters based on Cluster (e.g., `General Mathematics`, `Earth and Life Science`).
+   - **Terms:** Auto-fills `No. Terms Taught` (3), `Units per term` (2), `Units per year` (6).
+3. **If Old Curriculum:** Uses a "Custom" setup where the teacher manually inputs the WW, PT, EX weights without pre-filled dropdowns.
 
 > [!NOTE]
-> **Teacher handles different subjects for different grade levels.** A teacher teaching Grade 11 General Mathematics and Grade 12 Basic Calculus will see them as two separate teaching assignments. Each has its own sections, schedule, gradebook, assessments, etc.
+> **Instructions & Input Data Views:** Similar to the Excel file, the UI will feature an "Instructions" tab guiding the teacher. The "Input Data" tab will auto-populate School Info and Learner Names into grading terms. Teachers only manually configure the Grade Level, Section Name, and Subject Area Info.
 
 ---
 
@@ -988,12 +995,13 @@ Every user account (Admin, Teacher, Student, Parent) follows this state machine:
 | **Previous Structure** | 4 Quarters (being phased out) | DepEd Order No. 8, s. 2015 |
 | **System Support** | 3 Terms ONLY (new format) | Per user decision |
 | **Grading Components** | Written Works (WW), Performance Tasks (PT), Examinations (EX) | DO 015, s. 2026 |
-| **Component Weights** | Varies by subject area (WW: 20-40%, PT: 50-60%, EX: 20-30%) | Per subject type |
-| **Default Weights** | WW: 20%, PT: 50%, EX: 30% | Standard academic subjects |
-| **Examination Sub-types** | Summative Test 1 (ST1), Summative Test 2 (ST2), Term Examination (TE) | DepEd assessment framework |
-| **Grade Computation** | Raw → Percentage → Weighted → Initial Grade → Transmuted Grade | DepEd transmutation table |
+| **Component Weights Presets** | • Core & Academic: WW 20%, PT 50%, EX 30%<br>• TechPro (TVL/ICT): WW 15%, PT 65%, EX 20%<br>• Arts/Sports: WW 20%, PT 60%, EX 20%<br>• Research/Design: WW 15%, PT 70%, EX 15%<br>• Work Immersion: WW 40%, PT 60% | DO 015, s. 2026 (SSHS ECR Preset) |
+| **Examination Sub-types** | Summative Test 1 (ST1: 30%), Summative Test 2 (ST2: 30%), Term Examination (TE: 40%) | DO 015, s. 2026 EX Internal Weights |
+| **Grade Computation** | Raw → Percentage → Weighted → Initial Grade → Transmuted Grade (Adjusted Table) | DepEd Adjusted Transmutation Table |
+| **Descriptors** | Advancing (90-100), Benchmarking (80-89), Connecting (75-79), Developing (65-74), Emerging (60-64) | DO 015, s. 2026 Qualitative Scale |
+| **Final Grade Formula** | $\text{Final Grade} = \text{ROUND}((\text{TG}_1 + \text{TG}_2 + \text{TG}_3) / 3, 0)$ | 3-Term Trimester Averaging |
 | **Upcoming Change** | Zero-Based Grading (no transmutation) planned for SY 2027-2028 | DepEd announcement |
-| **SHS Curriculum** | "Strengthened SHS" — streamlined to 5-7 core subjects + electives | DepEd SHS reform |
+| **SHS Curriculum** | "Strengthened SHS" — streamlined to core subjects + electives | DepEd SHS reform |
 | **Tracks** | Academic Track, Technical-Professional (TechPro) Track | DO structure |
 
 ### How ClassRealm Aligns
@@ -1001,10 +1009,10 @@ Every user account (Admin, Teacher, Student, Parent) follows this state machine:
 | DepEd Requirement | ClassRealm Implementation |
 |---|---|
 | 3-term calendar | School Year Setup enforces 3 terms with start/end dates per term |
-| Subject-specific weights | Teacher configures WW/PT/EX weights per subject (must sum to 100%) |
-| Transmutation table | Built into the grading engine (Step 2 will define schema) |
+| Subject-specific weights | Automatic presets via Category/Cluster selection + Custom Override mode (See [Gradebook_Architecture.md](file:///c:/Users/Admin/AndroidStudioProjects/class_realm01/Gradebook_Architecture.md#L24-L135)) |
+| Transmutation table | 41-tier Adjusted Transmutation Table built into DB & grading engine |
 | Assessment categories | Explicit `AssessmentCategory` enum: `writtenWork`, `performanceTask`, `summativeTest1`, `summativeTest2`, `termExamination` |
-| Term-based final grade | Final Grade = average of 3 term grades |
+| Term-based final grade | Final Grade = average of 3 term grades rounded to nearest integer |
 
 ---
 
@@ -1197,7 +1205,7 @@ Data gathered from client interview (Ms. [Client Name], School Representative):
 | Rule | Client's Answer | System Implementation |
 |---|---|---|
 | Max subjects per teacher | **No hard limit** — max 6 hours of teaching per day | ~~Max 3 subjects~~ → Removed. Enforce 6-hour daily teaching cap via schedule validation. System warns when a teacher's total scheduled hours exceed 6/day. |
-| Section shifting / transfer mid-year | **NOT ALLOWED** — students stay in their section | No section transfer feature needed for students. Enrollment is permanent per school year. |
+| Section shifting / transfer mid-year | **NOT ALLOWED** — students stay in their section | No section transfer feature needed for students. Enrollment is permanent per school year. If enrolled in the wrong section, the record must be Archived and a new enrollment created. |
 | Teacher with 2+ subjects | **Yes** (e.g., Statistics AND General Mathematics) | Already supported in our multi-subject design. |
 | Who moves between rooms? | **Teachers move**, not students | Room assignment is per schedule entry, not per section. Teacher's schedule shows different rooms at different times. |
 | Grading weights (WW/PT/EX) | **Teacher self-configures** per subject | No global weight enforcement. Teacher sets percentages in Gradebook Setup. Must sum to 100%. |
@@ -1304,20 +1312,22 @@ These are representative subjects per cluster. The actual list depends on what t
 ### How the Catalog Works in the System
 
 ```
-subject_catalog table (seeded by system, editable by Admin)
+subject_catalog table (seeded by system, matching Excel template)
 ├── id: UUID
+├── category: "SSHS - CORE" | "SSHS - ACADEMIC" | "SSHS - TECH-PRO"
+├── cluster: "CORE" | "ARTS, SOCIAL SCIENCES, AND HUMANITIES" | "BUSINESS AND ENTREPRENEURSHIP" | etc.
 ├── name: "General Mathematics"
 ├── grade_level: 11
-├── cluster: "Core" | "STEM" | "Business" | "ASSH" | "ICT" | ...
-├── track: "Academic" | "TechPro" | "Both"
-├── is_active: true (Admin can deactivate subjects not offered)
-└── created_at / updated_at
+├── no_terms_taught: 3
+├── units_per_term: 2.0
+├── units_per_year: 6.0
+└── is_active: true
 
-When teacher selects subjects in Academic Setup:
-├── Filter by grade_level (11 or 12)
-├── Filter by is_active = true
-├── Exclude subjects already assigned to this teacher
-└── Show grouped by cluster for easy browsing
+When teacher selects "Strengthened SHS" in Academic Setup:
+├── 1. Select Category (Dropdown)
+├── 2. Select Cluster (Filtered by Category)
+├── 3. Select Subject (Filtered by Cluster)
+└── Auto-fills Terms and Units
 ```
 
 ---
@@ -1328,11 +1338,12 @@ When teacher selects subjects in Academic Setup:
 
 | Status | Meaning | Triggers |
 |---|---|---|
-| `active` | Currently enrolled and participating | Default on enrollment |
-| `dropped` | Student has dropped out after formal process | Teacher marks after completing letter → visitation → agreement process |
-| `transferred_out` | Student transferred to another school | Teacher marks when student leaves |
-| `transferred_in` | Student is a transferee from another school | Teacher marks during enrollment, enters previous grades |
-| `completed` | Student finished the school year | Auto-set at end of school year if all grades are finalized |
+| `Pending` | Student data entered, awaiting finalization | Created by Teacher |
+| `PendingFirstLogin` | Account created, awaiting student login | Teacher finalizes enrollment |
+| `Active` | Currently enrolled and participating | Student logs in / verified |
+| `Dropped` | Student has dropped out after formal process | Teacher marks after completing offline process |
+| `Transferred` | Student transferred to another school (In/Out) | Teacher marks when student leaves or arrives |
+| `Archived` | Student record is invalid or from a past year | Admin/Teacher soft-deletes the record |
 
 ### Drop Flow
 
@@ -1410,6 +1421,713 @@ Teacher clicks "Add Student" → marks "Transfer Student" toggle
 
 ---
 
+## 1.17 Forgot Password Flow
+
+> [!NOTE]
+> Applies to ALL user types (Teacher, Student, Parent). Same process regardless of role.
+
+### When to Use
+
+- User forgets their password (including the auto-generated temp password).
+- User wants to reset after suspected account compromise.
+
+### Flow
+
+```
+User clicks "Forgot Password?" on Login Screen
+│
+├── Show Forgot Password Screen:
+│   ┌──────────────────────────────────────────────────┐
+│   │  FORGOT PASSWORD                                  │
+│   │                                                   │
+│   │  Enter the email address linked to your account. │
+│   │  We'll send you a password reset link.           │
+│   │                                                   │
+│   │  Email *  [________________________]             │
+│   │                                                   │
+│   │  [ Back to Login ]  [ Send Reset Link ]          │
+│   └──────────────────────────────────────────────────┘
+│
+├── User enters email → clicks "Send Reset Link"
+│   ├── Client-side: Valid email format?
+│   │   ├── NO → Inline error: "Please enter a valid email address."
+│   │   └── YES ↓
+│   │
+│   ├── Firebase Auth: sendPasswordResetEmail(email)
+│   │   ├── Generates one-time secure reset link
+│   │   ├── Sends email to user
+│   │   └── Link expires in 1 hour (Firebase default)
+│   │
+│   └── Show confirmation (SAME message whether email exists or not):
+│       ┌──────────────────────────────────────────────────┐
+│       │  📧 CHECK YOUR EMAIL                              │
+│       │                                                   │
+│       │  If an account exists with that email, we've     │
+│       │  sent a password reset link.                      │
+│       │                                                   │
+│       │  • Check your inbox (and spam folder)            │
+│       │  • Link expires in 1 hour                        │
+│       │  • Didn't receive it? Try again                  │
+│       │                                                   │
+│       │  [ Back to Login ]  [ Resend Link ]              │
+│       └──────────────────────────────────────────────────┘
+│
+├── User clicks link in email → Firebase Reset Page
+│   ├── Enter new password (same rules as Section 1.5):
+│   │   ├── Min 8 chars, 1 uppercase, 1 lowercase, 1 number, 1 special char
+│   │   └── Confirm password must match
+│   ├── Firebase updates password
+│   └── Redirect to Login: "Password reset successful!"
+│
+└── Rate Limiting (Anti-Abuse):
+    ├── Max 3 reset requests per email per hour
+    └── Firebase built-in IP-based rate limiting
+```
+
+### Edge Cases
+
+| Scenario | System Behavior |
+|---|---|
+| Email not registered | Same "check your email" message (prevents email enumeration attack) |
+| Student/Parent without email | Must contact Teacher → Teacher resets from Dashboard (see below) |
+| Reset link expired | "Link expired. Please request a new one." |
+| Account is `pending` / `rejected` | Reset processes, but login blocked until approved |
+| Account is `deactivated` | Reset processes, but Supabase status check blocks login |
+
+### Manual Password Reset by Teacher (For Students/Parents Without Email)
+
+```
+Teacher Dashboard → Student Management → Select Student → "Reset Password"
+│
+├── Confirmation dialog:
+│   ┌──────────────────────────────────────────────────┐
+│   │  🔄 RESET STUDENT PASSWORD                       │
+│   │                                                   │
+│   │  Reset password for Juan Dela Cruz to the        │
+│   │  default temporary password?                      │
+│   │                                                   │
+│   │  New temp password: delacruz03202010              │
+│   │  (lastname + birthday MMDDYYYY)                   │
+│   │                                                   │
+│   │  Student will be required to change this          │
+│   │  password on their next login.                    │
+│   │                                                   │
+│   │  [ Cancel ]  [ Reset Password ]                  │
+│   └──────────────────────────────────────────────────┘
+│
+├── Teacher confirms
+│   ├── Firebase Auth: update password → temp password
+│   ├── Supabase: is_first_login = true (forces change on next login)
+│   └── Teacher notifies student verbally of the reset
+│
+└── Student logs in with temp password → forced to change again
+```
+
+---
+
+## 1.18 Attendance Computation & Auto-Drop Rules
+
+> [!IMPORTANT]
+> **Per-term rule** drops from **THAT SUBJECT ONLY** (hindi lahat). **Overall rule** drops from **ALL SUBJECTS**. These are separate, independent checks.
+
+### Rule 1: Per-Subject Per-Term Auto-Drop
+
+| Parameter | Value |
+|---|---|
+| **Threshold** | ≥ 12 absent days in ONE subject in ONE term |
+| **Scope** | Per subject, per term (based on subject's class schedule) |
+| **Based On** | Only the scheduled class days of that specific subject |
+| **Result** | Student → **DROPPED from THAT SUBJECT ONLY** |
+| **Other Subjects** | **NOT affected** — student remains active in all other subjects |
+
+#### How "Absent Day" Is Counted
+
+```
+"Absent Day" = 1 scheduled class meeting that the student did NOT attend.
+
+Example: General Mathematics is scheduled Mon, Wed, Fri
+├── Student absent on Monday → 1 absent day for Math
+├── Student absent on Monday AND Wednesday → 2 absent days for Math
+├── Only MATH class days are counted, NOT other subjects
+├── Late ≠ Absent (Late has its own separate tracking)
+└── Excused absence = still counted as absent (affects threshold)
+
+Per-Term Calculation:
+├── Term 1 has ~65 total school days
+├── Math (MWF) has ~39 class meetings in Term 1
+├── Science (TTh) has ~26 class meetings in Term 1
+├── If student misses 12 of those 39 Math meetings → DROP THRESHOLD HIT for Math
+├── But student only missed 4 Science meetings → Science is SAFE
+└── Student gets dropped from Math ONLY, stays in Science
+```
+
+#### Warning Flow
+
+```
+System detects student has reached 12 absences in Math (Term 1)
+│
+├── Teacher Dashboard shows alert:
+│   ┌──────────────────────────────────────────────────────┐
+│   │  ⚠️ ATTENDANCE DROP ALERT                            │
+│   │                                                       │
+│   │  Juan Dela Cruz has reached 12 absences in           │
+│   │  General Mathematics (Term 1).                       │
+│   │                                                       │
+│   │  Absent: 12 / 39 class meetings (30.8%)              │
+│   │                                                       │
+│   │  Per school policy, this student is eligible          │
+│   │  for dropping from this subject.                      │
+│   │                                                       │
+│   │  [ View Attendance Record ]                          │
+│   │  [ Mark as Dropped ]  [ Dismiss ]                    │
+│   └──────────────────────────────────────────────────────┘
+│
+├── NOTE: System does NOT auto-drop. It WARNS the teacher.
+│   Teacher makes the final decision after reviewing.
+│
+└── If teacher confirms drop:
+    ├── Enrollment status for THIS subject → 'dropped'
+    ├── Grades for this subject → frozen
+    └── Student remains ACTIVE in all OTHER subjects
+```
+
+### Rule 2: Overall Cross-Term Auto-Drop (Buong School Year)
+
+| Parameter | Value |
+|---|---|
+| **Threshold** | ≥ 20% of total school days absent across Terms 1-3 |
+| **Scope** | ALL subjects combined, entire school year |
+| **Result** | Student → **DROPPED from ALL SUBJECTS** |
+
+#### How It's Computed
+
+```
+At any point during the school year:
+│
+├── total_class_meetings = SUM of all scheduled meetings across ALL subjects
+│   Example: Math(39) + Science(26) + English(39) + PE(13) + ... = 200 total
+│
+├── total_absent = SUM of all absences across ALL subjects in Terms 1-3
+│   Example: Math(5) + Science(8) + English(12) + PE(3) + ... = 40 total
+│
+├── absence_rate = (total_absent / total_class_meetings) × 100
+│   = (40 / 200) × 100 = 20.0%
+│
+├── IF absence_rate >= 20%:
+│   ├── Alert ALL teachers handling this student:
+│   │   "🔴 CRITICAL: Juan Dela Cruz has exceeded 20% total absences
+│   │    across all subjects (20.0%). Eligible for school-wide dropping."
+│   │
+│   ├── Admin also notified for review
+│   │
+│   └── Once confirmed by Admin/Teacher:
+│       ├── ALL enrollments → 'dropped'
+│       ├── Student account → 'deactivated'
+│       └── All grades → frozen at current values
+│
+└── IF absence_rate < 20%:
+    └── No action. Continue monitoring.
+```
+
+### Attendance Dashboard Indicators (Per Student)
+
+```
+┌────────────────────────────────────────────────────────────┐
+│  Juan Dela Cruz — General Mathematics (Term 1)             │
+│                                                            │
+│  Present: 28  │  Absent: 9  │  Late: 3  │  Excused: 2    │
+│                                                            │
+│  Per-Subject:  ██████████████████░░░░  9/12 absences       │
+│  ▲ WARNING — 3 absences away from subject drop             │
+│                                                            │
+│  Overall (All Subjects): 14.2% absent (threshold: 20%)     │
+│  ████████████████░░░░░░░░░░  14.2% / 20%                  │
+│  ▲ Approaching overall threshold                           │
+└────────────────────────────────────────────────────────────┘
+```
+
+### Color-Coded Alert Levels
+
+**Per-Subject (Per Term):**
+
+| Absent Count | Color | Alert Level |
+|---|---|---|
+| 0 – 6 | 🟢 Green | Normal |
+| 7 – 9 | 🟡 Yellow | Warning — Nearing limit |
+| 10 – 11 | 🟠 Orange | Critical — 1-2 absences away |
+| 12+ | 🔴 Red | Drop threshold reached — Action required |
+
+**Overall (Cross-Term, All Subjects):**
+
+| Absence Rate | Color | Alert Level |
+|---|---|---|
+| 0% – 10% | 🟢 Green | Normal |
+| 10% – 15% | 🟡 Yellow | Warning |
+| 15% – 19% | 🟠 Orange | Critical |
+| 20%+ | 🔴 Red | Drop threshold — Action required |
+
+---
+
+## 1.19 Assessment Engine (WW, PT, Quiz, ST1, ST2, TE)
+
+> 🔲 **TODO — Awaiting detailed specifications.** Add your details below the marker.
+
+### Topics to Cover When Complete
+
+- [ ] How teachers create Written Works (WW) activities
+- [ ] How teachers create Performance Tasks (PT)
+- [ ] How to create Quizzes
+- [ ] Summative Tests (ST1, ST2) creation flow
+- [ ] Term Examination (TE) creation flow
+- [ ] Question types: Multiple Choice, True/False, Identification, Essay
+- [ ] Scoring rules, total points, passing scores
+- [ ] Deadline and late submission handling
+- [ ] Student submission flow (file upload, online answer)
+- [ ] Teacher grading/checking flow
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- 📝 ADD YOUR ASSESSMENT ENGINE DETAILS BELOW THIS LINE  -->
+<!-- ═══════════════════════════════════════════════════════ -->
+
+
+
+---
+
+## 1.20 Anti-Cheat Exam Engine
+
+> 🔲 **TODO — Awaiting detailed specifications.** Add your details below the marker.
+
+### Topics to Cover When Complete
+
+- [ ] Full-screen lock during exams (mobile & web)
+- [ ] Tab-switch / app-switch detection and penalties
+- [ ] How many warnings before auto-submit? (e.g., 3 warnings)
+- [ ] Randomized question order per student
+- [ ] Randomized answer choices per question
+- [ ] Time limit per exam and per question (optional)
+- [ ] Auto-submit when time runs out
+- [ ] Exam violation logging and teacher notification
+- [ ] Teacher live monitoring view during exam
+- [ ] Copy-paste blocking
+- [ ] Screen record/screenshot detection (if possible)
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- 📝 ADD YOUR ANTI-CHEAT ENGINE DETAILS BELOW THIS LINE  -->
+<!-- ═══════════════════════════════════════════════════════ -->
+
+
+
+---
+
+## 1.21 Item Analysis Engine
+
+> 🔲 **TODO — Awaiting detailed specifications.** Add your details below the marker.
+
+### Topics to Cover When Complete
+
+- [ ] Difficulty Index formula: P = R / N
+- [ ] Discrimination Index formula: D = (U - L) / Ng
+- [ ] How questions are classified: Retain, Revise, or Discard
+- [ ] Per-question breakdown view for teachers
+- [ ] Per-exam summary statistics
+- [ ] Auto-computed after all students finish the exam
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- 📝 ADD YOUR ITEM ANALYSIS ENGINE DETAILS BELOW THIS LINE -->
+<!-- ═══════════════════════════════════════════════════════ -->
+
+
+
+---
+
+## 1.22 DepEd Grading Computation Engine
+
+> 🔲 **TODO — Awaiting detailed specifications.** Add your details below the marker.
+
+### Topics to Cover When Complete
+
+- [ ] Step-by-step formula: Raw Score → Percentage Score → Weighted Score → Initial Grade → Transmuted Grade
+- [ ] DepEd Transmutation Table (exact values)
+- [ ] How WW, PT, EX weights are applied per subject
+- [ ] Term grade computation
+- [ ] Final Grade = average of 3 term grades
+- [ ] Teacher grade override/adjustment capability
+- [ ] Passing grade threshold (75 transmuted = passing)
+- [ ] Zero-Based Grading readiness (SY 2027-2028)
+- [ ] Handling of incomplete grades
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- 📝 ADD YOUR GRADING ENGINE DETAILS BELOW THIS LINE     -->
+<!-- ═══════════════════════════════════════════════════════ -->
+
+
+
+---
+
+## 1.23 Lesson Plan Generator & Learning Materials
+
+> 🔲 **TODO — Awaiting detailed specifications.** Add your details below the marker.
+
+### Topics to Cover When Complete
+
+- [ ] Lesson plan template structure (topic, objectives, activities, assessment)
+- [ ] AI-assisted lesson plan generation flow (if applicable)
+- [ ] Manual creation flow
+- [ ] File upload for learning materials (PDF, images, documents, links)
+- [ ] File size limits (max 2MB per file, enforced)
+- [ ] Organization by subject, term, and topic
+- [ ] How students access uploaded materials
+- [ ] Editing and versioning of saved lesson plans
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- 📝 ADD YOUR LESSON PLAN DETAILS BELOW THIS LINE        -->
+<!-- ═══════════════════════════════════════════════════════ -->
+
+
+
+---
+
+## 1.24 Student Mobile App Flow
+
+> 🔲 **TODO — Awaiting detailed specifications.** Add your details below the marker.
+> See also: [Section 1.30 Input Fields Registry](#130-input-fields-registry) for Student account fields.
+
+### Topics to Cover When Complete
+
+- [ ] Student first-time login and password change (mobile)
+- [ ] Multi-subject dashboard navigation (shows all enrolled subjects)
+- [ ] Viewing attendance record per subject
+- [ ] Taking quizzes/exams on phone (with anti-cheat fullscreen lock)
+- [ ] Submitting assignments and performance tasks (file upload or online)
+- [ ] Viewing grades per term and general average
+- [ ] Viewing and downloading learning materials
+- [ ] Viewing class schedule
+- [ ] Viewing announcements
+- [ ] Profile settings and password change
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- 📝 ADD YOUR STUDENT APP FLOW DETAILS BELOW THIS LINE   -->
+<!-- ═══════════════════════════════════════════════════════ -->
+
+
+
+---
+
+## 1.25 Parent Mobile App Flow
+
+> 🔲 **TODO — Awaiting detailed specifications.** Add your details below the marker.
+> See also: [Section 1.30 Input Fields Registry](#130-input-fields-registry) for Parent account fields.
+
+### Topics to Cover When Complete
+
+- [ ] Parent account creation by Teacher (linked to student via LRN)
+- [ ] Parent first-time login and password change (mobile)
+- [ ] How parent links to their child's account (LRN + birthday verification?)
+- [ ] Viewing child's attendance (real-time alerts via FCM push notification)
+- [ ] Viewing child's grades per subject and term
+- [ ] Viewing child's class schedule
+- [ ] Receiving announcements from teachers
+- [ ] Multiple children support (can 1 parent link to many students?)
+- [ ] Parent notification preferences
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- 📝 ADD YOUR PARENT APP FLOW DETAILS BELOW THIS LINE    -->
+<!-- ═══════════════════════════════════════════════════════ -->
+
+
+
+---
+
+## 1.26 Admin Portal Complete Flow
+
+> 🔲 **TODO — Awaiting detailed specifications.** Add your details below the marker.
+> Note: Basic approval/rejection flow is already defined in [Section 1.4](#14-admin-approval-flow).
+
+### Topics to Cover When Complete
+
+- [ ] Admin dashboard overview (total teachers, students, pending approvals)
+- [ ] Teacher account management (approve, reject, deactivate, view all)
+- [ ] Master Student Directory (search by LRN across all teachers/sections)
+- [ ] System settings (school year management, subject catalog editing)
+- [ ] Audit logs (who did what, when)
+- [ ] Data export capabilities (DepEd reports, attendance summaries)
+- [ ] Admin account management (how to add more admins? Pre-seeded only?)
+- [ ] System monitoring and usage statistics
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- 📝 ADD YOUR ADMIN PORTAL DETAILS BELOW THIS LINE       -->
+<!-- ═══════════════════════════════════════════════════════ -->
+
+
+
+---
+
+## 1.27 ESP32/RFID Hardware Integration
+
+> 🔲 **TODO — Awaiting detailed specifications.** Add your details below the marker.
+
+### Topics to Cover When Complete
+
+- [ ] ESP32 microcontroller + RC522 RFID reader hardware setup
+- [ ] Data format transmitted by ESP32 (UID, timestamp, format)
+- [ ] Connection method: USB Serial / Bluetooth / Local WiFi AP
+- [ ] RFID card registration flow (teacher assigns card UID to student LRN)
+- [ ] What happens when an unregistered card taps
+- [ ] Multiple readers support (1 per classroom?)
+- [ ] Power supply and hardware placement considerations
+- [ ] Offline buffering on ESP32 vs on Flutter app
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- 📝 ADD YOUR HARDWARE INTEGRATION DETAILS BELOW THIS LINE -->
+<!-- ═══════════════════════════════════════════════════════ -->
+
+
+
+---
+
+## 1.28 Notification System
+
+> 🔲 **TODO — Awaiting detailed specifications.** Add your details below the marker.
+
+### Topics to Cover When Complete
+
+- [ ] Notification types (attendance alert, grade posted, announcement, assessment due, drop warning)
+- [ ] Who receives what (Teacher → ?, Student → ?, Parent → ?, Admin → ?)
+- [ ] Push notification via Firebase FCM (mobile)
+- [ ] In-app notification center (web & mobile)
+- [ ] Email notifications (which events trigger email?)
+- [ ] Read/unread status tracking
+- [ ] Notification preferences (can users mute certain types?)
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- 📝 ADD YOUR NOTIFICATION SYSTEM DETAILS BELOW THIS LINE -->
+<!-- ═══════════════════════════════════════════════════════ -->
+
+
+
+---
+
+## 1.29 Reports & Data Export
+
+> 🔲 **TODO — Awaiting detailed specifications.** Add your details below the marker.
+
+### Topics to Cover When Complete
+
+- [ ] DepEd School Form 2 (SF2) — Daily Attendance Report export
+- [ ] Class record / Grade sheet export (per subject, per term)
+- [ ] Student performance summary (per student, across subjects)
+- [ ] Attendance summary report (monthly, per term)
+- [ ] Item analysis report (per exam)
+- [ ] Export formats: PDF, Excel (.xlsx), CSV
+- [ ] Who can generate which reports (Teacher, Admin)
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- 📝 ADD YOUR REPORTS & EXPORT DETAILS BELOW THIS LINE   -->
+<!-- ═══════════════════════════════════════════════════════ -->
+
+
+
+---
+
+## 1.30 Input Fields Registry
+
+> [!IMPORTANT]
+> This section lists **ALL input fields for EVERY form** in the system.
+> Fields marked 🔲 **TODO** still need to be decided — **ikaw ang mag-fill in** kung kailangan o hindi.
+> Fields marked ✅ are already defined in earlier sections.
+> I-edit mo lang ang tables below para mag-add, mag-remove, o mag-change ng field requirements.
+
+### A. Teacher Account — Registration Form (Ref: Section 1.3)
+
+| # | Field Name | Type | Required? | Status | Notes |
+|---|---|---|---|---|---|
+| 1 | First Name | String | ✅ Required | ✅ Defined | 2-50 chars, letters/spaces/hyphens |
+| 2 | Middle Name | String | Optional | ✅ Defined | Same rules if provided |
+| 3 | Last Name | String | ✅ Required | ✅ Defined | 2-50 chars |
+| 4 | Birthday | DateTime | ✅ Required | ✅ Defined | Age ≥ 21, Year ≥ 1960 |
+| 5 | Age | int | Auto-calc | ✅ Defined | Read-only, computed from birthday |
+| 6 | Email | String | ✅ Required | ✅ Defined | Must be unique in system |
+| 7 | Gender | Enum | ✅ Required | ✅ Defined | Male / Female |
+| 8 | Terms Accepted | bool | ✅ Required | ✅ Defined | Must be true to submit |
+| 9 | Name Extension (Jr., III) | String | ? | 🔲 TODO | _Decide if needed_ |
+| 10 | Phone / Contact Number | String | ? | 🔲 TODO | _Decide if needed_ |
+| 11 | DepEd Employee ID | String | ? | 🔲 TODO | _For Admin verification?_ |
+| 12 | PRC License Number | String | ? | 🔲 TODO | _Optional teaching license proof?_ |
+| 13 | Profile Photo | File | Optional (in Profile Settings) | ✅ Defined | **Only allowed image type in system:** `.jpg`, `.jpeg`, `.png` only (Max 500 KB, auto-compressed to $\le 100\text{ KB}$, 1:1 square crop). Excluded from initial registration form. |
+| 14 | Specialization / Major | String | ? | 🔲 TODO | _e.g., "Mathematics", "English"_ |
+| 15 | Address | String | ? | 🔲 TODO | _Full address or barangay/city only?_ |
+
+<!-- 📝 ADD MORE TEACHER FIELDS ABOVE IF NEEDED -->
+
+### B. Student Account — Add Student Form (Ref: Section 1.9)
+
+| # | Field Name | Type | Required? | Status | Notes |
+|---|---|---|---|---|---|
+| 1 | First Name | String | ✅ Required | ✅ Defined | 2-50 chars |
+| 2 | Middle Name | String | Optional | ✅ Defined | |
+| 3 | Last Name | String | ✅ Required | ✅ Defined | 2-50 chars |
+| 4 | LRN | String | ✅ Required | ✅ Defined | Exactly 12 digits, unique |
+| 5 | Birthday | DateTime | ✅ Required | ✅ Defined | Age 10-25, Year ≥ 2000 |
+| 6 | Age | int | Auto-calc | ✅ Defined | Read-only |
+| 7 | Gender | Enum | ✅ Required | ✅ Defined | Male / Female |
+| 8 | Contact # | String | Optional | ✅ Defined | Student's own or guardian's |
+| 9 | Subject Assignment | FK | ✅ Required | ✅ Defined | From teacher's active subjects |
+| 10 | Section Assignment | FK | ✅ Required | ✅ Defined | From sections under subject |
+| 11 | Name Extension (Jr., III) | String | ? | 🔲 TODO | _Decide if needed_ |
+| 12 | Strand / Track | Enum | ? | 🔲 TODO | _STEM, ABM, HUMSS, TVL, etc._ |
+| 13 | Guardian / Parent Name | String | ? | 🔲 TODO | _For linking parent accounts_ |
+| 14 | Guardian Contact # | String | ? | 🔲 TODO | _If different from student contact_ |
+| 15 | Email | String | ? | 🔲 TODO | _Not all students have email_ |
+| 16 | Address | String | ? | 🔲 TODO | _Home address_ |
+| 17 | RFID Card UID | String | ? | 🔲 TODO | _Assigned during RFID card registration_ |
+| 18 | Profile Photo | File | Optional (in Profile Settings) | ✅ Defined | **Only allowed image type:** `.jpg`/`.png` only, Max 500 KB (auto-compressed to $\le 100\text{ KB}$, 1:1 square crop). |
+
+<!-- 📝 ADD MORE STUDENT FIELDS ABOVE IF NEEDED -->
+
+### C. Parent Account — Created by Teacher
+
+> 🔲 **TODO — Parent account creation flow is not yet defined.**
+> Fill in the fields below when ready. All fields are tentative.
+
+| # | Field Name | Type | Required? | Status | Notes |
+|---|---|---|---|---|---|
+| 1 | First Name | String | ? | 🔲 TODO | |
+| 2 | Middle Name | String | ? | 🔲 TODO | |
+| 3 | Last Name | String | ? | 🔲 TODO | |
+| 4 | Name Extension (Jr., III) | String | ? | 🔲 TODO | |
+| 5 | Relationship to Student | Enum | ? | 🔲 TODO | _Mother, Father, Guardian_ |
+| 6 | Linked Student LRN | String | ? | 🔲 TODO | _Which student is this parent linked to?_ |
+| 7 | Birthday | DateTime | ? | 🔲 TODO | _For temp password generation_ |
+| 8 | Gender | Enum | ? | 🔲 TODO | |
+| 9 | Email | String | ? | 🔲 TODO | _"Not all have Gmail" — make optional?_ |
+| 10 | Phone / Contact # | String | ? | 🔲 TODO | _For SMS or app-based notifications_ |
+| 11 | Address | String | ? | 🔲 TODO | _Same as student or different?_ |
+
+<!-- 📝 ADD MORE PARENT FIELDS ABOVE WHEN DECIDED -->
+
+### D. Admin Account — Pre-Seeded by Capstone Team
+
+> Admin accounts are **NOT** created through registration. Pre-seeded by the development team.
+
+| # | Field Name | Type | Required? | Status | Notes |
+|---|---|---|---|---|---|
+| 1 | First Name | String | Required | 🔲 TODO | _Define validation rules_ |
+| 2 | Last Name | String | Required | 🔲 TODO | |
+| 3 | Email | String | Required | 🔲 TODO | _Used for login_ |
+| 4 | Password | String | Required | 🔲 TODO | _Set manually during seeding_ |
+| 5 | Role | Enum | Required | ✅ Defined | Always 'admin' |
+
+### E. Assessment Form Fields
+
+> 🔲 **TODO — Define when Assessment Engine (Section 1.19) is completed.**
+
+| # | Field Name | Type | Required? | Status | Notes |
+|---|---|---|---|---|---|
+| 1 | Title | String | ? | 🔲 TODO | _e.g., "Quiz 1: Polynomials"_ |
+| 2 | Assessment Category | Enum | ? | 🔲 TODO | _WW, PT, ST1, ST2, TE_ |
+| 3 | Total Points | int | ? | 🔲 TODO | |
+| 4 | Passing Score | int | ? | 🔲 TODO | |
+| 5 | Due Date / Schedule | DateTime | ? | 🔲 TODO | |
+| 6 | Term | Enum | ? | 🔲 TODO | _Term 1, 2, or 3_ |
+| 7 | Time Limit (minutes) | int | ? | 🔲 TODO | _For exams only?_ |
+| 8 | Anti-Cheat Enabled | bool | ? | 🔲 TODO | _For online exams_ |
+| 9 | Shuffle Questions | bool | ? | 🔲 TODO | |
+| 10 | Instructions | String | ? | 🔲 TODO | |
+| 11 | Assigned Section(s) | FK[] | ? | 🔲 TODO | _Which sections take this?_ |
+
+<!-- 📝 ADD MORE ASSESSMENT FIELDS ABOVE WHEN DECIDED -->
+
+### F. Question / Item Fields (Per Question in an Assessment)
+
+> 🔲 **TODO — Define when Assessment Engine (Section 1.19) is completed.**
+
+| # | Field Name | Type | Required? | Status | Notes |
+|---|---|---|---|---|---|
+| 1 | Question Text | String | ? | 🔲 TODO | |
+| 2 | Question Type | Enum | ? | 🔲 TODO | _MC, True/False, Identification, Essay_ |
+| 3 | Image Attachment | File | ? | 🔲 TODO | _Optional per question_ |
+| 4 | Choices (A-D) | String[] | ? | 🔲 TODO | _For MC questions only_ |
+| 5 | Correct Answer | String | ? | 🔲 TODO | |
+| 6 | Points | int | ? | 🔲 TODO | _Per question_ |
+| 7 | Cognitive Level (Bloom's) | Enum | ? | 🔲 TODO | _Remember, Understand, Apply, etc._ |
+
+<!-- 📝 ADD MORE QUESTION FIELDS ABOVE WHEN DECIDED -->
+
+### G. Lesson Plan Form Fields
+
+> 🔲 **TODO — Define when Lesson Plan section (Section 1.23) is completed.**
+
+| # | Field Name | Type | Required? | Status | Notes |
+|---|---|---|---|---|---|
+| 1 | Lesson Topic | String | ? | 🔲 TODO | |
+| 2 | Learning Objectives | String[] | ? | 🔲 TODO | |
+| 3 | Subject | FK | ? | 🔲 TODO | |
+| 4 | Term | Enum | ? | 🔲 TODO | |
+| 5 | Lesson Content / Info | String | ? | 🔲 TODO | |
+| 6 | Activities | String | ? | 🔲 TODO | |
+| 7 | Assessment Method | String | ? | 🔲 TODO | |
+
+<!-- 📝 ADD MORE LESSON PLAN FIELDS ABOVE WHEN DECIDED -->
+
+### H. Learning Material Upload Fields
+
+> 📄 **Document Formats Only:** Strictly `.pdf`, `.docx`, `.doc`, `.xlsx`, `.xls`, `.pptx`, `.ppt` (Max 5 MB). Direct image (`.jpg`/`.png`) and video (`.mp4`) uploads are strictly prohibited. For video lessons, teachers use the Video Resource Link field (YouTube/Google Drive).
+
+| # | Field Name | Type | Required? | Status | Notes / Restrictions |
+|---|---|---|---|---|---|
+| 1 | Material Title | String | ✅ Required | ✅ Defined | 2–100 characters |
+| 2 | File Upload | File | Optional (if link provided) | ✅ Defined | **Strictly PDF, Word, Excel, PPT only (Max 5 MB)**. Direct JPG/PNG/MP4 blocked. |
+| 3 | Video Resource Link | String (URL) | Optional | ✅ Defined | YouTube (Unlisted) or Google Drive link for video lectures (0 MB storage consumed). |
+| 4 | File Type | Enum | Auto | ✅ Defined | Auto-detected: `PDF`, `DOCX`, `XLSX`, `PPTX`, `VIDEO_LINK` |
+| 5 | Category / Topic | String | ✅ Required | 🔲 TODO | e.g. "Lesson 1: Functions and Graphs" |
+| 6 | Subject | FK | ✅ Required | ✅ Defined | References teacher's active teaching assignment |
+| 7 | Term | Enum | ✅ Required | ✅ Defined | `Term 1`, `Term 2`, or `Term 3` |
+| 8 | Upload Date | DateTime | Auto | ✅ Defined | System-generated timestamp |
+
+<!-- 📝 ADD MORE MATERIAL FIELDS ABOVE WHEN DECIDED -->
+
+### I. Schedule Data Fields
+
+> Partially defined in Section 1.6 (Academic Setup Wizard Step 4).
+
+| # | Field Name | Type | Required? | Status | Notes |
+|---|---|---|---|---|---|
+| 1 | Subject | FK | ✅ Required | ✅ Defined | |
+| 2 | Section | FK | ✅ Required | ✅ Defined | |
+| 3 | Day of Week | Enum | ✅ Required | ✅ Defined | _Mon-Fri_ |
+| 4 | Start Time | Time | ✅ Required | ✅ Defined | |
+| 5 | End Time | Time | ✅ Required | ✅ Defined | _Duration ≥ 30 min, ≤ 4 hours_ |
+| 6 | Room | String | Optional | ✅ Defined | _Some schools don't assign rooms_ |
+
+### J. Notification Fields
+
+> 🔲 **TODO — Define when Notification System (Section 1.28) is completed.**
+
+| # | Field Name | Type | Required? | Status | Notes |
+|---|---|---|---|---|---|
+| 1 | Notification Type | Enum | ? | 🔲 TODO | _attendance, grade, announcement, etc._ |
+| 2 | Message | String | ? | 🔲 TODO | |
+| 3 | Recipient | FK | ? | 🔲 TODO | |
+| 4 | Date/Time | DateTime | ? | 🔲 TODO | |
+| 5 | Read/Unread Status | bool | ? | 🔲 TODO | |
+
+<!-- 📝 ADD MORE NOTIFICATION FIELDS ABOVE WHEN DECIDED -->
+
+### K. Offline Sync Data Fields
+
+> System-managed. Users do NOT manually control sync.
+
+| # | Field Name | Type | Required? | Status | Notes |
+|---|---|---|---|---|---|
+| 1 | Offline Record ID | UUID | Auto | 🔲 TODO | _Local primary key_ |
+| 2 | Record Type | Enum | Auto | 🔲 TODO | _attendance, etc._ |
+| 3 | Payload (JSON) | String | Auto | 🔲 TODO | _The data to sync_ |
+| 4 | Created At | DateTime | Auto | 🔲 TODO | _When recorded offline_ |
+| 5 | Sync Status | Enum | Auto | 🔲 TODO | _PENDING, SYNCED, FAILED_ |
+| 6 | Synced At | DateTime | Auto | 🔲 TODO | _When successfully uploaded_ |
+
+---
+
 ## CLARIFYING QUESTIONS ANSWERED (For Reference)
 
 ### Round 1 (Initial Design)
@@ -1429,6 +2147,7 @@ Teacher clicks "Add Student" → marks "Transfer Student" toggle
 | Student dedup identifier? | LRN (12-digit unique DepEd ID) | LRN is the primary deduplication key. System checks LRN before creating any new student account. |
 | Student view scope? | Active enrollments + toggle for past/completed | Student home shows current subjects by default. "Past Subjects" toggle shows completed/archived. |
 | Dropped student handling? | Mark as 'Dropped' — account preserved, grades frozen | `dropped` enrollment status. Login deactivated. Records preserved for reporting. |
+
 | Transfer student grades? | Teacher manually enters previous school grades | `is_transferee` flag + manual grade entry during enrollment. Grades carry over to computation. |
 
 ---

@@ -44,8 +44,11 @@ class _EditStudentDialogState extends State<EditStudentDialog> {
   late final TextEditingController _emailCtrl;
   late final TextEditingController _studentIdCtrl;
   late final TextEditingController _contactCtrl;
+  late final TextEditingController _parentNameCtrl;
+  late final TextEditingController _parentContactCtrl;
   String? _gender;
   DateTime? _birthday;
+  String? _parentRelationship;
 
   @override
   void initState() {
@@ -57,6 +60,9 @@ class _EditStudentDialogState extends State<EditStudentDialog> {
     _emailCtrl = TextEditingController(text: s.email);
     _studentIdCtrl = TextEditingController(text: s.lrn ?? s.studentId ?? '');
     _contactCtrl = TextEditingController(text: s.contactNumber ?? '');
+    _parentNameCtrl = TextEditingController(text: s.parentGuardianName ?? '');
+    _parentContactCtrl = TextEditingController(text: s.parentGuardianContact ?? '');
+    _parentRelationship = s.parentGuardianRelationship ?? 'Mother';
     _gender = s.gender;
     _birthday = s.birthday;
   }
@@ -69,6 +75,8 @@ class _EditStudentDialogState extends State<EditStudentDialog> {
     _emailCtrl.dispose();
     _studentIdCtrl.dispose();
     _contactCtrl.dispose();
+    _parentNameCtrl.dispose();
+    _parentContactCtrl.dispose();
     super.dispose();
   }
 
@@ -95,6 +103,9 @@ class _EditStudentDialogState extends State<EditStudentDialog> {
       gender: _gender!,
       contactNumber: _contactCtrl.text.trim(),
       birthday: _birthday ?? widget.student.birthday ?? DateTime(2006, 1, 1),
+      parentName: _parentNameCtrl.text.trim(),
+      parentContactNumber: _parentContactCtrl.text.trim(),
+      parentRelationship: _parentRelationship ?? 'Mother',
     );
 
     Navigator.of(context).pop();
@@ -266,8 +277,43 @@ class _EditStudentDialogState extends State<EditStudentDialog> {
                 const SizedBox(height: 16),
                 _buildField(
                   _contactCtrl,
-                  'Contact Number *',
+                  'Student Contact Number *',
                   keyboardType: TextInputType.phone,
+                ),
+                const SizedBox(height: 16),
+                const _SectionLabel('Parent / Guardian Details'),
+                _buildField(
+                  _parentNameCtrl,
+                  'Parent / Guardian Name *',
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildField(
+                        _parentContactCtrl,
+                        'Parent Contact Number *',
+                        keyboardType: TextInputType.phone,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: DropdownButtonFormField<String>(
+                        initialValue: _parentRelationship,
+                        decoration: const InputDecoration(
+                          labelText: 'Relationship *',
+                        ),
+                        items: const [
+                          DropdownMenuItem(value: 'Mother', child: Text('Mother')),
+                          DropdownMenuItem(value: 'Father', child: Text('Father')),
+                          DropdownMenuItem(value: 'Guardian', child: Text('Guardian')),
+                        ],
+                        validator: (value) =>
+                            value == null ? 'Relationship is required' : null,
+                        onChanged: (value) => setState(() => _parentRelationship = value),
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 12),
                 Container(

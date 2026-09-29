@@ -1,0 +1,186 @@
+--- EXCEL DEEP INSPECTION ---
+Total Shared Strings: 455
+Sample Strings (First 150):
+  [0] Exclusively for Strengthened SHS Curriculum Implementers
+  [1] Instructions: 
+  [2] Accomplishing the Electronic Class Record (ECR) for SSHS
+  [3] Input the correct data for the following sections. Any details entered here are used throughout the e-Class Record.
+  [4] This template is intended exclusively 
+  [5] for Strengthened SHS Curriculum implementers
+  [6] .
+  [7] SCHOOL INFO
+  [8] Select the Region where the school is located
+  [9] →
+  [10] REGION
+  [11] :
+  [12] Input the respective Schools Division Office
+  [13] DIVISION
+  [14] Enter the six (6) digit school ID
+  [15] SCHOOL ID
+  [16] Enter the name of the school
+  [17] SCHOOL NAME
+  [18] Enter the current school year
+  [19] SCHOOL YEAR
+  [20] 2026 – 2027
+  [21] Upon donwload of this ECR, the School Year (2026–2027) is already pre-filled
+  [22] . This may be updated.
+  [23] TEACHER, GRADE LEVEL, AND SUBJECT AREA INFO
+  [24] Enter teacher's name.
+  [25] TEACHER
+  [26] Input the grade level taught. This field only accepts 11 or 12.
+  [27] GRADE LEVEL
+  [28] Enter section name.
+  [29] SECTION NAME
+  [30] Indicate "
+  [31] Various Sections
+  [32] " if the class is composed of learners from different sections.
+  [33] Select a Subject Category: ACADEMIC, TECH-PRO, or CORE.
+  [34] SUBJECT CATEGORY
+  [35] Select the appropriate subject cluster.
+  [36] CLUSTER
+  [37] Select the subject / elective from the dropdown.
+  [38] SUBJECT
+  [39] If applicable, select
+  [40]  “Other Elective and Special Curricular Program”
+  [41] , then enter the new elective or subject in the field provided. Complete the details of the subject in the correct fields.
+  [42] Other Elective & Special Curricular Program / Subject
+  [43] Text highlighted in orange
+  [44]  indicates that the selected Track, Cluster, or Subject is not applicable to the grade level. Select only from the available dropdown options.
+  [45] NO. TERMS TAUGHT
+  [46] Term Blk
+  [47] UNITS PER TERM
+  [48] As an additional guide, the number of terms in which the subject is taught (1 or 3), as well as the units to be earned per term and per year, will be displayed once a subject or elective is selected. 
+  [49] For Other Electives, manually enter these details in the correct fields.
+  [50] UNITS PER YEAR
+  [51] For electives offered for one or two terms, indicate the “Term Block.” Data may only be encoded in the sheet corresponding to the selected term. For electives offered for two terms, indicate the first term in which the elective is offered. The succeeding term will automatically be displayed.
+  [52] A
+  [53]  helper notification
+  [54]  will display next to the No. of Terms Taught indicating how many Term sheets need to be accomplished.
+  [55] LEARNERS' NAMES
+  [56] MALE
+  [57] FEMALE
+  [58] Either manually type the learners' LRNs and names or copy from SF1 and paste onto their respective columns (Male or Female).
+  [59] LRN
+  [60] Name
+  [61] Up to 50 learners per group (Male/Female) may be entered. Ensure that the actual class size does not exceed the prescribed maximum class size.
+  [62] ↓
+  [63] TIPS:
+  [64] Press Control + Shift + V to paste values only.
+  [65] In cases where 
+  [66] multiple sections
+  [67]  are handled in one class, the corresponding section may be indicated in the row immediately preceding the learners’ names, provided that sufficient rows are available. Color coding may also be used to group learners accordingly.
+  [68] INSTRUCTIONS
+  [69] INPUT DATA
+  [70] Term 1
+  [71] Term 2
+  [72] Term 3
+  [73] Input the raw scores per Summative Assessment component to compute for the term grades and final grades.
+  [74] SUMMATIVE ASSESSMENT SCORES
+  [75] IMPORTANT!
+  [76] Select the appropriate sheet for the term (Term 1, Term 2, and/or Term 3).
+  [77] If the subject is taught for only one term, accomplish only the corresponding sheet for that term. If the subject is taught across three terms, accomplish all Term sheets.
+  [78] Blue cells
+  [79] Recommended number
+  [80]  of summative assessments per component.
+  [81] Check whether the details entered in the INPUT sheet are captured correctly.
+  [82] Blank white cells
+  [83] Cells where the highest possible scores and actual scores should be entered.
+  [84] Under each Summative Assessment component, input the following:
+  [85] HIGHEST POSSIBLE SCORE
+  [86] Enter the highest possible score for each assessment.
+  [87] Gray cells
+  [88] Non-editable cells; no values should be entered.
+  [89] ACTUAL SCORE
+  [90] Enter the corresponding raw score for each learner.
+  [91] Use the dropdown menu under "LEARNERS' NAMES" to select the learners to be graded.
+  [92] Green text in gray cells
+  [93] Indicates an invalid entry; remove the entry or encode the corresponding highest possible score first.
+  [94] IMPORTANT NOTES:
+  [95] To ensure proper data entry, the score columns are grayed out until the Highest Possible Score is entered.
+  [96] Green cells
+  [97] Indicate a failing mark.
+  [98] “INCORRECT SHEET. Do not use this sheet to input data.”
+  [99]  is displayed above the term sheet to indicate that the sheet is not applicable for data entry.
+  [100] Review final grades. The computation of final grades depends on the selected subject and grade level.
+  [101] Grades are computed in accordance with 
+  [102] DepEd Order No. 015, s. 2026
+  [103] , titled "Revised Guidelines on Classroom Assessment, Grading System, and Awards and Recognition for the K to 12 Basic Education Program."
+  [104] ACCRONYMS
+  [105] EX
+  [106] Examinations
+  [107] TG
+  [108] Term Grade (TG)
+  [109] IG
+  [110] Initial Grade
+  [111] WS
+  [112] Weighted Score
+  [113] The grading system for the 
+  [114] Strengthened Senior High School (SSHS)
+  [115]  follows a different set of weights for each component.
+  [116] PS
+  [117] Percentage Score
+  [118] WW
+  [119] Written/Oral Works
+  [120] PT
+  [121] Product/Performance Tasks
+  [122] Weight of the Components for the 
+  [123] Strengthened Senior High School (SSHS)
+  [124] Subject
+  [125] Component
+  [126] NOTE:
+  [127] WWs
+  [128] PTs
+  [129] EXs
+  [130] *
+  [131] Given the applied and performance-based nature of SHS Field Exposure, Arts Apprenticeship, Creative Production, and Innovation, the ST–TE component shall consist solely of a Term Examination (TE), with no Summative Tests (STs), and shall carry the full 15% weight.
+  [132] Core
+  [133] Academic Electives
+  [134] All Other Electives
+  [135] Research and Design and Innovation
+  [136] Arts, Sports, Health and Wellness Electives
+  [137] ADJUSTED TRANSMUTATION TABLE
+  [138] Field Experience
+  [139] *
+  [140] 15%
+  [141] Transmuted Grade
+  [142] TechPro Electives
+  [143] Min.
+  [144] Max.
+  [145] Work Immersion
+  [146] ---
+  [147] How the Grade Is Computed
+  [148] Once the raw scores are encoded, the ECR automatically computes the grades as follows:
+  [149] Step 1. Compute the Percentage Scores (PS)
+Sheet Name: INSTRUCTIONS, SheetId: 33, RelId: rId1
+Sheet Name: INPUT DATA, SheetId: 26, RelId: rId2
+Sheet Name: Term 1, SheetId: 30, RelId: rId3
+Sheet Name: Term 2, SheetId: 34, RelId: rId4
+Sheet Name: Term 3, SheetId: 35, RelId: rId5
+Sheet Name: FINAL GRADES, SheetId: 29, RelId: rId6
+Sheet Name: HELPER, SheetId: 31, RelId: rId7
+
+--- DATA VALIDATIONS BY SHEET ---
+
+xl/worksheets/sheet1.xml:
+  - Type: list, SqRef: U24, F1: "11,12", F2: 
+
+xl/worksheets/sheet2.xml:
+  - Type: list, SqRef: F10:H10, F1: "Select Region, CAR , NCR , Region I , Region II , Region III , Region IV-A , MIMAROPA , Region V , Region VI , Region VII , Region VIII , NIR , Region IX , Region X , Region XI , Region XII , CARAGA, BARMM", F2: 
+  - Type: list, SqRef: F24:G24, F1: "11,12", F2: 
+  - Type: list, SqRef: F28:H28, F1: INDIRECT(HELPER!$F$8), F2: 
+  - Type: list, SqRef: F29:H29, F1: INDIRECT(HELPER!$F$9), F2: 
+  - Type: list, SqRef: H33 H51, F1: "FIRST TERM, SECOND TERM, THIRD TERM", F2: 
+  - Type: list, SqRef: F51, F1: "1,2,3", F2: 
+  - Type: list, SqRef: F30:H31, F1: INDIRECT(HELPER!$F$10), F2: 
+
+xl/worksheets/sheet3.xml:
+  - Type: list, SqRef: D17:M117 Q17:Z117 AD17:AF117, F1: _xlfn.ANCHORARRAY(D$120), F2: 
+
+xl/worksheets/sheet4.xml:
+  - Type: list, SqRef: D17:M117 Q17:Z117 AD17:AF117, F1: _xlfn.ANCHORARRAY(D$120), F2: 
+
+xl/worksheets/sheet5.xml:
+  - Type: list, SqRef: D17:M117 Q17:Z117 AD17:AF117, F1: _xlfn.ANCHORARRAY(D$120), F2: 
+
+xl/worksheets/sheet6.xml:
+  - Type: , SqRef: L17 J17:J117, F1: , F2: 

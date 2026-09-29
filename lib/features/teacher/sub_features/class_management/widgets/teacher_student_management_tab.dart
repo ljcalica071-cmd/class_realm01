@@ -1230,7 +1230,7 @@ class _TeacherStudentManagementTabState
                       ),
                       SizedBox(height: 12),
                       Text(
-                        'Required: LRN, Last Name, First Name, Gender, Birthday, Email, Contact Number',
+                        'Required: LRN, Last Name, First Name, Gender, Birthday, Email, Student Contact, Parent Name, Parent Contact, Relationship',
                         textAlign: TextAlign.center,
                         style: TextStyle(color: Color(0xFF475569)),
                       ),
