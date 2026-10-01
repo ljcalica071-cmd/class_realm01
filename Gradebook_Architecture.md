@@ -136,9 +136,11 @@ $$\text{EX Weighted Score (WS)} = \text{Total EX PS} \times \text{Weight}_{\text
 ### Scenario 1: First-Time Gradebook Setup (Replacing "Input Data" Sheet)
 Kapag unang beses binuksan ni teacher ang Gradebook para sa isang klase (e.g., Gen Math):
 1.  **Prompt:** *"Configure Grading Weights for [Subject Name]"*
-2.  **Select Curriculum System:**
-    *   **Strengthened SHS (New Curriculum):** Automatic na may dropdown templates ang system (Category -> Cluster -> Subject). Naka-lock at automatic na ang WW=20%, PT=50%, EX=30% o kung ano mang standard preset ang kasama ng subject na yun base sa Excel.
-    *   **Old Curriculum (Custom Setup):** Walang provided na exact template, kaya dito gagamit ang teacher ng custom inputs para i-type nang mano-mano ang percentages ng WW, PT, at EX nila (basta mag-total sa 100%).
+2.  **Select Curriculum System & Setup Mode:**
+    *   **Grade 11 (Strengthened SHS — New Curriculum):** May automatic dropdown templates para sa Core Subjects at Elective Clusters (*Business & Entrepreneurship*, *Social Sciences & Humanities*). Automatic ang default DO 15 presets (WW=20%, PT=50%, EX=30%). May **Custom Fallback** din kung gustong mag-type ng ibang Subject Name si Grade 11 teacher.
+    *   **Grade 12 (Old Curriculum — 3 Terms):** Sumusunod din sa **3 Terms (Trimester)** schedule at may **100% kaparehong grading computation engine** (WW PS/WS + PT PS/WS + EX PS/WS, 41-tier transmutation, 3-term average). Dahil Old Curriculum pa ang Grade 12, gagamit ang teacher ng Custom Setup Mode para i-type nang mano-mano ang Subject Name at ang sarili nilang WW, PT, at EX percentages (na kailangang mag-total sa 100%).
+
+
 3.  **Component Builder:**
     *   Kung Strengthened SHS, lalabas agad ang breakdown. Kung custom, ita-type pa lang.
     *   Sa ilalim ng **EX (30%)**, pwedeng mag-add ng "Child Components" (ST1, ST2, TE) gaya ng nasa excel template para mas detailed ang pagkuha ng EX score.

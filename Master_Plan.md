@@ -464,19 +464,23 @@ This is the **critical onboarding flow** that every teacher must complete before
 | Subject catalog enforced | Subjects must come from the official DepEd-provided list stored in the system. Grade 11 and Grade 12 have separate, non-overlapping subject pools. |
 | No duplicate subjects | A teacher cannot select the same subject twice. |
 
-**Subject Catalog (pre-loaded in system — sourced from DepEd strengthened SHS curriculum):**
+**Subject Catalog & Curriculum Rules (Grade 11 New Curriculum vs Grade 12 Old Curriculum):**
 
-The system will store the official subject list as reference data. The setup reflects the Excel E-Class Record templates:
-1. **Curriculum Type Selection:** Teacher chooses "Strengthened SHS (New)" or "Old Curriculum".
-2. **If Strengthened SHS:** Teacher selects from dropdowns:
-   - **Subject Category:** `SSHS - CORE`, `SSHS - ACADEMIC`, `SSHS - TECH-PRO`, etc.
-   - **Cluster:** Filters based on Category (e.g., `CORE`, `ARTS, SOCIAL SCIENCES, AND HUMANITIES`, `BUSINESS AND ENTREPRENEURSHIP`).
-   - **Subject:** Filters based on Cluster (e.g., `General Mathematics`, `Earth and Life Science`).
-   - **Terms:** Auto-fills `No. Terms Taught` (3), `Units per term` (2), `Units per year` (6).
-3. **If Old Curriculum:** Uses a "Custom" setup where the teacher manually inputs the WW, PT, EX weights without pre-filled dropdowns.
+The system stores the official subject list as reference data and supports flexible teacher overrides:
+
+1. **Grade 11 (New Curriculum — DepEd Strengthened SHS):**
+   - **Template Mode (Default & Automated):** Pre-loaded templates for Core Subjects (*Effective Communication*, *Mabisang Komunikasyon*, *Life & Career Skills*, *Gen Math*, *Gen Science*, *Kasaysayan*) and Elective Clusters (*Business and Entrepreneurship*, *Social Sciences and Humanities*). Selecting a template automatically populates the Subject Name and default DO 15 weights (WW 20%, PT 50%, EX 30%).
+   - **Custom Fallback Mode:** May opsyon si Grade 11 teacher na huwag gumamit ng template at mag-type ng sariling Subject Name at custom WW/PT/EX % weights kung kinakailangan.
+
+2. **Grade 12 (Old Curriculum — Transitioning):**
+   - Kasalukuyang gumagamit ng **Old Curriculum**, ngunit sumusunod din sa **3-Term (Trimester)** schedule.
+   - Ang grading computation pipeline ay **100% kapareho** ng Grade 11 (WW + PT + EX weighted scores ➔ 41-tier transmutation ➔ 3-term average).
+   - **Custom Setup Mode:** Dahil Old Curriculum ang Grade 12, mano-manong ita-type ni teacher ang Subject Name at iseset ang sariling % weights ng Written Work (WW), Performance Task (PT), at Exam (EX) na kailangang mag-total sa **100%**.
+
 
 > [!NOTE]
 > **Instructions & Input Data Views:** Similar to the Excel file, the UI will feature an "Instructions" tab guiding the teacher. The "Input Data" tab will auto-populate School Info and Learner Names into grading terms. Teachers only manually configure the Grade Level, Section Name, and Subject Area Info.
+
 
 ---
 

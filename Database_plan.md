@@ -70,11 +70,9 @@ Wala tayong gagawing tables dito dahil NoSQL at pre-built ang Firebase para dito
 
 **Table: `teacher_profiles`**
 *   `id` : `UUID` (Primary Key -> `users.id`)
-*   `employee_id` : `VARCHAR(50)` (Unique)
 *   `first_name` : `VARCHAR(30)` (Required)
 *   `last_name` : `VARCHAR(30)` (Required)
 *   `middle_name` : `VARCHAR(30)` (Optional)
-*   `department` : `VARCHAR(100)`
 *   `is_setup_complete` : `BOOLEAN` (Default: FALSE)
 
 **Table: `student_profiles`**
@@ -95,18 +93,18 @@ Wala tayong gagawing tables dito dahil NoSQL at pre-built ang Firebase para dito
 *   `contact_number` : `VARCHAR(11)` (Must start with '09' format)
 
 ### 2. Academic Setup (Setup Wizard Data & Templates)
-**Table: `subject_catalog`** *(The Global Template for Subjects based on DepEd Strengthened SHS)*
-*   `id` : `UUID` (Primary Key)
-*   `category` : `VARCHAR(20)` (e.g., 'SSHS - CORE', 'SSHS - ACADEMIC', 'SSHS - TECH-PRO')
-*   `cluster` : `VARCHAR(60)` (e.g., 'CORE', 'ARTS, SOCIAL SCIENCES, AND HUMANITIES')
-*   `name` : `VARCHAR(100)` (e.g., 'General Mathematics', 'Earth and Life Science')
+**Table: `subject_catalog`** *(The Global Template for Official Subjects based on DepEd Strengthened SHS)*
+*   `id` : `UUID` (Primary Key, `uuid_generate_v4()`)
 *   `grade_level` : `INTEGER` (11 or 12)
-*   `no_terms_taught` : `INTEGER` (Default: 3)
-*   `units_per_term` : `NUMERIC(4,2)` (Default: 2)
-*   `units_per_year` : `NUMERIC(4,2)` (Default: 6)
-*   `default_ww_weight` : `NUMERIC(5,2)` (e.g. 20.00, 15.00)
-*   `default_pt_weight` : `NUMERIC(5,2)` (e.g. 50.00, 65.00)
-*   `default_ex_weight` : `NUMERIC(5,2)` (e.g. 30.00, 20.00)
+*   `category` : `VARCHAR(30)` ('CORE', 'ACADEMIC_ELECTIVE', 'TECHPRO_ELECTIVE')
+*   `cluster` : `VARCHAR(60)` ('CORE', 'Business and Entrepreneurship', 'Social Sciences and Humanities')
+*   `name` : `VARCHAR(100)` (e.g. 'Effective Communication', 'Basic Accounting')
+*   `term_assigned` : `INTEGER` (0 = All Terms / 3-Term, 1 = Term 1, 2 = Term 2, 3 = Term 3)
+*   `no_terms_taught` : `INTEGER` (1 for Term Electives, 3 for Core)
+*   `default_ww_weight` : `NUMERIC(5,2)` (Default: 20.00)
+*   `default_pt_weight` : `NUMERIC(5,2)` (Default: 50.00)
+*   `default_ex_weight` : `NUMERIC(5,2)` (Default: 30.00)
+
 
 **Table: `sections`**
 *   `id` : `UUID` (Primary Key)
