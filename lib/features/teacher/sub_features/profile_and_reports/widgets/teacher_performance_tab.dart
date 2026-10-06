@@ -21,45 +21,68 @@ class TeacherPerformanceTab extends StatelessWidget {
             style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface),
           ),
           const SizedBox(height: 24),
-          Row(
-            children: [
-              Expanded(
-                child: TeacherTopSummaryCard(
+          if (MediaQuery.of(context).size.width < 900)
+            Column(
+              children: [
+                TeacherTopSummaryCard(
                   title: 'Quarter Class Average',
                   mainValue: '88.4%',
                   subText: '↑ 2.1% improvement from Q1',
-                  subColor: AppTheme.catGreen,
+                  baseColor: AppTheme.catGreen,
                   icon: Icons.trending_up,
-                  iconColor: AppTheme.catGreen,
-                  iconBgColor: AppTheme.catGreen.withValues(alpha: 0.1),
                 ),
-              ),
-              const SizedBox(width: 20),
-              Expanded(
-                child: TeacherTopSummaryCard(
+                const SizedBox(height: 16),
+                TeacherTopSummaryCard(
                   title: 'Students At-Risk (< 75)',
                   mainValue: '2',
                   subText: 'Requires remedial interventions',
-                  subColor: AppTheme.catRed,
+                  baseColor: AppTheme.catRed,
                   icon: Icons.warning_amber_outlined,
-                  iconColor: AppTheme.catRed,
-                  iconBgColor: AppTheme.catRed.withValues(alpha: 0.1),
                 ),
-              ),
-              const SizedBox(width: 20),
-              Expanded(
-                child: TeacherTopSummaryCard(
+                const SizedBox(height: 16),
+                TeacherTopSummaryCard(
                   title: 'Honor Students (> 90)',
                   mainValue: '14',
                   subText: 'High academic distinction',
-                  subColor: theme.colorScheme.primary,
+                  baseColor: theme.colorScheme.primary,
                   icon: Icons.emoji_events_outlined,
-                  iconColor: theme.colorScheme.primary,
-                  iconBgColor: theme.colorScheme.primary.withValues(alpha: 0.1),
                 ),
-              ),
-            ],
-          ),
+              ],
+            )
+          else
+            Row(
+              children: [
+                Expanded(
+                  child: TeacherTopSummaryCard(
+                    title: 'Quarter Class Average',
+                    mainValue: '88.4%',
+                    subText: '↑ 2.1% improvement from Q1',
+                    baseColor: AppTheme.catGreen,
+                    icon: Icons.trending_up,
+                  ),
+                ),
+                const SizedBox(width: 20),
+                Expanded(
+                  child: TeacherTopSummaryCard(
+                    title: 'Students At-Risk (< 75)',
+                    mainValue: '2',
+                    subText: 'Requires remedial interventions',
+                    baseColor: AppTheme.catRed,
+                    icon: Icons.warning_amber_outlined,
+                  ),
+                ),
+                const SizedBox(width: 20),
+                Expanded(
+                  child: TeacherTopSummaryCard(
+                    title: 'Honor Students (> 90)',
+                    mainValue: '14',
+                    subText: 'High academic distinction',
+                    baseColor: theme.colorScheme.primary,
+                    icon: Icons.emoji_events_outlined,
+                  ),
+                ),
+              ],
+            ),
         ],
       ),
     );

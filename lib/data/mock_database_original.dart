@@ -1,2 +1,0 @@
-// Deprecated: Dead duplicate mock database removed during Phase 1 cleanup.
-// Active canonical mock database is located in mock_database.dart.

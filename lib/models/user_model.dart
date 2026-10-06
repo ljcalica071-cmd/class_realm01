@@ -14,6 +14,8 @@ class UserModel {
   final String? studentId;
   final String? lrn;
   final String? linkedStudentId;
+  final String? enrolledSubjectId;
+  final String? enrolledSubjectName;
   final String? contactNumber;
   final bool isArchived;
   // Student-specific fields
@@ -28,6 +30,13 @@ class UserModel {
   final String? parentGuardianContact;
   final String? password; // mock only — not for production
   final bool isSetupComplete;
+  
+  // Teacher-specific / Profile fields
+  final String? subjectSpecialization;
+  final String? facebookLink;
+  final bool isFacebookPublic;
+  final bool isPhonePublic;
+  final String? consultationHours;
 
   const UserModel({
     required this.id,
@@ -41,6 +50,8 @@ class UserModel {
     this.studentId,
     this.lrn,
     this.linkedStudentId,
+    this.enrolledSubjectId,
+    this.enrolledSubjectName,
     this.contactNumber,
     this.isArchived = false,
     this.isSetupComplete = false,
@@ -54,6 +65,11 @@ class UserModel {
     this.parentGuardianRelationship,
     this.parentGuardianContact,
     this.password,
+    this.subjectSpecialization,
+    this.facebookLink,
+    this.isFacebookPublic = false,
+    this.isPhonePublic = false,
+    this.consultationHours,
   });
 
   UserModel copyWith({
@@ -68,6 +84,8 @@ class UserModel {
     String? studentId,
     String? lrn,
     String? linkedStudentId,
+    String? enrolledSubjectId,
+    String? enrolledSubjectName,
     String? contactNumber,
     bool? isArchived,
     String? firstName,
@@ -81,6 +99,11 @@ class UserModel {
     String? parentGuardianContact,
     String? password,
     bool? isSetupComplete,
+    String? subjectSpecialization,
+    String? facebookLink,
+    bool? isFacebookPublic,
+    bool? isPhonePublic,
+    String? consultationHours,
   }) {
     return UserModel(
       id: id ?? this.id,
@@ -94,6 +117,8 @@ class UserModel {
       studentId: studentId ?? this.studentId,
       lrn: lrn ?? this.lrn,
       linkedStudentId: linkedStudentId ?? this.linkedStudentId,
+      enrolledSubjectId: enrolledSubjectId ?? this.enrolledSubjectId,
+      enrolledSubjectName: enrolledSubjectName ?? this.enrolledSubjectName,
       contactNumber: contactNumber ?? this.contactNumber,
       isArchived: isArchived ?? this.isArchived,
       isSetupComplete: isSetupComplete ?? this.isSetupComplete,
@@ -108,6 +133,11 @@ class UserModel {
           parentGuardianRelationship ?? this.parentGuardianRelationship,
       parentGuardianContact: parentGuardianContact ?? this.parentGuardianContact,
       password: password ?? this.password,
+      subjectSpecialization: subjectSpecialization ?? this.subjectSpecialization,
+      facebookLink: facebookLink ?? this.facebookLink,
+      isFacebookPublic: isFacebookPublic ?? this.isFacebookPublic,
+      isPhonePublic: isPhonePublic ?? this.isPhonePublic,
+      consultationHours: consultationHours ?? this.consultationHours,
     );
   }
 }

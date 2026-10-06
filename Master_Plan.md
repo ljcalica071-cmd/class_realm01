@@ -1,5 +1,71 @@
 # ClassRealm — Master Plan
 
+## Priority Case Scenarios: Student Enrollment and Schedules
+
+> Quick reference for the rules that matter when a teacher assigns students to their own subjects/sections and sets class schedules. The detailed flows remain in §§1.6, 1.8, 1.9, and 1.13.
+
+### Archive, Delete, and Restore Scenarios
+
+> **How to read this section:** Subject/section archiving and student drop behavior are already described in the plan. Teacher-account lifecycle rules exist but do not fully define what happens to assigned classes. Parent lifecycle and permanent deletion rules are not yet specified. Entries labeled **Proposed safe default** are scenarios and safeguards to consider, not approved policies; resolve them before implementation.
+
+#### General safeguards
+
+| Scenario | Expected system behavior | Status |
+|---|---|---|
+| User starts an archive/delete action but cancels the confirmation | Make no changes. Do not partially archive records or update account access. | Proposed safe default |
+| User tries to archive/delete an item they are not authorized to manage | Block the action and record the denied attempt where audit logging is available. | Proposed safe default |
+| User chooses “delete” for a record that has linked grades, attendance, enrollments, or other history | Do not physically delete it through the ordinary UI. Offer the documented archive/deactivate action instead; reserve permanent deletion for a separately approved data-retention/privacy process. | Proposed safe default |
+| An archive action affects related records | Show the exact scope before confirmation, preserve linked history, and make the operation atomic so it cannot leave a partially archived set. | Proposed safe default |
+| User restores an archived record that now conflicts with active limits or assignments | Keep it archived and explain the conflict; do not overwrite or duplicate active records. | Proposed safe default |
+
+#### Scenarios by record type
+
+| Record/action scenario | Expected system behavior | Status / reference |
+|---|---|---|
+| Teacher archives a subject | Soft-archive the teaching assignment, its sections, and schedules. Hide its subject learning records from active views but preserve them for history. Do **not** archive the shared student accounts or affect their other subjects/enrollments. | Archive cascade documented in §1.8; scope clarification proposed |
+| Teacher archives a section | Soft-archive the section and its schedules; retain the section's student enrollments, grades, and attendance as historical data. Do not deactivate a student account or hide that student's other active subjects. | Archive documented in §1.8; enrollment/account scope clarification proposed |
+| Teacher tries to archive the only active subject or a subject's only active section | Block the action and explain that at least one active subject/section must remain. | Documented in §1.8 |
+| Teacher archives the wrong subject/section and requests restoration | Restore the archived item and its dependents only when active subject/section limits and assignment constraints pass. Preserve items that had been archived independently before the parent archive. | Restore flow documented in §1.8; independent-child behavior proposed |
+| Teacher archives or deletes one student's record | Preserve the student account and academic history. Require the user to choose whether the action concerns one subject enrollment or a school-wide withdrawal; do not silently deactivate the global account from a single-subject action. | Archive status exists in §1.16; action scope is unresolved in §1.16/§1.18 |
+| Student is formally dropped from school | Apply the documented school-wide drop flow: freeze grades and preserve records, remove the student from active lists, and deactivate login. Do not physically delete the student or academic history. | Documented in §1.16; conflicting drop scope is tracked in §5 |
+| Teacher tries to archive a student's account while the student has active enrollments with other teachers | Do not let a single teacher hide or deactivate the shared student account. Require an authorized school-wide action, or let the teacher archive only the enrollment they own if that action is approved. | Proposed safe default; account/enrollment scope needs resolution |
+| Admin finds a duplicate student account with the same LRN | Verify which account is authoritative, then use a controlled merge or link-correction process that preserves all enrollments and grade history. Do not simply delete either account. | Proposed safe default |
+| Admin archives/deactivates a teacher account | Block that teacher's login while preserving the teacher profile and academic records. Do not automatically delete classes, enrollments, grades, or students. Define an explicit admin process for classes that need another owner. | Account states documented in §1.11; class ownership behavior proposed |
+| Admin restores a teacher account | Restore access only after the account is re-approved/reactivated and its academic assignments are checked for conflicts; keep historical records linked to their original owner unless an authorized reassignment is recorded. | Reactivation state shown in §1.11; restoration details proposed |
+| Teacher or admin archives/deletes a parent account | Proposed behavior: disable that parent's login and remove only the affected parent-child link when requested. Keep the student's account and records, and preserve any other child links. | Parent lifecycle is TODO in §1.25; proposed safe default |
+| Admin permanently deletes a subject or section that has academic history | Do not hard-delete it through the ordinary UI. Keep it archived so historical records remain traceable; only consider permanent removal through the approved retention/privacy process after dependent records are reviewed. | Proposed safe default |
+| User requests permanent deletion of a teacher, student, or parent account | Do not cascade-delete academic records through the normal account screen. Route the request through an authorized review that checks ownership, linked records, retention requirements, and any required anonymization. | Not yet specified; proposed safe default |
+
+> **Important distinction:** Archiving a subject/section is not the same as dropping a student from school. A subject/section archive should not deactivate shared student accounts. A school-wide student drop is a distinct action with a wider effect and needs the scope conflict in §5 resolved before implementation.
+
+### Adding Students to a Teacher's Subject and Section
+
+| Scenario | Expected system behavior | Reference |
+|---|---|---|
+| Teacher adds a student whose 12-digit LRN is not in the system | Create one student account, then create an enrollment for the teacher's selected subject and one of that subject's sections. | §1.9; §1.13 |
+| Teacher adds a student whose LRN already exists under another teacher | Reuse the existing student account and create only an enrollment for the current teacher's subject and selected section; do not create another account or password. | §1.13 |
+| Existing LRN matches, but the entered student details do not | Warn about the mismatch and block enrollment until the LRN/details are verified or corrected. | §1.13 |
+| Teacher selects a subject or section | Offer only the teacher's active subjects and sections belonging to the selected subject. | §1.6 Steps 2–3; §1.9 |
+| Student takes multiple subjects, possibly with different teachers | Keep one student account with separate enrollments per subject/teaching assignment; show active enrollments to the student. | §1.13 |
+| Teacher views a student also enrolled with another teacher | Show only data scoped to the current teaching assignment. Grade level or a shared student account alone does not grant access to another teacher's subject data. | §1.13 |
+| Teacher imports students with a mix of new and existing LRNs | Classify rows as new-account, enrollment-only, or invalid/duplicate; allow review of valid rows and errors before import. | §1.9; §1.13 |
+| Student is already assigned to a section and needs to move mid-year | Section shifting is not allowed. Archive the incorrect enrollment and create a new enrollment for the correct section; preserve historical records. | §1.14; §1.8 |
+
+### Schedule Setup and Conflict Scenarios
+
+| Scenario | Expected system behavior | Reference |
+|---|---|---|
+| Teacher sets up a subject-section without any schedule entry | Require at least one schedule entry before setup is complete. | §1.6 Step 4 |
+| A new schedule overlaps another schedule for the same teacher | Show an inline conflict and block submission; the teacher cannot be in two places at the same time. | §1.6 Step 4 |
+| A schedule starts at or after its end time | Reject it; start time must be earlier than end time. | §1.6 Step 4 |
+| A schedule is shorter than 30 minutes or longer than 3 hours | Reject it; each schedule entry must be 30 minutes to 3 hours long max 3 hours long in one subject na tuloy tuloy. | §1.6 Step 4 |
+| Teacher leaves the room blank | Allow it; room assignment is optional. | §1.6 Step 4 |
+| Teacher's total scheduled teaching time exceeds 6 hours in a day | Show a warning, but do not block setup solely for exceeding 6 hours. Any overlapping time conflict remains blocking. | §1.14; §1.6 Step 4 |
+
+## 5. Authentication & Production Readiness
+* **Real Authentication Enforcement**: Admin and Teacher accounts use **REAL Firebase authentication**. Do not revert them to mock data or bypass logic. (For testing the teacher account, use `Uzumaki123`).
+* **Final Cleanup Goal**: Once the Student and Parent modules are fully implemented with real Supabase data and Firebase auth, the "Developer Quick Login" buttons and all mock bypass logic must be completely removed from the login screen.
+* **Dashboard Personalization**: The Student and Parent sides must not use hard-coded prototype data. Just like the Teacher dashboard, they must fetch and display data uniquely associated with the logged-in user's credentials from Supabase.
 > **Document Type:** System Architecture & Planning Document (NO CODE YET)  
 > **Project:** ClassRealm — Integrated Senior High School Management System  
 > **Date Created:** 2026-09-25  
@@ -10,6 +76,17 @@
 
 ## TABLE OF CONTENTS
 
+- [Archive, Delete, and Restore Scenarios](#archive-delete-and-restore-scenarios)
+- [Priority Case Scenarios: Student Enrollment and Schedules](#priority-case-scenarios-student-enrollment-and-schedules)
+- [Input Validation Registry](#input-validation-registry)
+- [System Plan: Prioritized Implementation Reference](#system-plan-prioritized-implementation-reference)
+  - [1. Purpose and Status Labels](#1-purpose-and-status-labels)
+  - [2. Validation Rules](#2-validation-rules)
+  - [3. Case Scenarios and Current System Answers](#3-case-scenarios-and-current-system-answers)
+  - [4. Confirmed System Rulings](#4-confirmed-system-rulings)
+  - [5. Conflicts and Decisions Still Needed](#5-conflicts-and-decisions-still-needed)
+  - [6. Recommended Planning and Implementation Order](#6-recommended-planning-and-implementation-order)
+  - [7. Detailed Reference Sections](#7-detailed-reference-sections)
 - [Step 1: System Flow & Architecture](#step-1-system-flow--architecture)
   - [1.1 High-Level System Architecture](#11-high-level-system-architecture)
   - [1.2 User Roles & Platform Distribution](#12-user-roles--platform-distribution)
@@ -27,8 +104,235 @@
   - [1.14 Client Intelligence Summary](#114-client-intelligence-summary)
   - [1.15 SHS Subject Catalog (Assumed for Prototype)](#115-shs-subject-catalog-assumed-for-prototype)
   - [1.16 Student Status Lifecycle (Drop / Transfer)](#116-student-status-lifecycle-drop--transfer)
-- [Step 2: Database Schema Strategy](#step-2-database-schema-strategy) _(Pending)_
-- [Step 3: API Security & Rate Limiting](#step-3-api-security--rate-limiting) _(Pending)_
+  - [1.17 Forgot Password Flow](#117-forgot-password-flow)
+  - [1.18 Attendance Computation & Auto-Drop Rules](#118-attendance-computation--auto-drop-rules)
+  - [1.19 Assessment Engine](#119-assessment-engine-ww-pt-quiz-st1-st2-te)
+  - [1.20 Anti-Cheat Exam Engine](#120-anti-cheat-exam-engine)
+  - [1.21 Item Analysis Engine](#121-item-analysis-engine)
+  - [1.22 DepEd Grading Computation Engine](#122-deped-grading-computation-engine)
+  - [1.23 Lesson Plan Generator & Learning Materials](#123-lesson-plan-generator--learning-materials)
+  - [1.24 Student Mobile App Flow](#124-student-mobile-app-flow)
+  - [1.25 Parent Mobile App Flow](#125-parent-mobile-app-flow)
+  - [1.26 Admin Portal Complete Flow](#126-admin-portal-complete-flow)
+  - [1.27 ESP32/RFID Hardware Integration](#127-esp32rfid-hardware-integration)
+  - [1.28 Notification System](#128-notification-system)
+  - [1.29 Reports & Data Export](#129-reports--data-export)
+  - [1.30 Input Fields Registry](#130-input-fields-registry)
+- [Clarifying Questions Answered](#clarifying-questions-answered-for-reference)
+  - Step 2: Database Schema Strategy _(Pending — see §6 for planning order)_
+  - Step 3: API Security & Rate Limiting _(Pending — see §5 and §6)_
+- [New Classroom Setup Architecture (Teacher Side)](#new-classroom-setup-architecture-teacher-side)
+
+---
+
+# Input Validation Registry
+
+All text input fields across the system strictly follow the rules defined in `lib/core/utils/validators.dart` to prevent dirty data. These are applied instantly upon typing using Flutter's `TextInputFormatter`.
+
+### 1. Name Field Rules (First, Middle, Last Name)
+*   **Characters Allowed:** Alphabets (a-z, A-Z), Spaces, Hyphens (`-`), and Periods (`.`).
+*   **Characters Blocked:** Numbers (0-9) and all other special characters (`@`, `#`, `$`, etc.).
+*   **Auto-Formatting:** 
+    *   The very first letter is automatically Capitalized.
+    *   Leading spaces or periods are instantly deleted.
+    *   Consecutive spaces (`  `) and consecutive periods (`..`) are blocked.
+*   **Length:** Maximum of 30 characters. Minimum of 2 characters.
+
+### 2. Age / Birthday Validation
+*   Age is NEVER saved in the database. It is dynamically computed via `birthday`.
+*   **Teacher Restriction:** Must be at least 18 years old to 75 to register.
+*   **Student Restriction:** Must be between 10 to 57 years old.
+
+### 3. Smart Email Validation
+*   Uses strict Regex to ensure correct format (e.g., `user@domain.com`).
+*   **Disposable Email Blocker:** Rejects emails from `tempmail`, `10minutemail`, `mailinator`, etc.
+*   **Typo Correction:** Detects common typos (like `gmal.com` o `yaho.com`) and suggests the correct domain to the user.
+
+---
+
+# System Plan: Prioritized Implementation Reference
+
+> This section puts the most actionable system rules and decisions first. The detailed flows below remain supporting specifications. A rule marked **Needs decision** must not be implemented as an assumed policy until the owner resolves it.
+
+## 1. Purpose and Status Labels
+
+| Label | Meaning |
+|---|---|
+| **Defined in plan** | The plan states a rule or behavior. It still needs verification against the live database, security policies, and application code before it can be called implemented. |
+| **Needs decision** | The plan has conflicting, incomplete, or ambiguous requirements. Do not choose one silently. |
+| **Implementation check** | The requirement is documented; confirm that UI, repository, database constraints, and authorization enforce it consistently. |
+
+**Important:** This document is a system plan, not proof that a requirement is already implemented. Steps 2 and 3—database schema and API security/RLS—are still marked pending later in this document.
+
+## 2. Validation Rules
+
+### 2.1 Account and identity
+
+| Entity | Defined rules | Detailed reference |
+|---|---|---|
+| Teacher registration | First/last name required, 2–50 characters; middle name optional; birthday must be a valid past date, age at least 21, year 1960 or later; email valid and unique; gender required; terms must be accepted. | §1.3, “Field Validation Rules” |
+| Password change/reset | Password must meet the rules in §1.5; confirmation must match. Forgot-password requests are limited to 3 per email per hour, with Firebase IP-based rate limiting. | §1.5; §1.17 |
+| Student identity | LRN required, exactly 12 digits, and unique. Birthday must be in the past; stated age range is 10–25 and birth year 2000 or later. Gender required. | §1.9; §1.30.B |
+
+### 2.2 Academic setup and teaching assignments
+
+| Entity | Defined rules | Detailed reference |
+|---|---|---|
+| School year | Start and end years must be consecutive. The newer setup proposal sets 2026–2027 as the minimum and restricts creating far-future school years. | §1.6 Step 1; “New Classroom Setup Architecture” |
+| Terms | Exactly 3 terms are specified. All term start/end dates are required, chronologically ordered, non-overlapping, and within the approximate school-year calendar range. Gaps are allowed. | §1.6 Step 1; §1.12 |
+| Grade levels and subjects | Teacher may choose Grade 11, Grade 12, or both; each selected grade must have at least one subject. Subjects must come from the applicable catalog and cannot be duplicated for the same teacher. There is no hard subject-count limit. | §1.6 Step 2; §1.14 |
+| Sections | At least one section per subject; maximum 8 sections per subject; name required, 1–50 characters; names must be unique within a subject. Different subjects may use the same section name. | §1.6 Step 3 |
+| Schedule | Each subject-section needs at least one schedule entry. Same-teacher time overlaps are blocked; start must precede end; duration 30 minutes–4 hours; weekdays Monday–Friday; room optional. | §1.6 Step 4 |
+| Daily teaching hours | More than 6 scheduled hours in a day triggers a warning, not a hard block. | §1.14 |
+
+### 2.3 Grade 11/12 Subject Templates and WW/PT/EX Weights
+
+> **Source and authority:** The Grade 11 Core subject templates below were confirmed by the system owner. Other subject entries in this section reflect the current app catalog in `lib/models/subject_catalog_model.dart` (`DepEdSubjectCatalog.allSubjects`) and still require school/DepEd verification. The Core category's current planned weights are WW 20%, PT 50%, EX 30%; confirm these against the adopted E-Class Record before production.
+
+#### Weight presets
+
+| Catalog category | Written Works (WW) | Performance Tasks (PT) | Examinations (EX) |
+|---|---:|---:|---:|
+| SSHS - CORE | 20% | 50% | 30% |
+| SSHS - ACADEMIC | 20% | 50% | 30% |
+| SSHS - TECH-PRO | 15% | 65% | 20% |
+| SSHS - ARTS & SPORTS | 20% | 60% | 20% |
+| SSHS - RESEARCH, DESIGN, AND INNOVATION | 15% | 70% | 15% |
+| SSHS - WORK IMMERSION / APPRENTICESHIP | 40% | 60% | 0% |
+
+#### Grade 11 catalog entries
+
+| Category / cluster | Subject template | WW | PT | EX |
+|---|---|---:|---:|---:|
+| CORE | Effective Communication | 20% | 50% | 30% |
+| CORE | Mabisang Komunikasyon | 20% | 50% | 30% |
+| CORE | Life and Career Skills | 20% | 50% | 30% |
+| CORE | General Mathematics | 20% | 50% | 30% |
+| CORE | General Science | 20% | 50% | 30% |
+| CORE | Pag-aaral ng Kasaysayan at Lipunang Pilipino | 20% | 50% | 30% |
+| ACADEMIC - Business and Entrepreneurship | Fundamentals of Accountancy, Business, and Management 1 | 20% | 50% | 30% |
+| ACADEMIC - STEM | Pre-Calculus | 20% | 50% | 30% |
+| ACADEMIC - STEM | Basic Calculus | 20% | 50% | 30% |
+| ACADEMIC - Arts, Social Sciences, and Humanities | Creative Writing | 20% | 50% | 30% |
+| TECH-PRO - ICT | Computer Programming (Java) | 15% | 65% | 20% |
+| TECH-PRO - ICT | Computer Programming (.Net Technology) | 15% | 65% | 20% |
+| TECH-PRO - ICT | 2D Animation & Illustration | 15% | 65% | 20% |
+| RESEARCH - Capstone Projects | Practical Research 1 | 15% | 70% | 15% |
+
+#### Grade 12 catalog entries
+
+| Category / cluster | Subject template | WW | PT | EX |
+|---|---|---:|---:|---:|
+| CORE | Physical Education and Health (Grade 11 and 12) | 20% | 50% | 30% |
+| CORE | Life and Works of Rizal | 20% | 50% | 30% |
+| ACADEMIC - Business and Entrepreneurship | Business 2: Finance and Income Tax | 20% | 50% | 30% |
+| ACADEMIC - Business and Entrepreneurship | Applied Economics | 20% | 50% | 30% |
+| ACADEMIC - STEM | General Physics 1 | 20% | 50% | 30% |
+| ACADEMIC - Arts, Social Sciences, and Humanities | Philippine Politics and Governance | 20% | 50% | 30% |
+| TECH-PRO - ICT | Computer Systems Servicing (CSS) | 15% | 65% | 20% |
+| ARTS & SPORTS - Arts and Design | Art Criticism and Creative Markets | 20% | 60% | 20% |
+| ARTS & SPORTS - Sports Track | Sports Officiating and Activity Management | 20% | 60% | 20% |
+| RESEARCH - Capstone Projects | Capstone Project / Innovation in Daily Life | 15% | 70% | 15% |
+| WORK IMMERSION / APPRENTICESHIP | Work Immersion / Field Exposure | 40% | 60% | 0% |
+
+**Custom / Old Curriculum:** The app catalog defines a `CUSTOM / OLD CURRICULUM` category, but it has no fixed subject entries in `allSubjects`; its current fallback weights are WW 30%, PT 50%, EX 20%. The setup description in §1.6 says Grade 12 teachers manually enter a subject name and weights totaling 100%, while the catalog also includes Grade 12 subjects with presets. Decide whether Grade 12 uses catalog presets, manual custom weights, or both under explicit curriculum modes before implementing.
+
+**Exam sub-weights:** Where EX is non-zero, the plan specifies ST1 30%, ST2 30%, and Term Examination 40% of the EX component (§1.12).
+
+### 2.4 Student enrollment and lifecycle
+
+| Entity | Defined rules | Detailed reference |
+|---|---|---|
+| Enrollment | Subject and section are required and must come from the teacher’s active assignments. Student account creation is separate from enrollment; one student account can have many subject enrollments. | §1.9; §1.13 |
+| Bulk import | Validate required fields, LRN format/uniqueness, birthday/age, and duplicates row by row. Show a review summary before creating accounts/enrollments. | §1.9, “Bulk Import via Excel” |
+| Student access | Student sees active enrollments by default and may view past/completed subjects separately. Subject-specific learning data is scoped to its teaching assignment. | §1.13 |
+| Drop and archive | Preserve historical records; freeze grades where specified; hide inactive/archived records from active lists. The scope of dropping needs reconciliation (see §5). | §1.8; §1.16; §1.18 |
+
+### 2.5 Attendance and learning materials
+
+| Feature | Defined rules | Detailed reference |
+|---|---|---|
+| Per-subject attendance | At 12 absences in one subject during one term, alert the teacher. The system does not automatically drop the student; teacher reviews and confirms. If confirmed, only that subject enrollment is dropped. | §1.18 Rule 1 |
+| Overall attendance | At 20% absences across all subjects, alert teachers/admin for review and confirmation. The final impact on all enrollments must be reconciled with §1.16. | §1.18 Rule 2 |
+| Material files | Document formats only: PDF, DOC/DOCX, XLS/XLSX, PPT/PPTX. Images and MP4 uploads are prohibited; video lessons use a resource link. The registry says maximum 5 MB, but another section says 2 MB—resolve before implementation. | §1.23; §1.30.H |
+| Material metadata | Title required, 2–100 characters; subject and term required; category/topic is still marked TODO. | §1.30.H |
+
+## 3. Case Scenarios and Current System Answers
+
+These are the system behaviors already described in the plan. Any unresolved or conflicting behavior is called out in §5.
+
+| Scenario | Current system answer | Reference |
+|---|---|---|
+| Teacher archives a section or subject | Soft-archive and preserve historical records. Hide it from active views. Restore is allowed subject to active limits; cannot remove the only active subject/section. | §1.8 |
+| Student reaches 12 absences in one subject/term | Notify teacher and require a human decision. If confirmed, drop only that subject and retain other active subjects. | §1.18 Rule 1 |
+| Student reaches 20% absence overall | Notify teachers/admin and require review/confirmation. Exact interaction with global account deactivation is unresolved. | §1.18 Rule 2; §1.16 |
+| Incoming transfer student has completed a term and brings grades | Teacher may enter previous grades and mark the student as a transferee; grades are carried into computation. | §1.14; §1.16 |
+| Teacher imports a spreadsheet with new and existing LRNs | Classify each row as new account, enrollment-only, or invalid/duplicate; let the teacher review valid rows and errors before committing. | §1.9; §1.13 |
+| User requests password reset for an unknown email | Return the same “check your email” response to prevent email enumeration. Pending/rejected/deactivated account states still control login. | §1.17 |
+
+## 4. Confirmed System Rulings
+
+| Topic | Current ruling in the plan |
+|---|---|
+| Academic calendar | Three terms (trimester); the system does not support the old four-quarter format per the documented decision. |
+| Teacher subject load | No hard subject limit. Six scheduled hours/day is a warning threshold, not a block. |
+| Student deduplication | Unique 12-digit LRN is the deduplication key; account is created once, enrollments are per subject assignment. |
+| Student subject visibility | Current active enrollments are shown by default; historical/completed subjects are separate. |
+| Section movement | Mid-year section shifting is documented as not allowed; correct a wrong enrollment by archiving it and creating a new enrollment. |
+| Section/subject removal | Archive rather than delete, preserving historical records. |
+| Attendance action | A threshold creates an alert/review path; it is not an automatic drop by itself. |
+| Grading weights | Teacher configures weights per subject; WW/PT/EX must sum to 100%. |
+
+See §1.12–1.18 and “Clarifying Questions Answered” for the detailed rationale and flows.
+
+## 5. Conflicts and Decisions Still Needed
+
+Do not implement these items until the system owner resolves the conflict or confirms the policy.
+
+| Priority | Conflict or gap | Conflicting references | Needed decision |
+|---|---|---|---|
+| **Blocker** | Learning material maximum is 2 MB in the TODO list but 5 MB in the input registry. | §1.23 vs §1.30.H | Choose one limit and update both places. |
+| **Blocker** | Attendance drop scope differs: §1.18 says subject-only drop for per-term threshold and reviewed all-subject drop for the overall threshold; §1.16 says drop/deactivation can apply to all enrollments. | §1.16 vs §1.18 | Define separately whether a subject drop, school withdrawal, or account deactivation affects one enrollment or all enrollments. |
+| **Blocker** | Firebase Storage is specified in the architecture, while the database/security steps are pending and material storage design is incomplete. | §1.1; §1.23; Step 2–3 pending | Select and document the authoritative private storage provider, identity verification, and access-policy design. |
+| **Blocker** | The new classroom proposal uses `teacher_classes` with text subject/section names, while other sections require teaching-assignment and enrollment IDs for multi-teacher isolation. | §1.13; “New Classroom Setup Architecture” | Approve a normalized data model that supports multiple teachers, subjects, sections, school years, and student enrollments without relying on display names as security keys. |
+| **Blocker** | The current app catalog in `lib/models/subject_catalog_model.dart` does not match the owner-confirmed six Grade 11 Core templates (it includes other Core entries and omits `Mabisang Komunikasyon`, `Life and Career Skills`, and `Pag-aaral ng Kasaysayan at Lipunang Pilipino`). | Owner-confirmed list in §2.3/§1.15 vs `DepEdSubjectCatalog.allSubjects` | Update the application catalog to match the approved templates; verify grade mapping and WW/PT/EX weights against the school's adopted DepEd E-Class Record before release. |
+| **Blocker** | Grade 12 setup is described as manual/custom weights, but the current app catalog assigns preset weights to multiple Grade 12 entries. | §1.6 Step 2 vs §2.3 app catalog | Decide whether Grade 12 uses catalog presets, custom weights, or explicit curriculum modes. |
+| **Blocker** | Student drop, archive, and deactivation scope is inconsistent: §1.16 describes a school-wide drop that deactivates login, while §1.18 also describes subject-only drops. | §1.16 vs §1.18 and the priority archive scenarios | Define separately who may archive one enrollment, archive a student account, or confirm a school-wide withdrawal, and what each action does to login and other active enrollments. |
+| **Important** | Parent account archive, unlinking, restoration, and deletion behavior is not defined. | §1.25 TODO; priority archive scenarios | Define parent-child link scope, who may deactivate a parent, restoration rules, and how requests for permanent deletion are reviewed. |
+| **Important** | Permanent deletion and dependent-record retention are not defined for subjects, sections, teacher accounts, student accounts, or parent accounts. | §1.8; §1.11; §1.16; §1.25; priority archive scenarios | Decide whether permanent deletion is ever allowed, who can authorize it, and how academic history, auditability, and privacy/retention requirements are handled. |
+| **Important** | The teacher-journey flow still says “max 3 subjects,” while later decisions say unlimited subjects. | §1.10 vs §1.8/§1.14 | Treat “max 3” as stale and remove/update it in the detailed flow. |
+| **Important** | “Section transfer not allowed” refers to a current student changing section, while a separate transfer-in flow supports students arriving from another school. | §1.14 vs §1.16 | Keep these as distinct cases and define who may create/approve each enrollment change. |
+| **Important** | Credential documentation uses deterministic passwords based on last name and birthday and suggests exporting credentials. | §1.2, §1.9, §1.17, §1.30 | Review secure onboarding/reset method before production; avoid exposing credentials in downloadable files or logs. |
+| **Important** | Account state, enrollment state, and login eligibility are sometimes described together. | §1.11; §1.16; §1.18 | Define which status belongs to the user account versus each subject enrollment, and which one controls authentication. |
+| **Later** | Several feature specifications and form fields remain TODO, including assessment rules, question validation, lesson plans, notifications, reports, and offline sync. | §1.19–1.30 | Complete each feature’s rules before implementation; do not infer unspecified behavior. |
+| **Later** | DepEd rules/catalog examples and future grading changes need authoritative verification. | §1.12; §1.15 | Verify official source/version and make curriculum rules versioned/configurable where appropriate. |
+
+## 6. Recommended Planning and Implementation Order
+
+1. **Resolve blockers in §5.** Confirm storage provider/identity, multi-teacher data model, student enrollment scope, material file limit, and attendance/drop semantics.
+2. **Complete the database and authorization design.** Define keys, foreign keys, uniqueness constraints, indexes, role/assignment/enrollment relationships, RLS, and storage-object access before connecting the UI.
+3. **Implement account and academic foundations.** Teacher lifecycle, school years/terms, subjects, sections, schedules, student identity deduplication, and per-subject enrollments.
+4. **Implement feature data flows.** Students/parents, attendance, assessments/submissions, grades, materials, lesson plans, profile, reports, and notifications using repositories and real database records.
+5. **Enforce rules at all relevant layers.** Validate at the UI for usability, in repositories/services for consistent behavior, and in database constraints/RLS for integrity and security.
+6. **Test the case scenarios in §3.** Include duplicate LRN, multiple teachers/subjects, unauthorized student access, archive/restore, schedule conflicts, upload limits/failures, and attendance review.
+7. **Roll out safely.** Migrate/back up data, stage releases, monitor errors and access denials, and retain a rollback path.
+
+## 7. Detailed Reference Sections
+
+Use these sections when implementing each area; this prioritized reference does not replace their full flows.
+
+| Planning need | Detailed sections |
+|---|---|
+| Architecture, roles, teacher account, approval, login | §1.1–1.5 |
+| School year, terms, subjects, sections, schedule | §1.6; “New Classroom Setup Architecture” |
+| Teacher subject/section lifecycle | §1.8 |
+| Student onboarding, import, deduplication, teacher data isolation | §1.9; §1.13 |
+| Account states and curriculum decisions | §1.11–1.12 |
+| Attendance/drop/transfer rules | §1.14; §1.16; §1.18 |
+| Password reset and anti-abuse | §1.17 |
+| Incomplete feature requirements | §1.19–1.29 |
+| Form-field inventory and file restrictions | §1.30 |
+| Client answers and pending database/security work | “Clarifying Questions Answered” |
 
 ---
 
@@ -973,20 +1277,7 @@ Every user account (Admin, Teacher, Student, Parent) follows this state machine:
    └──────┬───────┘  └──────────┘
           │                ▲
           │ (reactivate)   │ (restore)
-          └────────────────┘
-```
-
-### State Definitions
-
-| State | Who Sets It | Can Login? | Behavior |
-|---|---|---|---|
-| `pending` | System (on teacher self-registration) | ❌ No | Shows "Pending Approval" screen |
-| `rejected` | Admin (reject registration) | ❌ No | Shows rejection reason dialog |
-| `pending_first_login` | System (on teacher approval or student/parent creation) | ✅ Yes | Forces password change screen |
-| `active` | System (after password change) or Admin (direct create) | ✅ Yes | Normal access |
-| `deactivated` | Admin or Teacher | ❌ No | Shows "Account Deactivated" error |
-| `archived` | Admin or Teacher (soft delete) | ❌ No | Hidden from all views. Data preserved. |
-
+          └────────────────
 ---
 
 ## 1.12 DepEd Curriculum Alignment (SY 2026-2027)
@@ -1229,17 +1520,18 @@ Data gathered from client interview (Ms. [Client Name], School Representative):
 
 Since the client has not yet provided the specific list of subjects offered at their school, we will use the **official DepEd Strengthened SHS Curriculum** as the base catalog. The Admin can edit this list later.
 
-### Core Subjects (All Students — Grade 11 Only)
+### Core Subject Templates (Grade 11)
 
-Per DepEd's Strengthened SHS Curriculum, all students take 5 core subjects:
+The system owner confirmed these six Grade 11 Core subject templates. The current planned Core grading preset is WW 20%, PT 50%, EX 30% (see §2.3 and §1.12); verify the percentages against the school's adopted E-Class Record.
 
 | # | Subject Name | Grade Level |
 |---|---|---|
-| 1 | Effective Communication / Mabisang Komunikasyon | Grade 11 |
-| 2 | Life and Career Skills | Grade 11 |
-| 3 | General Mathematics | Grade 11 |
-| 4 | General Science | Grade 11 |
-| 5 | Pag-aaral ng Kasaysayan at Lipunang Pilipino | Grade 11 |
+| 1 | Effective Communication | Grade 11 |
+| 2 | Mabisang Komunikasyon | Grade 11 |
+| 3 | Life and Career Skills | Grade 11 |
+| 4 | General Mathematics | Grade 11 |
+| 5 | General Science | Grade 11 |
+| 6 | Pag-aaral ng Kasaysayan at Lipunang Pilipino | Grade 11 |
 
 ### Elective Subjects (Assumed — Organized by Cluster)
 
@@ -1311,7 +1603,7 @@ These are representative subjects per cluster. The actual list depends on what t
 | 40 | Personal Development | Grade 11 |
 
 > [!NOTE]
-> **This is a placeholder catalog.** When the client provides their actual subject list, we will update this. The system stores subjects as reference data in a `subject_catalog` table that Admin can manage. Teachers select from this catalog during Academic Setup.
+> The six Grade 11 Core templates above are owner-confirmed. The elective subjects below are still a placeholder catalog and must be checked against the school's actual offerings. The system stores subjects as reference data in a `subject_catalog` table that Admin can manage. Teachers select from this catalog during Academic Setup.
 
 ### How the Catalog Works in the System
 
@@ -2162,3 +2454,47 @@ At any point during the school year:
 > - **Step 3 (Pending):** API Security & Rate Limiting — Supabase RLS policies, Firebase Auth JWT verification, rate limiting strategy, cache/cookie management, zero-exposed-API architecture.
 >
 > **Awaiting your go-ahead to proceed to Step 2.** Please also send any additional information you mentioned you'd share later.
+
+---
+
+## New Classroom Setup Architecture (Teacher Side)
+
+### Overview
+- The classroom setup will no longer rely on complex hierarchical junction tables from the previous database plan. It will be simplified for the solo teacher self-managed approach.
+- When a new teacher opens the Classroom Setup, they will see an empty state if no school years are configured.
+
+### Validation and Rules for School Year (SY) Creation
+1. **Input Fields**: The school year is typed in input fields (e.g., `2026` to `2027`), not selected from a dropdown.
+2. **Minimum Year**: The system will not accept any school year below `2026-2027`. (e.g. `2025-2026` is invalid).
+3. **Future Year Restriction**: The teacher cannot set up a school year far in advance. If the current academic year is 2026, they can only set up `2026-2027`. They cannot jump to `2027-2028`.
+4. **Consecutive Years**: The inputted years must be strictly consecutive. (e.g., `2026` and `2028` is invalid).
+5. **Term-Based Dates**: Because the school follows a Trimester (3 terms) format, instead of one overall start/end date for the whole year, the setup will require start and end dates for:
+   - First Term
+   - Second Term
+   - Third Term
+
+### Proposed Database Tables (Supabase)
+**1. `teacher_school_years`**
+- `id`: UUID (Primary Key)
+- `teacher_id`: UUID (Foreign Key to users)
+- `start_year`: INTEGER (e.g., 2026)
+- `end_year`: INTEGER (e.g., 2027)
+- `term_1_start`: DATE
+- `term_1_end`: DATE
+- `term_2_start`: DATE
+- `term_2_end`: DATE
+- `term_3_start`: DATE
+- `term_3_end`: DATE
+
+**2. `teacher_classes`**
+- `id`: UUID (Primary Key)
+- `school_year_id`: UUID (Foreign Key to teacher_school_years)
+- `grade_level`: TEXT
+- `subject_name`: TEXT
+- `section_name`: TEXT
+
+### Flow
+1. The teacher creates a School Year via the New School Year form (enforcing validation rules).
+2. Once the school year is saved, it appears as an expandable section.
+3. Inside the school year, the teacher can click "+ Add Class" to add subjects/sections.
+4. Gradebooks and other features will query `teacher_classes` based on the selected `school_year_id`.

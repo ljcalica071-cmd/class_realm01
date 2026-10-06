@@ -10,7 +10,7 @@ class AdminProfileTab extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final name = adminUser?.fullName ?? 'Administrator';
-    final email = adminUser?.email ?? 'admin@classrealm.edu';
+    final email = adminUser?.email ?? 'ljcalica971@gmail.com';
 
     return Padding(
       padding: const EdgeInsets.all(24),
@@ -20,7 +20,9 @@ class AdminProfileTab extends StatelessWidget {
         decoration: BoxDecoration(
           color: theme.colorScheme.surface,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: theme.colorScheme.onSurface.withValues(alpha: 0.12)),
+          border: Border.all(
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.12),
+          ),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

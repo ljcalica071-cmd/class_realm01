@@ -5,6 +5,8 @@ import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/routes/app_routes.dart';
 import 'package:class_realm/features/parent/sub_features/child_details/widgets/parent_schedule_view.dart';
 import 'package:class_realm/features/parent/sub_features/communications/widgets/parent_teacher_contact_view.dart';
+import 'package:class_realm/data/repositories/auth_repository.dart';
+import 'package:class_realm/widgets/common/app_modals.dart';
 
 class ParentDrawer extends StatelessWidget {
   final UserModel parent;
@@ -92,8 +94,17 @@ class ParentDrawer extends StatelessWidget {
               style: TextStyle(color: AppTheme.catRed),
             ),
             onTap: () {
-              MockDatabase.instance.logout();
-              Navigator.pushReplacementNamed(context, AppRoutes.login);
+              AppModals.showConfirmationDialog(
+                context: context,
+                title: 'Confirm Logout',
+                message: 'Are you sure you want to log out of the parent portal?',
+                confirmLabel: 'Logout',
+                confirmColor: AppTheme.catRed,
+                onConfirm: () async {
+                  await AuthRepository.instance.logout();
+                  if (context.mounted) Navigator.pushReplacementNamed(context, AppRoutes.login);
+                },
+              );
             },
           ),
         ],

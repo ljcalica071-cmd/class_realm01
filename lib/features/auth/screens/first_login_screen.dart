@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:flutter/services.dart';
 import 'package:class_realm/core/constants/asset_paths.dart';
-import 'package:class_realm/core/theme/app_theme.dart';
-import 'package:class_realm/data/mock_database.dart';
+import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/routes/app_routes.dart';
 import 'package:class_realm/widgets/common/app_buttons.dart';
@@ -15,162 +17,62 @@ class FirstLoginScreen extends StatefulWidget {
 }
 
 class _FirstLoginScreenState extends State<FirstLoginScreen> with SingleTickerProviderStateMixin {
-  final _formKey = GlobalKey<FormState>();
-  final _tempPassCtrl = TextEditingController();
   final _newPassCtrl = TextEditingController();
   final _confirmPassCtrl = TextEditingController();
-  bool _obscureTemp = true;
   bool _obscureNew = true;
   bool _obscureConfirm = true;
   bool _isLoading = false;
 
+  // Real-time validation states
+  bool _hasMinLength = false;
+  bool _hasUpper = false;
+  bool _hasLower = false;
+  bool _hasNumber = false;
+  bool _passwordsMatch = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _newPassCtrl.addListener(_validatePassword);
+    _confirmPassCtrl.addListener(_validateMatch);
+  }
+
+  void _validatePassword() {
+    final v = _newPassCtrl.text;
+    setState(() {
+      _hasMinLength = v.length >= 8;
+      _hasUpper = RegExp(r'[A-Z]').hasMatch(v);
+      _hasLower = RegExp(r'[a-z]').hasMatch(v);
+      _hasNumber = RegExp(r'[0-9]').hasMatch(v);
+      _validateMatch();
+    });
+  }
+
+  void _validateMatch() {
+    setState(() {
+      _passwordsMatch = _confirmPassCtrl.text.isNotEmpty && _confirmPassCtrl.text == _newPassCtrl.text;
+    });
+  }
+
+  bool get _isValid => _hasMinLength && _hasUpper && _hasLower && _hasNumber && _passwordsMatch;
+
   @override
   void dispose() {
-    _tempPassCtrl.dispose();
     _newPassCtrl.dispose();
     _confirmPassCtrl.dispose();
     super.dispose();
   }
 
-  void _showCelebratorySuccessDialog(BuildContext context, UserModel user) {
-    final theme = Theme.of(context);
-    final isTeacher = user.role == UserRole.teacher;
-    final displayName = user.lastName != null ? 'Teacher ${user.lastName}' : (user.firstName ?? user.fullName);
-
-    showGeneralDialog(
-      context: context,
-      barrierDismissible: false,
-      barrierLabel: 'SuccessDialog',
-      transitionDuration: const Duration(milliseconds: 450),
-      pageBuilder: (ctx, anim1, anim2) {
-        return const SizedBox.shrink();
-      },
-      transitionBuilder: (ctx, anim1, anim2, child) {
-        final curveValue = Curves.elasticOut.transform(anim1.value);
-        return Transform.scale(
-          scale: curveValue,
-          child: Opacity(
-            opacity: anim1.value.clamp(0.0, 1.0),
-            child: Dialog(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-              elevation: 16,
-              child: Container(
-                constraints: const BoxConstraints(maxWidth: 440),
-                padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 32),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.surface,
-                  borderRadius: BorderRadius.circular(24),
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // Celebratory Animated Icon Badge
-                    Container(
-                      padding: const EdgeInsets.all(18),
-                      decoration: BoxDecoration(
-                        color: Colors.green.withValues(alpha: 0.12),
-                        shape: BoxShape.circle,
-                        border: Border.all(color: Colors.green.withValues(alpha: 0.3), width: 2),
-                      ),
-                      child: const Icon(
-                        Icons.check_circle_rounded,
-                        color: Colors.green,
-                        size: 56,
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-
-                    // Title
-                    Text(
-                      'Password Setup Complete!',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                        color: theme.colorScheme.onSurface,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-
-                    // Informative Success Message
-                    Text(
-                      'Welcome to ClassRealm, $displayName! Your temporary password has been successfully replaced with your new secure credentials.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: theme.colorScheme.onSurface.withValues(alpha: 0.75),
-                        height: 1.5,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Status Pill
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: Colors.blue.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: Colors.blue.withValues(alpha: 0.3)),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.verified_user_outlined, size: 16, color: Colors.blue),
-                          const SizedBox(width: 6),
-                          Text(
-                            isTeacher ? 'Account Status: Active Faculty' : 'Account Status: Active Learner',
-                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.blue),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-
-                    // Next Step Button
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: theme.colorScheme.primary,
-                          foregroundColor: theme.colorScheme.onPrimary,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                          elevation: 2,
-                        ),
-                        icon: const Icon(Icons.arrow_forward_rounded, size: 20),
-                        label: Text(
-                          isTeacher ? 'Proceed to Academic Setup' : 'Enter Student Portal',
-                          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-                        ),
-                        onPressed: () {
-                          Navigator.pop(ctx);
-                          if (isTeacher) {
-                            Navigator.pushReplacementNamed(context, AppRoutes.academicSetup);
-                          } else {
-                            Navigator.pushReplacementNamed(context, AppRoutes.studentHome);
-                          }
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
 
   void _submit() async {
-    if (!_formKey.currentState!.validate()) return;
+    if (!_isValid) return;
     setState(() => _isLoading = true);
     await Future.delayed(const Duration(milliseconds: 600));
     if (!mounted) return;
-    setState(() => _isLoading = false);
 
-    final user = MockDatabase.instance.currentUser;
+    final user = AuthRepository.instance.currentUser;
     if (user == null) {
+      setState(() => _isLoading = false);
       AppModals.showErrorDialog(
         context: context,
         title: 'Session Expired',
@@ -180,52 +82,109 @@ class _FirstLoginScreenState extends State<FirstLoginScreen> with SingleTickerPr
       return;
     }
 
-    final error = MockDatabase.instance.completeFirstLogin(
-      user.id,
-      _tempPassCtrl.text.trim(),
-      _newPassCtrl.text.trim(),
-    );
-
-    if (error != null) {
+    late Map<String, dynamic> otpResponse;
+    try {
+      otpResponse = await AuthRepository.instance.sendFirstLoginOtp();
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
       AppModals.showErrorDialog(
         context: context,
-        title: 'Password Setup Failed',
-        message: error,
+        title: 'Verification Code Not Sent',
+        message: error.toString(),
       );
       return;
     }
 
-    // Show Celebratory Animated Modal
-    _showCelebratorySuccessDialog(context, user);
+    setState(() => _isLoading = false);
+    if (!mounted) return;
+
+    final bool? verified = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => _PasswordOtpDialog(
+        email: user.email,
+        initialResendCooldown: (otpResponse['resendAfter'] as num?)?.toInt() ?? 90,
+        initialInputCountdown: (otpResponse['expiresIn'] as num?)?.toInt() ?? 60,
+        initialResendCount: (otpResponse['resendCount'] as num?)?.toInt() ?? 0,
+      ),
+    );
+
+    if (verified != true) return;
+
+    setState(() => _isLoading = true);
+
+    final error = await AuthRepository.instance.completeFirstLogin(
+      user.id,
+      _newPassCtrl.text.trim(),
+    );
+
+    if (error != null) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        AppModals.showErrorDialog(
+          context: context,
+          title: 'Password Setup Failed',
+          message: error,
+        );
+      }
+      return;
+    }
+
+    if (!mounted) return;
+    if (user.role == UserRole.teacher) {
+      Navigator.pushReplacementNamed(context, AppRoutes.teacherDashboard);
+    } else {
+      Navigator.pushReplacementNamed(context, AppRoutes.studentHome);
+    }
+  }
+
+  Widget _buildValidationRow(String text, bool isValid) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        children: [
+          Icon(
+            isValid ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
+            size: 16,
+            color: isValid ? Colors.green : Colors.grey.shade400,
+          ),
+          const SizedBox(width: 8),
+          Text(
+            text,
+            style: TextStyle(
+              fontSize: 12,
+              color: isValid ? Colors.green.shade700 : Colors.grey.shade600,
+              fontWeight: isValid ? FontWeight.w500 : FontWeight.normal,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final user = MockDatabase.instance.currentUser;
+    final user = AuthRepository.instance.currentUser;
     final size = MediaQuery.of(context).size;
     final isDesktop = size.width >= 900;
     final theme = Theme.of(context);
 
-    final displayName = user != null
-        ? (user.lastName != null ? 'Teacher ${user.lastName}' : (user.firstName ?? user.fullName))
-        : 'Faculty';
+    final displayName = user == null
+        ? 'Faculty'
+        : user.role == UserRole.teacher
+        ? 'Teacher ${user.lastName ?? user.fullName}'
+        : (user.firstName ?? user.fullName);
 
     return Scaffold(
       body: Stack(
         children: [
-          // Background Campus Photo with Depth Overlay
           Positioned.fill(
-            child: Image.asset(
-              AssetPaths.landingBackground,
-              fit: BoxFit.cover,
-            ),
+            child: Image.asset(AssetPaths.landingBackground, fit: BoxFit.cover),
           ),
           Positioned.fill(
-            child: Container(
-              color: Colors.black.withValues(alpha: 0.65),
-            ),
+            child: Container(color: Colors.black.withValues(alpha: 0.65)),
           ),
-
           Center(
             child: SingleChildScrollView(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 36),
@@ -244,203 +203,675 @@ class _FirstLoginScreenState extends State<FirstLoginScreen> with SingleTickerPr
                     ),
                   ],
                 ),
-                child: Form(
-                  key: _formKey,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      // Header with School Crest Logo & Icon
-                      Center(
-                        child: Column(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(4),
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: Colors.white,
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withValues(alpha: 0.1),
-                                    blurRadius: 10,
-                                  ),
-                                ],
-                              ),
-                              child: Image.asset(
-                                AssetPaths.schoolLogo,
-                                height: 64,
-                                width: 64,
-                                fit: BoxFit.contain,
-                              ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Center(
+                      child: Column(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: Colors.white,
+                              boxShadow: [
+                                BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 10),
+                              ],
                             ),
-                            const SizedBox(height: 14),
-                            Text(
-                              'Set Permanent Password',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                fontSize: 22,
-                                fontWeight: FontWeight.bold,
-                                color: theme.colorScheme.onSurface,
-                              ),
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              'Welcome, $displayName! For security compliance, you must change your temporary password to activate your account.',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
-                                height: 1.4,
-                              ),
-                            ),
-                          ],
-                        ),
+                            child: Image.asset(AssetPaths.schoolLogo, height: 64, width: 64, fit: BoxFit.contain),
+                          ),
+                          const SizedBox(height: 14),
+                          Text(
+                            'Set New Password',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            'Welcome, $displayName! For security compliance, please set up your new personalized password.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(fontSize: 13, color: theme.colorScheme.onSurface.withValues(alpha: 0.65), height: 1.4),
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 24),
+                    ),
+                    const SizedBox(height: 32),
 
-                      // Informational Card
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFEFF6FF),
+                    // New Password
+                    TextField(
+                      controller: _newPassCtrl,
+                      obscureText: _obscureNew,
+                      maxLength: 30,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.deny(RegExp(r' {2,}')),
+                        FilteringTextInputFormatter.deny(RegExp(r'(.)\1{3,}')),
+                      ],
+                      buildCounter: (context, {required currentLength, required isFocused, maxLength}) => null,
+                      decoration: InputDecoration(
+                        labelText: 'New Password',
+                        hintText: '--------',
+                        prefixIcon: const Icon(Icons.lock_outline, size: 20),
+                        suffixIcon: IconButton(
+                          icon: Icon(_obscureNew ? Icons.visibility_outlined : Icons.visibility_off_outlined, size: 20),
+                          onPressed: () => setState(() => _obscureNew = !_obscureNew),
+                        ),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                      ),
+                    ),
+                    
+                    const SizedBox(height: 12),
+                    
+                    // Real-time Validation Rules
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildValidationRow('At least 8 characters', _hasMinLength),
+                          _buildValidationRow('At least one uppercase letter', _hasUpper),
+                          _buildValidationRow('At least one lowercase letter', _hasLower),
+                          _buildValidationRow('At least one number', _hasNumber),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(height: 24),
+
+                    // Confirm Password
+                    TextField(
+                      controller: _confirmPassCtrl,
+                      obscureText: _obscureConfirm,
+                      maxLength: 30,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.deny(RegExp(r' {2,}')),
+                        FilteringTextInputFormatter.deny(RegExp(r'(.)\1{3,}')),
+                      ],
+                      buildCounter: (context, {required currentLength, required isFocused, maxLength}) => null,
+                      decoration: InputDecoration(
+                        labelText: 'Confirm New Password',
+                        hintText: '--------',
+                        prefixIcon: const Icon(Icons.lock_reset_outlined, size: 20),
+                        suffixIcon: IconButton(
+                          icon: Icon(_obscureConfirm ? Icons.visibility_outlined : Icons.visibility_off_outlined, size: 20),
+                          onPressed: () => setState(() => _obscureConfirm = !_obscureConfirm),
+                        ),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                        focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: const Color(0xFFBFDBFE)),
-                        ),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Icon(Icons.shield_outlined, color: Color(0xFF1D4ED8), size: 20),
-                            const SizedBox(width: 10),
-                            const Expanded(
-                              child: Text(
-                                'Password Requirement: Must be at least 8 characters long and contain both letters and numbers.',
-                                style: TextStyle(fontSize: 12, color: Color(0xFF1E40AF), height: 1.4),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-
-                      // Temporary Password
-                      TextFormField(
-                        controller: _tempPassCtrl,
-                        obscureText: _obscureTemp,
-                        validator: (v) {
-                          if (v == null || v.trim().isEmpty) {
-                            return 'Temporary password is required.';
-                          }
-                          return null;
-                        },
-                        decoration: InputDecoration(
-                          labelText: 'Current Temporary Password',
-                          hintText: 'e.g. gonzaga19951024',
-                          prefixIcon: const Icon(Icons.vpn_key_outlined, size: 20),
-                          suffixIcon: IconButton(
-                            icon: Icon(
-                              _obscureTemp ? Icons.visibility_outlined : Icons.visibility_off_outlined,
-                              size: 20,
-                            ),
-                            onPressed: () => setState(() => _obscureTemp = !_obscureTemp),
+                          borderSide: BorderSide(
+                            color: _confirmPassCtrl.text.isEmpty
+                                ? theme.colorScheme.primary
+                                : (_passwordsMatch ? Colors.green : Colors.red),
+                            width: 2,
                           ),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                         ),
-                      ),
-                      const SizedBox(height: 16),
-
-                      // New Password
-                      TextFormField(
-                        controller: _newPassCtrl,
-                        obscureText: _obscureNew,
-                        validator: (v) {
-                          if (v == null || v.trim().isEmpty) {
-                            return 'New password is required.';
-                          }
-                          if (v.trim().length < 8) {
-                            return 'Password must be at least 8 characters.';
-                          }
-                          final hasLetter = RegExp(r'[a-zA-Z]').hasMatch(v);
-                          final hasNumber = RegExp(r'[0-9]').hasMatch(v);
-                          if (!hasLetter || !hasNumber) {
-                            return 'Must contain both letters and numbers.';
-                          }
-                          if (v.trim() == _tempPassCtrl.text.trim()) {
-                            return 'New password must be different from temporary password.';
-                          }
-                          return null;
-                        },
-                        decoration: InputDecoration(
-                          labelText: 'New Password',
-                          hintText: '••••••••',
-                          prefixIcon: const Icon(Icons.lock_outline, size: 20),
-                          suffixIcon: IconButton(
-                            icon: Icon(
-                              _obscureNew ? Icons.visibility_outlined : Icons.visibility_off_outlined,
-                              size: 20,
-                            ),
-                            onPressed: () => setState(() => _obscureNew = !_obscureNew),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(
+                            color: _confirmPassCtrl.text.isEmpty
+                                ? theme.colorScheme.outline
+                                : (_passwordsMatch ? Colors.green : Colors.red.withValues(alpha: 0.5)),
                           ),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                         ),
                       ),
-                      const SizedBox(height: 16),
+                    ),
+                    if (_confirmPassCtrl.text.isNotEmpty && !_passwordsMatch)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8, left: 12),
+                        child: Text(
+                          'Passwords do not match',
+                          style: TextStyle(color: Colors.red.shade700, fontSize: 12),
+                        ),
+                      ),
+                      
+                    const SizedBox(height: 32),
 
-                      // Confirm Password
-                      TextFormField(
-                        controller: _confirmPassCtrl,
-                        obscureText: _obscureConfirm,
-                        validator: (v) {
-                          if (v == null || v.trim().isEmpty) {
-                            return 'Please confirm your new password.';
-                          }
-                          if (v.trim() != _newPassCtrl.text.trim()) {
-                            return 'Passwords do not match.';
-                          }
-                          return null;
+                    // Submit Button
+                    AppPrimaryButton(
+                      label: 'Activate Account & Set Password',
+                      icon: Icons.check_circle_outline,
+                      isLoading: _isLoading,
+                      // Disable button natively when validation is not complete
+                      onPressed: _isValid ? _submit : null,
+                    ),
+                    const SizedBox(height: 14),
+
+                    // Back to Login Link
+                    Center(
+                      child: TextButton.icon(
+                        onPressed: () {
+                          AuthRepository.instance.logout();
+                          Navigator.pushReplacementNamed(context, AppRoutes.login);
                         },
-                        decoration: InputDecoration(
-                          labelText: 'Confirm New Password',
-                          hintText: '••••••••',
-                          prefixIcon: const Icon(Icons.lock_reset_outlined, size: 20),
-                          suffixIcon: IconButton(
-                            icon: Icon(
-                              _obscureConfirm ? Icons.visibility_outlined : Icons.visibility_off_outlined,
-                              size: 20,
-                            ),
-                            onPressed: () => setState(() => _obscureConfirm = !_obscureConfirm),
-                          ),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                        ),
+                        icon: const Icon(Icons.arrow_back, size: 16),
+                        label: const Text('Back to Login'),
                       ),
-                      const SizedBox(height: 28),
-
-                      // Submit Button
-                      AppPrimaryButton(
-                        label: 'Activate Account & Set Password',
-                        icon: Icons.check_circle_outline,
-                        isLoading: _isLoading,
-                        onPressed: _submit,
-                      ),
-                      const SizedBox(height: 14),
-
-                      // Back to Login Link
-                      Center(
-                        child: TextButton.icon(
-                          onPressed: () {
-                            MockDatabase.instance.logout();
-                            Navigator.pushReplacementNamed(context, AppRoutes.login);
-                          },
-                          icon: const Icon(Icons.arrow_back, size: 16),
-                          label: const Text('Back to Login'),
-                        ),
-                      ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _PasswordOtpDialog extends StatefulWidget {
+  final String email;
+  final int initialResendCooldown;
+  final int initialInputCountdown;
+  final int initialResendCount;
+
+  const _PasswordOtpDialog({
+    required this.email,
+    this.initialResendCooldown = 90,
+    this.initialInputCountdown = 60,
+    this.initialResendCount = 0,
+  });
+
+  @override
+  State<_PasswordOtpDialog> createState() => _PasswordOtpDialogState();
+}
+
+class _PasswordOtpDialogState extends State<_PasswordOtpDialog> {
+  final _otpController = TextEditingController();
+  final _formKey = GlobalKey<FormState>();
+  bool _hasError = false;
+  bool _isVerifying = false;
+  bool _isLockedOut = false;
+  String? _verificationMessage;
+
+  Timer? _resendTimer;
+  int _resendCooldown = 90;
+  int _resendAttempts = 0;
+
+  Timer? _inputTimer;
+  int _inputCountdown = 60;
+
+  bool _isResending = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _resendCooldown = widget.initialResendCooldown;
+    _inputCountdown = widget.initialInputCountdown;
+    _resendAttempts = widget.initialResendCount;
+    _startTimers(reset: false);
+  }
+
+  void _startTimers({bool reset = true}) {
+    if (reset) {
+      setState(() {
+        _resendCooldown = 90;
+        _inputCountdown = 60;
+        _isLockedOut = false;
+      });
+    }
+
+    _resendTimer?.cancel();
+    _inputTimer?.cancel();
+
+    _resendTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) return;
+      if (_resendCooldown > 0) {
+        setState(() => _resendCooldown--);
+      } else {
+        timer.cancel();
+      }
+    });
+
+    _inputTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) return;
+      if (_inputCountdown > 0) {
+        setState(() => _inputCountdown--);
+      } else if (_isLockedOut) {
+        setState(() {
+          _isLockedOut = false;
+          _verificationMessage = 'The code has expired. Request a new code.';
+        });
+        timer.cancel();
+      } else {
+        timer.cancel();
+      }
+    });
+  }
+
+  void _showTopNotification(String message, {bool isError = false}) {
+    final theme = Theme.of(context);
+    final overlay = Overlay.of(context, rootOverlay: true);
+    late OverlayEntry overlayEntry;
+
+    overlayEntry = OverlayEntry(
+      builder: (context) => Positioned(
+        top: MediaQuery.of(context).padding.top + 20,
+        left: 0,
+        right: 0,
+        child: Material(
+          color: Colors.transparent,
+          child: Center(
+            child: Container(
+              margin: const EdgeInsets.symmetric(horizontal: 24),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+              decoration: BoxDecoration(
+                color: isError ? theme.colorScheme.error : theme.colorScheme.primaryContainer,
+                borderRadius: BorderRadius.circular(8),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Colors.black26,
+                    blurRadius: 16,
+                    offset: Offset(0, 4),
+                  )
+                ],
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    isError ? LucideIcons.alertCircle : LucideIcons.checkCircle2,
+                    color: isError ? theme.colorScheme.onError : theme.colorScheme.onPrimaryContainer,
+                    size: 24,
+                  ),
+                  const SizedBox(width: 12),
+                  Flexible(
+                    child: Text(
+                      message,
+                      style: TextStyle(
+                        color: isError ? theme.colorScheme.onError : theme.colorScheme.onPrimaryContainer,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 15,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    overlay.insert(overlayEntry);
+    Future.delayed(const Duration(seconds: 3), () {
+      if (overlayEntry.mounted) overlayEntry.remove();
+    });
+  }
+
+  Future<void> _handleResend() async {
+    if (_resendAttempts >= 3) {
+      _showTopNotification('Maximum resend attempts reached.', isError: true);
+      return;
+    }
+
+    setState(() {
+      _isResending = true;
+      _hasError = false;
+      _otpController.clear();
+    });
+    _formKey.currentState?.reset();
+
+    try {
+      final result = await AuthRepository.instance.sendFirstLoginOtp();
+      if (!mounted) return;
+      setState(() {
+        _isResending = false;
+        _resendAttempts = (result['resendCount'] as num?)?.toInt() ?? _resendAttempts + 1;
+        _resendCooldown = (result['resendAfter'] as num?)?.toInt() ?? 90;
+        _inputCountdown = (result['expiresIn'] as num?)?.toInt() ?? 60;
+        _verificationMessage = null;
+      });
+      _startTimers(reset: false);
+      _showTopNotification('New verification code sent!');
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _isResending = false);
+      _showTopNotification(
+        error.toString().contains('resend_limit')
+            ? 'Maximum resend attempts reached. Try again later.'
+            : 'Unable to resend the code. ${error.toString()}',
+        isError: true,
+      );
+    }
+  }
+
+  Future<void> _verify() async {
+    if (_isVerifying || _isLockedOut || !_formKey.currentState!.validate()) return;
+    setState(() {
+      _isVerifying = true;
+      _hasError = false;
+      _verificationMessage = null;
+    });
+    try {
+      final result = await AuthRepository.instance.verifyFirstLoginOtp(
+        _otpController.text,
+      );
+      if (!mounted) return;
+      if (result.verified) {
+        Navigator.pop(context, true);
+        return;
+      }
+
+      final reason = result.reason;
+      if (reason == 'locked') {
+        setState(() {
+          _isLockedOut = true;
+          _inputCountdown = result.retryAfter > 0 ? result.retryAfter : 900;
+          _verificationMessage = 'Too many incorrect codes. Try again after 15 minutes.';
+        });
+        _startTimers(reset: false);
+        _showTopNotification(
+          'Too many incorrect codes. Try again after 15 minutes.',
+          isError: true,
+        );
+      } else {
+        setState(() {
+          _hasError = true;
+          _verificationMessage = reason == 'expired'
+              ? 'This code has expired. Request a new code.'
+              : 'The verification code is incorrect.';
+        });
+        _showTopNotification(
+          reason == 'expired'
+              ? 'This code has expired. Request a new code.'
+              : 'Incorrect code. ${result.attemptsRemaining ?? 0} attempts remaining.',
+          isError: true,
+        );
+      }
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _verificationMessage = error.toString());
+      _showTopNotification('Unable to verify the code. Try again.', isError: true);
+    } finally {
+      if (mounted) setState(() => _isVerifying = false);
+    }
+  }
+
+  @override
+  void dispose() {
+    _otpController.dispose();
+    _resendTimer?.cancel();
+    _inputTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return AlertDialog(
+      backgroundColor: theme.colorScheme.surface,
+      surfaceTintColor: Colors.transparent,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      contentPadding: const EdgeInsets.all(32),
+      title: null,
+      content: SizedBox(
+        width: 360,
+        child: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primaryContainer.withValues(
+                    alpha: 0.5,
+                  ),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  LucideIcons.shieldCheck,
+                  size: 38,
+                  color: theme.colorScheme.primary,
+                ),
+              ),
+              const SizedBox(height: 24),
+              Text(
+                'Verify password change',
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.w800,
+                  color: theme.colorScheme.onSurface,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'We sent a 6-digit verification code to:\n${widget.email}',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
+                  height: 1.6,
+                ),
+              ),
+              const SizedBox(height: 32),
+
+              TextFormField(
+                controller: _otpController,
+                enabled: !_isLockedOut && !_isVerifying,
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                maxLength: 6,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 12,
+                  color: _hasError
+                      ? theme.colorScheme.error
+                      : theme.colorScheme.primary,
+                ),
+                onChanged: (_) {
+                  if (_hasError) setState(() => _hasError = false);
+                },
+                decoration: InputDecoration(
+                  counterText: '',
+                  hintText: '000000',
+                  hintStyle: TextStyle(
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.15),
+                    letterSpacing: 12,
+                  ),
+                  errorText: _hasError ? 'Incorrect verification code' : null,
+                  filled: true,
+                  fillColor: _hasError
+                      ? theme.colorScheme.errorContainer.withValues(alpha: 0.3)
+                      : theme.colorScheme.surfaceContainerHighest.withValues(
+                          alpha: 0.3,
+                        ),
+                  contentPadding: const EdgeInsets.symmetric(vertical: 20),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    borderSide: BorderSide.none,
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    borderSide: BorderSide(
+                      color: _hasError
+                          ? theme.colorScheme.error
+                          : theme.colorScheme.primary,
+                      width: 2,
+                    ),
+                  ),
+                ),
+                validator: (val) {
+                  if (val == null || val.length != 6) {
+                    return 'Enter the 6-digit code';
+                  }
+                  return null;
+                },
+              ),
+
+              const SizedBox(height: 24),
+              if (_verificationMessage != null) ...[
+                const SizedBox(height: 12),
+                Text(
+                  _verificationMessage!,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: theme.colorScheme.error,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                  ),
+                ),
+              ],
+              if (_isLockedOut)
+                Text(
+                  'Try again in ${(_inputCountdown ~/ 60).toString().padLeft(2, '0')}:${(_inputCountdown % 60).toString().padLeft(2, '0')}',
+                  style: TextStyle(
+                    color: theme.colorScheme.error,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                  ),
+                )
+              else if (_inputCountdown > 0)
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 300),
+                  child: Container(
+                    key: ValueKey<int>(_inputCountdown > 0 ? 1 : 0),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.primaryContainer.withValues(
+                        alpha: 0.4,
+                      ),
+                      borderRadius: BorderRadius.circular(100),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          LucideIcons.timer,
+                          size: 16,
+                          color: theme.colorScheme.primary,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Expires in ${(_inputCountdown ~/ 60).toString().padLeft(2, '0')}:${(_inputCountdown % 60).toString().padLeft(2, '0')}',
+                          style: TextStyle(
+                            color: theme.colorScheme.primary,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              else
+                Text(
+                  'Code has expired. Please request a new one.',
+                  style: TextStyle(
+                    color: theme.colorScheme.error,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                  ),
+                ),
+
+              const SizedBox(height: 32),
+              SizedBox(
+                width: double.infinity,
+                height: 52,
+                child: ElevatedButton(
+                  onPressed: _inputCountdown > 0 && !_isLockedOut && !_isVerifying
+                      ? _verify
+                      : null,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: theme.colorScheme.primary,
+                    foregroundColor: theme.colorScheme.onPrimary,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                  child: _isVerifying
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text(
+                          'Verify Account',
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                        ),
+                ),
+              ),
+
+              const SizedBox(height: 24),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    "Didn't receive the code? ",
+                    style: TextStyle(
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                      fontSize: 13,
+                    ),
+                  ),
+                  _isResending
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : TextButton(
+                          onPressed: !_isLockedOut &&
+                                  _resendCooldown == 0 &&
+                                  _resendAttempts < 3
+                              ? _handleResend
+                              : null,
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                            minimumSize: Size.zero,
+                          ),
+                          child: Text(
+                            _resendAttempts >= 3
+                                ? 'Limit Reached'
+                                : _resendCooldown > 0
+                                ? 'Resend in ${_resendCooldown}s'
+                                : 'Resend',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                              color: _resendAttempts >= 3
+                                  ? theme.colorScheme.error
+                                  : null,
+                            ),
+                          ),
+                        ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  style: TextButton.styleFrom(
+                    foregroundColor: theme.colorScheme.primary,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                  child: const Text(
+                    'Cancel Password Change',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

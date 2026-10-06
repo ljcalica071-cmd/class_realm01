@@ -5,14 +5,12 @@ import 'package:class_realm/core/theme/app_theme.dart';
 import 'package:class_realm/data/mock_database.dart';
 import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/shared/widgets/shared_widgets.dart';
+import 'package:class_realm/features/teacher/sub_features/class_management/widgets/add_parent_dialog.dart';
 
 class TeacherParentManagementTab extends StatefulWidget {
   final List<UserModel> parents;
 
-  const TeacherParentManagementTab({
-    super.key,
-    required this.parents,
-  });
+  const TeacherParentManagementTab({super.key, required this.parents});
 
   @override
   State<TeacherParentManagementTab> createState() =>
@@ -30,6 +28,14 @@ class _TeacherParentManagementTabState
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final tableHeaderColor = theme.colorScheme.secondary;
+    final tableHeaderTextColor = theme.colorScheme.onSurface;
+    final tableBorderColor = theme.colorScheme.onSurface.withValues(
+      alpha: 0.08,
+    );
+    final alternateRowColor = theme.colorScheme.secondary.withValues(
+      alpha: theme.brightness == Brightness.dark ? 0.3 : 0.35,
+    );
     var displayList = widget.parents.where((p) {
       final linkedStudent = MockDatabase.instance.users
           .where((user) => user.id == p.linkedStudentId)
@@ -131,7 +137,10 @@ class _TeacherParentManagementTabState
                   const SizedBox(height: 4),
                   Text(
                     'View and manage parent or guardian accounts linked to enrolled students.',
-                    style: TextStyle(color: theme.colorScheme.onSurface.withValues(alpha: 0.6)),
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                    ),
                   ),
                 ],
               ),
@@ -164,7 +173,9 @@ class _TeacherParentManagementTabState
                 decoration: BoxDecoration(
                   color: theme.colorScheme.surface,
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: theme.colorScheme.onSurface.withValues(alpha: 0.12)),
+                  border: Border.all(
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.12),
+                  ),
                 ),
                 child: DropdownButtonHideUnderline(
                   child: DropdownButton<String>(
@@ -200,7 +211,9 @@ class _TeacherParentManagementTabState
                   onChanged: (v) => setState(() => _parentSearchQuery = v),
                   decoration: InputDecoration(
                     hintText: 'Search by parent name, student, or email...',
-                    hintStyle: TextStyle(color: theme.colorScheme.onSurface.withValues(alpha: 0.6)),
+                    hintStyle: TextStyle(
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                    ),
                     prefixIcon: Icon(
                       LucideIcons.search,
                       size: 20,
@@ -214,11 +227,19 @@ class _TeacherParentManagementTabState
                     ),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide(color: theme.colorScheme.onSurface.withValues(alpha: 0.12)),
+                      borderSide: BorderSide(
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.12,
+                        ),
+                      ),
                     ),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide(color: theme.colorScheme.onSurface.withValues(alpha: 0.12)),
+                      borderSide: BorderSide(
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.12,
+                        ),
+                      ),
                     ),
                   ),
                 ),
@@ -236,9 +257,9 @@ class _TeacherParentManagementTabState
               children: [
                 Container(
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: theme.colorScheme.surface,
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                    border: Border.all(color: tableBorderColor),
                   ),
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(12),
@@ -251,7 +272,7 @@ class _TeacherParentManagementTabState
                             Container(
                               height: 48,
                               decoration: BoxDecoration(
-                                color: Color(0xFF1A56DB),
+                                color: tableHeaderColor,
                               ),
                               child: Row(
                                 children: [
@@ -260,10 +281,10 @@ class _TeacherParentManagementTabState
                                     child: Center(
                                       child: Checkbox(
                                         value: allSelected,
-                                        activeColor: Colors.white,
-                                        checkColor: const Color(0xFF1A56DB),
-                                        side: const BorderSide(
-                                          color: Colors.white,
+                                        activeColor: theme.colorScheme.primary,
+                                        checkColor: theme.colorScheme.onPrimary,
+                                        side: BorderSide(
+                                          color: tableHeaderTextColor,
                                           width: 1.5,
                                         ),
                                         onChanged: (val) {
@@ -284,11 +305,11 @@ class _TeacherParentManagementTabState
                                   ),
                                   _buildHeaderCell(
                                     width: colNumWidth,
-                                    child: const Center(
+                                    child: Center(
                                       child: Text(
                                         '#',
                                         style: TextStyle(
-                                          color: Colors.white,
+                                          color: tableHeaderTextColor,
                                           fontWeight: FontWeight.bold,
                                           fontSize: 13,
                                         ),
@@ -314,7 +335,7 @@ class _TeacherParentManagementTabState
                                     child: Text(
                                       'RELATIONSHIP',
                                       style: TextStyle(
-                                        color: Colors.white,
+                                        color: tableHeaderTextColor,
                                         fontWeight: FontWeight.bold,
                                         fontSize: 13,
                                       ),
@@ -325,7 +346,7 @@ class _TeacherParentManagementTabState
                                     child: Text(
                                       'LINKED STUDENT',
                                       style: TextStyle(
-                                        color: Colors.white,
+                                        color: tableHeaderTextColor,
                                         fontWeight: FontWeight.bold,
                                         fontSize: 13,
                                       ),
@@ -336,7 +357,7 @@ class _TeacherParentManagementTabState
                                     child: Text(
                                       'SECTION',
                                       style: TextStyle(
-                                        color: Colors.white,
+                                        color: tableHeaderTextColor,
                                         fontWeight: FontWeight.bold,
                                         fontSize: 13,
                                       ),
@@ -361,7 +382,7 @@ class _TeacherParentManagementTabState
                                     child: Text(
                                       'STATUS',
                                       style: TextStyle(
-                                        color: Colors.white,
+                                        color: tableHeaderTextColor,
                                         fontWeight: FontWeight.bold,
                                         fontSize: 13,
                                       ),
@@ -370,11 +391,11 @@ class _TeacherParentManagementTabState
                                   _buildHeaderCell(
                                     width: colActionsWidth,
                                     hasRightBorder: false,
-                                    child: const Center(
+                                    child: Center(
                                       child: Text(
                                         'ACTIONS',
                                         style: TextStyle(
-                                          color: Colors.white,
+                                          color: tableHeaderTextColor,
                                           fontWeight: FontWeight.bold,
                                           fontSize: 13,
                                         ),
@@ -422,13 +443,16 @@ class _TeacherParentManagementTabState
                                           height: 52,
                                           decoration: BoxDecoration(
                                             color: isSelected
-                                                ? const Color(0xFFEFF6FF)
+                                                ? theme.colorScheme.primary
+                                                      .withValues(alpha: 0.12)
                                                 : (i % 2 == 1
-                                                      ? const Color(0xFFFBFDFF)
-                                                      : Colors.white),
-                                            border: const Border(
+                                                      ? alternateRowColor
+                                                      : theme
+                                                            .colorScheme
+                                                            .surface),
+                                            border: Border(
                                               bottom: BorderSide(
-                                                color: Color(0xFFE2E8F0),
+                                                color: tableBorderColor,
                                               ),
                                             ),
                                           ),
@@ -496,7 +520,9 @@ class _TeacherParentManagementTabState
                                                       'Unlinked student',
                                                   style: TextStyle(
                                                     fontSize: 13,
-                                                    color: Theme.of(context).colorScheme.primary,
+                                                    color: Theme.of(context)
+                                                        .colorScheme
+                                                        .primary,
                                                     fontWeight: FontWeight.bold,
                                                   ),
                                                 ),
@@ -548,8 +574,9 @@ class _TeacherParentManagementTabState
                                                       icon: Icon(
                                                         Icons.edit_outlined,
                                                         size: 18,
-                                                        color:
-                                                            Theme.of(context).colorScheme.primary,
+                                                        color: Theme.of(context)
+                                                            .colorScheme
+                                                            .primary,
                                                       ),
                                                       onPressed: () =>
                                                           _showEditParentDialog(
@@ -572,7 +599,8 @@ class _TeacherParentManagementTabState
                                                               confirmLabel:
                                                                   'Remove',
                                                               confirmColor:
-                                                                  AppTheme.catOrange,
+                                                                  AppTheme
+                                                                      .catOrange,
                                                             );
                                                         if (confirm == true) {
                                                           setState(() {
@@ -616,6 +644,7 @@ class _TeacherParentManagementTabState
     required Widget child,
     bool hasRightBorder = true,
   }) {
+    final theme = Theme.of(context);
     return Container(
       width: width,
       height: double.infinity,
@@ -623,8 +652,10 @@ class _TeacherParentManagementTabState
       alignment: Alignment.centerLeft,
       decoration: BoxDecoration(
         border: hasRightBorder
-            ? const Border(
-                right: BorderSide(color: Color(0xFF2563EB), width: 1),
+            ? Border(
+                right: BorderSide(
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.12),
+                ),
               )
             : null,
       ),
@@ -633,6 +664,7 @@ class _TeacherParentManagementTabState
   }
 
   Widget _buildClickableParentHeaderTitle(String title, String columnKey) {
+    final theme = Theme.of(context);
     final isCurrent = _parentSortColumn == columnKey;
     final icon = !isCurrent ? ' ↕' : (_parentSortAscending ? ' ▴' : ' ▾');
     return InkWell(
@@ -647,7 +679,7 @@ class _TeacherParentManagementTabState
       child: Text(
         '$title$icon',
         style: TextStyle(
-          color: Colors.white,
+          color: theme.colorScheme.onSurface,
           fontWeight: isCurrent ? FontWeight.w800 : FontWeight.bold,
           fontSize: 12.5,
         ),
@@ -660,6 +692,7 @@ class _TeacherParentManagementTabState
     required Widget child,
     bool hasRightBorder = true,
   }) {
+    final theme = Theme.of(context);
     return Container(
       width: width,
       height: double.infinity,
@@ -667,8 +700,10 @@ class _TeacherParentManagementTabState
       alignment: Alignment.centerLeft,
       decoration: BoxDecoration(
         border: hasRightBorder
-            ? const Border(
-                right: BorderSide(color: Color(0xFFF1F5F9), width: 1),
+            ? Border(
+                right: BorderSide(
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.06),
+                ),
               )
             : null,
       ),
@@ -677,112 +712,11 @@ class _TeacherParentManagementTabState
   }
 
   Future<void> _showAddParentDialog() async {
-    final formKey = GlobalKey<FormState>();
-    final nameController = TextEditingController();
-    final emailController = TextEditingController();
-    final contactController = TextEditingController();
-    String? relationship;
-    String? linkedStudentId;
-
-    await showDialog<void>(
-      context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: Text('Add Parent / Guardian'),
-          content: SizedBox(
-            width: 460,
-            child: Form(
-              key: formKey,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextFormField(
-                    controller: nameController,
-                    decoration: const InputDecoration(
-                      labelText: 'Parent / Guardian Name',
-                    ),
-                    validator: (value) => value == null || value.trim().isEmpty
-                        ? 'Required'
-                        : null,
-                  ),
-                  TextFormField(
-                    controller: emailController,
-                    decoration: const InputDecoration(labelText: 'Email'),
-                    validator: (value) => value == null || value.trim().isEmpty
-                        ? 'Required'
-                        : null,
-                  ),
-                  TextFormField(
-                    controller: contactController,
-                    decoration: const InputDecoration(
-                      labelText: 'Contact Number',
-                    ),
-                    validator: (value) => value == null || value.trim().isEmpty
-                        ? 'Required'
-                        : null,
-                  ),
-                  DropdownButtonFormField<String>(
-                    decoration: const InputDecoration(
-                      labelText: 'Relationship to Student',
-                    ),
-                    items: const ['Mother', 'Father', 'Guardian', 'Other']
-                        .map(
-                          (value) => DropdownMenuItem(
-                            value: value,
-                            child: Text(value),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: (value) =>
-                        setDialogState(() => relationship = value),
-                    validator: (value) => value == null ? 'Required' : null,
-                  ),
-                  DropdownButtonFormField<String>(
-                    decoration: const InputDecoration(
-                      labelText: 'Linked Student',
-                    ),
-                    items: MockDatabase.instance.users
-                        .where((u) => u.role == UserRole.student)
-                        .map(
-                          (u) => DropdownMenuItem(
-                            value: u.id,
-                            child: Text(u.fullName),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: (value) =>
-                        setDialogState(() => linkedStudentId = value),
-                    validator: (value) => value == null ? 'Required' : null,
-                  ),
-                ],
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                if (formKey.currentState!.validate()) {
-                  setState(() {
-                    MockDatabase.instance.createParentAccount(
-                      fullName: nameController.text,
-                      email: emailController.text,
-                      contactNumber: contactController.text,
-                      relationship: relationship!,
-                      linkedStudentId: linkedStudentId!,
-                    );
-                  });
-                  Navigator.pop(context);
-                }
-              },
-              child: Text('Add Parent'),
-            ),
-          ],
-        ),
-      ),
+    await AddParentDialog.show(
+      context,
+      onParentCreated: () {
+        setState(() {});
+      },
     );
   }
 

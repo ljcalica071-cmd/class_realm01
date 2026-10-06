@@ -1,0 +1,20 @@
+[functions.provision-student]
+verify_jwt = false
+
+[functions.update-student]
+verify_jwt = false
+
+[functions.approve-teacher]
+verify_jwt = false
+
+[functions.first-login-otp]
+verify_jwt = false
+
+[functions.complete-first-login]
+verify_jwt = false
+
+[functions.delete-firebase-user]
+verify_jwt = false
+
+[functions.student-dashboard]
+verify_jwt = false

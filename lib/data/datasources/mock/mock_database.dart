@@ -48,168 +48,7 @@ class MockDatabase {
     currentSubject = 'General Mathematics';
     sections = ['Section A', 'Section B'];
 
-    const studentRecords = [
-      {
-        'id': 'A01',
-        'section': 'Section A',
-        'first': 'Alyssa',
-        'middle': 'M.',
-        'last': 'Reyes',
-        'gender': 'Female',
-        'email': 'alyssareyes@gmail.com',
-        'phone': '09171234501',
-        'lrn': '100001230001',
-        'birthday': '2009-03-14',
-        'parent': 'Maricel Reyes',
-        'relationship': 'Mother',
-        'parentEmail': 'maricelreyes@gmail.com',
-        'parentPhone': '09181234501',
-      },
-      {
-        'id': 'A02',
-        'section': 'Section A',
-        'first': 'Joshua',
-        'middle': 'M.',
-        'last': 'Reyes',
-        'gender': 'Male',
-        'email': 'joshuareyes@gmail.com',
-        'phone': '09171234502',
-        'lrn': '100001230002',
-        'birthday': '2009-07-22',
-        'parent': 'Maricel Reyes',
-        'relationship': 'Mother',
-        'parentEmail': 'maricelreyes@gmail.com',
-        'parentPhone': '09181234501',
-      },
-      {
-        'id': 'A03',
-        'section': 'Section A',
-        'first': 'Bianca',
-        'middle': 'R.',
-        'last': 'Dela Cruz',
-        'gender': 'Female',
-        'email': 'biancadelacruz@gmail.com',
-        'phone': '09171234503',
-        'lrn': '100001230003',
-        'birthday': '2009-11-05',
-        'parent': 'Lorna Dela Cruz',
-        'relationship': 'Mother',
-        'parentEmail': 'lornadelacruz@gmail.com',
-        'parentPhone': '09181234503',
-      },
-      {
-        'id': 'A04',
-        'section': 'Section A',
-        'first': 'Daniel',
-        'middle': 'J.',
-        'last': 'Mendoza',
-        'gender': 'Male',
-        'email': 'danielmendoza@gmail.com',
-        'phone': '09171234504',
-        'lrn': '100001230004',
-        'birthday': '2009-01-28',
-        'parent': 'Joel Mendoza',
-        'relationship': 'Father',
-        'parentEmail': 'joelmendoza@gmail.com',
-        'parentPhone': '09181234504',
-      },
-      {
-        'id': 'A05',
-        'section': 'Section A',
-        'first': 'Camille',
-        'middle': 'S.',
-        'last': 'Villanueva',
-        'gender': 'Female',
-        'email': 'camillevillanueva@gmail.com',
-        'phone': '09171234505',
-        'lrn': '100001230005',
-        'birthday': '2009-09-09',
-        'parent': 'Grace Villanueva',
-        'relationship': 'Mother',
-        'parentEmail': 'grace.villanueva@gmail.com',
-        'parentPhone': '09181234505',
-      },
-      {
-        'id': 'B01',
-        'section': 'Section B',
-        'first': 'Nathan',
-        'middle': 'P.',
-        'last': 'Garcia',
-        'gender': 'Male',
-        'email': 'nathangarcia@gmail.com',
-        'phone': '09171234506',
-        'lrn': '100001230006',
-        'birthday': '2009-02-16',
-        'parent': 'Teresa Garcia',
-        'relationship': 'Mother',
-        'parentEmail': 'teresagarcia@gmail.com',
-        'parentPhone': '09181234506',
-      },
-      {
-        'id': 'B02',
-        'section': 'Section B',
-        'first': 'Sofia',
-        'middle': 'C.',
-        'last': 'Bautista',
-        'gender': 'Female',
-        'email': 'sofiabautista@gmail.com',
-        'phone': '09171234507',
-        'lrn': '100001230007',
-        'birthday': '2009-06-30',
-        'parent': 'Eduardo Bautista',
-        'relationship': 'Father',
-        'parentEmail': 'eduardobautista@gmail.com',
-        'parentPhone': '09181234507',
-      },
-      {
-        'id': 'B03',
-        'section': 'Section B',
-        'first': 'Ethan',
-        'middle': 'D.',
-        'last': 'Aquino',
-        'gender': 'Male',
-        'email': 'ethanaquino@gmail.com',
-        'phone': '09171234508',
-        'lrn': '100001230008',
-        'birthday': '2009-10-12',
-        'parent': 'Monica Aquino',
-        'relationship': 'Mother',
-        'parentEmail': 'monicaaquino@gmail.com',
-        'parentPhone': '09181234508',
-      },
-      {
-        'id': 'B04',
-        'section': 'Section B',
-        'first': 'Jasmine',
-        'middle': 'F.',
-        'last': 'Santiago',
-        'gender': 'Female',
-        'email': 'jasminesantiago@gmail.com',
-        'phone': '09171234509',
-        'lrn': '100001230009',
-        'birthday': '2009-12-03',
-        'parent': 'Roberto Santiago',
-        'relationship': 'Father',
-        'parentEmail': 'robertosantiago@gmail.com',
-        'parentPhone': '09181234509',
-      },
-      {
-        'id': 'B05',
-        'section': 'Section B',
-        'first': 'Marco',
-        'middle': 'T.',
-        'last': 'Castillo',
-        'gender': 'Male',
-        'email': 'marcocastillo@gmail.com',
-        'phone': '09171234510',
-        'lrn': '100001230010',
-        'birthday': '2009-04-25',
-        'parent': 'Elena Castillo',
-        'relationship': 'Mother',
-        'parentEmail': 'elenacastillo@gmail.com',
-        'parentPhone': '09181234510',
-      },
-    ];
+    const List<Map<String, String>> studentRecords = [];
 
     DateTime parseBirthday(String value) {
       final parts = value.split('-').map(int.parse).toList();
@@ -219,9 +58,9 @@ class MockDatabase {
     users = [
       const UserModel(
         id: 'usr_admin',
-        username: 'admin',
+        username: 'ljcalica971@gmail.com',
         fullName: 'School Administrator',
-        email: 'admin@classrealm.edu',
+        email: 'ljcalica971@gmail.com',
         role: UserRole.admin,
       ),
       const UserModel(
@@ -280,167 +119,15 @@ class MockDatabase {
     _mockPasswords
       ..clear()
       ..addAll({
-        'usr_admin': 'admin123',
         'T001': 'teacher123',
         for (final record in studentRecords) record['id']!: 'student123',
-        for (final record in studentRecords)
-          'P${record['id']}': 'parent123',
+        for (final record in studentRecords) 'P${record['id']}': 'parent123',
       });
 
-    final attendanceDates = [
-      DateTime(2026, 9, 14),
-      DateTime(2026, 9, 15),
-      DateTime(2026, 9, 16),
-      DateTime(2026, 9, 17),
-      DateTime(2026, 9, 18),
-    ];
-    const attendanceStatuses = {
-      'A01': ['Present', 'Present', 'Absent', 'Present', 'Late'],
-      'A02': ['Present', 'Present', 'Present', 'Present', 'Present'],
-      'A03': ['Present', 'Present', 'Present', 'Present', 'Present'],
-      'A04': ['Present', 'Present', 'Present', 'Present', 'Present'],
-      'A05': ['Present', 'Present', 'Present', 'Present', 'Present'],
-      'B01': ['Present', 'Late', 'Present', 'Absent', 'Present'],
-      'B02': ['Present', 'Present', 'Present', 'Present', 'Present'],
-      'B03': ['Present', 'Present', 'Present', 'Present', 'Present'],
-      'B04': ['Present', 'Present', 'Present', 'Present', 'Present'],
-      'B05': ['Present', 'Present', 'Present', 'Present', 'Present'],
-    };
-    AttendanceStatus statusFor(String value) => switch (value) {
-      'Late' => AttendanceStatus.late,
-      'Absent' => AttendanceStatus.absent,
-      'Excused' => AttendanceStatus.excused,
-      _ => AttendanceStatus.present,
-    };
-    attendanceRecords = [
-      for (final student in users.where(
-        (user) => user.role == UserRole.student,
-      ))
-        for (var index = 0; index < attendanceDates.length; index++)
-          AttendanceRecord(
-            id: 'att_${student.id}_${index + 1}',
-            studentId: student.id,
-            studentName: student.fullName,
-            section: student.departmentOrSection!,
-            date: attendanceDates[index],
-            timeIn: attendanceStatuses[student.id]![index] == 'Present'
-                ? '07:30 AM'
-                : '--:--',
-            status: statusFor(attendanceStatuses[student.id]![index]),
-            method: 'Manual',
-          ),
-    ];
-
-    DateTime due(int day, [int hour = 16]) => DateTime(2026, 9, day, hour, 0);
-    activities = [
-      ActivityModel(
-        id: 'WW1',
-        title: 'Functions Activity',
-        description: 'Introduction to basic functions.',
-        subject: currentSubject,
-        section: 'Section A, Section B',
-        deadline: due(22, 23),
-        sectionDeadlines: {'Section A': due(22, 23), 'Section B': due(22, 23)},
-        maxScore: 20,
-        totalStudents: 10,
-      ),
-      ActivityModel(
-        id: 'WW2',
-        title: 'Function Operations',
-        description: 'Operations on composite functions.',
-        subject: currentSubject,
-        section: 'Section A, Section B',
-        deadline: due(24, 23),
-        sectionDeadlines: {'Section A': due(24, 23), 'Section B': due(24, 23)},
-        maxScore: 20,
-        totalStudents: 10,
-      ),
-      ActivityModel(
-        id: 'PT1',
-        title: 'Functions Project',
-        description: 'Create a portfolio of functions.',
-        instructions: 'Complete the Functions Project.',
-        subject: currentSubject,
-        section: 'Section A, Section B',
-        deadline: DateTime(2026, 9, 30, 17, 0),
-        sectionDeadlines: {
-          'Section A': DateTime(2026, 9, 30, 17, 0),
-          'Section B': DateTime(2026, 9, 30, 17, 0),
-        },
-        maxScore: 100,
-        isRequirement: true,
-        totalStudents: 10,
-      ),
-    ];
-
-    const scores = {
-      'A01': [18, 17, 26, 88, 42, 44, 86],
-      'A02': [16, 18, 24, 82, 39, 41, 80],
-      'A03': [19, 19, 28, 94, 46, 47, 91],
-      'A04': [15, 16, 22, 78, 37, 40, 76],
-      'A05': [17, 18, 25, 85, 41, 43, 84],
-      'B01': [18, 16, 25, 86, 43, 42, 85],
-      'B02': [20, 19, 29, 96, 48, 46, 94],
-      'B03': [16, 17, 23, 80, 38, 40, 79],
-      'B04': [19, 18, 27, 90, 45, 44, 89],
-      'B05': [17, 19, 26, 87, 42, 45, 88],
-    };
-    assessmentScores = {
-      for (final id in ['WW1', 'WW2', 'WW3', 'PT1', 'EX1', 'EX2', 'EX3'])
-        id: {
-          for (final student in scores.keys)
-            student:
-                scores[student]![[
-                      'WW1',
-                      'WW2',
-                      'WW3',
-                      'PT1',
-                      'EX1',
-                      'EX2',
-                      'EX3',
-                    ].indexOf(id)]
-                    .toDouble(),
-        },
-    };
-
-    final submissionScore = <String, Map<String, double>>{
-      'WW1': assessmentScores['WW1']!,
-      'WW2': assessmentScores['WW2']!,
-      'WW3': assessmentScores['WW3']!,
-      'PT1': assessmentScores['PT1']!,
-    };
-    activitySubmissions = [
-      for (final activity in activities)
-        for (final student in users.where(
-          (user) =>
-              user.role == UserRole.student && user.departmentOrSection != null,
-        ))
-          if (student.id.endsWith('04') || student.id.endsWith('05')) ...[
-            StudentSubmission(
-              id: 'sub_${activity.id}_${student.id}',
-              activityOrExamId: activity.id,
-              studentId: student.id,
-              studentName: student.fullName,
-              submittedAt: DateTime(2026, 9, 18, 15),
-              attachedFile: '${student.id}_${activity.id}.pdf',
-              score: submissionScore[activity.id]?[student.id],
-              maxScore: activity.maxScore,
-              status: ActivityStatus.graded,
-            ),
-          ] else if (student.id.endsWith('02') ||
-              student.id.endsWith('03')) ...[
-            StudentSubmission(
-              id: 'sub_${activity.id}_${student.id}',
-              activityOrExamId: activity.id,
-              studentId: student.id,
-              studentName: student.fullName,
-              submittedAt: DateTime(2026, 9, 18, 15),
-              attachedFile: '${student.id}_${activity.id}.pdf',
-              maxScore: activity.maxScore,
-              status: ActivityStatus.submitted,
-            ),
-          ],
-    ];
+    attendanceRecords = [];
+    activities = [];
+    assessmentScores = {};
+    activitySubmissions = [];
 
     QuestionModel question(String id, double points) => QuestionModel(
       id: id,
@@ -456,353 +143,22 @@ class MockDatabase {
           (index) => question('$prefix-Q${index + 1}', points),
         );
     final now = DateTime.now();
-    quizzesAndExams = [
-      QuizOrExamModel(
-        id: 'EX1',
-        title: 'ST1',
-        description: 'Summative Test 1: Functions',
-        subject: currentSubject,
-        section: 'Section A, Section B',
-        isExam: true,
-        durationMinutes: 60,
-        scheduleDate: now.subtract(const Duration(days: 10)),
-        sectionDeadlines: {
-          'Section A': now.subtract(const Duration(days: 10)),
-          'Section B': now.subtract(const Duration(days: 10)),
-        },
-        questions: questions('EX1', 10, 5),
-      ),
-      QuizOrExamModel(
-        id: 'EX2',
-        title: 'ST2',
-        description: 'Summative Test 2: Rational Functions',
-        subject: currentSubject,
-        section: 'Section A, Section B',
-        isExam: true,
-        durationMinutes: 60,
-        scheduleDate: now.subtract(const Duration(days: 5)),
-        sectionDeadlines: {
-          'Section A': now.subtract(const Duration(days: 5)),
-          'Section B': now.subtract(const Duration(days: 5)),
-        },
-        questions: questions('EX2', 10, 5),
-      ),
-      QuizOrExamModel(
-        id: 'EX3',
-        title: 'TE',
-        description: 'Term Examination: General Mathematics',
-        subject: currentSubject,
-        section: 'Section A, Section B',
-        isExam: true,
-        durationMinutes: 90,
-        scheduleDate: now.subtract(const Duration(days: 1)),
-        sectionDeadlines: {
-          'Section A': now.subtract(const Duration(days: 1)),
-          'Section B': now.subtract(const Duration(days: 1)),
-        },
-        questions: questions('EX3', 10, 10),
-      ),
-    ];
+    quizzesAndExams = [];
     examReviews = [];
-    assessmentResults = [
-      AssessmentResultModel(
-        id: 'res_A01',
-        assessmentId: 'EX1',
-        studentId: 'A01',
-        studentName: 'Alyssa M. Reyes',
-        submittedAt: now.subtract(const Duration(days: 9, hours: 2)),
-        durationTakenMinutes: 45,
-        violationCount: 0,
-        answers: {},
-        scoreEarned: 42,
-        totalPoints: 50,
-        isReleased: true,
-      ),
-      AssessmentResultModel(
-        id: 'res_A02',
-        assessmentId: 'EX1',
-        studentId: 'A02',
-        studentName: 'Joshua L. Navarro',
-        submittedAt: now.subtract(const Duration(days: 9, hours: 1)),
-        durationTakenMinutes: 55,
-        violationCount: 2,
-        violationLog: [
-          {'type': 'Tab Switch', 'timestamp': '10:15 AM'},
-          {'type': 'Tab Switch', 'timestamp': '10:18 AM'},
-        ],
-        answers: {},
-        scoreEarned: 39,
-        totalPoints: 50,
-        isReleased: true,
-      ),
-      AssessmentResultModel(
-        id: 'res_B01',
-        assessmentId: 'EX1',
-        studentId: 'B01',
-        studentName: 'Nathan P. Garcia',
-        submittedAt: now.subtract(const Duration(days: 10)),
-        durationTakenMinutes: 50,
-        violationCount: 0,
-        answers: {},
-        scoreEarned: 43,
-        totalPoints: 50,
-        isReleased: true,
-      ),
-    ];
+    assessmentResults = [];
     gradingCriteria = [
       GradingCriteria(id: 'WW', name: 'Written Works', percentage: 20),
       GradingCriteria(id: 'PT', name: 'Performance Task', percentage: 50),
       GradingCriteria(id: 'EX', name: 'Examinations', percentage: 30),
     ];
-    lessonPlans = [
-      LessonPlanModel(
-        id: 'LP1',
-        topic: 'Functions and Relations',
-        gradeLevel: 'Grade 11',
-        subject: currentSubject,
-        duration: '60 mins',
-        objectives: 'Understand domain and range.',
-        materials: 'PDF: Module_1_Functions.pdf',
-        procedure: 'Discussion and exercises.',
-        assessment: 'Quiz 1',
-        assignment: 'Problem Set 1',
-        createdAt: DateTime(2026, 9, 15),
-      ),
-      LessonPlanModel(
-        id: 'LP2',
-        topic: 'Rational Functions',
-        gradeLevel: 'Grade 11',
-        subject: currentSubject,
-        duration: '90 mins',
-        objectives: 'Graph rational functions.',
-        materials: 'DOCX: Rational_Functions_Guide.docx',
-        procedure: 'Step-by-step graphing.',
-        assessment: 'Quiz 2',
-        assignment: 'Graphing Activity',
-        createdAt: DateTime(2026, 9, 18),
-      ),
-    ];
-    materials = [
-      LearningMaterialModel(
-        id: 'mat_1',
-        title: 'Module 1: Functions and Their Graphs',
-        category: 'PDF Document',
-        topic: 'Functions Review',
-        fileName: 'GenMath_Module_1_Functions.pdf',
-        fileSize: '3.4 MB',
-        uploadedAt: DateTime(2026, 9, 10),
-        description: 'Complete syllabus and conceptual exercises for piecewise and inverse functions.',
-        section: 'Section A',
-      ),
-      LearningMaterialModel(
-        id: 'mat_2',
-        title: 'Rational Functions Lecture Slide Deck',
-        category: 'Presentation',
-        topic: 'Rational Expressions',
-        fileName: 'Lesson_2_Rational_Functions_Slides.pptx',
-        fileSize: '8.1 MB',
-        uploadedAt: DateTime(2026, 9, 15),
-        description: 'Official slide deck used in class discussion with animated graphs.',
-        section: 'Section B',
-      ),
-      LearningMaterialModel(
-        id: 'mat_lp_1',
-        title: 'Lesson Plan: Rational Functions',
-        category: 'DOCX Document',
-        topic: 'Rational Functions',
-        fileName: 'LP_Rational_Functions_Grade_11.docx',
-        fileSize: '42 KB',
-        uploadedAt: DateTime(2026, 9, 16),
-        description: 'Daily lesson plan for Grade 11 General Mathematics on rational functions and asymptotes.',
-        section: 'Section A',
-      ),
-      LearningMaterialModel(
-        id: 'mat_lp_2',
-        title: 'Lesson Plan: Exponential Growth',
-        category: 'DOCX Document',
-        topic: 'Exponential Growth',
-        fileName: 'LP_Exponential_Growth_Grade_11.docx',
-        fileSize: '38 KB',
-        uploadedAt: DateTime(2026, 9, 14),
-        description: 'Classroom-ready lesson plan covering exponential growth and compound interest models.',
-        section: 'Section B',
-      ),
-      LearningMaterialModel(
-        id: 'mat_lp_3',
-        title: 'Lesson Plan: Functions Assessment',
-        category: 'PDF Document',
-        topic: 'Functions Review',
-        fileName: 'LP_Functions_Review_Assessment.pdf',
-        fileSize: '1.2 MB',
-        uploadedAt: DateTime(2026, 9, 12),
-        description: 'Printable PDF lesson plan and assessment guide for the Functions review lesson.',
-        section: 'Section A',
-      ),
-    ];
-    schedules = [
-      // Section A
-      ScheduleModel(
-        id: 'sch_1',
-        subject: 'General Mathematics',
-        section: 'Section A',
-        room: 'Room 304',
-        dayOfWeek: 'Monday',
-        startTime: '07:30 AM',
-        endTime: '09:00 AM',
-      ),
-      ScheduleModel(
-        id: 'sch_1b',
-        subject: 'Earth & Life Science',
-        section: 'Section A',
-        room: 'Lab 2',
-        dayOfWeek: 'Monday',
-        startTime: '09:15 AM',
-        endTime: '10:45 AM',
-      ),
-      ScheduleModel(
-        id: 'sch_1c',
-        subject: 'Oral Communication',
-        section: 'Section A',
-        room: 'Room 201',
-        dayOfWeek: 'Tuesday',
-        startTime: '07:30 AM',
-        endTime: '09:00 AM',
-      ),
-      ScheduleModel(
-        id: 'sch_1d',
-        subject: 'Physical Education',
-        section: 'Section A',
-        room: 'Gymnasium',
-        dayOfWeek: 'Tuesday',
-        startTime: '09:15 AM',
-        endTime: '10:45 AM',
-      ),
-      ScheduleModel(
-        id: 'sch_2',
-        subject: 'General Mathematics',
-        section: 'Section A',
-        room: 'Room 304',
-        dayOfWeek: 'Wednesday',
-        startTime: '07:30 AM',
-        endTime: '09:00 AM',
-      ),
-      ScheduleModel(
-        id: 'sch_2b',
-        subject: 'Empowerment Tech',
-        section: 'Section A',
-        room: 'Comp Lab 1',
-        dayOfWeek: 'Wednesday',
-        startTime: '09:15 AM',
-        endTime: '10:45 AM',
-      ),
-      ScheduleModel(
-        id: 'sch_2c',
-        subject: 'Oral Communication',
-        section: 'Section A',
-        room: 'Room 201',
-        dayOfWeek: 'Thursday',
-        startTime: '07:30 AM',
-        endTime: '09:00 AM',
-      ),
-      ScheduleModel(
-        id: 'sch_2d',
-        subject: 'Earth & Life Science',
-        section: 'Section A',
-        room: 'Lab 2',
-        dayOfWeek: 'Thursday',
-        startTime: '09:15 AM',
-        endTime: '10:45 AM',
-      ),
-      ScheduleModel(
-        id: 'sch_2e',
-        subject: 'Personal Development',
-        section: 'Section A',
-        room: 'Room 304',
-        dayOfWeek: 'Friday',
-        startTime: '07:30 AM',
-        endTime: '09:00 AM',
-      ),
-      ScheduleModel(
-        id: 'sch_2f',
-        subject: 'Physical Education',
-        section: 'Section A',
-        room: 'Gymnasium',
-        dayOfWeek: 'Friday',
-        startTime: '09:15 AM',
-        endTime: '10:45 AM',
-      ),
-
-      // Section B
-      ScheduleModel(
-        id: 'sch_3',
-        subject: 'General Mathematics',
-        section: 'Section B',
-        room: 'Room 305',
-        dayOfWeek: 'Tuesday',
-        startTime: '07:30 AM',
-        endTime: '09:00 AM',
-      ),
-      ScheduleModel(
-        id: 'sch_3b',
-        subject: 'Earth & Life Science',
-        section: 'Section B',
-        room: 'Lab 1',
-        dayOfWeek: 'Tuesday',
-        startTime: '09:15 AM',
-        endTime: '10:45 AM',
-      ),
-      ScheduleModel(
-        id: 'sch_3c',
-        subject: 'Oral Communication',
-        section: 'Section B',
-        room: 'Room 202',
-        dayOfWeek: 'Wednesday',
-        startTime: '07:30 AM',
-        endTime: '09:00 AM',
-      ),
-      ScheduleModel(
-        id: 'sch_3d',
-        subject: 'Personal Development',
-        section: 'Section B',
-        room: 'Room 305',
-        dayOfWeek: 'Wednesday',
-        startTime: '09:15 AM',
-        endTime: '10:45 AM',
-      ),
-      ScheduleModel(
-        id: 'sch_4',
-        subject: 'General Mathematics',
-        section: 'Section B',
-        room: 'Room 305',
-        dayOfWeek: 'Thursday',
-        startTime: '07:30 AM',
-        endTime: '09:00 AM',
-      ),
-      ScheduleModel(
-        id: 'sch_4b',
-        subject: 'Empowerment Tech',
-        section: 'Section B',
-        room: 'Comp Lab 2',
-        dayOfWeek: 'Thursday',
-        startTime: '09:15 AM',
-        endTime: '10:45 AM',
-      ),
-      ScheduleModel(
-        id: 'sch_4c',
-        subject: 'Physical Education',
-        section: 'Section B',
-        room: 'Gymnasium',
-        dayOfWeek: 'Friday',
-        startTime: '07:30 AM',
-        endTime: '09:00 AM',
-      ),
-    ];
+    lessonPlans = [];
+    materials = [];
+    schedules = [];
     notifications = [
       AppNotificationModel(
         id: 'notif_att_1',
         title: 'Alert: Low Attendance detected',
-        message:
-            'Student Daniel J. Mendoza (A04) has dropped below 80% attendance this month.',
+        message: 'Student Daniel J. Mendoza (A04) has dropped below 80% attendance this month.',
         timestamp: now.subtract(const Duration(days: 1)),
         isRead: false,
         type: 'attendance_alert',
@@ -810,8 +166,7 @@ class MockDatabase {
       AppNotificationModel(
         id: 'notif_risk_1',
         title: 'Alert: At-Risk Student Identified',
-        message:
-            'Student Camille S. Villanueva (A05) current standing is below 75%. Remedial intervention recommended.',
+        message: 'Student Camille S. Villanueva (A05) current standing is below 75%. Remedial intervention recommended.',
         timestamp: now.subtract(const Duration(hours: 3)),
         isRead: false,
         type: 'academic_alert',
@@ -960,10 +315,12 @@ class MockDatabase {
       users[idx] = users[idx].copyWith(status: newStatus);
       if (newStatus == AccountStatus.pendingFirstLogin) {
         final teacher = users[idx];
-        final lastName = (teacher.lastName ?? teacher.fullName.split(' ').last).toLowerCase();
+        final lastName = (teacher.lastName ?? teacher.fullName.split(' ').last)
+            .toLowerCase();
         String formattedBday = '19950101';
         if (teacher.birthday != null) {
-          formattedBday = teacher.birthday!.year.toString() +
+          formattedBday =
+              teacher.birthday!.year.toString() +
               teacher.birthday!.month.toString().padLeft(2, '0') +
               teacher.birthday!.day.toString().padLeft(2, '0');
         }
@@ -1002,7 +359,7 @@ class MockDatabase {
   }
 
   // Student Archive / Soft Delete Management
-  void archiveStudent(String id) {
+  void archiveStudent(String id, [String? subjectId]) {
     final idx = users.indexWhere((u) => u.id == id);
     if (idx != -1) {
       users[idx] = users[idx].copyWith(
@@ -1012,7 +369,7 @@ class MockDatabase {
     }
   }
 
-  void restoreStudent(String id) {
+  void restoreStudent(String id, [String? subjectId]) {
     final idx = users.indexWhere((u) => u.id == id);
     if (idx != -1) {
       users[idx] = users[idx].copyWith(
@@ -1022,7 +379,7 @@ class MockDatabase {
     }
   }
 
-  void permanentlyDeleteStudent(String id) {
+  void permanentlyDeleteStudent(String id, [String? subjectId]) {
     users.removeWhere((u) => u.id == id);
     _mockPasswords.remove(id);
   }
@@ -1127,7 +484,7 @@ class MockDatabase {
     );
     users.add(newStudent);
     _mockPasswords[id] = tempPassword;
-    
+
     // Auto-create Parent Account
     final parentId = 'P$studentId';
     final parentEmail = 'parent.$studentId@classrealm.edu';
@@ -1143,7 +500,7 @@ class MockDatabase {
     );
     users.add(newParent);
     _mockPasswords[parentId] = 'parent123'; // Default mock password for parents
-    
+
     return null; // success
   }
 
@@ -1194,7 +551,6 @@ class MockDatabase {
     required String email,
     required String studentId,
     required String gender,
-    required String contactNumber,
     required DateTime birthday,
     required String parentName,
     required String parentContactNumber,
@@ -1219,7 +575,6 @@ class MockDatabase {
       lastName: lastName,
       birthday: birthday,
       gender: gender,
-      contactNumber: contactNumber,
       gradeLevel: users[idx].gradeLevel ?? '11',
       parentGuardianName: parentName,
       parentGuardianContact: parentContactNumber,
@@ -1227,7 +582,9 @@ class MockDatabase {
     );
 
     // Update Linked Parent Account if exists
-    final parentIdx = users.indexWhere((u) => u.role == UserRole.parent && u.linkedStudentId == id);
+    final parentIdx = users.indexWhere(
+      (u) => u.role == UserRole.parent && u.linkedStudentId == id,
+    );
     if (parentIdx != -1) {
       users[parentIdx] = users[parentIdx].copyWith(
         fullName: parentName,

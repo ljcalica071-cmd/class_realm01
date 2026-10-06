@@ -1,6 +1,16 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:class_realm/firebase_options.dart';
+import 'package:class_realm/core/config/env_config.dart';
+import 'package:class_realm/core/services/supabase_service.dart';
+import 'package:class_realm/core/services/local_storage_service.dart';
+
+import 'package:flutter_web_plugins/url_strategy.dart';
+
 import 'core/theme/app_theme.dart';
+import 'core/widgets/auth_guard.dart';
+import 'models/user_model.dart';
 import 'routes/app_routes.dart';
 import 'features/auth/screens/login_screen.dart';
 import 'features/auth/screens/register_screen.dart';
@@ -13,9 +23,42 @@ import 'features/teacher/screens/teacher_dashboard_screen.dart';
 import 'features/student/screens/student_home_screen.dart';
 import 'features/parent/screens/parent_home_screen.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  usePathUrlStrategy(); // Removes the # from the URL
+
+  // Initialize Local Storage (Hive)
+  await LocalStorageService.init();
+
+  // Initialize Environment Variables
+  try {
+    await EnvConfig.init();
+  } catch (e) {
+    debugPrint('EnvConfig initialization error: $e');
+  }
+
+  // Initialize Firebase (Requires `flutterfire configure` to generate firebase_options.dart)
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+  } catch (e) {
+    debugPrint(
+      'Firebase initialization error. Make sure to run flutterfire configure.',
+    );
+  }
+
+  // Initialize Supabase
+  try {
+    await SupabaseService.initialize();
+  } catch (e) {
+    debugPrint('Supabase initialization error: $e');
+  }
+
   runApp(const ClassRealmApp());
 }
+
+
 
 class ClassRealmApp extends StatelessWidget {
   const ClassRealmApp({super.key});
@@ -26,6 +69,14 @@ class ClassRealmApp extends StatelessWidget {
       valueListenable: AppTheme.themeModeNotifier,
       builder: (context, themeMode, _) {
         return MaterialApp(
+          scrollBehavior: const MaterialScrollBehavior().copyWith(
+            dragDevices: {
+              PointerDeviceKind.mouse,
+              PointerDeviceKind.touch,
+              PointerDeviceKind.stylus,
+              PointerDeviceKind.trackpad,
+            },
+          ),
           title: 'ClassRealm',
           debugShowCheckedModeBanner: false,
           theme: AppTheme.lightTheme,
@@ -38,13 +89,38 @@ class ClassRealmApp extends StatelessWidget {
             AppRoutes.login: (context) => const LoginScreen(),
             AppRoutes.register: (context) => const RegisterScreen(),
             AppRoutes.forgotPassword: (context) => const ForgotPasswordScreen(),
-            AppRoutes.pendingAccount: (context) => const PendingAccountScreen(),
-            AppRoutes.firstLogin: (context) => const FirstLoginScreen(),
-            AppRoutes.academicSetup: (context) => const AcademicSetupWizardScreen(),
-            AppRoutes.adminDashboard: (context) => const AdminDashboardScreen(),
-            AppRoutes.teacherDashboard: (context) => const TeacherDashboardScreen(),
-            AppRoutes.studentHome: (context) => const StudentHomeScreen(),
-            AppRoutes.parentHome: (context) => const ParentHomeScreen(),
+            AppRoutes.pendingAccount: (context) => const AuthGuard(
+              allowedRoles: [UserRole.teacher],
+              child: PendingAccountScreen(),
+            ),
+            AppRoutes.studentFirstLogin: (context) => const AuthGuard(
+              allowedRoles: [UserRole.student],
+              child: FirstLoginScreen(),
+            ),
+            AppRoutes.teacherFirstLogin: (context) => const AuthGuard(
+              allowedRoles: [UserRole.teacher],
+              child: FirstLoginScreen(),
+            ),
+            AppRoutes.academicSetup: (context) => const AuthGuard(
+              allowedRoles: [UserRole.teacher],
+              child: AcademicSetupWizardScreen(),
+            ),
+            AppRoutes.adminDashboard: (context) => const AuthGuard(
+              allowedRoles: [UserRole.admin],
+              child: AdminDashboardScreen(),
+            ),
+            AppRoutes.teacherDashboard: (context) => const AuthGuard(
+              allowedRoles: [UserRole.teacher],
+              child: TeacherDashboardScreen(),
+            ),
+            AppRoutes.studentHome: (context) => const AuthGuard(
+              allowedRoles: [UserRole.student],
+              child: StudentHomeScreen(),
+            ),
+            AppRoutes.parentHome: (context) => const AuthGuard(
+              allowedRoles: [UserRole.parent],
+              child: ParentHomeScreen(),
+            ),
           },
         );
       },

@@ -83,6 +83,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         context: context,
         title: 'Password Reset Successful',
         message: 'Your account password has been updated securely. You can now log in with your new password.',
+        confirmLabel: 'Continue to Sign In',
         onConfirm: () => Navigator.pushReplacementNamed(context, AppRoutes.login),
       );
     });

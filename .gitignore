@@ -47,5 +47,11 @@ app.*.map.json
 # Widget Preview related
 .widget_preview/
 
+# Environment Variables / Credentials (NEVER COMMIT TO GIT)
+.env
+.env.*
+!.env.example
+lib/firebase_options.dart
+
 # Reference Projects (Ignore)
 AMS_Project - 002/

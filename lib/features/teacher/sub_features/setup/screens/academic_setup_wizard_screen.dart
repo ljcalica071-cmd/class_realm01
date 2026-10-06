@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:loading_animation_widget/loading_animation_widget.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:class_realm/core/constants/asset_paths.dart';
 import 'package:class_realm/core/theme/app_theme.dart';
-import 'package:class_realm/data/mock_database.dart';
+import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/models/subject_catalog_model.dart';
 import 'package:class_realm/routes/app_routes.dart';
 import 'package:class_realm/shared/widgets/shared_widgets.dart';
@@ -127,29 +128,21 @@ class _AcademicSetupWizardScreenState extends State<AcademicSetupWizardScreen> {
 
   void _handleFinalizeSetup() async {
     setState(() => _isSaving = true);
-    await Future.delayed(const Duration(milliseconds: 700));
-
-    // Update global MockDatabase state
-    MockDatabase.instance.academicYear = _schoolYear;
-    MockDatabase.instance.gradeLevel = _selectedGradeLevel;
-    MockDatabase.instance.currentSubject = _selectedSubject;
-    MockDatabase.instance.sections = List.from(_sections);
-
-    // Update current teacher user
-    final current = MockDatabase.instance.currentUser;
+    
+    final current = AuthRepository.instance.currentUser;
     if (current != null) {
-      final updated = current.copyWith(
-        departmentOrSection: _selectedSubject,
-        gradeLevel: _selectedGradeLevel,
-        isSetupComplete: true,
+      await AuthRepository.instance.completeAcademicSetup(
+        uid: current.id, 
+        gradeLevel: _selectedGradeLevel, 
+        subjectName: _selectedSubject,
+        sections: _sections,
+        schoolYear: _schoolYear,
+        wwWeight: _wwWeight,
+        ptWeight: _ptWeight,
+        exWeight: _exWeight,
       );
-      MockDatabase.instance.currentUser = updated;
-      final idx = MockDatabase.instance.users.indexWhere((u) => u.id == current.id);
-      if (idx != -1) {
-        MockDatabase.instance.users[idx] = updated;
-      }
     }
-
+    
     if (!mounted) return;
     setState(() => _isSaving = false);
 
@@ -292,10 +285,10 @@ class _AcademicSetupWizardScreenState extends State<AcademicSetupWizardScreen> {
                       ElevatedButton.icon(
                         onPressed: _isSaving ? null : _handleFinalizeSetup,
                         icon: _isSaving
-                            ? const SizedBox(
+                            ? SizedBox(
                                 width: 18,
                                 height: 18,
-                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                child: LoadingAnimationWidget.staggeredDotsWave(color: Colors.white, size: 18),
                               )
                             : const Icon(LucideIcons.checkCheck, size: 18),
                         label: Text(_isSaving ? 'Configuring System...' : 'Finalize & Launch Dashboard'),

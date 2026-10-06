@@ -538,6 +538,13 @@ class ScheduleModel {
   final String dayOfWeek; // 'Monday', 'Tuesday', etc.
   final String startTime; // "HH:MM AM/PM"
   final String endTime; // "HH:MM AM/PM"
+  final String? sectionId;
+  final String? subjectId;
+  final String? teacherId;
+  final int? gradeLevel;
+  final double? wwWeight;
+  final double? ptWeight;
+  final double? exWeight;
 
   ScheduleModel({
     required this.id,
@@ -547,11 +554,89 @@ class ScheduleModel {
     required this.dayOfWeek,
     required this.startTime,
     required this.endTime,
+    this.sectionId,
+    this.subjectId,
+    this.teacherId,
+    this.gradeLevel,
+    this.wwWeight,
+    this.ptWeight,
+    this.exWeight,
   });
 
   int get startMinutes => _parseTimeToMinutes(startTime);
   int get endMinutes => _parseTimeToMinutes(endTime);
   int get durationMinutes => endMinutes - startMinutes;
+
+  int get dayOfWeekIndex {
+    switch (dayOfWeek) {
+      case 'Monday':
+        return 1;
+      case 'Tuesday':
+        return 2;
+      case 'Wednesday':
+        return 3;
+      case 'Thursday':
+        return 4;
+      case 'Friday':
+        return 5;
+      case 'Saturday':
+        return 6;
+      case 'Sunday':
+        return 7;
+      default:
+        return 1;
+    }
+  }
+
+  static String dayFromIndex(int index) {
+    switch (index) {
+      case 1:
+        return 'Monday';
+      case 2:
+        return 'Tuesday';
+      case 3:
+        return 'Wednesday';
+      case 4:
+        return 'Thursday';
+      case 5:
+        return 'Friday';
+      case 6:
+        return 'Saturday';
+      case 7:
+        return 'Sunday';
+      default:
+        return 'Monday';
+    }
+  }
+
+  static String formatTime24to12(String time24) {
+    try {
+      final parts = time24.split(':');
+      int h = int.parse(parts[0]);
+      int m = int.parse(parts[1]);
+      final ampm = h >= 12 ? 'PM' : 'AM';
+      int displayHour = h % 12;
+      if (displayHour == 0) displayHour = 12;
+      return '${displayHour.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')} $ampm';
+    } catch (_) {
+      return time24;
+    }
+  }
+
+  static String formatTime12to24(String time12) {
+    try {
+      final parts = time12.trim().split(' ');
+      final hm = parts[0].split(':');
+      int h = int.parse(hm[0]);
+      int m = int.parse(hm[1]);
+      final ampm = parts.length > 1 ? parts[1].toUpperCase() : 'AM';
+      if (ampm == 'PM' && h != 12) h += 12;
+      if (ampm == 'AM' && h == 12) h = 0;
+      return '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}:00';
+    } catch (_) {
+      return time12;
+    }
+  }
 
   int _parseTimeToMinutes(String time) {
     try {
@@ -579,6 +664,13 @@ class ScheduleModel {
     String? dayOfWeek,
     String? startTime,
     String? endTime,
+    String? sectionId,
+    String? subjectId,
+    String? teacherId,
+    int? gradeLevel,
+    double? wwWeight,
+    double? ptWeight,
+    double? exWeight,
   }) {
     return ScheduleModel(
       id: id ?? this.id,
@@ -588,6 +680,13 @@ class ScheduleModel {
       dayOfWeek: dayOfWeek ?? this.dayOfWeek,
       startTime: startTime ?? this.startTime,
       endTime: endTime ?? this.endTime,
+      sectionId: sectionId ?? this.sectionId,
+      subjectId: subjectId ?? this.subjectId,
+      teacherId: teacherId ?? this.teacherId,
+      gradeLevel: gradeLevel ?? this.gradeLevel,
+      wwWeight: wwWeight ?? this.wwWeight,
+      ptWeight: ptWeight ?? this.ptWeight,
+      exWeight: exWeight ?? this.exWeight,
     );
   }
 }

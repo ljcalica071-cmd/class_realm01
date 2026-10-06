@@ -30,12 +30,12 @@ abstract class StudentRepository {
     required String email,
     required String studentId,
     required String gender,
-    required String contactNumber,
     required DateTime birthday,
+    required String subjectId,
   });
-  Future<void> archiveStudent(String id);
-  Future<void> restoreStudent(String id);
+  Future<void> archiveStudent(String id, [String? subjectId]);
+  Future<void> restoreStudent(String id, [String? subjectId]);
   Future<void> deactivateStudent(String id);
   Future<void> reactivateStudent(String id);
-  Future<void> permanentlyDeleteStudent(String id);
+  Future<void> permanentlyDeleteStudent(String id, [String? subjectId]);
 }

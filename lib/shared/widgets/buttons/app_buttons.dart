@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:loading_animation_widget/loading_animation_widget.dart';
 import 'package:class_realm/core/theme/app_theme.dart';
 
 // ─────────────────────────────────────────────
@@ -83,6 +84,17 @@ class AppButton extends StatelessWidget {
   })  : type = AppButtonType.outline,
         height = 42;
 
+  const AppButton.secondary({
+    super.key,
+    required this.label,
+    required this.onPressed,
+    this.icon,
+    this.isLoading = false,
+    this.width,
+    this.isSmall = false,
+  })  : type = AppButtonType.outline,
+        height = 42;
+
   Color _bgColor(BuildContext context) {
     final primary = Theme.of(context).colorScheme.primary;
     switch (type) {
@@ -130,9 +142,9 @@ class AppButton extends StatelessWidget {
           SizedBox(
             width: iconSize,
             height: iconSize,
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
+            child: LoadingAnimationWidget.staggeredDotsWave(
               color: fg,
+              size: iconSize * 1.5,
             ),
           )
         else ...[

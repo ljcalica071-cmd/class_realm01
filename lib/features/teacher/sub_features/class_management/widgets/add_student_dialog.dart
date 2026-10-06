@@ -1,24 +1,36 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-
 import 'package:class_realm/core/theme/app_theme.dart';
-import 'package:class_realm/data/mock_database.dart';
+import 'package:class_realm/data/repositories/supabase_student_repository.dart';
 import 'package:class_realm/widgets/common/app_buttons.dart';
 import 'package:class_realm/widgets/common/app_modals.dart';
+import 'package:class_realm/widgets/common/app_text_field.dart';
+import 'package:class_realm/widgets/common/app_date_picker_field.dart';
+import 'package:class_realm/core/utils/validators.dart';
+import 'package:class_realm/core/services/email_service.dart';
 
 class AddStudentDialog extends StatefulWidget {
   final VoidCallback onStudentCreated;
+  final List<Map<String, dynamic>> teacherSubjects;
 
-  const AddStudentDialog({super.key, required this.onStudentCreated});
+  const AddStudentDialog({
+    super.key,
+    required this.onStudentCreated,
+    required this.teacherSubjects,
+  });
 
   static Future<void> show(
     BuildContext context, {
     required VoidCallback onStudentCreated,
+    required List<Map<String, dynamic>> teacherSubjects,
   }) {
     return showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (_) => AddStudentDialog(onStudentCreated: onStudentCreated),
+      builder: (_) => AddStudentDialog(
+        onStudentCreated: onStudentCreated,
+        teacherSubjects: teacherSubjects,
+      ),
     );
   }
 
@@ -33,25 +45,9 @@ class _AddStudentDialogState extends State<AddStudentDialog> {
   final _lastNameCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
   final _studentIdCtrl = TextEditingController();
-  final _contactCtrl = TextEditingController();
-  final _parentNameCtrl = TextEditingController();
-  final _parentContactCtrl = TextEditingController();
   String? _gender;
   DateTime? _birthday;
-  String? _parentRelationship;
-
-  String get _previewUsername {
-    final fn = _firstNameCtrl.text.trim();
-    final ln = _lastNameCtrl.text.trim();
-    if (fn.isEmpty && ln.isEmpty) return '—';
-    return MockDatabase.generateUsername(fn, ln);
-  }
-
-  String get _previewTempPassword {
-    final ln = _lastNameCtrl.text.trim();
-    if (ln.isEmpty || _birthday == null) return '—';
-    return MockDatabase.generateTempPassword(ln, _birthday!);
-  }
+  String? _selectedSubjectId;
 
   @override
   void dispose() {
@@ -60,23 +56,10 @@ class _AddStudentDialogState extends State<AddStudentDialog> {
     _lastNameCtrl.dispose();
     _emailCtrl.dispose();
     _studentIdCtrl.dispose();
-    _contactCtrl.dispose();
-    _parentNameCtrl.dispose();
-    _parentContactCtrl.dispose();
     super.dispose();
   }
 
-  Future<void> _pickBirthday() async {
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: DateTime(2006, 1, 1),
-      firstDate: DateTime(1990),
-      lastDate: DateTime.now(),
-    );
-    if (picked != null) setState(() => _birthday = picked);
-  }
-
-  void _submit() {
+  void _submit() async {
     if (!_formKey.currentState!.validate()) return;
     if (_birthday == null) {
       AppModals.showErrorDialog(
@@ -86,38 +69,52 @@ class _AddStudentDialogState extends State<AddStudentDialog> {
       );
       return;
     }
-
-    final error = MockDatabase.instance.createStudentAccount(
-      firstName: _firstNameCtrl.text.trim(),
-      middleName: _middleNameCtrl.text.trim(),
-      lastName: _lastNameCtrl.text.trim(),
-      birthday: _birthday!,
-      email: _emailCtrl.text.trim(),
-      studentId: _studentIdCtrl.text.trim(),
-      gender: _gender!,
-      contactNumber: _contactCtrl.text.trim(),
-      parentName: _parentNameCtrl.text.trim(),
-      parentContactNumber: _parentContactCtrl.text.trim(),
-      parentRelationship: _parentRelationship ?? 'Mother',
-    );
-
-    if (error != null) {
+    if (_selectedSubjectId == null) {
       AppModals.showErrorDialog(
         context: context,
-        title: 'Duplicate Account Detected',
-        message: error,
+        title: 'Subject Required',
+        message: 'Please select a subject/section to enroll the student into.',
       );
       return;
     }
 
-    final username = _previewUsername;
-    final tempPassword = _previewTempPassword;
+    late final StudentEnrollmentResult result;
+    try {
+      final repo = SupabaseStudentRepository();
+      result = await repo.enrollStudent(
+        lrn: _studentIdCtrl.text.trim(),
+        firstName: _firstNameCtrl.text.trim(),
+        middleName: _middleNameCtrl.text.trim(),
+        lastName: _lastNameCtrl.text.trim(),
+        birthday: _birthday!,
+        email: _emailCtrl.text.trim(),
+        gender: _gender!,
+        subjectId: _selectedSubjectId!,
+      );
+    } catch (e) {
+      AppModals.showErrorDialog(
+        context: context,
+        title: 'Enrollment Error',
+        message: e.toString(),
+      );
+      return;
+    }
+
     final fullName = [
       _firstNameCtrl.text.trim(),
       if (_middleNameCtrl.text.trim().isNotEmpty) _middleNameCtrl.text.trim(),
       _lastNameCtrl.text.trim(),
     ].join(' ');
     final email = _emailCtrl.text.trim();
+
+    if (result.createdAccount && result.tempPassword != null) {
+      EmailService.sendStudentCredentials(
+        recipientEmail: email,
+        studentName: fullName,
+        studentId: result.studentId,
+        tempPassword: result.tempPassword!,
+      );
+    }
 
     Navigator.of(context).pop();
     widget.onStudentCreated();
@@ -126,8 +123,7 @@ class _AddStudentDialogState extends State<AddStudentDialog> {
       context: context,
       fullName: fullName,
       email: email,
-      username: username,
-      tempPassword: tempPassword,
+      createdAccount: result.createdAccount,
     );
   }
 
@@ -135,8 +131,7 @@ class _AddStudentDialogState extends State<AddStudentDialog> {
     required BuildContext context,
     required String fullName,
     required String email,
-    required String username,
-    required String tempPassword,
+    required bool createdAccount,
   }) {
     showDialog(
       context: context,
@@ -162,7 +157,7 @@ class _AddStudentDialogState extends State<AddStudentDialog> {
               ),
               const SizedBox(height: 16),
               Text(
-                'STUDENT ACCOUNT CREATED',
+                createdAccount ? 'STUDENT ACCOUNT CREATED' : 'STUDENT ENROLLED',
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.w900,
@@ -171,74 +166,25 @@ class _AddStudentDialogState extends State<AddStudentDialog> {
                 ),
                 textAlign: TextAlign.center,
               ),
-              const SizedBox(height: 4),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFEF3C7),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  '⚠️ Prototype: No actual email is sent. Share credentials manually.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 11, color: Color(0xFF92400E)),
+              const SizedBox(height: 8),
+              Text(
+                createdAccount
+                    ? 'A temporary password was sent to the student email. On first sign-in, the student must set a new password and verify it by email.'
+                    : 'The existing student account was enrolled in this subject and section. Their account credentials were not changed.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 13,
+                  color: Theme.of(context).colorScheme.onSurface
+                      .withValues(alpha: 0.7),
+                  height: 1.5,
                 ),
               ),
               const SizedBox(height: 20),
               _CredentialRow(label: 'Student', value: fullName),
-              _CredentialRow(label: 'Email', value: email),
-              _CredentialRow(label: 'Username', value: username),
-              _CredentialRow(
-                label: 'Temporary Password',
-                value: tempPassword,
-                isPassword: true,
-              ),
-              _CredentialRow(
-                label: 'Account Status',
-                value: 'Pending',
-                valueColor: const Color(0xFF7C3AED),
-              ),
+              _CredentialRow(label: 'Email / Username', value: email),
               const SizedBox(height: 20),
               Row(
                 children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Theme.of(context).colorScheme.primary,
-                        side: BorderSide(color: Theme.of(context).colorScheme.primary),
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                      ),
-                      icon: Icon(Icons.copy, size: 16),
-                      label: Text(
-                        'Copy Credentials',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 13,
-                        ),
-                      ),
-                      onPressed: () {
-                        Clipboard.setData(
-                          ClipboardData(
-                            text:
-                                'Student: $fullName\nEmail: $email\nUsername: $username\nTemporary Password: $tempPassword\nStatus: Pending',
-                          ),
-                        );
-                        ScaffoldMessenger.of(ctx).showSnackBar(
-                          const SnackBar(
-                            content: Text('Credentials copied to clipboard'),
-                            duration: Duration(seconds: 2),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                  const SizedBox(width: 12),
                   Expanded(
                     child: AppPrimaryButton(
                       label: 'Close',
@@ -254,23 +200,19 @@ class _AddStudentDialogState extends State<AddStudentDialog> {
     );
   }
 
-  @override
   Widget build(BuildContext context) {
-    final birthdayText = _birthday == null
-        ? 'Select Birthday'
-        : '${_birthday!.month.toString().padLeft(2, '0')}/${_birthday!.day.toString().padLeft(2, '0')}/${_birthday!.year}';
-
     return AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       titlePadding: const EdgeInsets.fromLTRB(28, 28, 28, 0),
       contentPadding: const EdgeInsets.fromLTRB(28, 16, 28, 0),
-      actionsPadding: const EdgeInsets.fromLTRB(28, 0, 28, 24),
+      actionsPadding: const EdgeInsets.fromLTRB(28, 24, 28, 24),
       title: Row(
         children: [
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
+              color: Theme.of(context).colorScheme.primary
+                  .withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Icon(
@@ -292,7 +234,8 @@ class _AddStudentDialogState extends State<AddStudentDialog> {
                   'Teacher creates the student account',
                   style: TextStyle(
                     fontSize: 12,
-                    color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+                    color: Theme.of(context).colorScheme.onSurface
+                        .withValues(alpha: 0.6),
                     fontWeight: FontWeight.normal,
                   ),
                 ),
@@ -313,30 +256,45 @@ class _AddStudentDialogState extends State<AddStudentDialog> {
                 const SizedBox(height: 8),
                 const _SectionLabel('Student Name'),
                 Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Expanded(
                       flex: 3,
-                      child: _buildField(
-                        _firstNameCtrl,
-                        'First Name *',
-                        onChanged: (_) => setState(() {}),
+                      child: AppTextField(
+                        label: 'First Name *',
+                        controller: _firstNameCtrl,
+                        inputFormatters: [
+                          ...AppValidators.nameFormatters,
+                          LengthLimitingTextInputFormatter(30),
+                        ],
+                        validator: (v) =>
+                            AppValidators.validateName(v, 'First name'),
                       ),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
                       flex: 2,
-                      child: _buildField(
-                        _middleNameCtrl,
-                        'Middle Name / Initial',
+                      child: AppTextField(
+                        label: 'Middle Name',
+                        controller: _middleNameCtrl,
+                        inputFormatters: [
+                          ...AppValidators.nameFormatters,
+                          LengthLimitingTextInputFormatter(30),
+                        ],
                       ),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
                       flex: 3,
-                      child: _buildField(
-                        _lastNameCtrl,
-                        'Last Name *',
-                        onChanged: (_) => setState(() {}),
+                      child: AppTextField(
+                        label: 'Last Name *',
+                        controller: _lastNameCtrl,
+                        inputFormatters: [
+                          ...AppValidators.nameFormatters,
+                          LengthLimitingTextInputFormatter(30),
+                        ],
+                        validator: (v) =>
+                            AppValidators.validateName(v, 'Last name'),
                       ),
                     ),
                   ],
@@ -344,11 +302,12 @@ class _AddStudentDialogState extends State<AddStudentDialog> {
                 const SizedBox(height: 16),
                 const _SectionLabel('Student Details'),
                 Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Expanded(
-                      child: _buildField(
-                        _studentIdCtrl,
-                        'LRN (12-digit number) *',
+                      child: AppTextField(
+                        label: 'LRN (12-digit number) *',
+                        controller: _studentIdCtrl,
                         keyboardType: TextInputType.number,
                         inputFormatters: [
                           FilteringTextInputFormatter.digitsOnly,
@@ -364,208 +323,249 @@ class _AddStudentDialogState extends State<AddStudentDialog> {
                       ),
                     ),
                     const SizedBox(width: 12),
-                    Expanded(
-                      child: DropdownButtonFormField<String>(
-                        initialValue: _gender,
-                        decoration: const InputDecoration(
-                          labelText: 'Gender *',
-                        ),
-                        items: const [
-                          DropdownMenuItem(value: 'Male', child: Text('Male')),
-                          DropdownMenuItem(
-                            value: 'Female',
-                            child: Text('Female'),
-                          ),
-                        ],
-                        validator: (value) =>
-                            value == null ? 'Gender is required' : null,
-                        onChanged: (value) => setState(() => _gender = value),
-                      ),
-                    ),
+                    Expanded(child: _buildGenderField(Theme.of(context))),
                   ],
                 ),
                 const SizedBox(height: 16),
                 Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Expanded(
-                      child: InkWell(
-                        onTap: _pickBirthday,
-                        child: InputDecorator(
-                          decoration: const InputDecoration(
-                            labelText: 'Birthday *',
-                            prefixIcon: Icon(Icons.cake_outlined, size: 18),
-                          ),
-                          child: Text(birthdayText),
+                      child: AppDatePickerField(
+                        label: 'Birthday *',
+                        initialDate: _birthday,
+                        firstDate: DateTime(1970, 1, 1),
+                        lastDate: DateTime(
+                          DateTime.now().year - 10,
+                          DateTime.now().month,
+                          DateTime.now().day,
                         ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _buildField(
-                        _emailCtrl,
-                        'Email / Gmail *',
-                        keyboardType: TextInputType.emailAddress,
-                        validator: (v) {
-                          if (v == null || v.isEmpty) {
-                            return 'Email is required';
-                          }
-                          if (!v.toLowerCase().endsWith('@gmail.com')) {
-                            return 'Use a Gmail address ending in @gmail.com';
-                          }
+                        onDateSelected: (d) => setState(() => _birthday = d),
+                        validator: (d) {
+                          if (d == null) return 'Birthday is required';
+                          final now = DateTime.now();
+                          int age = now.year - d.year;
+                          if (now.month < d.month ||
+                              (now.month == d.month && now.day < d.day))
+                            age--;
+                          if (age < 10)
+                            return 'Student must be at least 10 years old.';
                           return null;
                         },
                       ),
                     ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                _buildField(
-                  _contactCtrl,
-                  'Student Contact Number *',
-                  keyboardType: TextInputType.phone,
-                ),
-                const SizedBox(height: 16),
-                const _SectionLabel('Parent / Guardian Details'),
-                _buildField(
-                  _parentNameCtrl,
-                  'Parent / Guardian Name *',
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _buildField(
-                        _parentContactCtrl,
-                        'Parent Contact Number *',
-                        keyboardType: TextInputType.phone,
-                      ),
-                    ),
                     const SizedBox(width: 12),
                     Expanded(
-                      child: DropdownButtonFormField<String>(
-                        initialValue: _parentRelationship,
-                        decoration: const InputDecoration(
-                          labelText: 'Relationship *',
-                        ),
-                        items: const [
-                          DropdownMenuItem(value: 'Mother', child: Text('Mother')),
-                          DropdownMenuItem(value: 'Father', child: Text('Father')),
-                          DropdownMenuItem(value: 'Guardian', child: Text('Guardian')),
-                        ],
-                        validator: (value) =>
-                            value == null ? 'Relationship is required' : null,
-                        onChanged: (value) => setState(() => _parentRelationship = value),
+                      child: AppTextField(
+                        label: 'Email / Gmail *',
+                        controller: _emailCtrl,
+                        keyboardType: TextInputType.emailAddress,
+                        autovalidateMode: AutovalidateMode.onUserInteraction,
+                        validator: AppValidators.validateEmail,
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 20),
-
-                // Auto-generated credentials preview
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).scaffoldBackgroundColor,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.12)),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Auto-Generated Credentials Preview',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 13,
-                          color: Theme.of(context).colorScheme.onSurface,
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      _PreviewRow(label: 'Username', value: _previewUsername),
-                      const SizedBox(height: 6),
-                      _PreviewRow(
-                        label: 'Temp Password',
-                        value: _previewTempPassword,
-                      ),
-                      const SizedBox(height: 6),
-                      const _PreviewRow(
-                        label: 'Account Status',
-                        value: 'Pending',
-                        valueColor: Color(0xFF7C3AED),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 16),
+                _buildSubjectDropdown(Theme.of(context)),
+                const SizedBox(height: 24),
               ],
             ),
           ),
         ),
       ),
       actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: Text(
-            'Cancel',
-            style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6)),
-          ),
-        ),
-        AppPrimaryButton(
-          label: 'Create Student Account',
-          icon: Icons.person_add_alt_1,
-          onPressed: _submit,
-          width: 200,
-          height: 44,
+        Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            OutlinedButton(
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Theme.of(context).colorScheme.onSurface
+                    .withValues(alpha: 0.7),
+                side: BorderSide(
+                  color: Theme.of(context).colorScheme.outline
+                      .withValues(alpha: 0.3),
+                ),
+                minimumSize: const Size(160, 44),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text(
+                'Cancel',
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
+            ),
+            const SizedBox(width: 12),
+            AppPrimaryButton(
+              label: 'Create Account',
+              icon: Icons.person_add_alt_1,
+              onPressed: _submit,
+              width: 200,
+              height: 44,
+            ),
+          ],
         ),
       ],
     );
   }
 
-  Widget _buildField(
-    TextEditingController ctrl,
-    String label, {
-    bool required = true,
-    TextInputType? keyboardType,
-    List<TextInputFormatter>? inputFormatters,
-    String? Function(String?)? validator,
-    void Function(String)? onChanged,
-  }) {
-    return TextFormField(
-      controller: ctrl,
-      keyboardType: keyboardType,
-      inputFormatters: inputFormatters,
-      onChanged: onChanged,
-      validator:
-          validator ??
-          (required
-              ? (v) => (v == null || v.isEmpty) ? '$label is required' : null
-              : null),
-      decoration: InputDecoration(
-        labelText: label,
-        filled: true,
-        fillColor: const Color(0xFFEFF6FF),
-        isDense: true,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide.none,
+  Widget _buildGenderField(ThemeData theme) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Gender *',
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: theme.colorScheme.onSurface,
+          ),
         ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide.none,
+        const SizedBox(height: 6),
+        DropdownButtonFormField<String>(
+          value: _gender,
+          autovalidateMode: AutovalidateMode.onUserInteraction,
+          decoration: InputDecoration(
+            filled: true,
+            fillColor: theme.colorScheme.surface,
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 14,
+              vertical: 12,
+            ),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(
+                color: theme.colorScheme.outline.withValues(alpha: 0.4),
+              ),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(
+                color: theme.colorScheme.outline.withValues(alpha: 0.4),
+              ),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(
+                color: theme.colorScheme.primary,
+                width: 1.5,
+              ),
+            ),
+            errorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(
+                color: theme.colorScheme.error,
+                width: 1.5,
+              ),
+            ),
+            focusedErrorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(
+                color: theme.colorScheme.error,
+                width: 1.5,
+              ),
+            ),
+            errorStyle: TextStyle(fontSize: 12, color: theme.colorScheme.error),
+          ),
+          hint: Text(
+            'Select Gender',
+            style: TextStyle(
+              fontSize: 14,
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
+            ),
+          ),
+          validator: (v) =>
+              (v == null || v.isEmpty) ? 'Gender is required.' : null,
+          items: const [
+            DropdownMenuItem(
+              value: 'Male',
+              child: Row(
+                children: [
+                  Icon(Icons.male, size: 20, color: Colors.blue),
+                  SizedBox(width: 8),
+                  Text('Male'),
+                ],
+              ),
+            ),
+            DropdownMenuItem(
+              value: 'Female',
+              child: Row(
+                children: [
+                  Icon(Icons.female, size: 20, color: Colors.pink),
+                  SizedBox(width: 8),
+                  Text('Female'),
+                ],
+              ),
+            ),
+          ],
+          onChanged: (v) => setState(() => _gender = v),
         ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide(color: Theme.of(context).colorScheme.primary, width: 1.5),
+      ],
+    );
+  }
+
+  Widget _buildSubjectDropdown(ThemeData theme) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Subject & Section *',
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: theme.colorScheme.onSurface,
+          ),
         ),
-        errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: AppTheme.catRed),
+        const SizedBox(height: 6),
+        DropdownButtonFormField<String>(
+          value: _selectedSubjectId,
+          autovalidateMode: AutovalidateMode.onUserInteraction,
+          decoration: InputDecoration(
+            filled: true,
+            fillColor: theme.colorScheme.surface,
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 14,
+              vertical: 12,
+            ),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(
+                color: theme.colorScheme.outline.withValues(alpha: 0.4),
+              ),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(
+                color: theme.colorScheme.outline.withValues(alpha: 0.4),
+              ),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(
+                color: theme.colorScheme.primary,
+                width: 1.5,
+              ),
+            ),
+            errorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: AppTheme.catRed, width: 1.5),
+            ),
+          ),
+          hint: const Text('Select a subject/section to enroll'),
+          items: widget.teacherSubjects.map((subject) {
+            return DropdownMenuItem<String>(
+              value: subject['id'].toString(),
+              child: Text(
+                '${subject['subject_name']} - ${subject['section_name'] ?? 'No Section'}',
+              ),
+            );
+          }).toList(),
+          onChanged: (val) => setState(() => _selectedSubjectId = val),
+          validator: (val) => val == null ? 'Subject is required' : null,
         ),
-        focusedErrorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: AppTheme.catRed, width: 1.5),
-        ),
-      ),
+      ],
     );
   }
 }
@@ -591,59 +591,11 @@ class _SectionLabel extends StatelessWidget {
   }
 }
 
-class _PreviewRow extends StatelessWidget {
-  final String label;
-  final String value;
-  final Color? valueColor;
-
-  const _PreviewRow({
-    required this.label,
-    required this.value,
-    this.valueColor,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        SizedBox(
-          width: 120,
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: 12,
-              color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
-            ),
-          ),
-        ),
-        Expanded(
-          child: Text(
-            value,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.bold,
-              color: valueColor ?? Theme.of(context).colorScheme.onSurface,
-              fontFamily: value.length > 20 ? 'monospace' : null,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
 class _CredentialRow extends StatelessWidget {
   final String label;
   final String value;
-  final bool isPassword;
-  final Color? valueColor;
 
-  const _CredentialRow({
-    required this.label,
-    required this.value,
-    this.isPassword = false,
-    this.valueColor,
-  });
+  const _CredentialRow({required this.label, required this.value});
 
   @override
   Widget build(BuildContext context) {
@@ -658,7 +610,8 @@ class _CredentialRow extends StatelessWidget {
               label,
               style: TextStyle(
                 fontSize: 13,
-                color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+                color: Theme.of(context).colorScheme.onSurface
+                    .withValues(alpha: 0.6),
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -667,14 +620,11 @@ class _CredentialRow extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
-                color: isPassword
-                    ? const Color(0xFFF0FDF4)
-                    : Theme.of(context).scaffoldBackgroundColor,
+                color: Theme.of(context).scaffoldBackgroundColor,
                 borderRadius: BorderRadius.circular(6),
                 border: Border.all(
-                  color: isPassword
-                      ? AppTheme.catGreen.withValues(alpha: 0.3)
-                      : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.12),
+                  color: Theme.of(context).colorScheme.onSurface
+                      .withValues(alpha: 0.12),
                 ),
               ),
               child: Text(
@@ -682,10 +632,7 @@ class _CredentialRow extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.bold,
-                  color:
-                      valueColor ??
-                      (isPassword ? AppTheme.catGreen : Theme.of(context).colorScheme.onSurface),
-                  fontFamily: isPassword ? 'monospace' : null,
+                  color: Theme.of(context).colorScheme.onSurface,
                 ),
               ),
             ),

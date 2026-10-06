@@ -3,7 +3,8 @@ class AppRoutes {
   static const String register = '/register';
   static const String forgotPassword = '/forgot-password';
   static const String pendingAccount = '/pending-account';
-  static const String firstLogin = '/student/first-login';
+  static const String studentFirstLogin = '/student/first-login';
+  static const String teacherFirstLogin = '/teacher/first-login';
 
   // Dashboards & Wizards
   static const String academicSetup = '/teacher/academic-setup';

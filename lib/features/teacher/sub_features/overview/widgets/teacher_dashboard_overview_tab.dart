@@ -3,12 +3,16 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import 'package:class_realm/models/academic_models.dart';
 import 'package:class_realm/models/user_model.dart';
+import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/features/teacher/shared/widgets/teacher_top_summary_card.dart';
 
-class TeacherDashboardOverviewTab extends StatelessWidget {
+import 'package:class_realm/data/repositories/subject_repository.dart';
+import 'package:class_realm/data/repositories/supabase_schedule_repository.dart';
+import 'package:class_realm/data/repositories/supabase_student_repository.dart';
+
+class TeacherDashboardOverviewTab extends StatefulWidget {
   final List<UserModel> activeStudents;
   final List<QuizOrExamModel> quizzesAndExams;
-  final List<ScheduleModel> schedules;
   final ValueChanged<int> onNavigateTo;
   final VoidCallback onCreateChooser;
 
@@ -16,17 +20,91 @@ class TeacherDashboardOverviewTab extends StatelessWidget {
     super.key,
     required this.activeStudents,
     required this.quizzesAndExams,
-    required this.schedules,
     required this.onNavigateTo,
     required this.onCreateChooser,
   });
 
-  Widget _buildClassItem(BuildContext context, {
+  @override
+  State<TeacherDashboardOverviewTab> createState() =>
+      _TeacherDashboardOverviewTabState();
+}
+
+class _TeacherDashboardOverviewTabState
+    extends State<TeacherDashboardOverviewTab> {
+  int totalSubjects = 0;
+  int totalSections = 0;
+  int totalStudents = 0;
+  bool isLoadingStats = true;
+  String? _loadError;
+  List<ScheduleModel> _schedules = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadDashboardStats();
+  }
+
+  Future<void> _loadDashboardStats() async {
+    final currentUser = AuthRepository.instance.currentUser;
+    if (currentUser == null) {
+      if (mounted) {
+        setState(() {
+          isLoadingStats = false;
+          _loadError = 'Sign in as a teacher to load your dashboard.';
+        });
+      }
+      return;
+    }
+
+    try {
+      final subjects = await SubjectRepository.instance.getTeacherSubjects(
+        currentUser.id,
+      );
+      final uniqueSubjects = subjects
+          .map((e) => e['subject_name'])
+          .toSet()
+          .length;
+      final uniqueSections = subjects
+          .map((e) => '${e['subject_name']}-${e['section_name']}')
+          .toSet()
+          .length;
+
+      final students = await SupabaseStudentRepository().getStudentsForTeacher(
+        currentUser.id,
+      );
+      final uniqueStudents = students
+          .map((student) => student.id)
+          .toSet()
+          .length;
+      final schedules = await SupabaseScheduleRepository.instance.getSchedules(
+        teacherId: currentUser.id,
+      );
+
+      if (mounted) {
+        setState(() {
+          totalSubjects = uniqueSubjects;
+          totalSections = uniqueSections;
+          totalStudents = uniqueStudents;
+          _schedules = schedules;
+          isLoadingStats = false;
+        });
+      }
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          isLoadingStats = false;
+          _loadError = 'Failed to load dashboard data: $error';
+        });
+      }
+    }
+  }
+
+  Widget _buildClassItem(
+    BuildContext context, {
     required String subject,
     required String sectionAndRoom,
     required String time,
     required bool isDone,
-    required String attendanceStats,
   }) {
     final theme = Theme.of(context);
     return Container(
@@ -34,14 +112,18 @@ class TeacherDashboardOverviewTab extends StatelessWidget {
       decoration: BoxDecoration(
         color: theme.scaffoldBackgroundColor, // Inherits 60% for contrast inside 30% card
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: theme.colorScheme.onSurface.withValues(alpha: 0.05)),
+        border: Border.all(
+          color: theme.colorScheme.onSurface.withValues(alpha: 0.05),
+        ),
       ),
       child: Row(
         children: [
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: isDone ? Colors.teal.withValues(alpha: 0.1) : Colors.amber.withValues(alpha: 0.1),
+              color: isDone
+                  ? Colors.teal.withValues(alpha: 0.1)
+                  : Colors.amber.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Icon(
@@ -71,15 +153,6 @@ class TeacherDashboardOverviewTab extends StatelessWidget {
                     color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                   ),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  attendanceStats,
-                  style: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.teal,
-                  ),
-                ),
               ],
             ),
           ),
@@ -96,7 +169,8 @@ class TeacherDashboardOverviewTab extends StatelessWidget {
     );
   }
 
-  Widget _buildQuickActionTile(BuildContext context, {
+  Widget _buildQuickActionTile(
+    BuildContext context, {
     required String title,
     required IconData icon,
     required VoidCallback onTap,
@@ -135,10 +209,26 @@ class TeacherDashboardOverviewTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final quizzesCount = quizzesAndExams.where((q) => !q.isExam).length;
-    final examsCount = quizzesAndExams.where((q) => q.isExam).length;
-    final totalAssessments = quizzesAndExams.length;
-    const todaysClassesCount = 2;
+    final currentUser = AuthRepository.instance.currentUser;
+    final displayName = currentUser?.fullName ?? 'Teacher';
+    final nameTitle = currentUser?.gender?.toLowerCase() == 'female'
+        ? "Ma'am"
+        : "Sir";
+
+    // Loading state for the top cards
+    final mainValueSubjects = isLoadingStats ? '-' : '$totalSubjects';
+    final mainValueSections = isLoadingStats ? '-' : '$totalSections';
+    final mainValueStudents = isLoadingStats ? '-' : '$totalStudents';
+    final now = DateTime.now();
+    final todayName = ScheduleModel.dayFromIndex(now.weekday);
+    final nowInMinutes = now.hour * 60 + now.minute;
+    final sortedSchedules = List<ScheduleModel>.from(_schedules)
+      ..sort((a, b) {
+        final dayCompare = a.dayOfWeekIndex.compareTo(b.dayOfWeekIndex);
+        return dayCompare != 0
+            ? dayCompare
+            : a.startMinutes.compareTo(b.startMinutes);
+      });
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
@@ -146,7 +236,7 @@ class TeacherDashboardOverviewTab extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Welcome back, Ma\'am Karen!',
+            'Welcome back, $nameTitle $displayName!',
             style: TextStyle(
               fontSize: 22,
               fontWeight: FontWeight.bold,
@@ -156,51 +246,76 @@ class TeacherDashboardOverviewTab extends StatelessWidget {
           const SizedBox(height: 4),
           Text(
             "Here's your academic summary for Eduardo Barretto Senior Integrated School today.",
-            style: TextStyle(fontSize: 14, color: theme.colorScheme.onSurface.withValues(alpha: 0.6)),
+            style: TextStyle(
+              fontSize: 14,
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+            ),
           ),
           const SizedBox(height: 24),
 
           // 3 TOP STAT CARDS
-          Row(
-            children: [
-              Expanded(
-                child: TeacherTopSummaryCard(
-                  title: "Today's Classes",
-                  mainValue: '$todaysClassesCount',
-                  subText: '↑ 2 completed, 2 remaining',
-                  subColor: Colors.teal,
+          if (MediaQuery.of(context).size.width < 900)
+            Column(
+              children: [
+                TeacherTopSummaryCard(
+                  title: "Total Subjects",
+                  mainValue: mainValueSubjects,
+                  subText: 'Subjects handled',
+                  baseColor: Colors.teal,
                   icon: LucideIcons.bookOpen,
-                  iconColor: Colors.teal,
-                  iconBgColor: Colors.teal.withValues(alpha: 0.1),
                 ),
-              ),
-              const SizedBox(width: 20),
-              Expanded(
-                child: TeacherTopSummaryCard(
-                  title: 'Students',
-                  mainValue: '${activeStudents.length}',
-                  subText: 'Across 2 sections (Grade 11)',
-                  subColor: theme.colorScheme.primary,
+                const SizedBox(height: 16),
+                TeacherTopSummaryCard(
+                  title: 'Total Sections',
+                  mainValue: mainValueSections,
+                  subText: 'Sections handled',
+                  baseColor: Colors.amber.shade700,
+                  icon: LucideIcons.users,
+                ),
+                const SizedBox(height: 16),
+                TeacherTopSummaryCard(
+                  title: 'Total Students',
+                  mainValue: mainValueStudents,
+                  subText: 'Active students',
+                  baseColor: theme.colorScheme.primary,
                   icon: LucideIcons.graduationCap,
-                  iconColor: theme.colorScheme.primary,
-                  iconBgColor: theme.colorScheme.primary.withValues(alpha: 0.1),
                 ),
-              ),
-              const SizedBox(width: 20),
-              Expanded(
-                child: TeacherTopSummaryCard(
-                  title: 'Upcoming Assessments',
-                  mainValue: '$totalAssessments',
-                  subText:
-                      '$quizzesCount Quizzes • $examsCount Periodical Exams',
-                  subColor: theme.colorScheme.primary,
-                  icon: LucideIcons.fileQuestion,
-                  iconColor: Colors.amber.shade800,
-                  iconBgColor: Colors.amber.shade100,
+              ],
+            )
+          else
+            Row(
+              children: [
+                Expanded(
+                  child: TeacherTopSummaryCard(
+                    title: "Total Subjects",
+                    mainValue: mainValueSubjects,
+                    subText: 'Subjects handled',
+                    baseColor: Colors.teal,
+                    icon: LucideIcons.bookOpen,
+                  ),
                 ),
-              ),
-            ],
-          ),
+                const SizedBox(width: 20),
+                Expanded(
+                  child: TeacherTopSummaryCard(
+                    title: 'Total Sections',
+                    mainValue: mainValueSections,
+                    subText: 'Sections handled',
+                    baseColor: Colors.amber.shade700,
+                    icon: LucideIcons.users,
+                  ),
+                ),
+                const SizedBox(width: 20),
+                Expanded(
+                  child: TeacherTopSummaryCard(
+                    title: 'Total Students',
+                    mainValue: mainValueStudents,
+                    subText: 'Active students',
+                    baseColor: theme.colorScheme.primary,
+                    icon: LucideIcons.graduationCap,
+                  ),
+                ),
+              ],
+            ),
           const SizedBox(height: 28),
 
           // LOWER SECTION: Today's Classes & Quick Actions
@@ -219,7 +334,7 @@ class TeacherDashboardOverviewTab extends StatelessWidget {
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Text(
-                              "Today's Classes",
+                              'My Class Schedule',
                               style: TextStyle(
                                 fontSize: 18,
                                 fontWeight: FontWeight.bold,
@@ -227,7 +342,7 @@ class TeacherDashboardOverviewTab extends StatelessWidget {
                               ),
                             ),
                             TextButton(
-                              onPressed: () => onNavigateTo(14),
+                              onPressed: () => widget.onNavigateTo(14),
                               child: Text(
                                 'View All Schedule',
                                 style: TextStyle(
@@ -238,24 +353,59 @@ class TeacherDashboardOverviewTab extends StatelessWidget {
                             ),
                           ],
                         ),
-                        const SizedBox(height: 16),
-                        _buildClassItem(
-                          context,
-                          subject: 'General Mathematics',
-                          sectionAndRoom: 'Grade 11 - Section A • Room 304',
-                          time: '07:30 AM - 09:00 AM',
-                          isDone: true,
-                          attendanceStats: 'Attendance: 4 / 5 present',
-                        ),
-                        const SizedBox(height: 12),
-                        _buildClassItem(
-                          context,
-                          subject: 'General Mathematics',
-                          sectionAndRoom: 'Grade 11 - Section B • Room 305',
-                          time: '09:15 AM - 10:45 AM',
-                          isDone: true,
-                          attendanceStats: 'Attendance: 5 / 5 present',
-                        ),
+                        if (isLoadingStats)
+                          const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 24),
+                            child: Center(child: CircularProgressIndicator()),
+                          )
+                        else if (_loadError != null)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 24),
+                            child: Center(
+                              child: Text(
+                                _loadError!,
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  color: theme.colorScheme.error,
+                                ),
+                              ),
+                            ),
+                          )
+                        else if (sortedSchedules.isEmpty)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 24),
+                            child: Center(
+                              child: Text(
+                                'No schedule entries have been added yet.',
+                                style: TextStyle(
+                                  color: theme.colorScheme.onSurface.withValues(
+                                    alpha: 0.5,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          )
+                        else
+                          ...sortedSchedules.map(
+                            (schedule) => Padding(
+                              padding: const EdgeInsets.only(top: 10),
+                              child: _buildClassItem(
+                                context,
+                                subject: schedule.subject,
+                                sectionAndRoom: [
+                                  schedule.dayOfWeek,
+                                  'Section ${schedule.section}',
+                                  if (schedule.room.trim().isNotEmpty)
+                                    'Room ${schedule.room}',
+                                ].join(' • '),
+                                time:
+                                    '${schedule.startTime} - ${schedule.endTime}',
+                                isDone:
+                                    schedule.dayOfWeek == todayName &&
+                                    nowInMinutes >= schedule.endMinutes,
+                              ),
+                            ),
+                          ),
                       ],
                     ),
                   ),
@@ -285,21 +435,31 @@ class TeacherDashboardOverviewTab extends StatelessWidget {
                           context,
                           title: 'Record Attendance',
                           icon: LucideIcons.checkSquare,
-                          onTap: () => onNavigateTo(5),
+                          onTap: () => widget.onNavigateTo(5),
                         ),
-                        Divider(height: 1, color: theme.colorScheme.onSurface.withValues(alpha: 0.05)),
+                        Divider(
+                          height: 1,
+                          color: theme.colorScheme.onSurface.withValues(
+                            alpha: 0.05,
+                          ),
+                        ),
                         _buildQuickActionTile(
                           context,
                           title: 'Create Classwork',
                           icon: LucideIcons.fileText,
-                          onTap: onCreateChooser,
+                          onTap: widget.onCreateChooser,
                         ),
-                        Divider(height: 1, color: theme.colorScheme.onSurface.withValues(alpha: 0.05)),
+                        Divider(
+                          height: 1,
+                          color: theme.colorScheme.onSurface.withValues(
+                            alpha: 0.05,
+                          ),
+                        ),
                         _buildQuickActionTile(
                           context,
-                          title: 'Add Assessment',
-                          icon: LucideIcons.filePlus,
-                          onTap: onCreateChooser,
+                          title: 'View Schedule',
+                          icon: LucideIcons.calendarDays,
+                          onTap: () => widget.onNavigateTo(14),
                         ),
                       ],
                     ),

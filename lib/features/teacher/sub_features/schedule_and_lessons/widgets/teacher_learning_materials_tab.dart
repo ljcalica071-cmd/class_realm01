@@ -21,17 +21,20 @@ class TeacherLearningMaterialsTab extends StatelessWidget {
             children: [
               Text(
                 'Learning Materials Repository',
-                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface),
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  color: theme.colorScheme.onSurface,
+                ),
               ),
               AppButton.primary(
                 label: 'Upload Material',
                 icon: Icons.upload_file,
                 onPressed: () {
-                  AppModals.showSuccessDialog(
-                    context: context,
-                    title: 'Material Uploaded',
-                    message:
-                        'Simulated document successfully added to student repository.',
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Material upload is not available yet.'),
+                    ),
                   );
                 },
               ),
@@ -50,7 +53,11 @@ class TeacherLearningMaterialsTab extends StatelessWidget {
                   decoration: BoxDecoration(
                     color: theme.colorScheme.surface,
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: theme.colorScheme.onSurface.withValues(alpha: 0.12)),
+                    border: Border.all(
+                      color: theme.colorScheme.onSurface.withValues(
+                        alpha: 0.12,
+                      ),
+                    ),
                   ),
                   child: Row(
                     children: [
@@ -58,9 +65,7 @@ class TeacherLearningMaterialsTab extends StatelessWidget {
                         isPdf
                             ? Icons.picture_as_pdf
                             : Icons.description_outlined,
-                        color: isPdf
-                            ? AppTheme.catRed
-                            : AppTheme.catBlue,
+                        color: isPdf ? AppTheme.catRed : AppTheme.catBlue,
                         size: 36,
                       ),
                       const SizedBox(width: 16),
@@ -80,7 +85,9 @@ class TeacherLearningMaterialsTab extends StatelessWidget {
                             Text(
                               mat.description,
                               style: TextStyle(
-                                color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                                color: theme.colorScheme.onSurface.withValues(
+                                  alpha: 0.6,
+                                ),
                                 fontSize: 13,
                               ),
                             ),

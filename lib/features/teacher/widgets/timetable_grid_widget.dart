@@ -25,14 +25,20 @@ class TimetableGridWidget extends StatelessWidget {
   ];
 
   Color _getSectionColor(String section) {
-    switch (section) {
-      case 'Section A':
-        return const Color(0xFFE0F2FE);
-      case 'Section B':
-        return const Color(0xFFDCFCE7);
-      default:
-        return const Color(0xFFFFEDD5);
-    }
+    const pastelPalette = [
+      Color(0xFFE0F2FE), // Sky
+      Color(0xFFDCFCE7), // Emerald
+      Color(0xFFFEF3C7), // Amber
+      Color(0xFFF3E8FF), // Purple
+      Color(0xFFFFE4E6), // Rose
+      Color(0xFFCFFAFE), // Cyan
+      Color(0xFFFCE7F3), // Pink
+      Color(0xFFE0E7FF), // Indigo
+      Color(0xFFD1FAE5), // Mint
+      Color(0xFFFFEDD5), // Orange
+    ];
+    final hash = section.hashCode.abs();
+    return pastelPalette[hash % pastelPalette.length];
   }
 
   Color _getSubjectDarkColor(String subject) {

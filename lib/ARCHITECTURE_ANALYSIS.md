@@ -172,7 +172,7 @@ class_realm/
 - [x] **Dashboard Overview:** Collapsible sidebar (20 navigation items), summary metric cards, classroom shortcut cards, quick-action tiles.
 - [x] **Classroom Setup:** Section selector (`Section A`, `Section B`), School Year selector (`2026-2027`), Add Class form, Classroom prototype cards.
 - [x] **Academic Setup:** Academic year configuration form, start/end dates, 4-quarter structure definition.
-- [x] **Student Management:** Active and Archived tabs, real-time search, column sorting, Add Student dialog (with LRN & birthday validation), Edit Student dialog, View Student profile modal, Soft archive / restore, Permanent deletion, Deactivate / reactivate, Single section transfer dialog, Bulk section transfer dialog, Import students CSV modal.
+- [x] **Student Management:** Active and Archived tabs, real-time search, column sorting, Add Student dialog (with LRN & birthday validation), Edit Student dialog, View Student profile modal, Soft archive / restore, Permanent deletion, Deactivate / reactivate, Import students CSV modal.
 - [x] **Parent Management:** Parent table, linked student ID, phone, relationship, search, sorting, Add Parent modal, Edit Parent modal.
 - [x] **Classwork / Unified Assessments:** Unified tab grouping Written Work (WW), Performance Tasks (PT), and Examinations (EX); category filter chips; section deadline overrides; Create Chooser modal; Delete assessment with confirmation.
 - [x] **Performance Tasks / Requirements:** `CreateRequirementFlowDialog` with title, instructions, max score, deadline, section deadlines, rubric attachment, and submission type.

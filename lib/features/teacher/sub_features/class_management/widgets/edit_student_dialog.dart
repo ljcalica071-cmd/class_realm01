@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import 'package:class_realm/core/theme/app_theme.dart';
-import 'package:class_realm/data/mock_database.dart';
+import 'package:class_realm/core/utils/validators.dart';
+import 'package:class_realm/data/repositories/supabase_student_repository.dart';
 import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/widgets/common/app_buttons.dart';
 import 'package:class_realm/widgets/common/app_modals.dart';
+import 'package:class_realm/widgets/common/app_text_field.dart';
+import 'package:class_realm/widgets/common/app_date_picker_field.dart';
 
 class EditStudentDialog extends StatefulWidget {
   final UserModel student;
@@ -43,12 +45,9 @@ class _EditStudentDialogState extends State<EditStudentDialog> {
   late final TextEditingController _lastNameCtrl;
   late final TextEditingController _emailCtrl;
   late final TextEditingController _studentIdCtrl;
-  late final TextEditingController _contactCtrl;
-  late final TextEditingController _parentNameCtrl;
-  late final TextEditingController _parentContactCtrl;
   String? _gender;
   DateTime? _birthday;
-  String? _parentRelationship;
+  bool _isSaving = false;
 
   @override
   void initState() {
@@ -59,10 +58,6 @@ class _EditStudentDialogState extends State<EditStudentDialog> {
     _lastNameCtrl = TextEditingController(text: s.lastName ?? '');
     _emailCtrl = TextEditingController(text: s.email);
     _studentIdCtrl = TextEditingController(text: s.lrn ?? s.studentId ?? '');
-    _contactCtrl = TextEditingController(text: s.contactNumber ?? '');
-    _parentNameCtrl = TextEditingController(text: s.parentGuardianName ?? '');
-    _parentContactCtrl = TextEditingController(text: s.parentGuardianContact ?? '');
-    _parentRelationship = s.parentGuardianRelationship ?? 'Mother';
     _gender = s.gender;
     _birthday = s.birthday;
   }
@@ -74,40 +69,55 @@ class _EditStudentDialogState extends State<EditStudentDialog> {
     _lastNameCtrl.dispose();
     _emailCtrl.dispose();
     _studentIdCtrl.dispose();
-    _contactCtrl.dispose();
-    _parentNameCtrl.dispose();
-    _parentContactCtrl.dispose();
     super.dispose();
   }
 
-  Future<void> _pickBirthday() async {
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: _birthday ?? DateTime(2006, 1, 1),
-      firstDate: DateTime(1990),
-      lastDate: DateTime.now(),
-    );
-    if (picked != null) setState(() => _birthday = picked);
-  }
-
-  void _submit() {
+  Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
+    if (_birthday == null) {
+      AppModals.showErrorDialog(
+        context: context,
+        title: 'Birthday Required',
+        message: 'Please select the student\'s birthday.',
+      );
+      return;
+    }
+    final subjectId = widget.student.enrolledSubjectId;
+    if (subjectId == null || subjectId.isEmpty) {
+      AppModals.showErrorDialog(
+        context: context,
+        title: 'Enrollment Not Found',
+        message:
+            'This student has no subject and section enrollment to update.',
+      );
+      return;
+    }
 
-    MockDatabase.instance.updateStudentFull(
-      id: widget.student.id,
-      firstName: _firstNameCtrl.text.trim(),
-      middleName: _middleNameCtrl.text.trim(),
-      lastName: _lastNameCtrl.text.trim(),
-      email: _emailCtrl.text.trim(),
-      studentId: _studentIdCtrl.text.trim(),
-      gender: _gender!,
-      contactNumber: _contactCtrl.text.trim(),
-      birthday: _birthday ?? widget.student.birthday ?? DateTime(2006, 1, 1),
-      parentName: _parentNameCtrl.text.trim(),
-      parentContactNumber: _parentContactCtrl.text.trim(),
-      parentRelationship: _parentRelationship ?? 'Mother',
-    );
+    setState(() => _isSaving = true);
+    try {
+      await SupabaseStudentRepository().updateStudentFull(
+        id: widget.student.id,
+        subjectId: subjectId,
+        firstName: _firstNameCtrl.text.trim(),
+        middleName: _middleNameCtrl.text.trim(),
+        lastName: _lastNameCtrl.text.trim(),
+        email: _emailCtrl.text.trim(),
+        studentId: _studentIdCtrl.text.trim(),
+        gender: _gender!,
+        birthday: _birthday!,
+      );
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _isSaving = false);
+      AppModals.showErrorDialog(
+        context: context,
+        title: 'Student Update Failed',
+        message: error.toString(),
+      );
+      return;
+    }
 
+    if (!mounted) return;
     Navigator.of(context).pop();
     widget.onStudentUpdated();
     AppModals.showSuccessDialog(
@@ -119,10 +129,6 @@ class _EditStudentDialogState extends State<EditStudentDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final birthdayText = _birthday == null
-        ? 'Select Birthday'
-        : '${_birthday!.month.toString().padLeft(2, '0')}/${_birthday!.day.toString().padLeft(2, '0')}/${_birthday!.year}';
-
     return AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       titlePadding: const EdgeInsets.fromLTRB(28, 28, 28, 0),
@@ -133,7 +139,8 @@ class _EditStudentDialogState extends State<EditStudentDialog> {
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
+              color: Theme.of(context).colorScheme.primary
+                  .withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Icon(
@@ -155,7 +162,8 @@ class _EditStudentDialogState extends State<EditStudentDialog> {
                   widget.student.fullName,
                   style: TextStyle(
                     fontSize: 12,
-                    color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+                    color: Theme.of(context).colorScheme.onSurface
+                        .withValues(alpha: 0.6),
                     fontWeight: FontWeight.normal,
                   ),
                 ),
@@ -176,24 +184,46 @@ class _EditStudentDialogState extends State<EditStudentDialog> {
                 const SizedBox(height: 8),
                 const _SectionLabel('Student Name'),
                 Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Expanded(
                       flex: 3,
-                      child: _buildField(_firstNameCtrl, 'First Name *'),
+                      child: AppTextField(
+                        label: 'First Name *',
+                        controller: _firstNameCtrl,
+                        inputFormatters: [
+                          ...AppValidators.nameFormatters,
+                          LengthLimitingTextInputFormatter(30),
+                        ],
+                        validator: (value) =>
+                            AppValidators.validateName(value, 'First name'),
+                      ),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
                       flex: 2,
-                      child: _buildField(
-                        _middleNameCtrl,
-                        'Middle Name / Initial',
-                        required: false,
+                      child: AppTextField(
+                        label: 'Middle Name',
+                        controller: _middleNameCtrl,
+                        inputFormatters: [
+                          ...AppValidators.nameFormatters,
+                          LengthLimitingTextInputFormatter(30),
+                        ],
                       ),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
                       flex: 3,
-                      child: _buildField(_lastNameCtrl, 'Last Name *'),
+                      child: AppTextField(
+                        label: 'Last Name *',
+                        controller: _lastNameCtrl,
+                        inputFormatters: [
+                          ...AppValidators.nameFormatters,
+                          LengthLimitingTextInputFormatter(30),
+                        ],
+                        validator: (value) =>
+                            AppValidators.validateName(value, 'Last name'),
+                      ),
                     ),
                   ],
                 ),
@@ -202,9 +232,9 @@ class _EditStudentDialogState extends State<EditStudentDialog> {
                 Row(
                   children: [
                     Expanded(
-                      child: _buildField(
-                        _studentIdCtrl,
-                        'LRN (12-digit number) *',
+                      child: AppTextField(
+                        label: 'LRN (12-digit number) *',
+                        controller: _studentIdCtrl,
                         keyboardType: TextInputType.number,
                         inputFormatters: [
                           FilteringTextInputFormatter.digitsOnly,
@@ -220,120 +250,52 @@ class _EditStudentDialogState extends State<EditStudentDialog> {
                       ),
                     ),
                     const SizedBox(width: 12),
-                    Expanded(
-                      child: DropdownButtonFormField<String>(
-                        initialValue: _gender,
-                        decoration: const InputDecoration(
-                          labelText: 'Gender *',
-                        ),
-                        items: const [
-                          DropdownMenuItem(value: 'Male', child: Text('Male')),
-                          DropdownMenuItem(
-                            value: 'Female',
-                            child: Text('Female'),
-                          ),
-                        ],
-                        validator: (value) =>
-                            value == null ? 'Gender is required' : null,
-                        onChanged: (value) => setState(() => _gender = value),
-                      ),
-                    ),
+                    Expanded(child: _buildGenderField()),
                   ],
                 ),
                 const SizedBox(height: 16),
                 Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Expanded(
-                      child: InkWell(
-                        onTap: _pickBirthday,
-                        child: InputDecorator(
-                          decoration: const InputDecoration(
-                            labelText: 'Birthday *',
-                            prefixIcon: Icon(Icons.cake_outlined, size: 18),
-                          ),
-                          child: Text(birthdayText),
+                      child: AppDatePickerField(
+                        label: 'Birthday *',
+                        initialDate: _birthday,
+                        firstDate: DateTime(1970, 1, 1),
+                        lastDate: DateTime(
+                          DateTime.now().year - 10,
+                          DateTime.now().month,
+                          DateTime.now().day,
                         ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _buildField(
-                        _emailCtrl,
-                        'Email / Gmail *',
-                        keyboardType: TextInputType.emailAddress,
-                        validator: (v) {
-                          if (v == null || v.isEmpty) {
-                            return 'Email is required';
+                        onDateSelected: (date) =>
+                            setState(() => _birthday = date),
+                        validator: (date) {
+                          if (date == null) return 'Birthday is required';
+                          final now = DateTime.now();
+                          var age = now.year - date.year;
+                          if (now.month < date.month ||
+                              (now.month == date.month && now.day < date.day)) {
+                            age--;
                           }
-                          if (!v.toLowerCase().endsWith('@gmail.com')) {
-                            return 'Use a Gmail address ending in @gmail.com';
-                          }
-                          return null;
+                          return age < 10
+                              ? 'Student must be at least 10 years old.'
+                              : null;
                         },
                       ),
                     ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                _buildField(
-                  _contactCtrl,
-                  'Student Contact Number *',
-                  keyboardType: TextInputType.phone,
-                ),
-                const SizedBox(height: 16),
-                const _SectionLabel('Parent / Guardian Details'),
-                _buildField(
-                  _parentNameCtrl,
-                  'Parent / Guardian Name *',
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _buildField(
-                        _parentContactCtrl,
-                        'Parent Contact Number *',
-                        keyboardType: TextInputType.phone,
-                      ),
-                    ),
                     const SizedBox(width: 12),
                     Expanded(
-                      child: DropdownButtonFormField<String>(
-                        initialValue: _parentRelationship,
-                        decoration: const InputDecoration(
-                          labelText: 'Relationship *',
-                        ),
-                        items: const [
-                          DropdownMenuItem(value: 'Mother', child: Text('Mother')),
-                          DropdownMenuItem(value: 'Father', child: Text('Father')),
-                          DropdownMenuItem(value: 'Guardian', child: Text('Guardian')),
-                        ],
-                        validator: (value) =>
-                            value == null ? 'Relationship is required' : null,
-                        onChanged: (value) => setState(() => _parentRelationship = value),
+                      child: AppTextField(
+                        label: 'Email / Gmail *',
+                        controller: _emailCtrl,
+                        keyboardType: TextInputType.emailAddress,
+                        validator: AppValidators.validateEmail,
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 12),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFEF3C7),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: const Color(0xFFF59E0B).withValues(alpha: 0.4),
-                    ),
-                  ),
-                  child: Text(
-                    'Note: Editing the student\'s name does not automatically change the username or temporary password for an existing account.',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: Color(0xFF92400E),
-                      height: 1.4,
-                    ),
-                  ),
-                ),
+                const SizedBox(height: 16),
+                _buildSubjectField(),
                 const SizedBox(height: 8),
               ],
             ),
@@ -345,62 +307,52 @@ class _EditStudentDialogState extends State<EditStudentDialog> {
           onPressed: () => Navigator.of(context).pop(),
           child: Text(
             'Cancel',
-            style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6)),
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurface
+                  .withValues(alpha: 0.6),
+            ),
           ),
         ),
         AppPrimaryButton(
           label: 'Save Changes',
           icon: Icons.save_outlined,
-          onPressed: _submit,
-          width: 160,
+          onPressed: _isSaving ? null : _submit,
+          isLoading: _isSaving,
+          width: 180,
           height: 44,
         ),
       ],
     );
   }
 
-  Widget _buildField(
-    TextEditingController ctrl,
-    String label, {
-    bool required = true,
-    TextInputType? keyboardType,
-    List<TextInputFormatter>? inputFormatters,
-    String? Function(String?)? validator,
-  }) {
-    return TextFormField(
-      controller: ctrl,
-      keyboardType: keyboardType,
-      inputFormatters: inputFormatters,
-      validator:
-          validator ??
-          (required
-              ? (v) => (v == null || v.isEmpty) ? '$label is required' : null
-              : null),
-      decoration: InputDecoration(
-        labelText: label,
-        filled: true,
-        fillColor: const Color(0xFFEFF6FF),
-        isDense: true,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide.none,
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide.none,
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide(color: Theme.of(context).colorScheme.primary, width: 1.5),
-        ),
-        errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: AppTheme.catRed),
-        ),
-        focusedErrorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: AppTheme.catRed, width: 1.5),
-        ),
+  Widget _buildGenderField() {
+    return DropdownButtonFormField<String>(
+      initialValue: _gender,
+      decoration: const InputDecoration(labelText: 'Gender *'),
+      items: const [
+        DropdownMenuItem(value: 'Male', child: Text('Male')),
+        DropdownMenuItem(value: 'Female', child: Text('Female')),
+      ],
+      validator: (value) => value == null ? 'Gender is required' : null,
+      onChanged: (value) => setState(() => _gender = value),
+    );
+  }
+
+  Widget _buildSubjectField() {
+    final subject = widget.student.enrolledSubjectName;
+    final section = widget.student.departmentOrSection;
+    final value = [
+      if (subject != null && subject.isNotEmpty) subject,
+      if (section != null && section.isNotEmpty) section,
+    ].join(' - ');
+    return InputDecorator(
+      decoration: const InputDecoration(
+        labelText: 'Subject & Section *',
+        prefixIcon: Icon(Icons.lock_outline, size: 18),
+      ),
+      child: Text(
+        value.isEmpty ? 'No subject or section assigned' : value,
+        style: TextStyle(color: Theme.of(context).disabledColor),
       ),
     );
   }

@@ -32,26 +32,14 @@ class _TeacherLessonPlanningTabState extends State<TeacherLessonPlanningTab> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                'AI Lesson Plan Generator (Simulated)',
+                'ILAW Format',
                 style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface),
               ),
               AppButton.primary(
                 label: 'Generate New Lesson Plan',
                 icon: Icons.auto_awesome,
                 onPressed: () {
-                  MockDatabase.instance.generateLessonPlan(
-                    topic: 'Logarithmic Properties and Real Applications',
-                    gradeLevel: 'Grade 11',
-                    subject: 'General Mathematics',
-                    duration: '60 minutes',
-                  );
-                  widget.onPlanGenerated();
-                  AppModals.showSuccessDialog(
-                    context: context,
-                    title: 'AI Lesson Plan Generated',
-                    message:
-                        'Simulated AI generated a comprehensive lesson plan for Logarithmic Properties.',
-                  );
+                  // TO DO: AI Lesson Generator API implementation
                 },
               ),
             ],

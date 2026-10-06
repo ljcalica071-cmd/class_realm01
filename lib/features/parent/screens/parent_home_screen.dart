@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:loading_animation_widget/loading_animation_widget.dart';
 import 'package:class_realm/core/theme/app_theme.dart';
 import 'package:class_realm/data/mock_database.dart';
 import 'package:class_realm/models/user_model.dart';
@@ -88,11 +89,9 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
               SizedBox(
                 width: 44,
                 height: 44,
-                child: CircularProgressIndicator(
-                  strokeWidth: 3.5,
-                  valueColor: AlwaysStoppedAnimation<Color>(
-                    Theme.of(context).colorScheme.primary,
-                  ),
+                child: LoadingAnimationWidget.staggeredDotsWave(
+                  color: Theme.of(context).colorScheme.primary,
+                  size: 40,
                 ),
               ),
               const SizedBox(height: 20),

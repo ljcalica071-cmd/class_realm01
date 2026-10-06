@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:class_realm/core/theme/app_theme.dart';
-import 'package:class_realm/data/mock_database.dart';
+import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/shared/widgets/shared_widgets.dart';
+import 'package:class_realm/widgets/common/app_modals.dart';
 
 class AdminTeacherManagementTab extends StatefulWidget {
   final List<UserModel> teachers;
@@ -22,76 +23,58 @@ class AdminTeacherManagementTab extends StatefulWidget {
 class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
   String _searchQuery = '';
   String _statusFilter = 'All';
+  int _currentPage = 1;
+  static const int _itemsPerPage = 10;
 
-  void _showCreateTeacherModal(BuildContext context) {
-    final nameCtrl = TextEditingController();
-    final emailCtrl = TextEditingController();
-    final deptCtrl = TextEditingController();
-    final usernameCtrl = TextEditingController();
-
-    showDialog(
+  void _handleArchive(UserModel t) async {
+    final confirm = await AppModals.showConfirmDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Create New Teacher Account'),
-        content: SizedBox(
-          width: 400,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nameCtrl,
-                decoration: const InputDecoration(labelText: 'Full Name with Title'),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: emailCtrl,
-                decoration: const InputDecoration(labelText: 'Email Address'),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: deptCtrl,
-                decoration: const InputDecoration(labelText: 'Department'),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: usernameCtrl,
-                decoration: const InputDecoration(labelText: 'Username'),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          AppButton.primary(
-            label: 'Create Account',
-            onPressed: () {
-              if (nameCtrl.text.isEmpty || usernameCtrl.text.isEmpty) return;
-              MockDatabase.instance.users.add(
-                UserModel(
-                  id: 'usr_t_${DateTime.now().millisecondsSinceEpoch}',
-                  username: usernameCtrl.text.trim(),
-                  fullName: nameCtrl.text.trim(),
-                  email: emailCtrl.text.trim(),
-                  role: UserRole.teacher,
-                  status: AccountStatus.active,
-                  departmentOrSection: deptCtrl.text.trim(),
-                ),
-              );
-              Navigator.pop(ctx);
-              widget.onDataChanged();
-              AppModals.showSuccessDialog(
-                context: context,
-                title: 'Teacher Created',
-                message: 'New teacher account successfully created and activated.',
-              );
-            },
-          ),
-        ],
-      ),
+      title: 'Archive Teacher',
+      message: 'Are you sure you want to archive ${t.fullName}?',
+      confirmLabel: 'Archive',
+      confirmColor: AppTheme.catOrange,
     );
+    if (confirm == true) {
+      final success = await AuthRepository.instance.updateTeacherStatus(t.id, 'archived');
+      if (success) widget.onDataChanged();
+    }
+  }
+
+  void _handleRecover(UserModel t) async {
+    final confirm = await AppModals.showConfirmDialog(
+      context: context,
+      title: 'Recover Teacher',
+      message: 'Are you sure you want to recover ${t.fullName} and set their status back to active?',
+      confirmLabel: 'Recover',
+      confirmColor: Colors.green,
+    );
+    if (confirm == true) {
+      final success = await AuthRepository.instance.updateTeacherStatus(t.id, 'active');
+      if (success) {
+        widget.onDataChanged();
+        if (mounted) {
+          AppModals.showSuccessDialog(
+            context: context,
+            title: 'Teacher Recovered',
+            message: '${t.fullName} has been successfully recovered and is now active.',
+          );
+        }
+      }
+    }
+  }
+
+  void _handlePermanentDelete(UserModel t) async {
+    final confirm = await AppModals.showConfirmDialog(
+      context: context,
+      title: 'Permanent Delete',
+      message: 'Are you sure you want to permanently delete ${t.fullName}? This action cannot be undone and will remove them from the database.',
+      confirmLabel: 'Delete Forever',
+      confirmColor: AppTheme.catRed,
+    );
+    if (confirm == true) {
+      final success = await AuthRepository.instance.deleteTeacherRecord(t.id);
+      if (success) widget.onDataChanged();
+    }
   }
 
   @override
@@ -100,11 +83,28 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
     final filtered = widget.teachers.where((t) {
       final matchesSearch = t.fullName.toLowerCase().contains(_searchQuery.toLowerCase()) ||
           t.email.toLowerCase().contains(_searchQuery.toLowerCase());
+          
       if (_statusFilter == 'All') return matchesSearch;
       if (_statusFilter == 'Active') return matchesSearch && t.status == AccountStatus.active;
-      if (_statusFilter == 'Pending') return matchesSearch && t.status == AccountStatus.pending;
+      if (_statusFilter == 'Pending First Login') return matchesSearch && t.status == AccountStatus.pendingFirstLogin;
+      if (_statusFilter == 'Archived') return matchesSearch && t.status == AccountStatus.archived;
+      
       return matchesSearch;
     }).toList();
+
+    final totalItems = filtered.length;
+    final totalPages = (totalItems / _itemsPerPage).ceil();
+    
+    if (_currentPage > totalPages && totalPages > 0) {
+      _currentPage = totalPages;
+    }
+
+    final startIndex = (_currentPage - 1) * _itemsPerPage;
+    final endIndex = (startIndex + _itemsPerPage).clamp(0, totalItems);
+    
+    final paginatedItems = filtered.isEmpty 
+        ? <UserModel>[] 
+        : filtered.sublist(startIndex, endIndex);
 
     return Padding(
       padding: const EdgeInsets.all(24),
@@ -122,11 +122,8 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
                   color: theme.colorScheme.onSurface,
                 ),
               ),
-              AppButton.primary(
-                label: 'Create Teacher Account',
-                icon: Icons.person_add,
-                onPressed: () => _showCreateTeacherModal(context),
-              ),
+              // We do not need a Create Account button here as they register on their own
+              // But if you want to keep it, you could. For now we will rely on self-registration.
             ],
           ),
           const SizedBox(height: 16),
@@ -136,7 +133,12 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
             children: [
               Expanded(
                 child: TextField(
-                  onChanged: (v) => setState(() => _searchQuery = v),
+                  onChanged: (v) {
+                    setState(() {
+                      _searchQuery = v;
+                      _currentPage = 1; // Reset to page 1 on search
+                    });
+                  },
                   decoration: const InputDecoration(
                     hintText: 'Search teachers by name or email...',
                     prefixIcon: Icon(Icons.search, size: 20),
@@ -147,10 +149,15 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
               const SizedBox(width: 16),
               DropdownButton<String>(
                 value: _statusFilter,
-                items: ['All', 'Active', 'Pending']
+                items: ['All', 'Active', 'Pending First Login', 'Archived']
                     .map((s) => DropdownMenuItem(value: s, child: Text('Status: $s')))
                     .toList(),
-                onChanged: (v) => setState(() => _statusFilter = v ?? 'All'),
+                onChanged: (v) {
+                  setState(() {
+                    _statusFilter = v ?? 'All';
+                    _currentPage = 1; // Reset to page 1 on filter
+                  });
+                },
               ),
             ],
           ),
@@ -196,47 +203,87 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
                         ),
                       ),
                     )
-                  : ListView.separated(
-                      itemCount: filtered.length,
-                      separatorBuilder: (_, _) => const Divider(height: 1),
-                      itemBuilder: (ctx, i) {
-                        final t = filtered[i];
-                  return ListTile(
-                    leading: CircleAvatar(
-                      backgroundColor: theme.colorScheme.primary,
-                      child: Text(
-                        t.fullName.substring(0, 1),
-                        style: TextStyle(color: theme.colorScheme.onPrimary),
-                      ),
-                    ),
-                    title: Text(t.fullName, style: TextStyle(fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface)),
-                    subtitle: Text('${t.email} • Dept: ${t.departmentOrSection ?? "General"}', style: TextStyle(color: theme.colorScheme.onSurface.withValues(alpha: 0.6))),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
+                  : Column(
                       children: [
-                        StatusBadge.fromAccountStatus(t.status),
-                        const SizedBox(width: 16),
-                        IconButton(
-                          icon: const Icon(Icons.delete_outline, color: AppTheme.catRed),
-                          onPressed: () async {
-                            final confirm = await AppModals.showConfirmDialog(
-                              context: context,
-                              title: 'Deactivate Teacher',
-                              message: 'Are you sure you want to deactivate ${t.fullName}?',
-                              confirmLabel: 'Deactivate',
-                              confirmColor: AppTheme.catRed,
-                            );
-                            if (confirm == true) {
-                              MockDatabase.instance.users.removeWhere((u) => u.id == t.id);
-                              widget.onDataChanged();
-                            }
-                          },
+                        Expanded(
+                          child: ListView.separated(
+                            itemCount: paginatedItems.length,
+                            separatorBuilder: (_, _) => const Divider(height: 1),
+                            itemBuilder: (ctx, i) {
+                              final t = paginatedItems[i];
+                              return ListTile(
+                                leading: CircleAvatar(
+                                  backgroundColor: theme.colorScheme.primary,
+                                  child: Text(
+                                    t.fullName.substring(0, 1),
+                                    style: TextStyle(color: theme.colorScheme.onPrimary),
+                                  ),
+                                ),
+                                title: Text(t.fullName, style: TextStyle(fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface)),
+                                subtitle: Text('${t.email} • Dept: ${t.departmentOrSection ?? "General"}', style: TextStyle(color: theme.colorScheme.onSurface.withValues(alpha: 0.6))),
+                                trailing: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    StatusBadge.fromAccountStatus(t.status),
+                                    const SizedBox(width: 16),
+                                    
+                                    if (t.status == AccountStatus.archived) ...[
+                                      Tooltip(
+                                        message: 'Recover Account',
+                                        child: IconButton(
+                                          icon: const Icon(Icons.restore, color: Colors.green),
+                                          onPressed: () => _handleRecover(t),
+                                        ),
+                                      ),
+                                      Tooltip(
+                                        message: 'Permanent Delete',
+                                        child: IconButton(
+                                          icon: const Icon(Icons.delete_forever, color: AppTheme.catRed),
+                                          onPressed: () => _handlePermanentDelete(t),
+                                        ),
+                                      ),
+                                    ] else ...[
+                                      Tooltip(
+                                        message: 'Archive Account',
+                                        child: IconButton(
+                                          icon: const Icon(Icons.archive_outlined, color: AppTheme.catOrange),
+                                          onPressed: () => _handleArchive(t),
+                                        ),
+                                      ),
+                                    ]
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
                         ),
+                        
+                        // Pagination Controls
+                        if (totalPages > 1)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 12.0),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.chevron_left),
+                                  onPressed: _currentPage > 1
+                                      ? () => setState(() => _currentPage--)
+                                      : null,
+                                ),
+                                Text('Page $_currentPage of $totalPages', 
+                                  style: TextStyle(fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface)),
+                                IconButton(
+                                  icon: const Icon(Icons.chevron_right),
+                                  onPressed: _currentPage < totalPages
+                                      ? () => setState(() => _currentPage++)
+                                      : null,
+                                ),
+                              ],
+                            ),
+                          ),
                       ],
                     ),
-                  );
-                },
-              ),
             ),
           ),
         ],

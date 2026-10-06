@@ -13,6 +13,7 @@ class AppTextField extends StatelessWidget {
   final TextInputType? keyboardType;
   final List<TextInputFormatter>? inputFormatters;
   final void Function(String)? onChanged;
+  final AutovalidateMode? autovalidateMode;
 
   const AppTextField({
     super.key,
@@ -27,6 +28,7 @@ class AppTextField extends StatelessWidget {
     this.keyboardType,
     this.inputFormatters,
     this.onChanged,
+    this.autovalidateMode,
   });
 
   @override
@@ -52,6 +54,7 @@ class AppTextField extends StatelessWidget {
           inputFormatters: inputFormatters,
           onChanged: onChanged,
           validator: validator,
+          autovalidateMode: autovalidateMode,
           style: TextStyle(fontSize: 14, color: theme.colorScheme.onSurface),
           decoration: InputDecoration(
             hintText: hint,

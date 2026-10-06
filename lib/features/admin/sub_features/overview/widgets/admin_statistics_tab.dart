@@ -48,11 +48,7 @@ class AdminStatisticsTab extends StatelessWidget {
                   title: 'Enrolled Students',
                   value: '${students.length}',
                   color: theme.colorScheme.primary,
-                  customIcon: Image.asset(
-                    'assets/branding/school_logo.png',
-                    width: 20,
-                    height: 20,
-                  ),
+                  icon: Icons.people_alt,
                 ),
               ),
               const SizedBox(width: 20),

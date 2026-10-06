@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1033367558170",
+    "project_id": "classrealm01",
+    "storage_bucket": "classrealm01.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1033367558170:android:c4392f1c10f720fb5f59a3",
+        "android_client_info": {
+          "package_name": "com.classrealm.class_realm"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDZ0G9riqZcG_XUinXR4_wtTO34gATucoA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
