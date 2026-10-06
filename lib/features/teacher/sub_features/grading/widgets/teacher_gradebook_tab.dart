@@ -875,7 +875,40 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
                   AppTheme.catOrange,
                   text,
                 ),
-                // Initial Grade + Term Grade
+                // Initial Grade
+                Container(
+                  width: computedW,
+                  height: 42,
+                  color: bg,
+                  alignment: Alignment.center,
+                  padding: const EdgeInsets.symmetric(horizontal: 2),
+                  child: Text(
+                    'INITIAL\nGRADE',
+                    style: TextStyle(
+                      fontSize: 9,
+                      fontWeight: FontWeight.bold,
+                      color: text,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+                // Term Grade
+                Container(
+                  width: computedW,
+                  height: 42,
+                  color: bg,
+                  alignment: Alignment.center,
+                  padding: const EdgeInsets.symmetric(horizontal: 2),
+                  child: Text(
+                    'TERM\nGRADE',
+                    style: TextStyle(
+                      fontSize: 9,
+                      fontWeight: FontWeight.bold,
+                      color: text,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
               ],
       ),
     );
@@ -1006,8 +1039,8 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
                   exWeight,
                   isExam: true,
                 ),
-                _subHeaderCell(computedW, 'INITIAL\nGRADE', text, bg),
-                _subHeaderCell(computedW, 'TERM\nGRADE', text, bg),
+                _subHeaderCell(computedW, 'IG', text, bg),
+                _subHeaderCell(computedW, 'TG', text, bg),
               ],
       ),
     );
