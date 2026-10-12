@@ -30,8 +30,9 @@ Make teacher-created activities and assignments real Supabase classwork that app
 2. Add a teacher classwork Edge Function following the existing Firebase-token verification pattern. It must verify the caller is an active teacher and owns the selected subject offering before issuing a one-use upload authorization or publishing classwork.
 3. Upload one selected file to a teacher-scoped, unpredictable Storage path using the signed upload authorization. Enforce the extension, allowed MIME type, and size at the client, Edge Function, and bucket boundary. On publish, verify the uploaded object and write the classwork item and attachment metadata. If persistence fails after upload, remove the unreferenced object and return an actionable error.
 4. Store the private object path and attachment metadata in `classwork_attachments`, not a public URL. Publish without an attachment remains supported.
-5. Extend teacher classwork repository/dashboard loading so created items are read from Supabase and appear in the teacher list after publish or refresh. Keep unrelated mock-backed quiz/exam flows out of scope.
-6. Extend `student-dashboard` to return attachment metadata and a short-lived signed download URL only for published classwork belonging to the student's enrolled offerings. Add the attachment to the student model and classwork card; tapping it opens the signed link through the platform viewer/browser. Never expose service-role credentials or a permanent public URL to Flutter.
+5. Extend teacher classwork repository/dashboard loading so created items are read from Supabase and appear in the teacher list after publish or refresh. Existing edit/delete actions on these persisted classwork items must also update/delete Supabase records and clean up replaced/deleted Storage objects; do not leave these actions pointed at `MockDatabase`. Keep unrelated mock-backed quiz/exam flows out of scope.
+6. Add a `storage_path` column to `classwork_attachments` in a forward migration; retain the existing `storage_url` column for compatibility and do not put a public URL in it for new private attachments.
+7. Extend `student-dashboard` to return attachment metadata and a short-lived signed download URL only for published classwork belonging to the student's enrolled offerings. Add the attachment to the student model and classwork card; tapping it opens the signed link through the platform viewer/browser. Never expose service-role credentials or a permanent public URL to Flutter.
 
 ## Form behavior
 
@@ -47,6 +48,7 @@ Make teacher-created activities and assignments real Supabase classwork that app
 - A cancelled file picker is not an error and leaves the form unchanged.
 - A selected file that cannot be read, has a disallowed extension/MIME type, or exceeds the limit is rejected with visible field-level feedback.
 - A failed upload or database write must not leave a published classwork item with a broken attachment. Clean up an uploaded object if its database write fails; if cleanup also fails, report both the original failure and cleanup status for later recovery.
+- When replacing or deleting an attachment, persist the database change first and then remove the old Storage object. If Storage cleanup fails, surface the failure and retain enough path information for a retry; never delete the object before the record update succeeds.
 - Student dashboard attachment-link generation errors must be surfaced rather than silently fabricating a URL.
 - Signed download links expire; refreshing the student dashboard obtains a fresh link.
 
