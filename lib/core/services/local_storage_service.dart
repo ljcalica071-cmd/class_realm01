@@ -1,4 +1,5 @@
 import 'dart:convert';
+
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:class_realm/models/user_model.dart';
 
@@ -56,9 +57,8 @@ class LocalStorageService {
     }
   }
 
-  static bool get isRememberMe =>
-      _preferences?.getBool(keyRememberMe) ?? false;
-  
+  static bool get isRememberMe => _preferences?.getBool(keyRememberMe) ?? false;
+
   static String? get savedEmail => _preferences?.getString(keySavedEmail);
 
   static Future<void> clearAuth() async {
@@ -73,17 +73,30 @@ class LocalStorageService {
     await _ensureSaved(await prefs.setBool(keyIsDarkMode, isDark));
   }
 
-  static bool get isDarkMode =>
-      _preferences?.getBool(keyIsDarkMode) ?? false;
+  static bool get isDarkMode => _preferences?.getBool(keyIsDarkMode) ?? false;
 
-  static Future<void> saveUserThemeMode(String uid, bool isDark, {String? email}) async {
+  static Future<void> saveUserThemeMode(
+    String uid,
+    bool isDark, {
+    String? email,
+  }) async {
     final prefs = await _prefs;
     if (uid.isNotEmpty) {
-      await _ensureSaved(await prefs.setBool('${_settingsPrefix}dark_mode_$uid', isDark));
+      await _ensureSaved(
+        await prefs.setBool('${_settingsPrefix}dark_mode_$uid', isDark),
+      );
     }
     if (email != null && email.isNotEmpty) {
-      final sanitizedEmail = email.toLowerCase().replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_');
-      await _ensureSaved(await prefs.setBool('${_settingsPrefix}dark_mode_email_$sanitizedEmail', isDark));
+      final sanitizedEmail = email.toLowerCase().replaceAll(
+        RegExp(r'[^a-zA-Z0-9]'),
+        '_',
+      );
+      await _ensureSaved(
+        await prefs.setBool(
+          '${_settingsPrefix}dark_mode_email_$sanitizedEmail',
+          isDark,
+        ),
+      );
     }
     await _ensureSaved(await prefs.setBool(keyIsDarkMode, isDark));
   }
@@ -94,12 +107,20 @@ class LocalStorageService {
       if (byUid != null) return byUid;
     }
     if (email != null && email.isNotEmpty) {
-      final sanitizedEmail = email.toLowerCase().replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_');
-      final byEmail = _preferences?.getBool('${_settingsPrefix}dark_mode_email_$sanitizedEmail');
+      final sanitizedEmail = email.toLowerCase().replaceAll(
+        RegExp(r'[^a-zA-Z0-9]'),
+        '_',
+      );
+      final byEmail = _preferences?.getBool(
+        '${_settingsPrefix}dark_mode_email_$sanitizedEmail',
+      );
       if (byEmail != null) return byEmail;
     }
-    if (uid.contains('admin') || (email != null && email.toLowerCase().contains('admin'))) {
-      final byAdmin = _preferences?.getBool('${_settingsPrefix}dark_mode_admin_1');
+    if (uid.contains('admin') ||
+        (email != null && email.toLowerCase().contains('admin'))) {
+      final byAdmin = _preferences?.getBool(
+        '${_settingsPrefix}dark_mode_admin_1',
+      );
       if (byAdmin != null) return byAdmin;
     }
     return _preferences?.getBool(keyIsDarkMode) ?? false;
@@ -107,9 +128,7 @@ class LocalStorageService {
 
   static Future<void> saveString(String key, String value) async {
     final prefs = await _prefs;
-    await _ensureSaved(
-      await prefs.setString('$_settingsPrefix$key', value),
-    );
+    await _ensureSaved(await prefs.setString('$_settingsPrefix$key', value));
   }
 
   static String? getString(String key) {
@@ -144,40 +163,94 @@ class LocalStorageService {
   }
 
   /// Teacher Subjects cache
-  static Future<void> saveTeacherSubjects(String teacherId, List<Map<String, dynamic>> subjects) async {
+  static Future<void> saveTeacherSubjects(
+    String teacherId,
+    List<Map<String, dynamic>> subjects,
+  ) async {
     await saveJson('teacher_subjects_$teacherId', subjects);
   }
 
   static List<Map<String, dynamic>> getTeacherSubjects(String teacherId) {
     final raw = getJson('teacher_subjects_$teacherId');
     if (raw is List) {
-      return raw.map<Map<String, dynamic>>((e) => Map<String, dynamic>.from(e as Map)).toList();
+      return raw
+          .map<Map<String, dynamic>>((e) => Map<String, dynamic>.from(e as Map))
+          .toList();
     }
     return [];
   }
 
+  static Future<void> saveGradebookSheet(
+    String offeringId,
+    int termNumber,
+    Map<String, dynamic> payload,
+  ) async {
+    _validateGradebookKey(offeringId, termNumber);
+    final prefs = await _prefs;
+    final key = '${_cachePrefix}gradebook_${offeringId}_term_$termNumber';
+    await _ensureSaved(await prefs.setString(key, jsonEncode(payload)));
+  }
+
+  static Map<String, dynamic>? getGradebookSheet(
+    String offeringId,
+    int termNumber,
+  ) {
+    _validateGradebookKey(offeringId, termNumber);
+    final raw = getJson('gradebook_${offeringId}_term_$termNumber');
+    return raw is Map ? Map<String, dynamic>.from(raw) : null;
+  }
+
+  static void _validateGradebookKey(String offeringId, int termNumber) {
+    if (offeringId.trim().isEmpty) {
+      throw ArgumentError.value(offeringId, 'offeringId', 'Must not be empty.');
+    }
+    if (termNumber < 1 || termNumber > 3) {
+      throw ArgumentError.value(
+        termNumber,
+        'termNumber',
+        'Must be 1, 2, or 3.',
+      );
+    }
+  }
+
   /// Attendance Roster cache
-  static Future<void> saveAttendanceRoster(String subjectOfferingId, List<Map<String, dynamic>> roster) async {
+  static Future<void> saveAttendanceRoster(
+    String subjectOfferingId,
+    List<Map<String, dynamic>> roster,
+  ) async {
     await saveJson('attendance_roster_$subjectOfferingId', roster);
   }
 
-  static List<Map<String, dynamic>> getAttendanceRoster(String subjectOfferingId) {
+  static List<Map<String, dynamic>> getAttendanceRoster(
+    String subjectOfferingId,
+  ) {
     final raw = getJson('attendance_roster_$subjectOfferingId');
     if (raw is List) {
-      return raw.map<Map<String, dynamic>>((e) => Map<String, dynamic>.from(e as Map)).toList();
+      return raw
+          .map<Map<String, dynamic>>((e) => Map<String, dynamic>.from(e as Map))
+          .toList();
     }
     return [];
   }
 
   /// Attendance Records cache
-  static Future<void> saveAttendanceRecords(String subjectOfferingId, String date, List<Map<String, dynamic>> records) async {
+  static Future<void> saveAttendanceRecords(
+    String subjectOfferingId,
+    String date,
+    List<Map<String, dynamic>> records,
+  ) async {
     await saveJson('attendance_records_${subjectOfferingId}_$date', records);
   }
 
-  static List<Map<String, dynamic>> getAttendanceRecords(String subjectOfferingId, String date) {
+  static List<Map<String, dynamic>> getAttendanceRecords(
+    String subjectOfferingId,
+    String date,
+  ) {
     final raw = getJson('attendance_records_${subjectOfferingId}_$date');
     if (raw is List) {
-      return raw.map<Map<String, dynamic>>((e) => Map<String, dynamic>.from(e as Map)).toList();
+      return raw
+          .map<Map<String, dynamic>>((e) => Map<String, dynamic>.from(e as Map))
+          .toList();
     }
     return [];
   }
@@ -189,8 +262,11 @@ class LocalStorageService {
     required List<Map<String, dynamic>> records,
   }) async {
     final queue = getOfflineAttendanceQueue();
-    queue.removeWhere((item) =>
-        item['subject_offering_id'] == subjectOfferingId && item['date'] == date);
+    queue.removeWhere(
+      (item) =>
+          item['subject_offering_id'] == subjectOfferingId &&
+          item['date'] == date,
+    );
     queue.add({
       'id': '${subjectOfferingId}_$date',
       'subject_offering_id': subjectOfferingId,
@@ -204,7 +280,9 @@ class LocalStorageService {
   static List<Map<String, dynamic>> getOfflineAttendanceQueue() {
     final raw = getJson('offline_attendance_queue');
     if (raw is List) {
-      return raw.map<Map<String, dynamic>>((e) => Map<String, dynamic>.from(e as Map)).toList();
+      return raw
+          .map<Map<String, dynamic>>((e) => Map<String, dynamic>.from(e as Map))
+          .toList();
     }
     return [];
   }

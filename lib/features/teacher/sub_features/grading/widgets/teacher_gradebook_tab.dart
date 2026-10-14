@@ -1,12 +1,15 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import 'package:class_realm/core/theme/app_theme.dart';
+import 'package:class_realm/core/utils/deped_grading_engine.dart';
 import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/data/repositories/subject_repository.dart';
 import 'package:class_realm/data/repositories/supabase_student_repository.dart';
-import 'package:loading_animation_widget/loading_animation_widget.dart';
+import 'package:class_realm/features/teacher/sub_features/grading/widgets/gradebook_grid_cell.dart';
+import 'package:class_realm/models/subject_catalog_model.dart';
 
 /// DepEd-style Strengthened SHS Class Record (Gradebook).
 /// Mirrors the official DepEd grading spreadsheet layout with
@@ -30,9 +33,26 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
   String? _studentLoadError;
   List<UserModel> _students = [];
   int _studentLoadRequest = 0;
+  int _sheetLoadRequest = 0;
+  String? _sheetLoadError;
+  bool _isLoadingSheets = false;
 
   int _selectedTerm = 1;
   final ScrollController _scrollController = ScrollController();
+  final ValueNotifier<int> _hpsRevision = ValueNotifier(0);
+  final Map<String, ValueNotifier<int>> _studentRevisions = {};
+  Timer? _sheetSaveTimer;
+
+  final Map<int, Map<String, Map<int, double?>>> _termHps = {
+    1: {'ww': {}, 'pt': {}, 'ex': {}},
+    2: {'ww': {}, 'pt': {}, 'ex': {}},
+    3: {'ww': {}, 'pt': {}, 'ex': {}},
+  };
+  final Map<int, Map<String, Map<String, Map<int, double?>>>> _termScores = {
+    1: {},
+    2: {},
+    3: {},
+  };
 
   @override
   void initState() {
@@ -63,7 +83,12 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
         _studentLoadError = null;
       });
       final subjectId = firstSubject?['id']?.toString();
-      if (subjectId != null) await _fetchStudents(user.id, subjectId);
+      if (subjectId != null) {
+        await Future.wait([
+          _fetchStudents(user.id, subjectId),
+          _loadOfferingSheets(subjectId),
+        ]);
+      }
     } catch (error) {
       debugPrint('Gradebook subjects load notice: $error');
       if (!mounted) return;
@@ -99,22 +124,29 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
       setState(() {
         _students = [];
         _isLoadingStudents = false;
+        _studentLoadError = 'Could not load learners for this subject.';
       });
     }
   }
 
   @override
   void dispose() {
+    _sheetSaveTimer?.cancel();
+    final offeringId = _currentSubjectData?['id']?.toString();
+    if (offeringId != null && _selectedTerm > 0) {
+      unawaited(
+        _persistSheet(offeringId, _selectedTerm).catchError((Object error) {
+          debugPrint('Gradebook save during dispose failed: $error');
+        }),
+      );
+    }
+    _hpsRevision.dispose();
+    for (final revision in _studentRevisions.values) {
+      revision.dispose();
+    }
     _scrollController.dispose();
     super.dispose();
   }
-
-  // Scores map: studentId -> category -> column index -> score
-  // category: 'ww', 'pt', 'ex'
-  final Map<String, Map<String, Map<int, double>>> _scores = {};
-
-  // Highest Possible Score per category per column
-  final Map<String, Map<int, double>> _hps = {'ww': {}, 'pt': {}, 'ex': {}};
 
   // Number of visible columns per category
   static const int wwColumns = 10;
@@ -146,61 +178,244 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
     return '${last.toUpperCase()}, $first$mid';
   }
 
-  double _getScore(String studentId, String category, int col) {
-    return _scores[studentId]?[category]?[col] ?? 0;
+  ValueNotifier<int> _revisionFor(String studentId) =>
+      _studentRevisions.putIfAbsent(studentId, () => ValueNotifier(0));
+
+  double? _getScore(String studentId, String category, int col, {int? term}) {
+    final selected = term ?? _selectedTerm;
+    return _termScores[selected]?[studentId]?[category]?[col];
   }
 
-  void _setScore(String studentId, String category, int col, double val) {
-    _scores.putIfAbsent(studentId, () => {});
-    _scores[studentId]!.putIfAbsent(category, () => {});
-    setState(() {
-      _scores[studentId]![category]![col] = val;
+  void _setScore(String studentId, String category, int col, double? value) {
+    final term = _selectedTerm;
+    final scores = _termScores[term]!;
+    scores.putIfAbsent(studentId, () => {});
+    scores[studentId]!.putIfAbsent(category, () => {});
+    scores[studentId]![category]![col] = value;
+    _revisionFor(studentId).value++;
+    _scheduleSheetSave();
+  }
+
+  double? _getHps(String category, int col, {int? term}) {
+    final selected = term ?? _selectedTerm;
+    return _termHps[selected]?[category]?[col];
+  }
+
+  void _setHps(String category, int col, double? value) {
+    final term = _selectedTerm;
+    _termHps[term]![category]![col] = value;
+    _hpsRevision.value++;
+    _scheduleSheetSave();
+  }
+
+  void _scheduleSheetSave() {
+    final offeringId = _currentSubjectData?['id']?.toString();
+    final term = _selectedTerm;
+    if (offeringId == null || term < 1 || term > 3) return;
+    _sheetSaveTimer?.cancel();
+    _sheetSaveTimer = Timer(const Duration(milliseconds: 300), () {
+      unawaited(
+        _persistSheet(offeringId, term).catchError((Object error) {
+          debugPrint('Gradebook local save failed: $error');
+        }),
+      );
     });
   }
 
-  double _getHps(String category, int col) {
-    return _hps[category]?[col] ?? 0;
+  Map<String, dynamic> _encodeSheet(int term) {
+    final hps = <String, dynamic>{};
+    for (final category in const ['ww', 'pt', 'ex']) {
+      hps[category] = {
+        for (final entry in _termHps[term]![category]!.entries)
+          entry.key.toString(): entry.value,
+      };
+    }
+    final scores = <String, dynamic>{};
+    for (final student in _termScores[term]!.entries) {
+      scores[student.key] = {
+        for (final category in student.value.entries)
+          category.key: {
+            for (final entry in category.value.entries)
+              entry.key.toString(): entry.value,
+          },
+      };
+    }
+    return {'hps': hps, 'scores': scores};
   }
 
-  void _setHps(String category, int col, double val) {
+  Future<void> _persistSheet(String offeringId, int term) async {
+    final payload = _encodeSheet(term);
+    if (DepEdSubjectCatalog.getActiveTermsForBlock(
+      _termsTaught,
+      _termBlock,
+    ).contains(term)) {
+      payload['term_grades'] = [
+        for (final student in _students)
+          _buildPersistedTermGrade(student.id, term),
+      ];
+    }
+    await SubjectRepository.instance.saveGradebookTermSheet(
+      offeringId,
+      term,
+      payload,
+    );
+  }
+
+  Map<String, dynamic> _buildPersistedTermGrade(String studentId, int term) {
+    final initialGrade = _initialGrade(studentId, term: term);
+    if (initialGrade == null) {
+      return {
+        'student_id': studentId,
+        'initial_grade': 0,
+        'transmuted_grade': 0,
+        'remarks': 'Incomplete',
+        'is_finalized': false,
+      };
+    }
+    final termGrade = DepEdGradingEngine.transmuteDO15(initialGrade);
+    return {
+      'student_id': studentId,
+      'initial_grade': initialGrade,
+      'transmuted_grade': termGrade,
+      'remarks': DepEdGradingEngine.getRemarks(termGrade),
+      'is_finalized': false,
+    };
+  }
+
+  Future<void> _loadOfferingSheets(String offeringId) async {
+    final request = ++_sheetLoadRequest;
     setState(() {
-      _hps[category]![col] = val;
+      _isLoadingSheets = true;
+      _sheetLoadError = null;
     });
-  }
-
-  // Compute total raw score for a student in a category
-  double _totalRaw(String studentId, String category, int numCols) {
-    double total = 0;
-    for (int i = 0; i < numCols; i++) {
-      total += _getScore(studentId, category, i);
+    for (final term in const [1, 2, 3]) {
+      for (final category in const ['ww', 'pt', 'ex']) {
+        _termHps[term]![category]!.clear();
+      }
+      _termScores[term]!.clear();
     }
-    return total;
-  }
-
-  // Total HPS for a category
-  double _totalHps(String category, int numCols) {
-    double total = 0;
-    for (int i = 0; i < numCols; i++) {
-      total += _getHps(category, i);
+    try {
+      final sheets = await Future.wait([
+        for (final term in const [1, 2, 3])
+          SubjectRepository.instance.getGradebookTermSheet(offeringId, term),
+      ]);
+      if (!mounted || request != _sheetLoadRequest) return;
+      for (var index = 0; index < sheets.length; index++) {
+        final sheet = sheets[index];
+        if (sheet != null) _decodeSheet(index + 1, sheet);
+      }
+      _hpsRevision.value++;
+      for (final studentId in _studentRevisions.keys) {
+        _studentRevisions[studentId]!.value++;
+      }
+      setState(() => _isLoadingSheets = false);
+    } catch (error) {
+      debugPrint('Gradebook term sheets load failed: $error');
+      if (!mounted || request != _sheetLoadRequest) return;
+      setState(() {
+        _isLoadingSheets = false;
+        _sheetLoadError =
+            'Could not load this offering’s saved gradebook data.';
+      });
     }
-    return total;
   }
 
-  // Percentage Score (PS) = (Total / HPS) * 100
-  double _percentageScore(String studentId, String category, int numCols) {
-    final hps = _totalHps(category, numCols);
-    if (hps == 0) return 0;
-    return (_totalRaw(studentId, category, numCols) / hps) * 100;
+  void _decodeSheet(int term, Map<String, dynamic> sheet) {
+    final rawHps = sheet['hps'] ?? sheet['hps_json'];
+    final rawScores = sheet['scores'] ?? sheet['scores_json'];
+    if (rawHps is! Map || rawScores is! Map) {
+      throw const FormatException('Saved gradebook sheet is malformed.');
+    }
+    for (final category in const ['ww', 'pt', 'ex']) {
+      final values = rawHps[category];
+      if (values is! Map) continue;
+      _termHps[term]![category]!.addAll(_decodeNumericColumns(values));
+    }
+    for (final studentEntry in rawScores.entries) {
+      if (studentEntry.value is! Map) {
+        throw const FormatException('Saved student scores must be an object.');
+      }
+      final studentScores = <String, Map<int, double?>>{};
+      for (final categoryEntry in (studentEntry.value as Map).entries) {
+        if (categoryEntry.value is! Map) {
+          throw const FormatException(
+            'Saved score categories must be objects.',
+          );
+        }
+        studentScores[categoryEntry.key.toString()] = _decodeNumericColumns(
+          categoryEntry.value as Map,
+        );
+      }
+      _termScores[term]![studentEntry.key.toString()] = studentScores;
+    }
   }
 
-  // Weighted Score (WS) = PS * weight / 100
-  double _weightedScore(
-    String studentId,
-    String category,
-    int numCols,
-    double weight,
-  ) {
-    return _percentageScore(studentId, category, numCols) * weight / 100;
+  Map<int, double?> _decodeNumericColumns(Map values) {
+    final result = <int, double?>{};
+    for (final entry in values.entries) {
+      final index = int.tryParse(entry.key.toString());
+      final value = entry.value;
+      if (index == null || index < 0 || (value != null && value is! num)) {
+        throw const FormatException('Saved gradebook cell is invalid.');
+      }
+      result[index] = (value as num?)?.toDouble();
+    }
+    return result;
+  }
+
+  Future<void> _changeTerm(int term) async {
+    if (term == _selectedTerm) return;
+    _sheetSaveTimer?.cancel();
+    final offeringId = _currentSubjectData?['id']?.toString();
+    try {
+      if (offeringId != null && _selectedTerm > 0) {
+        await _persistSheet(offeringId, _selectedTerm);
+      }
+    } catch (error) {
+      debugPrint('Could not persist gradebook before changing terms: $error');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not save this term sheet.')),
+        );
+      }
+      return;
+    }
+    if (mounted) setState(() => _selectedTerm = term);
+  }
+
+  Future<void> _selectOffering(Map<String, dynamic> offering) async {
+    _sheetSaveTimer?.cancel();
+    final previousId = _currentSubjectData?['id']?.toString();
+    try {
+      if (previousId != null && _selectedTerm > 0) {
+        await _persistSheet(previousId, _selectedTerm);
+      }
+    } catch (error) {
+      debugPrint(
+        'Could not persist gradebook before changing subjects: $error',
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not save this term sheet.')),
+        );
+      }
+      return;
+    }
+    final subjectName = offering['subject_name']?.toString();
+    final sectionName = offering['section_name']?.toString();
+    if (!mounted || subjectName == null || sectionName == null) return;
+    setState(() {
+      _selectedSubject = subjectName;
+      _selectedSection = sectionName;
+    });
+    final teacherId = AuthRepository.instance.currentUser?.id;
+    final offeringId = offering['id']?.toString();
+    if (teacherId != null && offeringId != null) {
+      await Future.wait([
+        _fetchStudents(teacherId, offeringId),
+        _loadOfferingSheets(offeringId),
+      ]);
+    }
   }
 
   Map<String, dynamic>? get _currentSubjectData {
@@ -229,69 +444,118 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
     }
   }
 
-  double _parseWeight(dynamic val) {
-    if (val == null) return 0.0;
+  double _parseWeight(dynamic val, {double fallback = 0}) {
+    if (val == null) return fallback;
     if (val is num) return val.toDouble();
-    if (val is String) return double.tryParse(val) ?? 0.0;
-    return 0.0;
+    if (val is String) return double.tryParse(val) ?? fallback;
+    return fallback;
   }
 
-  // Initial Grade = sum of all weighted scores
-  double _initialGrade(String studentId) {
+  int get _termsTaught {
     final data = _currentSubjectWeightsData;
-    final wwWeight = _parseWeight(data?['ww_weight']);
-    final ptWeight = _parseWeight(data?['pt_weight']);
-    final exWeight = _parseWeight(data?['ex_weight']);
-    final wsWW = _weightedScore(studentId, 'ww', wwColumns, wwWeight);
-    final wsPT = _weightedScore(studentId, 'pt', ptColumns, ptWeight);
-    final wsEX = _weightedScore(studentId, 'ex', exColumns, exWeight);
-    return wsWW + wsPT + wsEX;
+    final value = data?['terms_taught'];
+    return value is num ? value.toInt() : int.tryParse('$value') ?? 3;
   }
 
-  // Transmuted Grade (DepEd transmutation table simplified)
-  double _transmutedGrade(double initialGrade) {
-    if (initialGrade >= 100) return 100;
-    if (initialGrade >= 98.40) return 99;
-    if (initialGrade >= 96.80) return 98;
-    if (initialGrade >= 95.20) return 97;
-    if (initialGrade >= 93.60) return 96;
-    if (initialGrade >= 92.00) return 95;
-    if (initialGrade >= 90.40) return 94;
-    if (initialGrade >= 88.80) return 93;
-    if (initialGrade >= 87.20) return 92;
-    if (initialGrade >= 85.60) return 91;
-    if (initialGrade >= 84.00) return 90;
-    if (initialGrade >= 82.40) return 89;
-    if (initialGrade >= 80.80) return 88;
-    if (initialGrade >= 79.20) return 87;
-    if (initialGrade >= 77.60) return 86;
-    if (initialGrade >= 76.00) return 85;
-    if (initialGrade >= 74.40) return 84;
-    if (initialGrade >= 72.80) return 83;
-    if (initialGrade >= 71.20) return 82;
-    if (initialGrade >= 69.60) return 81;
-    if (initialGrade >= 68.00) return 80;
-    if (initialGrade >= 66.40) return 79;
-    if (initialGrade >= 64.80) return 78;
-    if (initialGrade >= 63.20) return 77;
-    if (initialGrade >= 61.60) return 76;
-    if (initialGrade >= 60.00) return 75;
-    // Below 60: linear mapping down
-    if (initialGrade >= 56.00) return 74;
-    if (initialGrade >= 52.00) return 73;
-    if (initialGrade >= 48.00) return 72;
-    if (initialGrade >= 44.00) return 71;
-    if (initialGrade >= 40.00) return 70;
-    if (initialGrade >= 36.00) return 69;
-    if (initialGrade >= 32.00) return 68;
-    if (initialGrade >= 28.00) return 67;
-    if (initialGrade >= 24.00) return 66;
-    if (initialGrade >= 20.00) return 65;
-    if (initialGrade >= 16.00) return 64;
-    if (initialGrade >= 12.00) return 63;
-    if (initialGrade >= 8.00) return 62;
-    if (initialGrade >= 4.00) return 61;
-    return 60;
+  String get _termBlock =>
+      _currentSubjectWeightsData?['term_block']?.toString() ?? '1ST, 2ND, 3RD';
+
+  double get _unitsPerTerm =>
+      _parseWeight(_currentSubjectWeightsData?['units_per_term'], fallback: 2);
+
+  double get _unitsPerYear => _unitsPerTerm * _termsTaught;
+
+  List<int> get _activeTerms =>
+      DepEdSubjectCatalog.getActiveTermsForBlock(_termsTaught, _termBlock);
+
+  bool get _isSelectedTermActive =>
+      _selectedTerm > 0 &&
+      _currentSubjectData != null &&
+      _activeTerms.contains(_selectedTerm);
+
+  String _formatUnits(double value) => value == value.roundToDouble()
+      ? value.toStringAsFixed(0)
+      : value.toStringAsFixed(1);
+
+  double _totalHps(String category, int count, {required int term}) {
+    var total = 0.0;
+    for (var index = 0; index < count; index++) {
+      total += _getHps(category, index, term: term) ?? 0;
+    }
+    return total;
+  }
+
+  ComponentMetrics _componentMetrics(
+    String studentId,
+    String category,
+    int count,
+    double weight, {
+    required int term,
+  }) {
+    return DepEdGradingEngine.computeComponentMetrics(
+      hps: List.generate(
+        count,
+        (index) => _getHps(category, index, term: term),
+      ),
+      scores: List.generate(
+        count,
+        (index) => _getScore(studentId, category, index, term: term),
+      ),
+      componentWeight: weight,
+    );
+  }
+
+  ExamMetrics _examMetrics(String studentId, {required int term}) {
+    final data = _currentSubjectWeightsData;
+    return DepEdGradingEngine.computeExamMetrics(
+      hps: List.generate(
+        exColumns,
+        (index) => _getHps('ex', index, term: term),
+      ),
+      scores: List.generate(
+        exColumns,
+        (index) => _getScore(studentId, 'ex', index, term: term),
+      ),
+      examWeight: _parseWeight(data?['ex_weight']),
+      subWeights: [
+        _parseWeight(data?['st1_weight'], fallback: 30),
+        _parseWeight(data?['st2_weight'], fallback: 30),
+        _parseWeight(data?['te_weight'], fallback: 40),
+      ],
+    );
+  }
+
+  double? _initialGrade(String studentId, {required int term}) {
+    final data = _currentSubjectWeightsData;
+    final ww = _componentMetrics(
+      studentId,
+      'ww',
+      wwColumns,
+      _parseWeight(data?['ww_weight']),
+      term: term,
+    );
+    final pt = _componentMetrics(
+      studentId,
+      'pt',
+      ptColumns,
+      _parseWeight(data?['pt_weight']),
+      term: term,
+    );
+    final exWeight = _parseWeight(data?['ex_weight']);
+    return DepEdGradingEngine.computeInitialGrade(
+      wwWs: ww.ws,
+      ptWs: pt.ws,
+      exWs: _examMetrics(studentId, term: term).exWs,
+      exWeight: exWeight,
+    );
+  }
+
+  int? _termGrade(String studentId, int term) {
+    if (!_activeTerms.contains(term)) return null;
+    final initialGrade = _initialGrade(studentId, term: term);
+    return initialGrade == null
+        ? null
+        : DepEdGradingEngine.transmuteDO15(initialGrade);
   }
 
   @override
@@ -357,187 +621,266 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
                   Expanded(
                     child: Stack(
                       children: [
-                        SingleChildScrollView(
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                        if (_selectedTerm == 0)
+                          _buildFinalGradesView(theme, isDark, borderColor)
+                        else
+                          Column(
                             children: [
-                              // LEFT STICKY COLUMN
-                              Container(
-                                width: 230.0,
-                                decoration: BoxDecoration(
-                                  color: cellBg,
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.black.withValues(
-                                        alpha: isDark ? 0.3 : 0.15,
-                                      ),
-                                      blurRadius: 10,
-                                      offset: const Offset(4, 0),
+                              if (!_isSelectedTermActive)
+                                _buildInactiveTermBanner(theme),
+                              if (_studentLoadError != null)
+                                MaterialBanner(
+                                  content: Text(_studentLoadError!),
+                                  leading: Icon(
+                                    Icons.people_outline,
+                                    color: theme.colorScheme.error,
+                                  ),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () {
+                                        final teacherId = AuthRepository
+                                            .instance
+                                            .currentUser
+                                            ?.id;
+                                        final offeringId =
+                                            _currentSubjectData?['id']
+                                                ?.toString();
+                                        if (teacherId != null &&
+                                            offeringId != null) {
+                                          unawaited(
+                                            _fetchStudents(
+                                              teacherId,
+                                              offeringId,
+                                            ),
+                                          );
+                                        }
+                                      },
+                                      child: const Text('Retry'),
                                     ),
                                   ],
                                 ),
-                                child: Column(
-                                  children: [
-                                    _buildCategoryHeaders(
-                                      theme,
-                                      subHeaderBg,
-                                      headerText,
-                                      wwWeight,
-                                      ptWeight,
-                                      exWeight,
-                                      isLeft: true,
-                                    ),
-                                    _buildColumnSubHeaders(
-                                      theme,
-                                      headerBg,
-                                      headerText,
-                                      wwWeight,
-                                      ptWeight,
-                                      exWeight,
-                                      isLeft: true,
-                                    ),
-                                    _buildHpsRow(
-                                      theme,
-                                      isDark,
-                                      borderColor,
-                                      cellText,
-                                      wwWeight,
-                                      ptWeight,
-                                      exWeight,
-                                      isLeft: true,
-                                    ),
-                                    Container(height: 2, color: borderColor),
-                                    _buildGenderHeader(
-                                      'MALE',
-                                      genderHeaderBg,
-                                      isLeft: true,
-                                    ),
-                                    ..._buildStudentRows(
-                                      _maleStudents,
-                                      theme,
-                                      isDark,
-                                      cellText,
-                                      borderColor,
-                                      altRowBg,
-                                      cellBg,
-                                      wwWeight,
-                                      ptWeight,
-                                      exWeight,
-                                      isLeft: true,
-                                    ),
-                                    _buildGenderHeader(
-                                      'FEMALE',
-                                      genderHeaderBg,
-                                      isLeft: true,
-                                    ),
-                                    ..._buildStudentRows(
-                                      _femaleStudents,
-                                      theme,
-                                      isDark,
-                                      cellText,
-                                      borderColor,
-                                      altRowBg,
-                                      cellBg,
-                                      wwWeight,
-                                      ptWeight,
-                                      exWeight,
-                                      isLeft: true,
+                              if (_sheetLoadError != null)
+                                MaterialBanner(
+                                  content: Text(_sheetLoadError!),
+                                  leading: Icon(
+                                    Icons.error_outline,
+                                    color: theme.colorScheme.error,
+                                  ),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () {
+                                        final id = _currentSubjectData?['id']
+                                            ?.toString();
+                                        if (id != null) {
+                                          unawaited(_loadOfferingSheets(id));
+                                        }
+                                      },
+                                      child: const Text('Retry'),
                                     ),
                                   ],
                                 ),
-                              ),
-                              // RIGHT SCROLLABLE COLUMNS
                               Expanded(
-                                child: Scrollbar(
-                                  thickness: 12,
-                                  controller: _scrollController,
-                                  radius: const Radius.circular(8),
-                                  interactive: true,
-                                  child: SingleChildScrollView(
-                                    scrollDirection: Axis.horizontal,
-                                    controller: _scrollController,
-                                    child: SizedBox(
-                                      width: _calculateTotalWidth() - 230.0,
-                                      child: Column(
-                                        children: [
-                                          _buildCategoryHeaders(
-                                            theme,
-                                            subHeaderBg,
-                                            headerText,
-                                            wwWeight,
-                                            ptWeight,
-                                            exWeight,
-                                            isLeft: false,
-                                          ),
-                                          _buildColumnSubHeaders(
-                                            theme,
-                                            headerBg,
-                                            headerText,
-                                            wwWeight,
-                                            ptWeight,
-                                            exWeight,
-                                            isLeft: false,
-                                          ),
-                                          _buildHpsRow(
-                                            theme,
-                                            isDark,
-                                            borderColor,
-                                            cellText,
-                                            wwWeight,
-                                            ptWeight,
-                                            exWeight,
-                                            isLeft: false,
-                                          ),
-                                          Container(
-                                            height: 2,
-                                            color: borderColor,
-                                          ),
-                                          _buildGenderHeader(
-                                            '',
-                                            genderHeaderBg,
-                                            isLeft: false,
-                                          ),
-                                          ..._buildStudentRows(
-                                            _maleStudents,
-                                            theme,
-                                            isDark,
-                                            cellText,
-                                            borderColor,
-                                            altRowBg,
-                                            cellBg,
-                                            wwWeight,
-                                            ptWeight,
-                                            exWeight,
-                                            isLeft: false,
-                                          ),
-                                          _buildGenderHeader(
-                                            '',
-                                            genderHeaderBg,
-                                            isLeft: false,
-                                          ),
-                                          ..._buildStudentRows(
-                                            _femaleStudents,
-                                            theme,
-                                            isDark,
-                                            cellText,
-                                            borderColor,
-                                            altRowBg,
-                                            cellBg,
-                                            wwWeight,
-                                            ptWeight,
-                                            exWeight,
-                                            isLeft: false,
-                                          ),
-                                        ],
+                                child: SingleChildScrollView(
+                                  child: Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      // LEFT STICKY COLUMN
+                                      Container(
+                                        width: 230.0,
+                                        decoration: BoxDecoration(
+                                          color: cellBg,
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: Colors.black.withValues(
+                                                alpha: isDark ? 0.3 : 0.15,
+                                              ),
+                                              blurRadius: 10,
+                                              offset: const Offset(4, 0),
+                                            ),
+                                          ],
+                                        ),
+                                        child: Column(
+                                          children: [
+                                            _buildCategoryHeaders(
+                                              theme,
+                                              subHeaderBg,
+                                              headerText,
+                                              wwWeight,
+                                              ptWeight,
+                                              exWeight,
+                                              isLeft: true,
+                                            ),
+                                            _buildColumnSubHeaders(
+                                              theme,
+                                              headerBg,
+                                              headerText,
+                                              wwWeight,
+                                              ptWeight,
+                                              exWeight,
+                                              isLeft: true,
+                                            ),
+                                            ValueListenableBuilder<int>(
+                                              valueListenable: _hpsRevision,
+                                              builder: (context, _, _) =>
+                                                  _buildHpsRow(
+                                                    theme,
+                                                    isDark,
+                                                    borderColor,
+                                                    cellText,
+                                                    wwWeight,
+                                                    ptWeight,
+                                                    exWeight,
+                                                    isLeft: true,
+                                                  ),
+                                            ),
+                                            Container(
+                                              height: 2,
+                                              color: borderColor,
+                                            ),
+                                            _buildGenderHeader(
+                                              'MALE',
+                                              genderHeaderBg,
+                                              isLeft: true,
+                                            ),
+                                            ..._buildStudentRows(
+                                              _maleStudents,
+                                              theme,
+                                              isDark,
+                                              cellText,
+                                              borderColor,
+                                              altRowBg,
+                                              cellBg,
+                                              wwWeight,
+                                              ptWeight,
+                                              exWeight,
+                                              isLeft: true,
+                                            ),
+                                            _buildGenderHeader(
+                                              'FEMALE',
+                                              genderHeaderBg,
+                                              isLeft: true,
+                                            ),
+                                            ..._buildStudentRows(
+                                              _femaleStudents,
+                                              theme,
+                                              isDark,
+                                              cellText,
+                                              borderColor,
+                                              altRowBg,
+                                              cellBg,
+                                              wwWeight,
+                                              ptWeight,
+                                              exWeight,
+                                              isLeft: true,
+                                            ),
+                                          ],
+                                        ),
                                       ),
-                                    ),
+                                      // RIGHT SCROLLABLE COLUMNS
+                                      Expanded(
+                                        child: Scrollbar(
+                                          thickness: 12,
+                                          controller: _scrollController,
+                                          radius: const Radius.circular(8),
+                                          interactive: true,
+                                          child: SingleChildScrollView(
+                                            scrollDirection: Axis.horizontal,
+                                            controller: _scrollController,
+                                            child: SizedBox(
+                                              width:
+                                                  _calculateTotalWidth() -
+                                                  230.0,
+                                              child: Column(
+                                                children: [
+                                                  _buildCategoryHeaders(
+                                                    theme,
+                                                    subHeaderBg,
+                                                    headerText,
+                                                    wwWeight,
+                                                    ptWeight,
+                                                    exWeight,
+                                                    isLeft: false,
+                                                  ),
+                                                  _buildColumnSubHeaders(
+                                                    theme,
+                                                    headerBg,
+                                                    headerText,
+                                                    wwWeight,
+                                                    ptWeight,
+                                                    exWeight,
+                                                    isLeft: false,
+                                                  ),
+                                                  ValueListenableBuilder<int>(
+                                                    valueListenable:
+                                                        _hpsRevision,
+                                                    builder: (context, _, _) =>
+                                                        _buildHpsRow(
+                                                          theme,
+                                                          isDark,
+                                                          borderColor,
+                                                          cellText,
+                                                          wwWeight,
+                                                          ptWeight,
+                                                          exWeight,
+                                                          isLeft: false,
+                                                        ),
+                                                  ),
+                                                  Container(
+                                                    height: 2,
+                                                    color: borderColor,
+                                                  ),
+                                                  _buildGenderHeader(
+                                                    '',
+                                                    genderHeaderBg,
+                                                    isLeft: false,
+                                                  ),
+                                                  ..._buildStudentRows(
+                                                    _maleStudents,
+                                                    theme,
+                                                    isDark,
+                                                    cellText,
+                                                    borderColor,
+                                                    altRowBg,
+                                                    cellBg,
+                                                    wwWeight,
+                                                    ptWeight,
+                                                    exWeight,
+                                                    isLeft: false,
+                                                  ),
+                                                  _buildGenderHeader(
+                                                    '',
+                                                    genderHeaderBg,
+                                                    isLeft: false,
+                                                  ),
+                                                  ..._buildStudentRows(
+                                                    _femaleStudents,
+                                                    theme,
+                                                    isDark,
+                                                    cellText,
+                                                    borderColor,
+                                                    altRowBg,
+                                                    cellBg,
+                                                    wwWeight,
+                                                    ptWeight,
+                                                    exWeight,
+                                                    isLeft: false,
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
                               ),
                             ],
                           ),
-                        ),
-                        if (_isLoadingSubjects || _isLoadingStudents)
+                        if (_isLoadingSubjects ||
+                            _isLoadingStudents ||
+                            _isLoadingSheets)
                           Positioned(
                             top: 0,
                             left: 0,
@@ -633,15 +976,7 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
                 final selectedRow = _teacherSubjects.firstWhere(
                   (subject) => subject['subject_name'] == val,
                 );
-                setState(() {
-                  _selectedSubject = val;
-                  _selectedSection = selectedRow['section_name']?.toString();
-                });
-                final teacherId = AuthRepository.instance.currentUser?.id;
-                final subjectId = selectedRow['id']?.toString();
-                if (teacherId != null && subjectId != null) {
-                  _fetchStudents(teacherId, subjectId);
-                }
+                unawaited(_selectOffering(selectedRow));
               },
             ),
           ),
@@ -694,14 +1029,7 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
                       subject['subject_name'] == _selectedSubject &&
                       subject['section_name'] == val,
                 );
-                setState(() {
-                  _selectedSection = val;
-                });
-                final teacherId = AuthRepository.instance.currentUser?.id;
-                final subjectId = selectedRow['id']?.toString();
-                if (teacherId != null && subjectId != null) {
-                  _fetchStudents(teacherId, subjectId);
-                }
+                unawaited(_selectOffering(selectedRow));
               },
             ),
           ),
@@ -760,6 +1088,20 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
               AppTheme.catOrange,
               text,
             ),
+            const SizedBox(width: 10),
+            _infoChip(
+              'Terms',
+              '$_termsTaught ($_termBlock)',
+              AppTheme.catPurple,
+              text,
+            ),
+            const SizedBox(width: 10),
+            _infoChip(
+              'Units',
+              '${_formatUnits(_unitsPerTerm)} / Term · ${_formatUnits(_unitsPerYear)} / Year',
+              AppTheme.catGreen,
+              text,
+            ),
           ],
           const SizedBox(width: 10),
           // Right: School Year
@@ -799,6 +1141,338 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildInactiveTermBanner(ThemeData theme) {
+    final activeTerm = _activeTerms.first;
+    return Material(
+      color: theme.colorScheme.errorContainer.withValues(alpha: 0.75),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        child: Row(
+          children: [
+            Icon(
+              Icons.warning_amber_rounded,
+              color: theme.colorScheme.onErrorContainer,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'INCORRECT SHEET. Do not use this sheet to input data. This subject is configured for $_termBlock only.',
+                style: TextStyle(
+                  color: theme.colorScheme.onErrorContainer,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+            TextButton(
+              onPressed: () => unawaited(_changeTerm(activeTerm)),
+              child: const Text('Switch to Active Term'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFinalGradesView(
+    ThemeData theme,
+    bool isDark,
+    Color borderColor,
+  ) {
+    const widths = [
+      30.0,
+      120.0,
+      220.0,
+      110.0,
+      110.0,
+      110.0,
+      110.0,
+      150.0,
+      110.0,
+    ];
+    const labels = [
+      '#',
+      'LRN',
+      "LEARNERS' NAMES",
+      'FIRST TERM',
+      'SECOND TERM',
+      'THIRD TERM',
+      'FINAL GRADE',
+      'DESCRIPTOR',
+      'REMARK',
+    ];
+    final tableWidth = widths.fold<double>(0, (sum, width) => sum + width);
+    final headerColor = isDark
+        ? theme.colorScheme.surfaceContainerHighest
+        : const Color(0xFFE8EDF5);
+
+    Widget headerRow() => Container(
+      height: 42,
+      decoration: BoxDecoration(
+        color: headerColor,
+        border: Border(bottom: BorderSide(color: borderColor)),
+      ),
+      child: Row(
+        children: List.generate(
+          labels.length,
+          (index) => _summaryCell(
+            labels[index],
+            widths[index],
+            theme.colorScheme.onSurface,
+            borderColor: borderColor,
+            bold: true,
+          ),
+        ),
+      ),
+    );
+
+    Widget genderHeader(String label) => Container(
+      height: 26,
+      width: tableWidth,
+      alignment: Alignment.centerLeft,
+      padding: const EdgeInsets.only(left: 12),
+      color: isDark ? const Color(0xFF374151) : const Color(0xFF334155),
+      child: Text(
+        label,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 10,
+          fontWeight: FontWeight.bold,
+          letterSpacing: 1,
+        ),
+      ),
+    );
+
+    final unitsEarned = _unitsPerYear;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            color: headerColor.withValues(alpha: 0.65),
+            border: Border(bottom: BorderSide(color: borderColor)),
+          ),
+          child: Wrap(
+            spacing: 18,
+            runSpacing: 8,
+            children: [
+              _metadataLabel('NO. OF TERMS', '$_termsTaught', theme),
+              _metadataLabel('TERM BLOCKS', _termBlock, theme),
+              _metadataLabel(
+                'UNITS PER TERM',
+                _formatUnits(_unitsPerTerm),
+                theme,
+              ),
+              _metadataLabel(
+                'TOTAL UNITS EARNED',
+                _formatUnits(unitsEarned),
+                theme,
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: SingleChildScrollView(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: SizedBox(
+                width: tableWidth,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    headerRow(),
+                    genderHeader('MALE'),
+                    ..._maleStudents.asMap().entries.map(
+                      (entry) => _buildFinalGradeStudentRow(
+                        entry.value,
+                        entry.key + 1,
+                        widths,
+                        borderColor,
+                        theme,
+                      ),
+                    ),
+                    genderHeader('FEMALE'),
+                    ..._femaleStudents.asMap().entries.map(
+                      (entry) => _buildFinalGradeStudentRow(
+                        entry.value,
+                        entry.key + 1,
+                        widths,
+                        borderColor,
+                        theme,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildFinalGradeStudentRow(
+    UserModel student,
+    int rowNumber,
+    List<double> widths,
+    Color borderColor,
+    ThemeData theme,
+  ) {
+    return AnimatedBuilder(
+      animation: Listenable.merge([_revisionFor(student.id), _hpsRevision]),
+      builder: (context, _) {
+        final termGrades = {
+          for (final term in const [1, 2, 3])
+            term: _termGrade(student.id, term),
+        };
+        final finalGrade = DepEdGradingEngine.computeFinalGrade(
+          termsTaught: _termsTaught,
+          activeTerms: _activeTerms,
+          termGrades: termGrades,
+          unitsPerTerm: _unitsPerTerm,
+          totalUnitsEarned: _unitsPerYear,
+        );
+        final values = <String>[
+          '$rowNumber',
+          student.lrn ?? '-',
+          _displayName(student),
+          for (final term in const [1, 2, 3])
+            _activeTerms.contains(term)
+                ? termGrades[term]?.toString() ?? ''
+                : 'N/A',
+          finalGrade?.toString() ?? '',
+          finalGrade == null
+              ? ''
+              : DepEdGradingEngine.getDescriptor(finalGrade),
+          finalGrade == null ? '' : DepEdGradingEngine.getRemarks(finalGrade),
+        ];
+        final isDark = theme.brightness == Brightness.dark;
+        final rowBackground = rowNumber.isOdd
+            ? (isDark
+                  ? theme.colorScheme.surfaceContainerHighest.withValues(
+                      alpha: 0.3,
+                    )
+                  : const Color(0xFFF8FAFC))
+            : theme.colorScheme.surface;
+
+        return Container(
+          height: 38,
+          decoration: BoxDecoration(
+            color: rowBackground,
+            border: Border(bottom: BorderSide(color: borderColor, width: 0.5)),
+          ),
+          child: Row(
+            children: List.generate(values.length, (index) {
+              final finalGradeCell = index == 6;
+              final remarkCell = index == 8;
+              if (remarkCell && finalGrade != null) {
+                final passed = finalGrade >= 75;
+                final color = passed ? AppTheme.catGreen : AppTheme.catRed;
+                return Container(
+                  width: widths[index],
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    border: Border(
+                      right: BorderSide(color: borderColor, width: 0.5),
+                    ),
+                  ),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: color.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      values[index],
+                      style: TextStyle(
+                        color: color,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                );
+              }
+              final isMuted = values[index] == 'N/A';
+              return _summaryCell(
+                values[index],
+                widths[index],
+                isMuted
+                    ? theme.colorScheme.onSurface.withValues(alpha: 0.4)
+                    : theme.colorScheme.onSurface,
+                borderColor: borderColor,
+                bold: finalGradeCell,
+              );
+            }),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _summaryCell(
+    String value,
+    double width,
+    Color textColor, {
+    required Color borderColor,
+    bool bold = false,
+  }) {
+    return Container(
+      width: width,
+      height: 38,
+      alignment: Alignment.center,
+      padding: const EdgeInsets.symmetric(horizontal: 6),
+      decoration: BoxDecoration(
+        border: Border(
+          right: BorderSide(color: borderColor, width: 0.5),
+          bottom: BorderSide(color: borderColor, width: 0.5),
+        ),
+      ),
+      child: Text(
+        value,
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          fontSize: 10,
+          color: textColor,
+          fontWeight: bold ? FontWeight.bold : FontWeight.normal,
+        ),
+      ),
+    );
+  }
+
+  Widget _metadataLabel(String label, String value, ThemeData theme) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
+            fontSize: 9,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 0.4,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          value,
+          style: TextStyle(
+            color: theme.colorScheme.onSurface,
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
     );
   }
 
@@ -1118,17 +1792,37 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
       final cols = <Widget>[];
       for (int i = 0; i < count; i++) {
         cols.add(
-          _buildHpsCell(category, i, colW, hpsBg, cellText, borderColor),
+          _buildHpsCell(
+            category,
+            i,
+            colW,
+            hpsBg,
+            cellText,
+            borderColor,
+            isEnabled: _isSelectedTermActive,
+          ),
         );
       }
       // Total HPS
       if (category == 'ex') {
-        // Exam component WS values will come from Classroom Setup.
-        for (int i = 0; i < count; i++) {
-          cols.add(_computedCell(computedW, '', hpsBg, cellText, borderColor));
+        final examWeights = [
+          _parseWeight(_currentSubjectData?['st1_weight'], fallback: 30),
+          _parseWeight(_currentSubjectData?['st2_weight'], fallback: 30),
+          _parseWeight(_currentSubjectData?['te_weight'], fallback: 40),
+        ];
+        for (final subWeight in examWeights) {
+          cols.add(
+            _computedCell(
+              computedW,
+              _formatUnits(subWeight),
+              hpsBg,
+              cellText,
+              borderColor,
+            ),
+          );
         }
       } else {
-        final totalHps = _totalHps(category, count);
+        final totalHps = _totalHps(category, count, term: _selectedTerm);
         cols.add(
           _computedCell(
             computedW,
@@ -1208,47 +1902,23 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
     double width,
     Color bg,
     Color text,
-    Color border,
-  ) {
+    Color border, {
+    required bool isEnabled,
+  }) {
     final val = _getHps(category, col);
-    return Container(
+    return GradebookGridCell(
+      key: ValueKey('hps-$_selectedTerm-$category-$col'),
+      value: val?.toStringAsFixed(0) ?? '',
+      onChanged: (value) =>
+          _setHps(category, col, value.isEmpty ? null : double.parse(value)),
+      isHpsCell: true,
+      columnHps: null,
+      isEnabled: isEnabled,
       width: width,
-      height: 32,
-      decoration: BoxDecoration(
-        color: bg,
-        border: Border(right: BorderSide(color: border, width: 0.5)),
-      ),
-      child: Center(
-        child: SizedBox(
-          width: width - 8,
-          child: TextField(
-            controller: TextEditingController(
-              text: val > 0 ? val.toStringAsFixed(0) : '',
-            ),
-            onSubmitted: (v) {
-              final parsed = double.tryParse(v) ?? 0;
-              _setHps(category, col, parsed);
-            },
-            onChanged: (v) {
-              final parsed = double.tryParse(v) ?? 0;
-              _setHps(category, col, parsed);
-            },
-            textAlign: TextAlign.center,
-            keyboardType: TextInputType.number,
-            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.bold,
-              color: text,
-            ),
-            decoration: const InputDecoration(
-              border: InputBorder.none,
-              isDense: true,
-              contentPadding: EdgeInsets.symmetric(vertical: 4),
-            ),
-          ),
-        ),
-      ),
+      backgroundColor: bg,
+      borderColor: border,
+      textColor: text,
+      disabledTooltip: 'This term is not active for the selected subject.',
     );
   }
 
@@ -1339,8 +2009,9 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
                         isFirst ? 'No students yet' : '-',
                         style: TextStyle(
                           fontSize: 11,
-                          fontStyle:
-                              isFirst ? FontStyle.italic : FontStyle.normal,
+                          fontStyle: isFirst
+                              ? FontStyle.italic
+                              : FontStyle.normal,
                           color: cellText.withValues(
                             alpha: isFirst ? 0.45 : 0.2,
                           ),
@@ -1369,7 +2040,12 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
                     ),
                     ...List.generate(
                       exColumns,
-                      (_) => _emptyGridCell(computedW, rowBg, borderColor, cellText),
+                      (_) => _emptyGridCell(
+                        computedW,
+                        rowBg,
+                        borderColor,
+                        cellText,
+                      ),
                     ),
                     _emptyGridCell(computedW, rowBg, borderColor, cellText),
                     _emptyGridCell(computedW, rowBg, borderColor, cellText),
@@ -1383,163 +2059,191 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
 
     return List.generate(students.length, (idx) {
       final s = students[idx];
-      final isAlt = idx.isOdd;
-      final rowBg = isAlt ? altRowBg : cellBg;
+      return AnimatedBuilder(
+        key: ValueKey('gradebook-row-${s.id}-$isLeft'),
+        animation: Listenable.merge([_revisionFor(s.id), _hpsRevision]),
+        builder: (context, _) {
+          final rowBg = idx.isOdd ? altRowBg : cellBg;
+          final ig = _initialGrade(s.id, term: _selectedTerm);
+          final tg = ig == null ? null : DepEdGradingEngine.transmuteDO15(ig);
 
-      final ig = _initialGrade(s.id);
-      final tg = _transmutedGrade(ig);
+          List<Widget> buildScoreCells(
+            String category,
+            int count,
+            Color accent,
+          ) {
+            final cells = <Widget>[];
+            for (var i = 0; i < count; i++) {
+              cells.add(
+                _buildScoreCell(
+                  s.id,
+                  category,
+                  i,
+                  colW,
+                  rowBg,
+                  cellText,
+                  borderColor,
+                ),
+              );
+            }
+            if (category == 'ex') {
+              final exam = _examMetrics(s.id, term: _selectedTerm);
+              for (final score in [exam.wsSt1, exam.wsSt2, exam.wsTe]) {
+                cells.add(
+                  _computedCell(
+                    computedW,
+                    score?.toStringAsFixed(2) ?? '',
+                    rowBg,
+                    accent,
+                    borderColor,
+                  ),
+                );
+              }
+              cells.add(
+                _computedCell(
+                  computedW,
+                  exam.exPs?.toStringAsFixed(2) ?? '',
+                  rowBg,
+                  accent,
+                  borderColor,
+                  isBold: true,
+                ),
+              );
+              cells.add(
+                _computedCell(
+                  computedW,
+                  exam.exWs?.toStringAsFixed(2) ?? '',
+                  rowBg,
+                  accent,
+                  borderColor,
+                  isBold: true,
+                ),
+              );
+              return cells;
+            }
 
-      List<Widget> buildScoreCells(String category, int count, Color accent) {
-        final cells = <Widget>[];
-        for (int i = 0; i < count; i++) {
-          cells.add(
-            _buildScoreCell(
+            final weight = category == 'ww' ? wwWeight : ptWeight;
+            final metrics = _componentMetrics(
               s.id,
               category,
-              i,
-              colW,
-              rowBg,
-              cellText,
-              borderColor,
-            ),
-          );
-        }
-        if (category == 'ex') {
-          // Exam component WS values will come from Classroom Setup.
-          for (int i = 0; i < count; i++) {
-            cells.add(_computedCell(computedW, '', rowBg, accent, borderColor));
+              count,
+              weight,
+              term: _selectedTerm,
+            );
+            cells
+              ..add(
+                _computedCell(
+                  computedW,
+                  metrics.totalRaw?.toStringAsFixed(0) ?? '',
+                  rowBg,
+                  cellText,
+                  borderColor,
+                  isBold: true,
+                ),
+              )
+              ..add(
+                _computedCell(
+                  computedW,
+                  metrics.ps?.toStringAsFixed(2) ?? '',
+                  rowBg,
+                  accent,
+                  borderColor,
+                  isBold: true,
+                ),
+              )
+              ..add(
+                _computedCell(
+                  computedW,
+                  metrics.ws?.toStringAsFixed(2) ?? '',
+                  rowBg,
+                  accent,
+                  borderColor,
+                  isBold: true,
+                ),
+              );
+            return cells;
           }
-        } else {
-          final total = _totalRaw(s.id, category, count);
-          cells.add(
-            _computedCell(
-              computedW,
-              total > 0 ? total.toStringAsFixed(0) : '',
-              rowBg,
-              cellText,
-              borderColor,
-              isBold: true,
+
+          return Container(
+            height: 32,
+            decoration: BoxDecoration(
+              color: rowBg,
+              border: Border(
+                bottom: BorderSide(color: borderColor, width: 0.5),
+              ),
+            ),
+            child: Row(
+              children: isLeft
+                  ? [
+                      Container(
+                        width: numW,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          border: Border(
+                            right: BorderSide(color: borderColor, width: 0.5),
+                          ),
+                        ),
+                        child: Text(
+                          '${idx + 1}',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color: cellText.withValues(alpha: 0.5),
+                          ),
+                        ),
+                      ),
+                      Container(
+                        width: nameW,
+                        alignment: Alignment.centerLeft,
+                        padding: const EdgeInsets.only(left: 8),
+                        decoration: BoxDecoration(
+                          border: Border(
+                            right: BorderSide(color: borderColor, width: 0.5),
+                          ),
+                        ),
+                        child: Text(
+                          _displayName(s),
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: cellText,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ]
+                  : [
+                      ...buildScoreCells('ww', wwColumns, AppTheme.catBlue),
+                      ...buildScoreCells('pt', ptColumns, AppTheme.catGreen),
+                      ...buildScoreCells('ex', exColumns, AppTheme.catOrange),
+                      _computedCell(
+                        computedW,
+                        ig?.toStringAsFixed(2) ?? '',
+                        rowBg,
+                        cellText,
+                        borderColor,
+                        isBold: true,
+                      ),
+                      _computedCell(
+                        computedW,
+                        tg?.toString() ?? '',
+                        rowBg,
+                        tg != null
+                            ? (tg >= 75 ? AppTheme.catGreen : AppTheme.catRed)
+                            : cellText,
+                        borderColor,
+                        isBold: true,
+                        fontSize: 13,
+                      ),
+                    ],
             ),
           );
-        }
-        // PS
-        final ps = _percentageScore(s.id, category, count);
-        cells.add(
-          _computedCell(
-            computedW,
-            ps > 0 ? ps.toStringAsFixed(0) : '',
-            rowBg,
-            accent,
-            borderColor,
-            isBold: true,
-          ),
-        );
-        // WS
-        double weight = category == 'ww'
-            ? wwWeight
-            : (category == 'pt' ? ptWeight : exWeight);
-        final ws = _weightedScore(s.id, category, count, weight);
-        cells.add(
-          _computedCell(
-            computedW,
-            ws > 0 ? ws.toStringAsFixed(1) : '',
-            rowBg,
-            accent,
-            borderColor,
-            isBold: true,
-          ),
-        );
-        return cells;
-      }
-
-      return Container(
-        height: 32,
-        decoration: BoxDecoration(
-          color: rowBg,
-          border: Border(bottom: BorderSide(color: borderColor, width: 0.5)),
-        ),
-        child: Row(
-          children: isLeft
-              ? [
-                  // Row number
-                  Container(
-                    width: numW,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      border: Border(
-                        right: BorderSide(color: borderColor, width: 0.5),
-                      ),
-                    ),
-                    child: Text(
-                      '${idx + 1}',
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        color: cellText.withValues(alpha: 0.5),
-                      ),
-                    ),
-                  ),
-                  // Name
-                  Container(
-                    width: nameW,
-                    alignment: Alignment.centerLeft,
-                    padding: const EdgeInsets.only(left: 8),
-                    decoration: BoxDecoration(
-                      border: Border(
-                        right: BorderSide(color: borderColor, width: 0.5),
-                      ),
-                    ),
-                    child: Text(
-                      _displayName(s),
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: cellText,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ]
-              : [
-                  // WW scores
-                  ...buildScoreCells('ww', wwColumns, AppTheme.catBlue),
-                  // PT scores
-                  ...buildScoreCells('pt', ptColumns, AppTheme.catGreen),
-                  // EX scores
-                  ...buildScoreCells('ex', exColumns, AppTheme.catOrange),
-                  // Initial Grade
-                  _computedCell(
-                    computedW,
-                    ig > 0 ? ig.toStringAsFixed(1) : '',
-                    rowBg,
-                    cellText,
-                    borderColor,
-                    isBold: true,
-                  ),
-                  // Term Grade (Transmuted)
-                  _computedCell(
-                    computedW,
-                    ig > 0 ? tg.toStringAsFixed(0) : '',
-                    rowBg,
-                    tg >= 75
-                        ? AppTheme.catGreen
-                        : (ig > 0 ? AppTheme.catRed : cellText),
-                    borderColor,
-                    isBold: true,
-                    fontSize: 13,
-                  ),
-                ],
-        ),
+        },
       );
     });
   }
 
-  Widget _emptyGridCell(
-    double width,
-    Color bg,
-    Color border,
-    Color text,
-  ) {
+  Widget _emptyGridCell(double width, Color bg, Color border, Color text) {
     return Container(
       width: width,
       height: 32,
@@ -1550,10 +2254,7 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
       alignment: Alignment.center,
       child: Text(
         '-',
-        style: TextStyle(
-          fontSize: 11,
-          color: text.withValues(alpha: 0.2),
-        ),
+        style: TextStyle(fontSize: 11, color: text.withValues(alpha: 0.2)),
       ),
     );
   }
@@ -1568,36 +2269,29 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
     Color border,
   ) {
     final val = _getScore(studentId, category, col);
-    return Container(
+    final hps = _getHps(category, col);
+    final invalidValue = val != null && (hps == null || val > hps);
+    final enabled = _isSelectedTermActive && hps != null && hps > 0;
+    return GradebookGridCell(
+      key: ValueKey('score-$_selectedTerm-$studentId-$category-$col'),
+      value: val?.toStringAsFixed(0) ?? '',
+      onChanged: (value) => _setScore(
+        studentId,
+        category,
+        col,
+        value.isEmpty ? null : double.parse(value),
+      ),
+      isHpsCell: false,
+      columnHps: hps,
+      isEnabled: enabled,
+      isInvalidValue: invalidValue,
       width: width,
-      height: 32,
-      decoration: BoxDecoration(
-        color: bg,
-        border: Border(right: BorderSide(color: border, width: 0.5)),
-      ),
-      child: Center(
-        child: SizedBox(
-          width: width - 8,
-          child: TextField(
-            controller: TextEditingController(
-              text: val > 0 ? val.toStringAsFixed(0) : '',
-            ),
-            onChanged: (v) {
-              final parsed = double.tryParse(v) ?? 0;
-              _setScore(studentId, category, col, parsed);
-            },
-            textAlign: TextAlign.center,
-            keyboardType: TextInputType.number,
-            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-            style: TextStyle(fontSize: 11, color: text),
-            decoration: const InputDecoration(
-              border: InputBorder.none,
-              isDense: true,
-              contentPadding: EdgeInsets.symmetric(vertical: 4),
-            ),
-          ),
-        ),
-      ),
+      backgroundColor: bg,
+      borderColor: border,
+      textColor: val == 0 ? AppTheme.catRed : text,
+      disabledTooltip: _isSelectedTermActive
+          ? 'Set Highest Possible Score (HPS) for this column first.'
+          : 'This term is not active for the selected subject.',
     );
   }
 
@@ -1661,7 +2355,7 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
             return Padding(
               padding: const EdgeInsets.only(right: 4),
               child: InkWell(
-                onTap: () => setState(() => _selectedTerm = i < 3 ? i + 1 : 0),
+                onTap: () => unawaited(_changeTerm(i < 3 ? i + 1 : 0)),
                 borderRadius: BorderRadius.circular(6),
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 200),

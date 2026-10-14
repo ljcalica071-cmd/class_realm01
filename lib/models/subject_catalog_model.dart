@@ -11,7 +11,13 @@ class SubjectCatalogItem {
   final double wwWeight; // Written Works %
   final double ptWeight; // Performance Tasks %
   final double exWeight; // Quarterly Exam %
-  final int termsTaught; // default 3
+  final int termsTaught;
+  final String defaultTermBlock;
+  final double unitsPerTerm;
+  final double unitsPerYear;
+  final double st1Weight;
+  final double st2Weight;
+  final double teWeight;
 
   const SubjectCatalogItem({
     required this.id,
@@ -23,7 +29,35 @@ class SubjectCatalogItem {
     required this.ptWeight,
     required this.exWeight,
     this.termsTaught = 3,
-  });
+    String? defaultTermBlock,
+    double? unitsPerTerm,
+    double? unitsPerYear,
+    this.st1Weight = 30,
+    this.st2Weight = 30,
+    this.teWeight = 40,
+  }) : defaultTermBlock =
+           defaultTermBlock ??
+           (termsTaught == 3
+               ? '1ST, 2ND, 3RD'
+               : termsTaught == 1
+               ? 'FIRST TERM'
+               : '1ST & 2ND'),
+       unitsPerTerm =
+           unitsPerTerm ??
+           (category == 'SSHS - ACADEMIC'
+               ? 3
+               : category == 'SSHS - TECH-PRO'
+               ? 4
+               : 2),
+       unitsPerYear =
+           unitsPerYear ??
+           (unitsPerTerm ??
+                   (category == 'SSHS - ACADEMIC'
+                       ? 3
+                       : category == 'SSHS - TECH-PRO'
+                       ? 4
+                       : 2)) *
+               termsTaught;
 }
 
 class DepEdSubjectCatalog {
@@ -45,6 +79,48 @@ class DepEdSubjectCatalog {
     catImmersion,
     catCustom,
   ];
+
+  static List<int> getActiveTermsForBlock(int termsTaught, String termBlock) {
+    if (termsTaught < 1 || termsTaught > 3) {
+      throw ArgumentError.value(
+        termsTaught,
+        'termsTaught',
+        'Must be 1, 2, or 3.',
+      );
+    }
+    if (termsTaught == 3) return const [1, 2, 3];
+
+    final block = termBlock.trim().toUpperCase();
+    if (termsTaught == 1) {
+      switch (block) {
+        case 'FIRST TERM':
+        case '1ST':
+          return const [1];
+        case 'SECOND TERM':
+        case '2ND':
+          return const [2];
+        case 'THIRD TERM':
+        case '3RD':
+          return const [3];
+      }
+    } else {
+      switch (block) {
+        case 'FIRST TERM':
+        case '1ST & 2ND':
+          return const [1, 2];
+        case 'SECOND TERM':
+        case '2ND & 3RD':
+          return const [2, 3];
+      }
+    }
+    throw ArgumentError.value(
+      termBlock,
+      'termBlock',
+      termsTaught == 2
+          ? 'Two-term subjects may start in Term 1 or Term 2 only.'
+          : 'Term block is not valid for a one-term subject.',
+    );
+  }
 
   /// Master list of subjects extracted from TEMPLATE-SSHS-E-Class-Record-SY-2026-2027.xlsx
   static const List<SubjectCatalogItem> allSubjects = [
@@ -130,6 +206,7 @@ class DepEdSubjectCatalog {
       wwWeight: 20,
       ptWeight: 50,
       exWeight: 30,
+      termsTaught: 1,
     ),
     SubjectCatalogItem(
       id: 'acad_fabm1',
@@ -140,6 +217,7 @@ class DepEdSubjectCatalog {
       wwWeight: 20,
       ptWeight: 50,
       exWeight: 30,
+      termsTaught: 1,
     ),
     SubjectCatalogItem(
       id: 'acad_appmacro',
@@ -150,6 +228,7 @@ class DepEdSubjectCatalog {
       wwWeight: 20,
       ptWeight: 50,
       exWeight: 30,
+      termsTaught: 1,
     ),
 
     // --- SSHS - ACADEMIC: STEM (20% WW - 50% PT - 30% EX) ---
@@ -162,6 +241,7 @@ class DepEdSubjectCatalog {
       wwWeight: 20,
       ptWeight: 50,
       exWeight: 30,
+      termsTaught: 1,
     ),
     SubjectCatalogItem(
       id: 'acad_bascalc',
@@ -172,6 +252,7 @@ class DepEdSubjectCatalog {
       wwWeight: 20,
       ptWeight: 50,
       exWeight: 30,
+      termsTaught: 1,
     ),
     SubjectCatalogItem(
       id: 'acad_genphys1',
@@ -182,6 +263,7 @@ class DepEdSubjectCatalog {
       wwWeight: 20,
       ptWeight: 50,
       exWeight: 30,
+      termsTaught: 1,
     ),
 
     // --- SSHS - ACADEMIC: HUMSS (20% WW - 50% PT - 30% EX) ---
@@ -194,6 +276,7 @@ class DepEdSubjectCatalog {
       wwWeight: 20,
       ptWeight: 50,
       exWeight: 30,
+      termsTaught: 1,
     ),
     SubjectCatalogItem(
       id: 'acad_polgov',
@@ -204,6 +287,7 @@ class DepEdSubjectCatalog {
       wwWeight: 20,
       ptWeight: 50,
       exWeight: 30,
+      termsTaught: 1,
     ),
 
     // --- SSHS - TECH-PRO: ICT (15% WW - 65% PT - 20% EX) ---
@@ -258,6 +342,7 @@ class DepEdSubjectCatalog {
       wwWeight: 20,
       ptWeight: 60,
       exWeight: 20,
+      termsTaught: 1,
     ),
     SubjectCatalogItem(
       id: 'sports_science',
@@ -268,6 +353,7 @@ class DepEdSubjectCatalog {
       wwWeight: 20,
       ptWeight: 60,
       exWeight: 20,
+      termsTaught: 1,
     ),
 
     // --- SSHS - RESEARCH (15% WW - 70% PT - 15% EX) ---
@@ -280,6 +366,7 @@ class DepEdSubjectCatalog {
       wwWeight: 15,
       ptWeight: 70,
       exWeight: 15,
+      termsTaught: 1,
     ),
     SubjectCatalogItem(
       id: 'res_prac1',
@@ -290,6 +377,7 @@ class DepEdSubjectCatalog {
       wwWeight: 15,
       ptWeight: 70,
       exWeight: 15,
+      termsTaught: 1,
     ),
 
     // --- SSHS - WORK IMMERSION (40% WW - 60% PT - 0% EX) ---
@@ -302,6 +390,7 @@ class DepEdSubjectCatalog {
       wwWeight: 40,
       ptWeight: 60,
       exWeight: 0,
+      termsTaught: 1,
     ),
   ];
 

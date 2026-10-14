@@ -5,6 +5,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/data/repositories/subject_repository.dart';
 import 'package:class_realm/features/teacher/sub_features/class_management/widgets/unified_enroll_student_dialog.dart';
+import 'package:class_realm/models/subject_catalog_model.dart';
 import 'package:class_realm/shared/widgets/shared_widgets.dart';
 import 'package:loading_animation_widget/loading_animation_widget.dart';
 
@@ -14,7 +15,27 @@ class SubjectTemplate {
   final int ww;
   final int pt;
   final int ex;
-  const SubjectTemplate(this.name, this.ww, this.pt, this.ex);
+  final int termsTaught;
+  final String termBlock;
+  final double unitsPerTerm;
+  final double st1Weight;
+  final double st2Weight;
+  final double teWeight;
+  final String? gradeLevel;
+
+  const SubjectTemplate(
+    this.name,
+    this.ww,
+    this.pt,
+    this.ex, {
+    this.termsTaught = 3,
+    this.termBlock = '1ST, 2ND, 3RD',
+    this.unitsPerTerm = 2,
+    this.st1Weight = 30,
+    this.st2Weight = 30,
+    this.teWeight = 40,
+    this.gradeLevel,
+  });
 }
 
 const List<SubjectTemplate> _defaultTemplates = [
@@ -32,10 +53,7 @@ class _ClassSection {
   final String name;
   int studentCount;
 
-  _ClassSection({
-    required this.id,
-    required this.name,
-  }) : studentCount = 0;
+  _ClassSection({required this.id, required this.name}) : studentCount = 0;
 }
 
 /// A subject the teacher teaches, with grading config and sections.
@@ -92,7 +110,7 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
   static const int _maxSections = 10;
   static const int _maxSubjects = 10;
   static const List<String> _gradeLevels = ['Grade 11', 'Grade 12'];
-  
+
   // Inherited from dashboard context
   final String _currentSchoolYear = '2026-2027';
 
@@ -107,7 +125,13 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
   final _subjectCtrl = TextEditingController();
   final _subjectFocus = FocusNode();
   String _gradeLevel = _gradeLevels.first;
-  
+  int _termsTaught = 3;
+  String _termBlock = '1ST, 2ND, 3RD';
+  double _unitsPerTerm = 2;
+  double _st1Weight = 30;
+  double _st2Weight = 30;
+  double _teWeight = 40;
+
   // Grading Weights
   final _wwCtrl = TextEditingController();
   final _ptCtrl = TextEditingController();
@@ -131,9 +155,9 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
   void initState() {
     super.initState();
     _sectionRows.add(_SectionRowDraft(_newId('row')));
-    
+
     _loadSubjects();
-    
+
     // Listen to weight changes to trigger rebuilds for the total sum text
     _wwCtrl.addListener(() => setState(() {}));
     _ptCtrl.addListener(() => setState(() {}));
@@ -159,8 +183,34 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
     final ex = int.tryParse(_exCtrl.text) ?? 0;
     return ww + pt + ex;
   }
-  
+
   bool get _isWeightValid => _currentWeightTotal == 100;
+
+  List<SubjectTemplate> get _availableTemplates {
+    final existingNames = _defaultTemplates
+        .map((template) => template.name.toLowerCase())
+        .toSet();
+    return [
+      ..._defaultTemplates,
+      for (final subject in DepEdSubjectCatalog.allSubjects)
+        if (!existingNames.contains(subject.name.toLowerCase()))
+          SubjectTemplate(
+            subject.name,
+            subject.wwWeight.toInt(),
+            subject.ptWeight.toInt(),
+            subject.exWeight.toInt(),
+            termsTaught: subject.termsTaught,
+            termBlock: subject.defaultTermBlock,
+            unitsPerTerm: subject.unitsPerTerm,
+            st1Weight: subject.st1Weight,
+            st2Weight: subject.st2Weight,
+            teWeight: subject.teWeight,
+            gradeLevel: subject.gradeLevel == 'Both'
+                ? null
+                : subject.gradeLevel,
+          ),
+    ];
+  }
 
   // ─────────────────────────────────────────────────────────────────────────
   // Custom Constrained Dialog Helper (Prevents overly wide stretched dialogs)
@@ -179,12 +229,14 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
           child: Dialog(
             backgroundColor: theme.colorScheme.surface,
             elevation: 8,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: child,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
             ),
+            insetPadding: const EdgeInsets.symmetric(
+              horizontal: 20,
+              vertical: 24,
+            ),
+            child: Padding(padding: const EdgeInsets.all(24), child: child),
           ),
         ),
       ),
@@ -213,7 +265,9 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(16),
               side: BorderSide(
-                color: theme.colorScheme.outline.withValues(alpha: isDark ? 0.2 : 0.4),
+                color: theme.colorScheme.outline.withValues(
+                  alpha: isDark ? 0.2 : 0.4,
+                ),
               ),
             ),
             child: Padding(
@@ -227,7 +281,9 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: theme.colorScheme.primary.withValues(alpha: 0.12),
+                          color: theme.colorScheme.primary.withValues(
+                            alpha: 0.12,
+                          ),
                           borderRadius: BorderRadius.circular(14),
                         ),
                         child: Icon(
@@ -253,7 +309,9 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
                             'SY $_currentSchoolYear · Trimester Curriculum',
                             style: TextStyle(
                               fontSize: 12,
-                              color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                              color: theme.colorScheme.onSurface.withValues(
+                                alpha: 0.6,
+                              ),
                             ),
                           ),
                         ],
@@ -270,14 +328,21 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
                       // View Archived / Active Toggle Button
                       OutlinedButton.icon(
                         style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 11,
+                          ),
                           side: BorderSide(
                             color: _isViewingArchived
                                 ? theme.colorScheme.primary
-                                : theme.colorScheme.outline.withValues(alpha: 0.35),
+                                : theme.colorScheme.outline.withValues(
+                                    alpha: 0.35,
+                                  ),
                           ),
                           backgroundColor: _isViewingArchived
-                              ? theme.colorScheme.primary.withValues(alpha: 0.08)
+                              ? theme.colorScheme.primary.withValues(
+                                  alpha: 0.08,
+                                )
                               : Colors.transparent,
                         ),
                         onPressed: () {
@@ -287,11 +352,15 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
                           });
                         },
                         icon: Icon(
-                          _isViewingArchived ? LucideIcons.layers : LucideIcons.archive,
+                          _isViewingArchived
+                              ? LucideIcons.layers
+                              : LucideIcons.archive,
                           size: 16,
                           color: _isViewingArchived
                               ? theme.colorScheme.primary
-                              : theme.colorScheme.onSurface.withValues(alpha: 0.8),
+                              : theme.colorScheme.onSurface.withValues(
+                                  alpha: 0.8,
+                                ),
                         ),
                         label: Text(
                           _isViewingArchived
@@ -302,7 +371,9 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
                             fontWeight: FontWeight.w600,
                             color: _isViewingArchived
                                 ? theme.colorScheme.primary
-                                : theme.colorScheme.onSurface.withValues(alpha: 0.85),
+                                : theme.colorScheme.onSurface.withValues(
+                                    alpha: 0.85,
+                                  ),
                           ),
                         ),
                       ),
@@ -333,10 +404,7 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
 
                   return Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      headerLeft,
-                      headerActions,
-                    ],
+                    children: [headerLeft, headerActions],
                   );
                 },
               ),
@@ -393,8 +461,8 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
                   ),
                 )
               : _isViewingArchived
-                  ? _buildArchivedView()
-                  : _buildActiveView(),
+              ? _buildArchivedView()
+              : _buildActiveView(),
         ],
       ),
     );
@@ -443,13 +511,20 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
                   color: Colors.amber.withValues(alpha: 0.15),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(LucideIcons.alertTriangle, color: Colors.amber, size: 20),
+                child: const Icon(
+                  LucideIcons.alertTriangle,
+                  color: Colors.amber,
+                  size: 20,
+                ),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
                   title,
-                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
             ],
@@ -460,7 +535,8 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
             style: TextStyle(
               fontSize: 13,
               height: 1.4,
-              color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.8),
+              color: Theme.of(context).colorScheme.onSurface
+                  .withValues(alpha: 0.8),
             ),
           ),
           const SizedBox(height: 20),
@@ -498,7 +574,10 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
           ),
           itemCount: _subjects.length,
           itemBuilder: (context, index) {
-            return _buildResponsiveSubjectCard(_subjects[index], isArchived: false);
+            return _buildResponsiveSubjectCard(
+              _subjects[index],
+              isArchived: false,
+            );
           },
         );
       },
@@ -520,10 +599,14 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
         decoration: BoxDecoration(
           color: isDark
               ? theme.colorScheme.surface
-              : theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+              : theme.colorScheme.surfaceContainerHighest.withValues(
+                  alpha: 0.3,
+                ),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: theme.colorScheme.outline.withValues(alpha: isDark ? 0.2 : 0.3),
+            color: theme.colorScheme.outline.withValues(
+              alpha: isDark ? 0.2 : 0.3,
+            ),
           ),
         ),
         child: Column(
@@ -579,7 +662,10 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
           ),
           itemCount: _archivedSubjects.length,
           itemBuilder: (context, index) {
-            return _buildResponsiveSubjectCard(_archivedSubjects[index], isArchived: true);
+            return _buildResponsiveSubjectCard(
+              _archivedSubjects[index],
+              isArchived: true,
+            );
           },
         );
       },
@@ -589,7 +675,10 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
   // ─────────────────────────────────────────────────────────────────────────
   // Responsive Redesigned Subject Card
   // ─────────────────────────────────────────────────────────────────────────
-  Widget _buildResponsiveSubjectCard(_SubjectClass subject, {required bool isArchived}) {
+  Widget _buildResponsiveSubjectCard(
+    _SubjectClass subject, {
+    required bool isArchived,
+  }) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final muted = theme.colorScheme.onSurface.withValues(alpha: 0.6);
@@ -602,8 +691,10 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
       decoration: BoxDecoration(
         color: isArchived
             ? (isDark
-                ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.2)
-                : const Color(0xFFF8F9FA))
+                  ? theme.colorScheme.surfaceContainerHighest.withValues(
+                      alpha: 0.2,
+                    )
+                  : const Color(0xFFF8F9FA))
             : (isDark ? theme.colorScheme.surface : Colors.white),
         borderRadius: BorderRadius.circular(18),
         border: Border.all(
@@ -616,7 +707,9 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
             ? []
             : [
                 BoxShadow(
-                  color: cardAccentColor.withValues(alpha: isDark ? 0.12 : 0.05),
+                  color: cardAccentColor.withValues(
+                    alpha: isDark ? 0.12 : 0.05,
+                  ),
                   blurRadius: 12,
                   offset: const Offset(0, 4),
                 ),
@@ -670,7 +763,11 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
                   children: [
                     Row(
                       children: [
-                        _buildBadge(subject.gradeLevel, isPrimary: true, compact: true),
+                        _buildBadge(
+                          subject.gradeLevel,
+                          isPrimary: true,
+                          compact: true,
+                        ),
                         if (isArchived) ...[
                           const SizedBox(width: 6),
                           _buildBadge('Archived', subtle: true, compact: true),
@@ -696,13 +793,21 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
                 IconButton(
                   tooltip: 'Restore to Active',
                   visualDensity: VisualDensity.compact,
-                  icon: Icon(LucideIcons.rotateCcw, size: 17, color: theme.colorScheme.primary),
+                  icon: Icon(
+                    LucideIcons.rotateCcw,
+                    size: 17,
+                    color: theme.colorScheme.primary,
+                  ),
                   onPressed: () => _restoreSubject(subject),
                 ),
                 IconButton(
                   tooltip: 'Permanently Delete',
                   visualDensity: VisualDensity.compact,
-                  icon: Icon(LucideIcons.trash2, size: 17, color: theme.colorScheme.error),
+                  icon: Icon(
+                    LucideIcons.trash2,
+                    size: 17,
+                    color: theme.colorScheme.error,
+                  ),
                   onPressed: () => _confirmPermanentDelete(subject),
                 ),
               ] else ...[
@@ -725,14 +830,22 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
               const SizedBox(width: 4),
               Text(
                 '$sectionCount ${sectionCount == 1 ? 'section' : 'sections'}',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: muted),
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: muted,
+                ),
               ),
               const SizedBox(width: 12),
               Icon(LucideIcons.users, size: 13, color: muted),
               const SizedBox(width: 4),
               Text(
                 '${subject.studentCount} enrolled students',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: muted),
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: muted,
+                ),
               ),
             ],
           ),
@@ -744,14 +857,29 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
             spacing: 6,
             runSpacing: 4,
             children: [
-              _buildBadge('WW ${subject.wwWeight}%', subtle: true, compact: true),
-              _buildBadge('PT ${subject.ptWeight}%', subtle: true, compact: true),
-              _buildBadge('EX ${subject.exWeight}%', subtle: true, compact: true),
+              _buildBadge(
+                'WW ${subject.wwWeight}%',
+                subtle: true,
+                compact: true,
+              ),
+              _buildBadge(
+                'PT ${subject.ptWeight}%',
+                subtle: true,
+                compact: true,
+              ),
+              _buildBadge(
+                'EX ${subject.exWeight}%',
+                subtle: true,
+                compact: true,
+              ),
             ],
           ),
 
           const SizedBox(height: 10),
-          Divider(height: 1, color: theme.colorScheme.outline.withValues(alpha: 0.18)),
+          Divider(
+            height: 1,
+            color: theme.colorScheme.outline.withValues(alpha: 0.18),
+          ),
           const SizedBox(height: 8),
 
           // ── Sections Area (Scrollable if many sections) ──
@@ -759,18 +887,27 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
             child: ListView.separated(
               padding: EdgeInsets.zero,
               itemCount: subject.sections.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 5),
+              separatorBuilder: (_, _) => const SizedBox(height: 5),
               itemBuilder: (context, idx) {
                 final sec = subject.sections[idx];
                 return Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     color: isDark
-                        ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.22)
-                        : theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
+                        ? theme.colorScheme.surfaceContainerHighest.withValues(
+                            alpha: 0.22,
+                          )
+                        : theme.colorScheme.surfaceContainerHighest.withValues(
+                            alpha: 0.4,
+                          ),
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(
-                      color: theme.colorScheme.outline.withValues(alpha: isDark ? 0.15 : 0.2),
+                      color: theme.colorScheme.outline.withValues(
+                        alpha: isDark ? 0.15 : 0.2,
+                      ),
                     ),
                   ),
                   child: Row(
@@ -781,7 +918,11 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
                           color: cardAccentColor.withValues(alpha: 0.12),
                           borderRadius: BorderRadius.circular(6),
                         ),
-                        child: Icon(LucideIcons.users, size: 12, color: cardAccentColor),
+                        child: Icon(
+                          LucideIcons.users,
+                          size: 12,
+                          color: cardAccentColor,
+                        ),
                       ),
                       const SizedBox(width: 8),
                       Expanded(
@@ -828,7 +969,10 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
           ),
 
           const SizedBox(height: 8),
-          Divider(height: 1, color: theme.colorScheme.outline.withValues(alpha: 0.18)),
+          Divider(
+            height: 1,
+            color: theme.colorScheme.outline.withValues(alpha: 0.18),
+          ),
           const SizedBox(height: 10),
 
           // ── Footer Action Buttons ──
@@ -840,7 +984,9 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
                     icon: LucideIcons.userPlus,
                     label: 'Add Students',
                     onPressed: () {
-                      final firstSec = subject.sections.isNotEmpty ? subject.sections.first : null;
+                      final firstSec = subject.sections.isNotEmpty
+                          ? subject.sections.first
+                          : null;
                       _openEnrollmentDialog(
                         initialSubjectId: firstSec?.id,
                         initialSectionName: firstSec?.name,
@@ -866,14 +1012,21 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
                       side: BorderSide(color: theme.colorScheme.primary),
                     ),
                     icon: const Icon(LucideIcons.rotateCcw, size: 14),
-                    label: const Text('Restore Subject', style: TextStyle(fontSize: 12)),
+                    label: const Text(
+                      'Restore Subject',
+                      style: TextStyle(fontSize: 12),
+                    ),
                     onPressed: () => _restoreSubject(subject),
                   ),
                 ),
                 const SizedBox(width: 8),
                 IconButton(
                   tooltip: 'Permanently Delete',
-                  icon: Icon(LucideIcons.trash2, size: 16, color: theme.colorScheme.error),
+                  icon: Icon(
+                    LucideIcons.trash2,
+                    size: 16,
+                    color: theme.colorScheme.error,
+                  ),
                   onPressed: () => _confirmPermanentDelete(subject),
                 ),
               ],
@@ -886,14 +1039,18 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
   Color _getSubjectAccentColor(String name) {
     final lower = name.toLowerCase();
     if (lower.contains('math')) return const Color(0xFF2563EB); // Royal Blue
-    if (lower.contains('science')) return const Color(0xFF059669); // Emerald Green
+    if (lower.contains('science')) {
+      return const Color(0xFF059669); // Emerald Green
+    }
     if (lower.contains('comm') || lower.contains('komunikasyon')) {
       return const Color(0xFF7C3AED); // Purple
     }
     if (lower.contains('career') || lower.contains('life')) {
       return const Color(0xFFD97706); // Amber
     }
-    if (lower.contains('kasaysayan') || lower.contains('history') || lower.contains('lipunan')) {
+    if (lower.contains('kasaysayan') ||
+        lower.contains('history') ||
+        lower.contains('lipunan')) {
       return const Color(0xFFDC2626); // Crimson
     }
     return const Color(0xFF0D9488); // Teal Default
@@ -909,13 +1066,18 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
     if (lower.contains('career') || lower.contains('life')) {
       return LucideIcons.briefcase;
     }
-    if (lower.contains('kasaysayan') || lower.contains('history') || lower.contains('lipunan')) {
+    if (lower.contains('kasaysayan') ||
+        lower.contains('history') ||
+        lower.contains('lipunan')) {
       return LucideIcons.landmark;
     }
     return LucideIcons.bookOpen;
   }
 
-  void _openEnrollmentDialog({String? initialSubjectId, String? initialSectionName}) async {
+  void _openEnrollmentDialog({
+    String? initialSubjectId,
+    String? initialSectionName,
+  }) async {
     final teacherId = AuthRepository.instance.currentUser?.id;
     if (teacherId == null) return;
 
@@ -937,7 +1099,12 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
     }
   }
 
-  Widget _buildBadge(String label, {bool isPrimary = false, bool subtle = false, bool compact = false}) {
+  Widget _buildBadge(
+    String label, {
+    bool isPrimary = false,
+    bool subtle = false,
+    bool compact = false,
+  }) {
     final theme = Theme.of(context);
     final primary = theme.colorScheme.primary;
     return Container(
@@ -949,8 +1116,8 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
         color: isPrimary
             ? primary.withValues(alpha: 0.12)
             : (subtle
-                ? theme.colorScheme.onSurface.withValues(alpha: 0.06)
-                : primary.withValues(alpha: 0.08)),
+                  ? theme.colorScheme.onSurface.withValues(alpha: 0.06)
+                  : primary.withValues(alpha: 0.08)),
         borderRadius: BorderRadius.circular(6),
       ),
       child: Text(
@@ -958,7 +1125,9 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
         style: TextStyle(
           fontSize: compact ? 10 : 11,
           fontWeight: FontWeight.w600,
-          color: isPrimary ? primary : theme.colorScheme.onSurface.withValues(alpha: 0.85),
+          color: isPrimary
+              ? primary
+              : theme.colorScheme.onSurface.withValues(alpha: 0.85),
         ),
       ),
     );
@@ -980,7 +1149,9 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           decoration: BoxDecoration(
-            border: Border.all(color: theme.colorScheme.outline.withValues(alpha: 0.4)),
+            border: Border.all(
+              color: theme.colorScheme.outline.withValues(alpha: 0.4),
+            ),
             borderRadius: BorderRadius.circular(12),
           ),
           child: Row(
@@ -1008,10 +1179,16 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
         controller: _subjectCtrl,
         focusNode: _subjectFocus,
         maxLength: 60,
-        buildCounter: (_, {required currentLength, required isFocused, required maxLength}) => null,
+        buildCounter: (
+          _, {
+          required currentLength,
+          required isFocused,
+          required maxLength,
+        }) => null,
         textInputAction: TextInputAction.next,
         onChanged: (_) {
-          if (_selectedTemplate != null && _selectedTemplate!.name != _subjectCtrl.text) {
+          if (_selectedTemplate != null &&
+              _selectedTemplate!.name != _subjectCtrl.text) {
             setState(() => _selectedTemplate = null);
           }
           _revalidateIfSubmitted();
@@ -1028,7 +1205,9 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
       field: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12),
         decoration: BoxDecoration(
-          border: Border.all(color: theme.colorScheme.outline.withValues(alpha: 0.4)),
+          border: Border.all(
+            color: theme.colorScheme.outline.withValues(alpha: 0.4),
+          ),
           borderRadius: BorderRadius.circular(12),
         ),
         child: DropdownButtonHideUnderline(
@@ -1036,13 +1215,117 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
             value: _gradeLevel,
             isExpanded: true,
             items: _gradeLevels
-                .map((g) => DropdownMenuItem(value: g, child: Text(g, style: const TextStyle(fontSize: 13))))
+                .map(
+                  (g) => DropdownMenuItem(
+                    value: g,
+                    child: Text(g, style: const TextStyle(fontSize: 13)),
+                  ),
+                )
                 .toList(),
             onChanged: (val) {
               if (val != null) setState(() => _gradeLevel = val);
             },
           ),
         ),
+      ),
+    );
+
+    final termsTaughtField = _buildLabeledField(
+      label: 'No. of Terms Taught',
+      field: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        decoration: BoxDecoration(
+          border: Border.all(
+            color: theme.colorScheme.outline.withValues(alpha: 0.4),
+          ),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: DropdownButtonHideUnderline(
+          child: DropdownButton<int>(
+            value: _termsTaught,
+            isExpanded: true,
+            items: const [
+              DropdownMenuItem(
+                value: 3,
+                child: Text('3 Terms (Full Year / Trimester)'),
+              ),
+              DropdownMenuItem(value: 1, child: Text('1 Term Only')),
+              DropdownMenuItem(value: 2, child: Text('2 Terms')),
+            ],
+            onChanged: (value) {
+              if (value == null) return;
+              setState(() {
+                _termsTaught = value;
+                _termBlock = value == 3
+                    ? '1ST, 2ND, 3RD'
+                    : value == 1
+                    ? 'FIRST TERM'
+                    : '1ST & 2ND';
+              });
+            },
+          ),
+        ),
+      ),
+    );
+
+    final termBlockOptions = switch (_termsTaught) {
+      1 => const [
+        ('FIRST TERM', 'FIRST TERM'),
+        ('SECOND TERM', 'SECOND TERM'),
+        ('THIRD TERM', 'THIRD TERM'),
+      ],
+      2 => const [
+        ('1ST & 2ND', '1ST & 2ND (Starts Term 1)'),
+        ('2ND & 3RD', '2ND & 3RD (Starts Term 2)'),
+      ],
+      _ => const [('1ST, 2ND, 3RD', '1ST, 2ND, 3RD')],
+    };
+
+    final termBlockNote = switch (_termsTaught) {
+      1 => 'Note: Accomplish only ONE (1) term sheet. Select the applicable TERM BLOCK.',
+      2 => 'Notes: Accomplish TWO (2) term sheets. 2-term electives cannot begin in Term 3.',
+      _ => 'Note: Accomplish all Term sheets.',
+    };
+
+    final termBlockField = _buildLabeledField(
+      label: 'Term Block (Active Term)',
+      field: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            decoration: BoxDecoration(
+              border: Border.all(
+                color: theme.colorScheme.outline.withValues(alpha: 0.4),
+              ),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                value: _termBlock,
+                isExpanded: true,
+                items: termBlockOptions
+                    .map(
+                      (option) => DropdownMenuItem(
+                        value: option.$1,
+                        child: Text(
+                          option.$2,
+                          style: const TextStyle(fontSize: 13),
+                        ),
+                      ),
+                    )
+                    .toList(),
+                onChanged: _termsTaught == 3
+                    ? null
+                    : (value) {
+                        if (value != null) setState(() => _termBlock = value);
+                      },
+              ),
+            ),
+          ),
+          const SizedBox(height: 5),
+          Text(termBlockNote, style: TextStyle(fontSize: 11, color: muted)),
+        ],
       ),
     );
 
@@ -1131,11 +1414,7 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
                 color: totalTextColor,
               ),
             ),
-            Icon(
-              totalIcon,
-              size: 16,
-              color: totalTextColor,
-            ),
+            Icon(totalIcon, size: 16, color: totalTextColor),
           ],
         ),
       ),
@@ -1146,7 +1425,9 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
       decoration: BoxDecoration(
         color: Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: theme.colorScheme.outline.withValues(alpha: 0.3)),
+        border: Border.all(
+          color: theme.colorScheme.outline.withValues(alpha: 0.3),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1195,6 +1476,30 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
               );
             },
           ),
+          const SizedBox(height: 16),
+          _buildSectionHeading('SUBJECT TERM CONFIGURATION'),
+          const SizedBox(height: 12),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              if (constraints.maxWidth < 650) {
+                return Column(
+                  children: [
+                    termsTaughtField,
+                    const SizedBox(height: 12),
+                    termBlockField,
+                  ],
+                );
+              }
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(child: termsTaughtField),
+                  const SizedBox(width: 12),
+                  Expanded(child: termBlockField),
+                ],
+              );
+            },
+          ),
           const SizedBox(height: 20),
           _buildSectionHeading('GRADING WEIGHTS'),
           const SizedBox(height: 4),
@@ -1233,7 +1538,10 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
             },
           ),
           const SizedBox(height: 20),
-          Divider(height: 1, color: theme.colorScheme.outline.withValues(alpha: 0.2)),
+          Divider(
+            height: 1,
+            color: theme.colorScheme.outline.withValues(alpha: 0.2),
+          ),
           const SizedBox(height: 16),
           _buildSectionHeading('SECTIONS'),
           const SizedBox(height: 4),
@@ -1261,15 +1569,15 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
                   label: 'Cancel',
                   onPressed: () => _resetForm(close: true),
                 ),
-                _isSaving 
-                  ? LoadingAnimationWidget.staggeredDotsWave(
-                      color: Theme.of(context).colorScheme.primary,
-                      size: 28,
-                    )
-                  : AppButton.primary(
-                      label: 'Save Subject',
-                      onPressed: isTotalValid ? _saveSubject : null,
-                    ),
+                _isSaving
+                    ? LoadingAnimationWidget.staggeredDotsWave(
+                        color: Theme.of(context).colorScheme.primary,
+                        size: 28,
+                      )
+                    : AppButton.primary(
+                        label: 'Save Subject',
+                        onPressed: isTotalValid ? _saveSubject : null,
+                      ),
               ],
             ),
           ),
@@ -1304,7 +1612,12 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
         controller: row.nameCtrl,
         focusNode: row.focusNode,
         maxLength: 30,
-        buildCounter: (_, {required currentLength, required isFocused, required maxLength}) => null,
+        buildCounter: (
+          _, {
+          required currentLength,
+          required isFocused,
+          required maxLength,
+        }) => null,
         onChanged: (_) => _revalidateIfSubmitted(),
         inputFormatters: [
           FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z0-9- ]')),
@@ -1342,7 +1655,9 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
     final removeButton = Padding(
       padding: const EdgeInsets.only(top: labelOffset + 4),
       child: IconButton(
-        tooltip: canRemove ? 'Remove section' : 'At least one section is required',
+        tooltip: canRemove
+            ? 'Remove section'
+            : 'At least one section is required',
         onPressed: canRemove ? () => _removeSectionRow(row) : null,
         icon: const Icon(LucideIcons.trash2, size: 18),
       ),
@@ -1367,8 +1682,7 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
     if (_sectionRows.length >= _maxSections) {
       _showLimitErrorDialog(
         title: 'Section Limit Reached',
-        message:
-            'You have reached the maximum allowed limit of sections for this subject.',
+        message: 'You have reached the maximum allowed limit of sections for this subject.',
       );
       return;
     }
@@ -1451,10 +1765,11 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
         teacherId,
         schoolYear: _currentSchoolYear,
       );
-      final archivedRows = await SubjectRepository.instance.getTeacherArchivedSubjects(
-        teacherId,
-        schoolYear: _currentSchoolYear,
-      );
+      final archivedRows = await SubjectRepository.instance
+          .getTeacherArchivedSubjects(
+            teacherId,
+            schoolYear: _currentSchoolYear,
+          );
 
       Map<String, _SubjectClass> parseGrouped(List<Map<String, dynamic>> rows) {
         final Map<String, _SubjectClass> grouped = {};
@@ -1539,6 +1854,12 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
         exWeight: double.parse(_exCtrl.text),
         sectionNames: _sectionRows.map((r) => r.nameCtrl.text.trim()).toList(),
         schoolYear: _currentSchoolYear,
+        termsTaught: _termsTaught,
+        termBlock: _termBlock,
+        unitsPerTerm: _unitsPerTerm,
+        st1Weight: _st1Weight,
+        st2Weight: _st2Weight,
+        teWeight: _teWeight,
       );
 
       await _loadSubjects();
@@ -1546,15 +1867,17 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
       if (mounted) {
         _resetForm(close: true);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Subject and sections saved successfully!')),
+          const SnackBar(
+            content: Text('Subject and sections saved successfully!'),
+          ),
         );
       }
     } catch (e) {
       debugPrint('Error saving subject: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to save subject: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to save subject: $e')));
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -1572,6 +1895,12 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
       _ptCtrl.clear();
       _exCtrl.clear();
       _gradeLevel = _gradeLevels.first;
+      _termsTaught = 3;
+      _termBlock = '1ST, 2ND, 3RD';
+      _unitsPerTerm = 2;
+      _st1Weight = 30;
+      _st2Weight = 30;
+      _teWeight = 40;
       _sectionRows
         ..clear()
         ..add(_SectionRowDraft(_newId('row')));
@@ -1646,10 +1975,15 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.12),
+                  color: Theme.of(context).colorScheme.primary
+                      .withValues(alpha: 0.12),
                   shape: BoxShape.circle,
                 ),
-                child: Icon(LucideIcons.archive, size: 20, color: Theme.of(context).colorScheme.primary),
+                child: Icon(
+                  LucideIcons.archive,
+                  size: 20,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
               ),
               const SizedBox(width: 12),
               const Expanded(
@@ -1666,20 +2000,26 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
             style: TextStyle(
               fontSize: 13,
               height: 1.4,
-              color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.85),
+              color: Theme.of(context).colorScheme.onSurface
+                  .withValues(alpha: 0.85),
             ),
           ),
           const SizedBox(height: 10),
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+              color: Theme.of(context).colorScheme.surfaceContainerHighest
+                  .withValues(alpha: 0.3),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(LucideIcons.info, size: 16, color: Colors.blueAccent),
+                const Icon(
+                  LucideIcons.info,
+                  size: 16,
+                  color: Colors.blueAccent,
+                ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
@@ -1687,7 +2027,8 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
                     style: TextStyle(
                       fontSize: 12,
                       height: 1.4,
-                      color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.75),
+                      color: Theme.of(context).colorScheme.onSurface
+                          .withValues(alpha: 0.75),
                     ),
                   ),
                 ),
@@ -1720,7 +2061,11 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
                   });
                   if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('${subject.name} moved to archived subjects.')),
+                      SnackBar(
+                        content: Text(
+                          '${subject.name} moved to archived subjects.',
+                        ),
+                      ),
                     );
                   }
                 },
@@ -1761,7 +2106,9 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${subject.name} restored to active classroom.')),
+        SnackBar(
+          content: Text('${subject.name} restored to active classroom.'),
+        ),
       );
     }
   }
@@ -1782,7 +2129,8 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.error.withValues(alpha: 0.12),
+                  color: Theme.of(context).colorScheme.error
+                      .withValues(alpha: 0.12),
                   shape: BoxShape.circle,
                 ),
                 child: Icon(
@@ -1814,10 +2162,12 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.error.withValues(alpha: 0.08),
+              color: Theme.of(context).colorScheme.error
+                  .withValues(alpha: 0.08),
               borderRadius: BorderRadius.circular(10),
               border: Border.all(
-                color: Theme.of(context).colorScheme.error.withValues(alpha: 0.25),
+                color: Theme.of(context).colorScheme.error
+                    .withValues(alpha: 0.25),
               ),
             ),
             child: Column(
@@ -1825,7 +2175,11 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
               children: [
                 Row(
                   children: [
-                    Icon(LucideIcons.alertCircle, size: 15, color: Theme.of(context).colorScheme.error),
+                    Icon(
+                      LucideIcons.alertCircle,
+                      size: 15,
+                      color: Theme.of(context).colorScheme.error,
+                    ),
                     const SizedBox(width: 6),
                     Text(
                       'What will be deleted:',
@@ -1846,7 +2200,8 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
                   style: TextStyle(
                     fontSize: 12,
                     height: 1.45,
-                    color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.8),
+                    color: Theme.of(context).colorScheme.onSurface
+                        .withValues(alpha: 0.8),
                   ),
                 ),
               ],
@@ -1864,7 +2219,11 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(LucideIcons.shieldCheck, size: 16, color: Colors.green),
+                const Icon(
+                  LucideIcons.shieldCheck,
+                  size: 16,
+                  color: Colors.green,
+                ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
@@ -1873,7 +2232,8 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
                     style: TextStyle(
                       fontSize: 12,
                       height: 1.4,
-                      color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.85),
+                      color: Theme.of(context).colorScheme.onSurface
+                          .withValues(alpha: 0.85),
                     ),
                   ),
                 ),
@@ -1894,7 +2254,10 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
                   backgroundColor: Theme.of(context).colorScheme.error,
                   foregroundColor: Theme.of(context).colorScheme.onError,
                   elevation: 0,
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
                 ),
                 icon: const Icon(LucideIcons.trash2, size: 16),
                 label: const Text('Delete Permanently'),
@@ -1912,7 +2275,9 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
                   });
                   if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('${subject.name} permanently deleted.')),
+                      SnackBar(
+                        content: Text('${subject.name} permanently deleted.'),
+                      ),
                     );
                   }
                 },
@@ -1928,6 +2293,7 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
   // Template Picker Dialog (Constrained Width)
   // ─────────────────────────────────────────────────────────────────────────
   void _showTemplateModal() {
+    final templates = _availableTemplates;
     _showConstrainedDialog(
       context: context,
       maxWidth: 440,
@@ -1949,25 +2315,43 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
                 const SizedBox(height: 12),
                 Expanded(
                   child: ListView.separated(
-                    itemCount: _defaultTemplates.length + 1,
-                    separatorBuilder: (_, __) => const Divider(height: 1),
+                    itemCount: templates.length + 1,
+                    separatorBuilder: (_, _) => const Divider(height: 1),
                     itemBuilder: (context, index) {
                       if (index == 0) {
                         return ListTile(
                           contentPadding: EdgeInsets.zero,
-                          title: const Text('Custom / Manual Entry', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
-                          subtitle: const Text('Enter custom subject name and grading weights', style: TextStyle(fontSize: 11)),
+                          title: const Text(
+                            'Custom / Manual Entry',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          subtitle: const Text(
+                            'Enter custom subject name and grading weights',
+                            style: TextStyle(fontSize: 11),
+                          ),
                           onTap: () {
                             setState(() => _selectedTemplate = null);
                             Navigator.pop(context);
                           },
                         );
                       }
-                      final template = _defaultTemplates[index - 1];
+                      final template = templates[index - 1];
                       return ListTile(
                         contentPadding: EdgeInsets.zero,
-                        title: Text(template.name, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-                        subtitle: Text('WW ${template.ww}% · PT ${template.pt}% · EX ${template.ex}%', style: const TextStyle(fontSize: 11)),
+                        title: Text(
+                          template.name,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        subtitle: Text(
+                          'WW ${template.ww}% · PT ${template.pt}% · EX ${template.ex}%',
+                          style: const TextStyle(fontSize: 11),
+                        ),
                         onTap: () {
                           _applyTemplate(template);
                           Navigator.pop(context);
@@ -1998,6 +2382,13 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
       _wwCtrl.text = template.ww.toString();
       _ptCtrl.text = template.pt.toString();
       _exCtrl.text = template.ex.toString();
+      _termsTaught = template.termsTaught;
+      _termBlock = template.termBlock;
+      _unitsPerTerm = template.unitsPerTerm;
+      _st1Weight = template.st1Weight;
+      _st2Weight = template.st2Weight;
+      _teWeight = template.teWeight;
+      if (template.gradeLevel != null) _gradeLevel = template.gradeLevel!;
     });
     _revalidateIfSubmitted();
   }
@@ -2039,7 +2430,11 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
             children: [
               Padding(
                 padding: const EdgeInsets.only(top: 1),
-                child: Icon(LucideIcons.alertCircle, size: 14, color: errorColor),
+                child: Icon(
+                  LucideIcons.alertCircle,
+                  size: 14,
+                  color: errorColor,
+                ),
               ),
               const SizedBox(width: 6),
               Expanded(

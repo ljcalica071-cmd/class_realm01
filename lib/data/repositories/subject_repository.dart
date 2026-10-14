@@ -1,19 +1,35 @@
 import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:drift/drift.dart' show Value;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:class_realm/core/services/local_storage_service.dart';
 import 'package:class_realm/data/datasources/local/app_database.dart';
 import 'package:class_realm/data/mock_database.dart';
+import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/models/user_model.dart';
 
 class SubjectRepository {
   final SupabaseClient _client;
+  static const Set<String> _termMetadataColumns = {
+    'terms_taught',
+    'term_block',
+    'units_per_term',
+    'st1_weight',
+    'st2_weight',
+    'te_weight',
+  };
 
   SubjectRepository({SupabaseClient? client})
-      : _client = client ?? Supabase.instance.client;
+    : _client = client ?? Supabase.instance.client;
 
   static final SubjectRepository instance = SubjectRepository();
+
+  bool _isMissingTermMetadata(PostgrestException error) {
+    return error.code == '42703' ||
+        error.code == 'PGRST204' ||
+        _termMetadataColumns.any(error.message.contains);
+  }
 
   /// Saves a subject along with multiple sections into the database.
   Future<void> saveSubjects({
@@ -25,7 +41,28 @@ class SubjectRepository {
     required double exWeight,
     required List<String> sectionNames,
     String schoolYear = '2026-2027',
+    int termsTaught = 3,
+    String? termBlock,
+    double unitsPerTerm = 2,
+    double st1Weight = 30,
+    double st2Weight = 30,
+    double teWeight = 40,
   }) async {
+    if (termsTaught < 1 || termsTaught > 3) {
+      throw ArgumentError.value(
+        termsTaught,
+        'termsTaught',
+        'Must be 1, 2, or 3.',
+      );
+    }
+    final resolvedTermBlock =
+        termBlock ??
+        (termsTaught == 3
+            ? '1ST, 2ND, 3RD'
+            : termsTaught == 1
+            ? 'FIRST TERM'
+            : '1ST & 2ND');
+
     int gLevel = 11;
     if (gradeLevel.contains('12')) {
       gLevel = 12;
@@ -62,17 +99,27 @@ class SubjectRepository {
     if (existingSubject != null) {
       subjectId = existingSubject['id'].toString();
     } else {
-      final words = cleanSubjectName.split(' ').where((w) => w.isNotEmpty).toList();
+      final words = cleanSubjectName
+          .split(' ')
+          .where((w) => w.isNotEmpty)
+          .toList();
       final codePrefix = words.map((w) => w[0].toUpperCase()).join();
-      final randomSuffix = (DateTime.now().millisecondsSinceEpoch % 10000).toString().padLeft(4, '0');
-      final code = '${codePrefix.length > 1 ? codePrefix : "SUB"}_G${gLevel}_$randomSuffix';
+      final randomSuffix = (DateTime.now().millisecondsSinceEpoch % 10000)
+          .toString()
+          .padLeft(4, '0');
+      final code =
+          '${codePrefix.length > 1 ? codePrefix : "SUB"}_G${gLevel}_$randomSuffix';
 
-      final insSub = await _client.from('subjects').insert({
-        'subject_code': code,
-        'subject_name': cleanSubjectName,
-        'grade_level': gLevel,
-        'is_archived': false,
-      }).select('id').single();
+      final insSub = await _client
+          .from('subjects')
+          .insert({
+            'subject_code': code,
+            'subject_name': cleanSubjectName,
+            'grade_level': gLevel,
+            'is_archived': false,
+          })
+          .select('id')
+          .single();
       subjectId = insSub['id'].toString();
     }
 
@@ -93,12 +140,16 @@ class SubjectRepository {
       if (existingSec != null) {
         sectionId = existingSec['id'].toString();
       } else {
-        final insSec = await _client.from('sections').insert({
-          'section_name': cleanSecName,
-          'grade_level': gLevel,
-          'school_year_id': schoolYearId,
-          'is_archived': false,
-        }).select('id').single();
+        final insSec = await _client
+            .from('sections')
+            .insert({
+              'section_name': cleanSecName,
+              'grade_level': gLevel,
+              'school_year_id': schoolYearId,
+              'is_archived': false,
+            })
+            .select('id')
+            .single();
         sectionId = insSec['id'].toString();
       }
 
@@ -111,17 +162,46 @@ class SubjectRepository {
           .eq('teacher_id', teacherId)
           .maybeSingle();
 
+      final offeringData = {
+        'subject_id': subjectId,
+        'section_id': sectionId,
+        'teacher_id': teacherId,
+        'term_id': termId,
+        'ww_weight': wwWeight,
+        'pt_weight': ptWeight,
+        'ex_weight': exWeight,
+        'terms_taught': termsTaught,
+        'term_block': resolvedTermBlock,
+        'units_per_term': unitsPerTerm,
+        'st1_weight': st1Weight,
+        'st2_weight': st2Weight,
+        'te_weight': teWeight,
+        'is_archived': false,
+      };
       if (existingOffering == null) {
-        await _client.from('subject_offerings').insert({
-          'subject_id': subjectId,
-          'section_id': sectionId,
-          'teacher_id': teacherId,
-          'term_id': termId,
-          'ww_weight': wwWeight,
-          'pt_weight': ptWeight,
-          'ex_weight': exWeight,
-          'is_archived': false,
-        });
+        try {
+          await _client.from('subject_offerings').insert(offeringData);
+        } on PostgrestException catch (error) {
+          if (!_isMissingTermMetadata(error)) rethrow;
+          final legacyData = Map<String, dynamic>.from(offeringData)
+            ..removeWhere((key, _) => _termMetadataColumns.contains(key));
+          await _client.from('subject_offerings').insert(legacyData);
+        }
+      } else {
+        try {
+          await _client
+              .from('subject_offerings')
+              .update(offeringData)
+              .eq('id', existingOffering['id']);
+        } on PostgrestException catch (error) {
+          if (!_isMissingTermMetadata(error)) rethrow;
+          final legacyData = Map<String, dynamic>.from(offeringData)
+            ..removeWhere((key, _) => _termMetadataColumns.contains(key));
+          await _client
+              .from('subject_offerings')
+              .update(legacyData)
+              .eq('id', existingOffering['id']);
+        }
       }
     }
   }
@@ -140,7 +220,8 @@ class SubjectRepository {
       for (int i = 0; i < mockDb.sections.length; i++) {
         final sec = mockDb.sections[i];
         mockOfferings.add({
-          'id': 'offering_mock_${sec.toLowerCase().replaceAll(RegExp(r'\s+'), '_')}',
+          'id':
+              'offering_mock_${sec.toLowerCase().replaceAll(RegExp(r'\s+'), '_')}',
           'subject_id': 'sub_mock_1',
           'subject_name': mockDb.currentSubject,
           'grade_level': mockDb.gradeLevel.contains('12') ? 12 : 11,
@@ -149,6 +230,12 @@ class SubjectRepository {
           'ww_weight': 20.0,
           'pt_weight': 50.0,
           'ex_weight': 30.0,
+          'terms_taught': 3,
+          'term_block': '1ST, 2ND, 3RD',
+          'units_per_term': 2.0,
+          'st1_weight': 30.0,
+          'st2_weight': 30.0,
+          'te_weight': 40.0,
           'school_year': '2026-2027',
         });
       }
@@ -156,14 +243,20 @@ class SubjectRepository {
 
     if (mockOfferings.isEmpty) {
       final studentSections = mockDb.users
-          .where((u) => u.role == UserRole.student && u.departmentOrSection != null && u.departmentOrSection!.isNotEmpty)
+          .where(
+            (u) =>
+                u.role == UserRole.student &&
+                u.departmentOrSection != null &&
+                u.departmentOrSection!.isNotEmpty,
+          )
           .map((u) => u.departmentOrSection!)
           .toSet()
           .toList();
       for (int i = 0; i < studentSections.length; i++) {
         final sec = studentSections[i];
         mockOfferings.add({
-          'id': 'offering_auto_${sec.toLowerCase().replaceAll(RegExp(r'\s+'), '_')}',
+          'id':
+              'offering_auto_${sec.toLowerCase().replaceAll(RegExp(r'\s+'), '_')}',
           'subject_id': 'sub_auto_1',
           'subject_name': 'Core Academic Subject',
           'grade_level': 11,
@@ -172,6 +265,12 @@ class SubjectRepository {
           'ww_weight': 20.0,
           'pt_weight': 50.0,
           'ex_weight': 30.0,
+          'terms_taught': 3,
+          'term_block': '1ST, 2ND, 3RD',
+          'units_per_term': 2.0,
+          'st1_weight': 30.0,
+          'st2_weight': 30.0,
+          'te_weight': 40.0,
           'school_year': '2026-2027',
         });
       }
@@ -187,22 +286,39 @@ class SubjectRepository {
   }) async {
     // 1. FAST LOCAL DRIFT SQLITE READ (0 milliseconds load)
     try {
-      final localOfferings = await AppDatabase.instance.getOfferingsForTeacher(teacherId);
+      final localOfferings = await AppDatabase.instance.getOfferingsForTeacher(
+        teacherId,
+      );
       if (localOfferings.isNotEmpty) {
+        final cachedMetadata = {
+          for (final offering in LocalStorageService.getTeacherSubjects(
+            teacherId,
+          ))
+            offering['id']?.toString() ?? '': offering,
+        };
         // Trigger silent background sync without blocking UI
         unawaited(_syncOfferingsFromCloud(teacherId, schoolYear));
 
-        return localOfferings.map((r) => {
-          'id': r.id,
-          'subject_id': r.subjectId,
-          'subject_name': r.subjectName,
-          'grade_level': r.gradeLevel,
-          'section_id': r.sectionId,
-          'section_name': r.sectionName,
-          'ww_weight': r.wwWeight,
-          'pt_weight': r.ptWeight,
-          'ex_weight': r.exWeight,
-          'school_year': r.schoolYear,
+        return localOfferings.map((r) {
+          final metadata = cachedMetadata[r.id] ?? const <String, dynamic>{};
+          return {
+            'id': r.id,
+            'subject_id': r.subjectId,
+            'subject_name': r.subjectName,
+            'grade_level': r.gradeLevel,
+            'section_id': r.sectionId,
+            'section_name': r.sectionName,
+            'ww_weight': r.wwWeight,
+            'pt_weight': r.ptWeight,
+            'ex_weight': r.exWeight,
+            'terms_taught': metadata['terms_taught'] ?? 3,
+            'term_block': metadata['term_block'] ?? '1ST, 2ND, 3RD',
+            'units_per_term': metadata['units_per_term'] ?? 2.0,
+            'st1_weight': metadata['st1_weight'] ?? 30.0,
+            'st2_weight': metadata['st2_weight'] ?? 30.0,
+            'te_weight': metadata['te_weight'] ?? 40.0,
+            'school_year': r.schoolYear,
+          };
         }).toList();
       }
     } catch (e) {
@@ -218,24 +334,51 @@ class SubjectRepository {
     String schoolYear,
   ) async {
     try {
-      final response = await _client
-          .from('subject_offerings')
-          .select('''
+      dynamic response;
+      try {
+        response = await _client
+            .from('subject_offerings')
+            .select('''
             id,
             ww_weight,
             pt_weight,
             ex_weight,
+            terms_taught,
+            term_block,
+            units_per_term,
+            st1_weight,
+            st2_weight,
+            te_weight,
             subjects ( id, subject_name, grade_level ),
             sections ( id, section_name, grade_level )
           ''')
-          .eq('teacher_id', teacherId)
-          .eq('is_archived', false);
+            .eq('teacher_id', teacherId)
+            .eq('is_archived', false);
+      } on PostgrestException catch (error) {
+        if (!_isMissingTermMetadata(error)) rethrow;
+        debugPrint(
+          'Subject term metadata unavailable before migration: $error',
+        );
+        response = await _client
+            .from('subject_offerings')
+            .select('''
+              id,
+              ww_weight,
+              pt_weight,
+              ex_weight,
+              subjects ( id, subject_name, grade_level ),
+              sections ( id, section_name, grade_level )
+            ''')
+            .eq('teacher_id', teacherId)
+            .eq('is_archived', false);
+      }
 
-      if (response == null || (response as List).isEmpty) {
+      final rows = response as List;
+      if (rows.isEmpty) {
         return getCachedTeacherSubjects(teacherId);
       }
 
-      final mapped = (response as List).map<Map<String, dynamic>>((row) {
+      final mapped = rows.map<Map<String, dynamic>>((row) {
         final sub = row['subjects'] as Map<String, dynamic>? ?? {};
         final sec = row['sections'] as Map<String, dynamic>? ?? {};
         return {
@@ -248,25 +391,35 @@ class SubjectRepository {
           'ww_weight': (row['ww_weight'] as num?)?.toDouble() ?? 20.0,
           'pt_weight': (row['pt_weight'] as num?)?.toDouble() ?? 50.0,
           'ex_weight': (row['ex_weight'] as num?)?.toDouble() ?? 30.0,
+          'terms_taught': (row['terms_taught'] as num?)?.toInt() ?? 3,
+          'term_block': row['term_block']?.toString() ?? '1ST, 2ND, 3RD',
+          'units_per_term': (row['units_per_term'] as num?)?.toDouble() ?? 2.0,
+          'st1_weight': (row['st1_weight'] as num?)?.toDouble() ?? 30.0,
+          'st2_weight': (row['st2_weight'] as num?)?.toDouble() ?? 30.0,
+          'te_weight': (row['te_weight'] as num?)?.toDouble() ?? 40.0,
           'school_year': schoolYear,
         };
       }).toList();
 
       // Persist into Drift SQLite safely without blocking data return on web
       try {
-        final companions = mapped.map((m) => LocalSubjectOfferingsCompanion.insert(
-          id: m['id'],
-          teacherId: teacherId,
-          subjectId: m['subject_id'],
-          sectionId: m['section_id'],
-          subjectName: m['subject_name'],
-          sectionName: m['section_name'],
-          gradeLevel: m['grade_level'],
-          wwWeight: Value(m['ww_weight']),
-          ptWeight: Value(m['pt_weight']),
-          exWeight: Value(m['ex_weight']),
-          schoolYear: Value(schoolYear),
-        )).toList();
+        final companions = mapped
+            .map(
+              (m) => LocalSubjectOfferingsCompanion.insert(
+                id: m['id'],
+                teacherId: teacherId,
+                subjectId: m['subject_id'],
+                sectionId: m['section_id'],
+                subjectName: m['subject_name'],
+                sectionName: m['section_name'],
+                gradeLevel: m['grade_level'],
+                wwWeight: Value(m['ww_weight']),
+                ptWeight: Value(m['pt_weight']),
+                exWeight: Value(m['ex_weight']),
+                schoolYear: Value(schoolYear),
+              ),
+            )
+            .toList();
         await AppDatabase.instance.upsertOfferings(companions);
       } catch (dbErr) {
         debugPrint('Drift local save notice on web: $dbErr');
@@ -282,6 +435,190 @@ class SubjectRepository {
     } catch (e) {
       debugPrint('Error syncing teacher subjects from cloud: $e');
       return getCachedTeacherSubjects(teacherId);
+    }
+  }
+
+  Future<void> saveGradebookTermSheet(
+    String offeringId,
+    int termNumber,
+    Map<String, dynamic> payload,
+  ) async {
+    _validateOfferingTerm(offeringId, termNumber);
+    await LocalStorageService.saveGradebookSheet(
+      offeringId,
+      termNumber,
+      payload,
+    );
+
+    final teacherId = AuthRepository.instance.currentUser?.id;
+    if (teacherId == null || teacherId.isEmpty) {
+      debugPrint(
+        'Gradebook sheet saved locally; cloud sync deferred without a teacher session.',
+      );
+      return;
+    }
+    unawaited(
+      _syncGradebookTermSheet(offeringId, termNumber, payload, teacherId),
+    );
+  }
+
+  Future<Map<String, dynamic>?> getGradebookTermSheet(
+    String offeringId,
+    int termNumber,
+  ) async {
+    _validateOfferingTerm(offeringId, termNumber);
+    final cached = LocalStorageService.getGradebookSheet(
+      offeringId,
+      termNumber,
+    );
+    final teacherId = AuthRepository.instance.currentUser?.id;
+    if (cached != null) {
+      if (teacherId != null && teacherId.isNotEmpty) {
+        unawaited(
+          _refreshGradebookTermSheet(offeringId, termNumber, teacherId),
+        );
+      }
+      return cached;
+    }
+    if (teacherId == null || teacherId.isEmpty) {
+      throw StateError(
+        'A signed-in teacher is required to fetch gradebook data.',
+      );
+    }
+    await _verifyOfferingTeacher(offeringId, teacherId);
+
+    final row = await _client
+        .from('gradebook_term_sheets')
+        .select('hps_json, scores_json')
+        .eq('subject_offering_id', offeringId)
+        .eq('term_number', termNumber)
+        .maybeSingle();
+    if (row == null) return null;
+
+    final payload = {
+      'hps': Map<String, dynamic>.from(row['hps_json'] as Map),
+      'scores': Map<String, dynamic>.from(row['scores_json'] as Map),
+    };
+    await LocalStorageService.saveGradebookSheet(
+      offeringId,
+      termNumber,
+      payload,
+    );
+    return payload;
+  }
+
+  Future<void> _syncGradebookTermSheet(
+    String offeringId,
+    int termNumber,
+    Map<String, dynamic> payload,
+    String teacherId,
+  ) async {
+    try {
+      await _verifyOfferingTeacher(offeringId, teacherId);
+      final hps =
+          payload['hps_json'] ?? payload['hps'] ?? const <String, dynamic>{};
+      final scores =
+          payload['scores_json'] ??
+          payload['scores'] ??
+          const <String, dynamic>{};
+      if (hps is! Map || scores is! Map) {
+        throw const FormatException(
+          'Gradebook HPS and scores must be JSON objects.',
+        );
+      }
+
+      await _client.from('gradebook_term_sheets').upsert({
+        'subject_offering_id': offeringId,
+        'term_number': termNumber,
+        'hps_json': Map<String, dynamic>.from(hps),
+        'scores_json': Map<String, dynamic>.from(scores),
+        'updated_at': DateTime.now().toUtc().toIso8601String(),
+      }, onConflict: 'subject_offering_id,term_number');
+
+      final rows = payload['term_grades'];
+      if (rows is List && rows.isNotEmpty) {
+        final termGrades = rows.map<Map<String, dynamic>>((value) {
+          if (value is! Map) {
+            throw const FormatException(
+              'Each term grade must be a JSON object.',
+            );
+          }
+          final grade = Map<String, dynamic>.from(value)
+            ..['subject_offering_id'] = offeringId
+            ..['term_number'] = termNumber;
+          if (grade['remarks'] == 'PASSED') {
+            grade['remarks'] = 'Passed';
+          } else if (grade['remarks'] == 'FAILED') {
+            grade['remarks'] = 'Failed';
+          }
+          return grade;
+        }).toList();
+        await _client
+            .from('term_grades')
+            .upsert(
+              termGrades,
+              onConflict: 'student_id,subject_offering_id,term_number',
+            );
+      }
+    } catch (error) {
+      debugPrint(
+        'Gradebook cloud sync failed for teacher $teacherId, offering $offeringId, term $termNumber: $error',
+      );
+    }
+  }
+
+  Future<void> _refreshGradebookTermSheet(
+    String offeringId,
+    int termNumber,
+    String teacherId,
+  ) async {
+    try {
+      await _verifyOfferingTeacher(offeringId, teacherId);
+      final row = await _client
+          .from('gradebook_term_sheets')
+          .select('hps_json, scores_json')
+          .eq('subject_offering_id', offeringId)
+          .eq('term_number', termNumber)
+          .maybeSingle();
+      if (row == null) return;
+      await LocalStorageService.saveGradebookSheet(offeringId, termNumber, {
+        'hps': Map<String, dynamic>.from(row['hps_json'] as Map),
+        'scores': Map<String, dynamic>.from(row['scores_json'] as Map),
+      });
+    } catch (error) {
+      debugPrint(
+        'Gradebook background refresh failed for offering $offeringId, term $termNumber: $error',
+      );
+    }
+  }
+
+  Future<void> _verifyOfferingTeacher(
+    String offeringId,
+    String teacherId,
+  ) async {
+    final offering = await _client
+        .from('subject_offerings')
+        .select('id')
+        .eq('id', offeringId)
+        .eq('teacher_id', teacherId)
+        .maybeSingle();
+    if (offering == null) {
+      throw StateError(
+        'The selected subject offering is not owned by this teacher.',
+      );
+    }
+  }
+
+  void _validateOfferingTerm(String offeringId, int termNumber) {
+    if (offeringId.trim().isEmpty) {
+      throw ArgumentError.value(offeringId, 'offeringId', 'Must not be empty.');
+    }
+    if (termNumber < 1 || termNumber > 3) {
+      throw ArgumentError.value(
+        termNumber,
+        'termNumber',
+        'Must be 1, 2, or 3.',
+      );
     }
   }
 
@@ -304,11 +641,11 @@ class SubjectRepository {
           .eq('teacher_id', teacherId)
           .eq('is_archived', true);
 
-      if (response == null || (response as List).isEmpty) {
+      if (response.isEmpty) {
         return [];
       }
 
-      return (response as List).map<Map<String, dynamic>>((row) {
+      return response.map<Map<String, dynamic>>((row) {
         final sub = row['subjects'] as Map<String, dynamic>? ?? {};
         final sec = row['sections'] as Map<String, dynamic>? ?? {};
         return {

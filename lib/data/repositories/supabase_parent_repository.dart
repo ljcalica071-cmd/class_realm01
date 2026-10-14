@@ -9,7 +9,25 @@ class SupabaseParentRepository {
   final SupabaseClient _client;
 
   SupabaseParentRepository({SupabaseClient? client})
-      : _client = client ?? Supabase.instance.client;
+    : _client = client ?? Supabase.instance.client;
+
+  AccountStatus _parseParentStatus(String? status, {required bool isArchived}) {
+    if (isArchived) return AccountStatus.archived;
+    switch (status?.toLowerCase().replaceAll(RegExp(r'[\s_-]'), '')) {
+      case 'pending':
+      case 'pendingfirstlogin':
+        return AccountStatus.pendingFirstLogin;
+      case 'rejected':
+        return AccountStatus.rejected;
+      case 'inactive':
+      case 'deactivated':
+        return AccountStatus.deactivated;
+      case 'archived':
+        return AccountStatus.archived;
+      default:
+        return AccountStatus.active;
+    }
+  }
 
   Future<List<UserModel>> getParentsForTeacher(
     String teacherId, {
@@ -23,7 +41,7 @@ class SupabaseParentRepository {
           .select('''
             student_id,
             student_profiles!inner ( 
-              student_id, lrn, first_name, middle_name, last_name, department_or_section
+              student_id, lrn, first_name, middle_name, last_name, birthday, gender
             ),
             subject_offerings!inner ( 
               id, teacher_id,
@@ -44,23 +62,27 @@ class SupabaseParentRepository {
 
       final studentMap = <String, Map<String, dynamic>>{};
       for (final row in enrollments as List) {
-        final stProfile = row['student_profiles'] as Map<String, dynamic>? ?? {};
-        final offering = row['subject_offerings'] as Map<String, dynamic>? ?? {};
+        final stProfile =
+            row['student_profiles'] as Map<String, dynamic>? ?? {};
+        final offering =
+            row['subject_offerings'] as Map<String, dynamic>? ?? {};
         final sub = offering['subjects'] as Map<String, dynamic>? ?? {};
         final sec = offering['sections'] as Map<String, dynamic>? ?? {};
-        final studentId = stProfile['student_id']?.toString() ?? row['student_id']?.toString();
+        final studentId =
+            stProfile['student_id']?.toString() ??
+            row['student_id']?.toString();
 
         if (studentId != null) {
           final studentFullName = [
             stProfile['first_name'],
             stProfile['middle_name'],
-            stProfile['last_name']
+            stProfile['last_name'],
           ].where((n) => n != null && n.toString().trim().isNotEmpty).join(' ');
 
           studentMap[studentId] = {
             'fullName': studentFullName,
             'lrn': stProfile['lrn']?.toString(),
-            'section': sec['section_name']?.toString() ?? stProfile['department_or_section']?.toString(),
+            'section': sec['section_name']?.toString(),
             'subject': sub['subject_name']?.toString(),
             'subjectId': sub['id']?.toString() ?? offering['id']?.toString(),
           };
@@ -82,7 +104,9 @@ class SupabaseParentRepository {
               first_name,
               middle_name,
               last_name,
-              contact_number
+              contact_number,
+              birthday,
+              status
             )
           ''')
           .filter('student_id', 'in', studentIds);
@@ -127,14 +151,15 @@ class SupabaseParentRepository {
         if (!includeArchived && isArchived) continue;
         if (includeArchived && !isArchived) continue;
 
-        final studentName = studentInfo['fullName']?.toString() ?? 'Enrolled Student';
+        final studentName =
+            studentInfo['fullName']?.toString() ?? 'Enrolled Student';
         final sectionName = studentInfo['section']?.toString() ?? '';
 
         if (!parentGroupMap.containsKey(parentId)) {
           final fullName = [
             profile['first_name'],
             profile['middle_name'],
-            profile['last_name']
+            profile['last_name'],
           ].where((n) => n != null && n.toString().trim().isNotEmpty).join(' ');
 
           final contactNumber = profile['contact_number']?.toString() ?? '';
@@ -143,13 +168,17 @@ class SupabaseParentRepository {
           parentGroupMap[parentId] = {
             'id': parentId,
             'username': username,
-            'email': userInfo['email'] ?? '$contactNumber@parent.classrealm.edu',
+            'email':
+                userInfo['email'] ?? '$contactNumber@parent.classrealm.edu',
             'fullName': fullName.isEmpty ? 'Parent / Guardian' : fullName,
             'firstName': profile['first_name']?.toString() ?? '',
             'middleName': profile['middle_name']?.toString(),
             'lastName': profile['last_name']?.toString() ?? '',
             'contactNumber': contactNumber,
-            'relationship': row['relationship']?.toString() ?? 'Parent/Guardian',
+            'birthday': profile['birthday']?.toString(),
+            'profileStatus': profile['status']?.toString(),
+            'relationship':
+                row['relationship']?.toString() ?? 'Parent/Guardian',
             'isArchived': isArchived,
             'studentNames': <String>[studentName],
             'sections': <String>[if (sectionName.isNotEmpty) sectionName],
@@ -183,21 +212,28 @@ class SupabaseParentRepository {
             lastName: entry['lastName'],
             role: UserRole.parent,
             contactNumber: entry['contactNumber'],
+            birthday: DateTime.tryParse(entry['birthday']?.toString() ?? ''),
             parentGuardianRelationship: entry['relationship'],
             linkedStudentId: entry['primaryStudentId'],
             departmentOrSection: sections.isNotEmpty ? sections : '—',
             enrolledSubjectName: entry['subjectName'],
             enrolledSubjectId: entry['subjectId'],
-            status: entry['isArchived'] ? AccountStatus.archived : AccountStatus.active,
+            status: _parseParentStatus(
+              entry['profileStatus']?.toString(),
+              isArchived: entry['isArchived'] == true,
+            ),
             isArchived: entry['isArchived'],
-            parentGuardianName: studentNames, // Holds the formatted linked student names
+            parentGuardianName:
+                studentNames, // Holds the formatted linked student names
           ),
         );
       }
 
       return results;
     } catch (e) {
-      debugPrint('Error fetching parents for teacher (falling back to mock): $e');
+      debugPrint(
+        'Error fetching parents for teacher (falling back to mock): $e',
+      );
       return MockDatabase.instance.users
           .where((u) => u.role == UserRole.parent && !u.isArchived)
           .toList();
@@ -218,7 +254,8 @@ class SupabaseParentRepository {
     String parentId = 'prnt_${DateTime.now().millisecondsSinceEpoch}';
 
     // 1. Create user in Firebase Auth using a secondary app instance without interrupting active teacher session
-    final secondaryAppName = 'CreateParent_${DateTime.now().millisecondsSinceEpoch}';
+    final secondaryAppName =
+        'CreateParent_${DateTime.now().millisecondsSinceEpoch}';
     FirebaseApp? secondaryApp;
     try {
       secondaryApp = await Firebase.initializeApp(
@@ -278,7 +315,7 @@ class SupabaseParentRepository {
     final fullName = [
       firstName,
       if (middleName != null && middleName.isNotEmpty) middleName,
-      lastName
+      lastName,
     ].join(' ');
 
     return UserModel(
@@ -313,8 +350,7 @@ class SupabaseParentRepository {
               middle_name,
               last_name,
               birthday,
-              gender,
-              department_or_section
+              gender
             )
           ''')
           .eq('parent_id', parentId);
@@ -326,7 +362,10 @@ class SupabaseParentRepository {
       final results = <UserModel>[];
       for (final row in linksResp as List) {
         final profile = row['student_profiles'] as Map<String, dynamic>? ?? {};
-        final sId = profile['student_id']?.toString() ?? row['student_id']?.toString() ?? '';
+        final sId =
+            profile['student_id']?.toString() ??
+            row['student_id']?.toString() ??
+            '';
         final firstName = profile['first_name']?.toString() ?? '';
         final middleName = profile['middle_name']?.toString();
         final lastName = profile['last_name']?.toString() ?? '';
@@ -366,12 +405,16 @@ class SupabaseParentRepository {
             lastName: lastName,
             lrn: profile['lrn']?.toString(),
             gender: profile['gender']?.toString(),
-            birthday: profile['birthday'] != null ? DateTime.tryParse(profile['birthday'].toString()) : null,
+            birthday: profile['birthday'] != null
+                ? DateTime.tryParse(profile['birthday'].toString())
+                : null,
             role: UserRole.student,
             departmentOrSection: section is Map
                 ? section['section_name']?.toString()
-                : profile['department_or_section']?.toString(),
-            gradeLevel: section is Map ? section['grade_level']?.toString() : null,
+                : null,
+            gradeLevel: section is Map
+                ? section['grade_level']?.toString()
+                : null,
             parentGuardianRelationship: row['relationship']?.toString(),
             status: AccountStatus.active,
           ),
@@ -393,12 +436,15 @@ class SupabaseParentRepository {
     required String relationship,
     String? studentId,
   }) async {
-    await _client.from('parent_profiles').update({
-      'first_name': firstName,
-      'middle_name': middleName,
-      'last_name': lastName,
-      'contact_number': contactNumber,
-    }).eq('parent_id', parentId);
+    await _client
+        .from('parent_profiles')
+        .update({
+          'first_name': firstName,
+          'middle_name': middleName,
+          'last_name': lastName,
+          'contact_number': contactNumber,
+        })
+        .eq('parent_id', parentId);
 
     final updateData = <String, dynamic>{'relationship': relationship};
     if (studentId != null) {
@@ -418,7 +464,10 @@ class SupabaseParentRepository {
   }
 
   Future<void> permanentlyDelete(String parentId) async {
-    await _client.from('parent_student_links').delete().eq('parent_id', parentId);
+    await _client
+        .from('parent_student_links')
+        .delete()
+        .eq('parent_id', parentId);
     await _client.from('parent_profiles').delete().eq('parent_id', parentId);
     await _client.from('users').delete().eq('id', parentId);
   }

@@ -1,4 +1,5 @@
 import 'dart:math';
+
 import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart' as firebase;
 import 'package:supabase_flutter/supabase_flutter.dart' hide User;
@@ -6,7 +7,6 @@ import 'package:class_realm/models/user_model.dart' as custom;
 import 'package:class_realm/data/datasources/mock/mock_database.dart';
 import 'package:class_realm/core/services/local_storage_service.dart';
 import 'package:class_realm/core/services/email_service.dart';
-
 
 class FirstLoginOtpVerification {
   const FirstLoginOtpVerification({
@@ -125,6 +125,7 @@ class AuthRepository {
     }
     return null;
   }
+
   // Fast Login / Restore Session
   Future<custom.UserModel?> restoreSession() async {
     final firebaseUser = _firebaseAuth.currentUser;
@@ -134,16 +135,18 @@ class AuthRepository {
       if (cachedUser != null && cachedUser.id == firebaseUser.uid) {
         _currentUser = cachedUser;
         MockDatabase.instance.currentUser = _currentUser;
-        
+
         // 2. Quietly update from Supabase in the background
-        _getUserFromSupabase(firebaseUser.uid).then((updatedUser) {
-          if (updatedUser != null) {
-            _currentUser = updatedUser;
-            MockDatabase.instance.currentUser = _currentUser;
-            LocalStorageService.saveUser(updatedUser);
-          }
-        }).catchError((_) {});
-        
+        _getUserFromSupabase(firebaseUser.uid)
+            .then((updatedUser) {
+              if (updatedUser != null) {
+                _currentUser = updatedUser;
+                MockDatabase.instance.currentUser = _currentUser;
+                LocalStorageService.saveUser(updatedUser);
+              }
+            })
+            .catchError((_) {});
+
         return _currentUser;
       }
 
@@ -164,6 +167,7 @@ class AuthRepository {
     }
     return null;
   }
+
   // Fetch User from Supabase
   Future<custom.UserModel?> _getUserFromSupabase(String uid) async {
     try {
@@ -220,11 +224,14 @@ class AuthRepository {
         final profileName = [
           profileResp?['first_name'],
           profileResp?['last_name'],
-        ].whereType<String>().where((part) => part.isNotEmpty).join(' ');
+        ].where((e) => e != null && e.toString().trim().isNotEmpty).join(' ');
+
         return custom.UserModel(
           id: uid,
           username: email,
-          fullName: profileName.isEmpty ? email.split('@').first : profileName,
+          fullName: profileName.isNotEmpty
+              ? profileName
+              : 'School Administrator',
           email: email,
           role: custom.UserRole.admin,
           status: custom.AccountStatus.active,
@@ -233,7 +240,7 @@ class AuthRepository {
         final infoResp = await _supabaseClient
             .from('student_settings')
             .select(
-              'student_id, status, student_profiles(lrn, first_name, middle_name, last_name, birthday, gender)',
+              'student_id, status, student_profiles!inner(student_id, lrn, first_name, middle_name, last_name, birthday, gender)',
             )
             .eq('student_id', uid)
             .single();
@@ -289,7 +296,9 @@ class AuthRepository {
       } else if (role == 'parent') {
         final profileResp = await _supabaseClient
             .from('parent_profiles')
-            .select()
+            .select(
+              'parent_id, first_name, middle_name, last_name, contact_number, birthday, status',
+            )
             .eq('parent_id', uid)
             .maybeSingle();
 
@@ -298,11 +307,12 @@ class AuthRepository {
             .select('student_id, relationship')
             .eq('parent_id', uid);
 
-        final linkedStudentId = (linksResp != null && (linksResp as List).isNotEmpty)
-            ? linksResp.first['student_id']?.toString()
+        final links = linksResp as List;
+        final linkedStudentId = links.isNotEmpty
+            ? links.first['student_id']?.toString()
             : null;
-        final relationship = (linksResp != null && (linksResp as List).isNotEmpty)
-            ? linksResp.first['relationship']?.toString()
+        final relationship = links.isNotEmpty
+            ? links.first['relationship']?.toString()
             : null;
 
         final firstName = profileResp?['first_name']?.toString() ?? '';
@@ -310,7 +320,8 @@ class AuthRepository {
         final lastName = profileResp?['last_name']?.toString() ?? '';
         final contactNumber = profileResp?['contact_number']?.toString();
         final birthdayStr = profileResp?['birthday']?.toString();
-        final statusStr = profileResp?['status']?.toString() ?? 'pending_first_login';
+        final statusStr =
+            profileResp?['status']?.toString() ?? 'pending_first_login';
 
         final fullName = [
           firstName,
@@ -321,7 +332,9 @@ class AuthRepository {
         return custom.UserModel(
           id: uid,
           username: userResp['email'] ?? contactNumber,
-          fullName: fullName.trim().isNotEmpty ? fullName : (userResp['email'] ?? 'Parent'),
+          fullName: fullName.trim().isNotEmpty
+              ? fullName
+              : (userResp['email'] ?? 'Parent'),
           email: userResp['email'] ?? '',
           role: custom.UserRole.parent,
           firstName: firstName,
@@ -336,8 +349,8 @@ class AuthRepository {
       }
       return null;
     } catch (e) {
-      print("ERROR IN _getUserFromSupabase: $e");
-      throw Exception("Supabase Error: $e");
+      debugPrint('Failed to load user profile from Supabase: $e');
+      rethrow;
     }
   }
 
@@ -367,7 +380,9 @@ class AuthRepository {
     return token;
   }
 
-  Future<Map<String, String>> _firebaseAuthHeaders({bool forceRefresh = false}) async {
+  Future<Map<String, String>> _firebaseAuthHeaders({
+    bool forceRefresh = false,
+  }) async {
     final token = await _firebaseIdToken(forceRefresh: forceRefresh);
     final apiKey = _firebaseAuth.app.options.apiKey;
     return {
@@ -395,7 +410,9 @@ class AuthRepository {
     _otpAttempts = 0;
 
     debugPrint('========================================================');
-    debugPrint('[ClassRealm Pure Dart OTP] Verification code for ${user.email}: $code');
+    debugPrint(
+      '[ClassRealm Pure Dart OTP] Verification code for ${user.email}: $code',
+    );
     debugPrint('========================================================');
 
     try {
@@ -406,11 +423,7 @@ class AuthRepository {
       );
     } catch (_) {}
 
-    return {
-      'sent': true,
-      'email': user.email,
-      'expires_in_minutes': 10,
-    };
+    return {'sent': true, 'email': user.email, 'expires_in_minutes': 10};
   }
 
   Future<FirstLoginOtpVerification> verifyFirstLoginOtp(String code) async {
@@ -448,10 +461,7 @@ class AuthRepository {
     }
 
     _pendingOtpCode = null;
-    return const FirstLoginOtpVerification(
-      verified: true,
-      reason: null,
-    );
+    return const FirstLoginOtpVerification(verified: true, reason: null);
   }
 
   // Complete first-login password setup in Pure Dart
@@ -576,7 +586,9 @@ class AuthRepository {
     _pendingOtpExpiry = DateTime.now().add(const Duration(minutes: 10));
 
     debugPrint('========================================================');
-    debugPrint('[ClassRealm Pure Dart Admin Code] Verification code for $email: $code');
+    debugPrint(
+      '[ClassRealm Pure Dart Admin Code] Verification code for $email: $code',
+    );
     debugPrint('========================================================');
 
     try {
@@ -587,10 +599,7 @@ class AuthRepository {
       );
     } catch (_) {}
 
-    return {
-      'sent': true,
-      'email': email,
-    };
+    return {'sent': true, 'email': email};
   }
 
   Future<Map<String, dynamic>> sendAdminTeacherVerificationCode({
@@ -601,16 +610,15 @@ class AuthRepository {
     required String gender,
     required DateTime birthday,
     bool isResend = false,
-  }) =>
-      sendAdminTeacherVerification(
-        email: email,
-        firstName: firstName,
-        middleName: middleName,
-        lastName: lastName,
-        gender: gender,
-        birthday: birthday,
-        isResend: isResend,
-      );
+  }) => sendAdminTeacherVerification(
+    email: email,
+    firstName: firstName,
+    middleName: middleName,
+    lastName: lastName,
+    gender: gender,
+    birthday: birthday,
+    isResend: isResend,
+  );
 
   Future<Map<String, dynamic>> createTeacherDirectlyByAdmin({
     required String email,
