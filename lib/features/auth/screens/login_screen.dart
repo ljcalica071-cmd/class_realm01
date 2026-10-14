@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:loading_animation_widget/loading_animation_widget.dart';
 
@@ -12,6 +14,7 @@ import 'package:class_realm/widgets/common/app_modals.dart';
 import 'package:class_realm/widgets/common/app_buttons.dart';
 import 'package:class_realm/core/theme/app_theme.dart';
 import 'package:class_realm/core/services/local_storage_service.dart';
+import 'package:class_realm/core/services/sync_coordinator.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -53,9 +56,12 @@ class _LoginScreenState extends State<LoginScreen> {
       _emailController.text = LocalStorageService.savedEmail ?? '';
     }
 
-    // Ensure theme is reset to light mode when logging out / viewing login screen
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      AppTheme.themeModeNotifier.value = ThemeMode.light;
+    // Fast Login / Cache Check & Route User
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final cachedUser = await AuthRepository.instance.restoreSession();
+      if (cachedUser != null && mounted) {
+        _routeUser(cachedUser);
+      }
     });
   }
 
@@ -107,291 +113,205 @@ class _LoginScreenState extends State<LoginScreen> {
     return '$minutes:$seconds';
   }
 
-  void _handleLogin() {
+  void _handleLogin() async {
     if (_isRateLimited || _isLoading) return;
     if (!_formKey.currentState!.validate()) return;
 
     if (_isMockLoginEmail) {
       setState(() => _isLoading = true);
-      Future.delayed(const Duration(milliseconds: 1500), () async {
-        if (!mounted) return;
-        
-        final email = _emailController.text.trim().toLowerCase();
-        await AuthRepository.instance.authenticate(email, 'mockpassword');
-        
-        if (!mounted) return;
-        setState(() => _isLoading = false);
-        
-        if (email == 'student') {
-          Navigator.pushReplacementNamed(context, AppRoutes.studentHome);
-        } else if (email == 'parent') {
-          Navigator.pushReplacementNamed(context, AppRoutes.parentHome);
-        } else if (email == 'teacher') {
-          Navigator.pushReplacementNamed(context, AppRoutes.teacherDashboard);
+      final email = _emailController.text.trim().toLowerCase();
+      final user = await AuthRepository.instance.authenticate(email, 'mockpassword');
+      
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+
+      if (email == 'student') {
+        if (user != null) {
+          final isUserDark = LocalStorageService.isUserDarkMode(user.id, email: user.email);
+          AppTheme.themeModeNotifier.value = isUserDark ? ThemeMode.dark : ThemeMode.light;
         }
-      });
+        Navigator.pushReplacementNamed(context, AppRoutes.studentHome);
+      } else if (email == 'parent') {
+        if (user != null) {
+          final isUserDark = LocalStorageService.isUserDarkMode(user.id, email: user.email);
+          AppTheme.themeModeNotifier.value = isUserDark ? ThemeMode.dark : ThemeMode.light;
+        }
+        Navigator.pushReplacementNamed(context, AppRoutes.parentHome);
+      } else if (email == 'teacher') {
+        if (user != null) {
+          final isUserDark = LocalStorageService.isUserDarkMode(user.id, email: user.email);
+          AppTheme.themeModeNotifier.value = isUserDark ? ThemeMode.dark : ThemeMode.light;
+        }
+        Navigator.pushReplacementNamed(context, AppRoutes.teacherDashboard);
+      }
       return;
     }
 
     setState(() => _isLoading = true);
 
-    Future.delayed(const Duration(milliseconds: 600), () async {
+    try {
+      final user = await AuthRepository.instance.authenticate(
+        _emailController.text.trim(),
+        _passwordController.text.trim(),
+      );
+
       if (!mounted) return;
 
-      try {
-        final user = await AuthRepository.instance.authenticate(
-          _emailController.text.trim(),
-          _passwordController.text.trim(),
-        );
-
+      // Save Remember Me state upon successful login
+      if (user != null) {
+        TextInput.finishAutofillContext();
+        await LocalStorageService.saveRememberMe(_rememberMe, _emailController.text.trim());
         if (!mounted) return;
+      }
+
+      if (user == null) {
         setState(() => _isLoading = false);
+        _recordFailedAttempt();
+        if (_isRateLimited) return;
+        AppModals.showErrorDialog(
+          context: context,
+          title: 'Authentication Failed',
+          message:
+              'Invalid email or password. Please check your credentials.',
+        );
+        return;
+      }
 
-        // Save Remember Me state upon successful login
-        if (user != null) {
-          await LocalStorageService.saveRememberMe(_rememberMe, _emailController.text.trim());
+      _loginAttemptLimiter.reset();
+      _lockoutTimer?.cancel();
+      _lockoutRemaining = null;
+
+      _routeUser(user);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      if (e is LoginAttemptException) {
+        if (e.providerRateLimited) {
+          _beginLockoutCountdown(
+            _loginAttemptLimiter.startLockout(DateTime.now()),
+          );
+          return;
         }
-
-        if (user == null) {
+        if (e.invalidCredentials) {
           _recordFailedAttempt();
           if (_isRateLimited) return;
           AppModals.showErrorDialog(
             context: context,
             title: 'Authentication Failed',
-            message:
-                'Invalid email or password. Please check your credentials.',
+            message: e.message,
           );
           return;
         }
+      }
+      AppModals.showErrorDialog(
+        context: context,
+        title: 'Login Error',
+        message: e.toString().replaceAll('Exception: ', ''),
+      );
+    }
+  }
 
-        _loginAttemptLimiter.reset();
-        _lockoutTimer?.cancel();
-        _lockoutRemaining = null;
-
-        if (user.status == AccountStatus.pending) {
-          AppModals.showErrorDialog(
-            context: context,
-            title: 'Account Pending',
-            message: 'Your account registration is currently being processed and is waiting for the administrator\'s approval. Please check your email later for updates.',
-          );
-          return;
-        }
-
-        if (user.status == AccountStatus.deactivated ||
-            user.status == AccountStatus.archived) {
-          AppModals.showErrorDialog(
-            context: context,
-            title: user.status == AccountStatus.archived
-                ? 'Account Archived'
-                : 'Account Deactivated',
-            message: user.status == AccountStatus.archived
-                ? 'Your account has been deactivated by ClassRealm Admin.'
-                : 'Your account has been deactivated.',
-          );
-          return;
-        }
-
-        if (user.status == AccountStatus.rejected) {
-          AppModals.showErrorDialog(
-            context: context,
-            title: 'Account Rejected',
-            message: 'Your account registration was declined by the administrator. Please create a new account or contact the school office.',
-          );
-          return;
-        }
-
-        if (user.status == AccountStatus.pendingFirstLogin) {
-          if (user.role == UserRole.teacher) {
-            Navigator.pushReplacementNamed(
-              context,
-              AppRoutes.teacherFirstLogin,
-            );
-          } else {
-            Navigator.pushReplacementNamed(
-              context,
-              AppRoutes.studentFirstLogin,
-            );
-          }
-          return;
-        }
-
-        switch (user.role) {
-          case UserRole.admin:
-            Navigator.pushReplacementNamed(context, AppRoutes.adminDashboard);
-            break;
-          case UserRole.teacher:
-            Navigator.pushReplacementNamed(context, AppRoutes.teacherDashboard);
-            break;
-          case UserRole.student:
-            Navigator.pushReplacementNamed(context, AppRoutes.studentHome);
-            break;
-          case UserRole.parent:
-            Navigator.pushReplacementNamed(context, AppRoutes.parentHome);
-            break;
-        }
-      } catch (e) {
-        if (!mounted) return;
-        setState(() => _isLoading = false);
-        if (e is LoginAttemptException) {
-          if (e.providerRateLimited) {
-            _beginLockoutCountdown(
-              _loginAttemptLimiter.startLockout(DateTime.now()),
-            );
-            return;
-          }
-          if (e.invalidCredentials) {
-            _recordFailedAttempt();
-            if (_isRateLimited) return;
-            AppModals.showErrorDialog(
-              context: context,
-              title: 'Authentication Failed',
-              message: e.message,
-            );
-            return;
-          }
-        }
-        AppModals.showErrorDialog(
-          context: context,
-          title: 'Login Error',
-          message: e.toString().replaceAll('Exception: ', ''),
+  void _routeUser(UserModel user) {
+    if (user.status == AccountStatus.pendingFirstLogin ||
+        user.status == AccountStatus.pending) {
+      // Must remain in default light theme for first-login and password setup
+      AppTheme.themeModeNotifier.value = ThemeMode.light;
+      if (user.role == UserRole.teacher) {
+        Navigator.pushReplacementNamed(
+          context,
+          AppRoutes.teacherFirstLogin,
+        );
+      } else {
+        Navigator.pushReplacementNamed(
+          context,
+          AppRoutes.studentFirstLogin,
         );
       }
-    });
+      return;
+    }
+
+    if (user.status == AccountStatus.deactivated ||
+        user.status == AccountStatus.archived) {
+      setState(() => _isLoading = false);
+      AppModals.showErrorDialog(
+        context: context,
+        title: user.status == AccountStatus.archived
+            ? 'Account Archived'
+            : 'Account Deactivated',
+        message: user.status == AccountStatus.archived
+            ? 'Your account has been deactivated by ClassRealm Admin.'
+            : 'Your account has been deactivated.',
+      );
+      return;
+    }
+
+    if (user.status == AccountStatus.rejected) {
+      unawaited(AuthRepository.instance.logout());
+      setState(() => _isLoading = false);
+      AppModals.showErrorDialog(
+        context: context,
+        title: 'Account Unavailable',
+        message: 'This account cannot access ClassRealm. Please contact the school administrator.',
+      );
+      return;
+    }
+
+    // Now that the user enters their authenticated dashboard, apply their theme preference
+    final isUserDark = LocalStorageService.isUserDarkMode(user.id, email: user.email);
+    AppTheme.themeModeNotifier.value = isUserDark ? ThemeMode.dark : ThemeMode.light;
+
+    switch (user.role) {
+      case UserRole.admin:
+        Navigator.pushReplacementNamed(context, AppRoutes.adminDashboard);
+        break;
+      case UserRole.teacher:
+        SyncCoordinator.instance.syncTeacherData(user.id);
+        Navigator.pushReplacementNamed(context, AppRoutes.teacherDashboard);
+        break;
+      case UserRole.student:
+        SyncCoordinator.instance.syncStudentData(user.id);
+        Navigator.pushReplacementNamed(context, AppRoutes.studentHome);
+        break;
+      case UserRole.parent:
+        SyncCoordinator.instance.syncParentData(user.id);
+        Navigator.pushReplacementNamed(context, AppRoutes.parentHome);
+        break;
+    }
   }
 
-  Widget _buildDemoQuickLogin() {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.only(top: 24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Divider(
-                  color: theme.colorScheme.outline.withValues(alpha: 0.3),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Text(
-                  'DEVELOPER QUICK LOGIN',
-                  style: TextStyle(
-                    fontSize: 10,
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1,
-                  ),
-                ),
-              ),
-              Expanded(
-                child: Divider(
-                  color: theme.colorScheme.outline.withValues(alpha: 0.3),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            alignment: WrapAlignment.center,
-            children: [
-              ActionChip(
-                label: const Text('Admin'),
-                avatar: const Icon(LucideIcons.shield, size: 14),
-                onPressed: () {
-                  _emailController.text = 'ljcalica071@gmail.com';
-                  _passwordController.text = 'Admin123';
-                  _handleLogin();
-                },
-              ),
-              ActionChip(
-                label: const Text('Teacher'),
-                avatar: const Icon(LucideIcons.graduationCap, size: 14),
-                onPressed: () {
-                  _emailController.text = 'ljcalica317@gmail.com';
-                  _passwordController.text = 'Uzumaki123';
-                  _handleLogin();
-                },
-              ),
-              ActionChip(
-                label: const Text('Student (Mock)'),
-                avatar: const Icon(LucideIcons.user, size: 14),
-                onPressed: () {
-                  _emailController.text = 'student';
-                  _passwordController.text = 'password';
-                  _handleLogin();
-                },
-              ),
-              ActionChip(
-                label: const Text('Parent (Mock)'),
-                avatar: const Icon(LucideIcons.users, size: 14),
-                onPressed: () {
-                  _emailController.text = 'parent';
-                  _passwordController.text = 'password';
-                  _handleLogin();
-                },
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
+  // Developer Quick Login removed based on user request.
   @override
   Widget build(BuildContext context) {
-    final size = MediaQuery.of(context).size;
-    final isDesktop = size.width >= 900;
+    return Theme(
+      data: AppTheme.lightTheme,
+      child: Builder(
+        builder: (context) {
+          final size = MediaQuery.of(context).size;
+          final isDesktop = size.width >= 900;
+          final theme = Theme.of(context);
 
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-
-    return Scaffold(
-      body: Stack(
-        children: [
-          Container(
-            decoration: BoxDecoration(
-              image: DecorationImage(
-                image: const AssetImage('assets/images/auth/school.jpg'),
-                fit: BoxFit.cover,
-                colorFilter: ColorFilter.mode(
-                  isDark ? Colors.black87 : Colors.black54,
-                  BlendMode.darken,
-                ),
-              ),
-            ),
-            child: isDesktop
-                ? _buildDesktopLayout(theme)
-                : _buildMobileLayout(theme),
-          ),
-          if (_isLoading)
-            Container(
-              color: Colors.black.withValues(alpha: 0.6),
-              child: Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    LoadingAnimationWidget.staggeredDotsWave(
-                      color: theme.colorScheme.primary,
-                      size: 60,
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      'Authenticating...',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w500,
+          return Scaffold(
+            body: Stack(
+              children: [
+                Container(
+                  decoration: const BoxDecoration(
+                    image: DecorationImage(
+                      image: AssetImage('assets/images/auth/school.jpg'),
+                      fit: BoxFit.cover,
+                      colorFilter: ColorFilter.mode(
+                        Colors.black45,
+                        BlendMode.darken,
                       ),
                     ),
-                  ],
+                  ),
+                  child: isDesktop
+                      ? _buildDesktopLayout(theme)
+                      : _buildMobileLayout(theme),
                 ),
-              ),
+              ],
             ),
-        ],
+          );
+        },
       ),
     );
   }
@@ -530,28 +450,48 @@ class _LoginScreenState extends State<LoginScreen> {
 
   // --- REUSABLE LOGIN FORM CARD ---
   Widget _buildLoginCard(ThemeData theme, bool isMobile) {
-    return Card(
-      child: Padding(
-        padding: EdgeInsets.all(isMobile ? 24 : 36),
-        child: Form(
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(24),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.94),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.8),
+              width: 1.5,
+            ),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x140F172A),
+                blurRadius: 28,
+                offset: Offset(0, 10),
+              ),
+            ],
+          ),
+          padding: EdgeInsets.all(isMobile ? 24 : 36),
+          child: Form(
           key: _formKey,
-          child: Column(
+          child: AutofillGroup(
+            child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(
+              const Text(
                 'Welcome to ClassRealm',
-                style: theme.textTheme.headlineSmall?.copyWith(
+                style: TextStyle(
                   fontWeight: FontWeight.w800,
                   fontSize: 26,
-                  color: theme.colorScheme.onSurface,
+                  color: Color(0xFF0F172A),
                 ),
               ),
               const SizedBox(height: 4),
-              Text(
+              const Text(
                 'Eduardo Barretto Senior Integrated School',
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Color(0xFF475569),
                 ),
               ),
               const SizedBox(height: 24),
@@ -560,27 +500,28 @@ class _LoginScreenState extends State<LoginScreen> {
               TextFormField(
                 controller: _emailController,
                 focusNode: _emailFocusNode,
+                autofillHints: const [AutofillHints.email],
                 textInputAction: TextInputAction.next,
                 onFieldSubmitted: (_) {
                   FocusScope.of(context).requestFocus(_passwordFocusNode);
                 },
                 validator: (v) =>
                     v == null || v.isEmpty ? 'Email is required' : null,
-                style: TextStyle(color: theme.colorScheme.onSurface),
+                style: const TextStyle(color: Color(0xFF0F172A), fontSize: 14),
                 decoration: InputDecoration(
                   filled: true,
-                  fillColor: theme.scaffoldBackgroundColor,
+                  fillColor: const Color(0xFFF8FAFC),
                   prefixIcon: Icon(
                     LucideIcons.mail,
                     color: theme.colorScheme.primary,
                   ),
                   hintText: 'Email',
-                  hintStyle: TextStyle(
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
+                  hintStyle: const TextStyle(
+                    color: Color(0xFF94A3B8),
                   ),
-                  border: OutlineInputBorder(
+                  enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide.none,
+                    borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
@@ -597,6 +538,7 @@ class _LoginScreenState extends State<LoginScreen> {
               TextFormField(
                 controller: _passwordController,
                 focusNode: _passwordFocusNode,
+                autofillHints: const [AutofillHints.password],
                 textInputAction: TextInputAction.done,
                 onFieldSubmitted: (_) {
                   if (!_isLoading && !_isRateLimited) {
@@ -604,12 +546,12 @@ class _LoginScreenState extends State<LoginScreen> {
                   }
                 },
                 obscureText: _obscurePassword,
-                style: TextStyle(color: theme.colorScheme.onSurface),
+                style: const TextStyle(color: Color(0xFF0F172A), fontSize: 14),
                 validator: (v) =>
                     v == null || v.isEmpty ? 'Password is required' : null,
                 decoration: InputDecoration(
                   filled: true,
-                  fillColor: theme.scaffoldBackgroundColor,
+                  fillColor: const Color(0xFFF8FAFC),
                   prefixIcon: Icon(
                     LucideIcons.lock,
                     color: theme.colorScheme.primary,
@@ -617,19 +559,19 @@ class _LoginScreenState extends State<LoginScreen> {
                   suffixIcon: IconButton(
                     icon: Icon(
                       _obscurePassword ? LucideIcons.eye : LucideIcons.eyeOff,
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                      color: const Color(0xFF64748B),
                       size: 20,
                     ),
                     onPressed: () =>
                         setState(() => _obscurePassword = !_obscurePassword),
                   ),
                   hintText: 'Password',
-                  hintStyle: TextStyle(
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
+                  hintStyle: const TextStyle(
+                    color: Color(0xFF94A3B8),
                   ),
-                  border: OutlineInputBorder(
+                  enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide.none,
+                    borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
@@ -745,46 +687,344 @@ class _LoginScreenState extends State<LoginScreen> {
                 height: 48,
               ),
 
-              _buildDemoQuickLogin(),
+              const SizedBox.shrink(),
 
-              if (!isMobile) ...[
-                const SizedBox(height: 20),
-                Wrap(
-                  alignment: WrapAlignment.center,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    Text(
-                      'New teacher in the system? ',
+              const SizedBox(height: 16),
+              Wrap(
+                alignment: WrapAlignment.center,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Text(
+                    'By logging in, you agree to our ',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: theme.colorScheme.onSurface.withValues(
+                        alpha: 0.65,
+                      ),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: _showTermsDialog,
+                    style: TextButton.styleFrom(
+                      padding: EdgeInsets.zero,
+                      minimumSize: const Size(0, 0),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: Text(
+                      'Terms and Conditions',
                       style: TextStyle(
-                        fontSize: 13,
-                        color: theme.colorScheme.onSurface.withValues(
-                          alpha: 0.65,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: theme.colorScheme.primary,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    ' and ',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: theme.colorScheme.onSurface.withValues(
+                        alpha: 0.65,
+                      ),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: _showPrivacyDialog,
+                    style: TextButton.styleFrom(
+                      padding: EdgeInsets.zero,
+                      minimumSize: const Size(0, 0),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: Text(
+                      'Privacy Policy',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: theme.colorScheme.primary,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    '.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: theme.colorScheme.onSurface.withValues(
+                        alpha: 0.65,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+    ),
+  );
+}
+
+  Future<void> _showTermsDialog() {
+    return _showConsentDocumentDialog(
+      title: 'Terms and Conditions',
+      content: [
+        _buildSubSection(
+          '1. Acceptance of Terms',
+          'By accessing or using ClassRealm, an Integrated Senior High School Academic Management System for Eduardo Barretto Senior Integrated School, you agree to be bound by these terms. If you do not agree, please do not use the system.',
+        ),
+        _buildSubSection(
+          '2. User Responsibilities',
+          '• Teachers: Responsible for accurate input of grades, assessments, and securing their authentication credentials.\n'
+          '• Students: Must maintain academic integrity, provide accurate personal details, and ensure their RFID tags are only used by them.\n'
+          '• Parents: Granted access strictly for monitoring their child\'s academic progress and attendance.',
+        ),
+        _buildSubSection(
+          '3. Acceptable Use',
+          'The system is provided solely for educational and administrative purposes. Users must interact with the platform securely and respect the privacy of other users.',
+        ),
+        _buildSubSection(
+          '4. Prohibited Conduct & Anti-Cheating',
+          'ClassRealm actively monitors "suspicious session events" (e.g., leaving the active quiz tab) during assessments. Any form of cheating, sharing of credentials, or bypassing monitoring mechanisms is strictly prohibited and will be logged for disciplinary review.',
+        ),
+        _buildSubSection(
+          '5. Limitation of Liability',
+          'The developers and the school are not liable for any temporary service interruptions or data loss caused by unauthorized user actions or hardware failures.',
+        ),
+      ],
+    );
+  }
+
+  Future<void> _showPrivacyDialog() {
+    return _showConsentDocumentDialog(
+      title: 'Privacy Policy',
+      subtitle: 'RA 10173 - Data Privacy Act of 2012',
+      content: [
+        Text(
+          'We protect your personal information in compliance with the Philippine Data Privacy Act of 2012 (RA 10173).',
+          textAlign: TextAlign.justify,
+          style: TextStyle(
+            fontSize: 13,
+            height: 1.5,
+            fontWeight: FontWeight.w600,
+            color: Theme.of(context).colorScheme.onSurface,
+          ),
+        ),
+        const SizedBox(height: 14),
+        _buildSubSection(
+          '1. Information We Collect',
+          '• Personal Information: Names, Student IDs (LRN), Emails, Contact Numbers, Birthdays, and Gender.\n'
+          '• Academic Data: Submissions, quiz/exam scores, calculated grades, and attendance records.\n'
+          '• RFID & Hardware Data: Attendance scan records from RFID cards read by the ESP32 scanner.\n'
+          '• Technical Data: Suspicious session events during assessments.',
+        ),
+        _buildSubSection(
+          '2. How We Use the Information',
+          'Collected data is used strictly for academic evaluation, generating student progress reports, tracking attendance, and ensuring academic integrity during examinations.',
+        ),
+        _buildSubSection(
+          '3. Offline & Cloud Storage Syncing',
+          'ClassRealm uses an offline-first architecture. Data is temporarily stored locally on your device when offline, and automatically synced to our secure cloud databases once an internet connection is established.',
+        ),
+        _buildSubSection(
+          '4. Third-Party Services',
+          'We utilize secure, industry-standard third-party services including Firebase and Supabase for authentication and cloud database management. They comply with strict data security standards.',
+        ),
+        _buildSubSection(
+          '5. Data Retention & User Rights',
+          'Your data is retained only as long as necessary for educational records. Under RA 10173, you have the right to access, rectify, or object to the processing of your personal information by contacting the system administrator.',
+        ),
+      ],
+    );
+  }
+
+  Future<void> _showConsentDocumentDialog({
+    required String title,
+    String? subtitle,
+    required List<Widget> content,
+  }) {
+    return showGeneralDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'Close',
+      barrierColor: Colors.black.withValues(alpha: 0.55),
+      transitionDuration: const Duration(milliseconds: 250),
+      pageBuilder: (dialogContext, animation, secondaryAnimation) {
+        final size = MediaQuery.sizeOf(dialogContext);
+        final dialogWidth = (size.width - 40).clamp(320.0, 560.0);
+        final dialogMaxHeight = size.height * 0.80;
+
+        return Center(
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+            child: Material(
+              color: Colors.transparent,
+              child: Container(
+                width: dialogWidth,
+                constraints: BoxConstraints(maxHeight: dialogMaxHeight),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(
+                    color: const Color(0xFFE2E8F0),
+                    width: 1.5,
+                  ),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x1F0F172A),
+                      blurRadius: 32,
+                      offset: Offset(0, 12),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // --- HEADER ---
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(24, 20, 16, 16),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  title,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 20,
+                                    color: Color(0xFF0F172A),
+                                  ),
+                                ),
+                                if (subtitle != null) ...[
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    subtitle,
+                                    style: const TextStyle(
+                                      color: Color(0xFF2563EB),
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(LucideIcons.x, size: 20, color: Color(0xFF64748B)),
+                            onPressed: () => Navigator.of(dialogContext).pop(),
+                            tooltip: 'Close',
+                            style: IconButton.styleFrom(
+                              backgroundColor: const Color(0xFFF1F5F9),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Divider(
+                      height: 1,
+                      thickness: 1,
+                      color: Color(0xFFE2E8F0),
+                    ),
+
+                    // --- SCROLLABLE BODY ---
+                    Flexible(
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.fromLTRB(24, 20, 24, 20),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: content,
                         ),
                       ),
                     ),
-                    TextButton(
-                      onPressed: () =>
-                          Navigator.pushNamed(context, AppRoutes.register),
-                      style: TextButton.styleFrom(
-                        padding: EdgeInsets.zero,
-                        minimumSize: const Size(0, 0),
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      ),
-                      child: Text(
-                        'Register here',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.bold,
-                          color: theme.colorScheme.primary,
+
+                    // --- SEPARATE FOOTER ACTION BAR ---
+                    const Divider(
+                      height: 1,
+                      thickness: 1,
+                      color: Color(0xFFE2E8F0),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                      decoration: const BoxDecoration(
+                        color: Color(0xFFF8FAFC),
+                        borderRadius: BorderRadius.only(
+                          bottomLeft: Radius.circular(24),
+                          bottomRight: Radius.circular(24),
                         ),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          FilledButton(
+                            onPressed: () => Navigator.of(dialogContext).pop(),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: const Color(0xFF2563EB),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 24,
+                                vertical: 12,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            child: const Text(
+                              'Close',
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
                 ),
-              ],
-            ],
+              ),
+            ),
           ),
-        ),
+        );
+      },
+      transitionBuilder: (context, animation, secondaryAnimation, child) {
+        return FadeTransition(
+          opacity: animation,
+          child: ScaleTransition(
+            scale: Tween<double>(begin: 0.95, end: 1.0).animate(
+              CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
+            ),
+            child: child,
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildSubSection(String title, String content) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 18.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+              letterSpacing: -0.2,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            content,
+            textAlign: TextAlign.justify,
+            style: TextStyle(
+              fontSize: 13,
+              height: 1.55,
+              color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.85),
+            ),
+          ),
+        ],
       ),
     );
   }

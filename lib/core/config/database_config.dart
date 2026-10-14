@@ -34,23 +34,8 @@ class DatabaseConfig {
     defaultValue: 'classrealm-deped',
   );
 
-  // --- EMAIL CHECKER API CONFIGURATION ---
-  // Supported providers: AbstractAPI, Hunter.io, ZeroBounce
-  static const String emailCheckerApiKey = String.fromEnvironment(
-    'EMAIL_CHECKER_API_KEY',
-    defaultValue: '',
-  );
-
-  static const String emailCheckerEndpoint = String.fromEnvironment(
-    'EMAIL_CHECKER_ENDPOINT',
-    defaultValue: 'https://emailvalidation.abstractapi.com/v1/',
-  );
-
   /// Helper to check if live database credentials are provided
   static bool get isLiveBackendConfigured =>
       supabaseUrl != 'https://your-project.supabase.co' &&
       supabaseAnonKey != 'your-anon-key-here';
-
-  /// Helper to check if external email validation API is active
-  static bool get isEmailApiConfigured => emailCheckerApiKey.isNotEmpty;
 }

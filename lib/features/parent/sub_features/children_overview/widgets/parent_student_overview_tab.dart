@@ -1,18 +1,16 @@
 import 'package:flutter/material.dart';
-import 'package:class_realm/core/theme/app_theme.dart';
-import 'package:class_realm/data/mock_database.dart';
 import 'package:class_realm/models/user_model.dart';
 
 class ParentStudentOverviewTab extends StatelessWidget {
   final UserModel? linkedStudent;
-  final UserModel teacher;
+  final UserModel? teacher;
   final List<UserModel>? allChildren;
   final Function(UserModel)? onSelectChild;
 
   const ParentStudentOverviewTab({
     super.key,
     required this.linkedStudent,
-    required this.teacher,
+    this.teacher,
     this.allChildren,
     this.onSelectChild,
   });
@@ -31,10 +29,6 @@ class ParentStudentOverviewTab extends StatelessWidget {
         ),
       );
     }
-
-    final quarterGrade = MockDatabase.instance.quarterlyGradeFor(
-      linkedStudent!.id,
-    );
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
@@ -58,8 +52,11 @@ class ParentStudentOverviewTab extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      Icon(Icons.swap_horizontal_circle_outlined,
-                          size: 18, color: theme.colorScheme.primary),
+                      Icon(
+                        Icons.swap_horizontal_circle_outlined,
+                        size: 18,
+                        color: theme.colorScheme.primary,
+                      ),
                       const SizedBox(width: 8),
                       Text(
                         'Switch Child Profile (${allChildren!.length} linked)',
@@ -147,7 +144,7 @@ class ParentStudentOverviewTab extends StatelessWidget {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        'Grade ${linkedStudent!.gradeLevel} - ${linkedStudent!.departmentOrSection} • LRN: ${linkedStudent!.lrn ?? linkedStudent!.studentId ?? 'N/A'}',
+                        '${linkedStudent!.gradeLevel?.isNotEmpty == true ? "Grade ${linkedStudent!.gradeLevel}" : ""}${linkedStudent!.departmentOrSection?.isNotEmpty == true ? " · ${linkedStudent!.departmentOrSection}" : ""} • LRN: ${linkedStudent!.lrn ?? linkedStudent!.studentId ?? 'N/A'}',
                         style: TextStyle(
                           fontSize: 13,
                           color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
@@ -167,7 +164,8 @@ class ParentStudentOverviewTab extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           Container(
-            padding: const EdgeInsets.all(16),
+            width: double.infinity,
+            padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
               color: theme.colorScheme.surface,
               borderRadius: BorderRadius.circular(12),
@@ -175,34 +173,25 @@ class ParentStudentOverviewTab extends StatelessWidget {
                 color: theme.colorScheme.onSurface.withValues(alpha: 0.12),
               ),
             ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            child: Column(
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'General Mathematics',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                      ),
-                    ),
-                    Text(
-                      teacher.fullName,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                      ),
-                    ),
-                  ],
+                Icon(
+                  Icons.assignment_outlined,
+                  size: 36,
+                  color: theme.colorScheme.onSurfaceVariant,
                 ),
+                const SizedBox(height: 12),
+                const Text(
+                  'No Quarterly Grades Posted Yet',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                ),
+                const SizedBox(height: 4),
                 Text(
-                  quarterGrade.toStringAsFixed(1),
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 18,
-                    color: AppTheme.catGreen,
+                  'Official marks for enrolled subjects will appear here once finalized by teachers.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: theme.colorScheme.onSurfaceVariant,
                   ),
                 ),
               ],

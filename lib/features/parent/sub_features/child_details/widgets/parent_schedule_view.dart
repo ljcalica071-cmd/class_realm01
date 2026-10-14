@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:class_realm/data/mock_database.dart';
 import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/models/academic_models.dart';
+import 'package:class_realm/data/repositories/supabase_schedule_repository.dart';
 import 'package:class_realm/features/teacher/widgets/timetable_grid_widget.dart';
 
 enum ParentScheduleViewMode { list, grid }
@@ -17,6 +17,19 @@ class ParentScheduleView extends StatefulWidget {
 
 class _ParentScheduleViewState extends State<ParentScheduleView> {
   ParentScheduleViewMode _viewMode = ParentScheduleViewMode.list;
+  late Future<List<ScheduleModel>> _schedulesFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    final sec = widget.linkedStudent?.departmentOrSection;
+    if (sec != null && sec.isNotEmpty) {
+      _schedulesFuture =
+          SupabaseScheduleRepository.instance.getSchedules(section: sec);
+    } else {
+      _schedulesFuture = Future.value([]);
+    }
+  }
 
   final List<String> _days = const [
     'Monday',
@@ -32,15 +45,14 @@ class _ParentScheduleViewState extends State<ParentScheduleView> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final student = widget.linkedStudent;
-    final section = student?.departmentOrSection ?? 'Section A';
-    final schedules = student == null
-        ? <ScheduleModel>[]
-        : MockDatabase.instance.scheduleForSection(section);
+    final section = student?.departmentOrSection ?? 'Enrolled';
 
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          student == null ? 'Student Schedule' : "${student.firstName}'s Schedule",
+          student == null
+              ? 'Student Schedule'
+              : "${student.firstName}'s Schedule",
         ),
         backgroundColor: theme.colorScheme.primary,
         foregroundColor: theme.colorScheme.onPrimary,
@@ -54,9 +66,10 @@ class _ParentScheduleViewState extends State<ParentScheduleView> {
             tooltip: 'Toggle Schedule View',
             onPressed: () {
               setState(() {
-                _viewMode = _viewMode == ParentScheduleViewMode.list
-                    ? ParentScheduleViewMode.grid
-                    : ParentScheduleViewMode.list;
+                _viewMode =
+                    _viewMode == ParentScheduleViewMode.list
+                        ? ParentScheduleViewMode.grid
+                        : ParentScheduleViewMode.list;
               });
             },
           ),
@@ -64,94 +77,116 @@ class _ParentScheduleViewState extends State<ParentScheduleView> {
       ),
       body: Container(
         color: theme.scaffoldBackgroundColor,
-        child: student == null
-            ? const Center(child: Text('No linked student found.'))
-            : Column(
-                children: [
-                  // Top View Switcher Banner
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 10),
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.surface,
-                      border: Border(
-                        bottom: BorderSide(
-                          color: theme.colorScheme.onSurface
-                              .withValues(alpha: 0.1),
+        child:
+            student == null
+                ? const Center(child: Text('No linked student found.'))
+                : Column(
+                  children: [
+                    // Top View Switcher Banner
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 10,
+                      ),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.surface,
+                        border: Border(
+                          bottom: BorderSide(
+                            color: theme.colorScheme.onSurface.withValues(
+                              alpha: 0.1,
+                            ),
+                          ),
                         ),
                       ),
-                    ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                '${student.fullName} • $section',
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 14,
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  '${student.fullName} • $section',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                  ),
                                 ),
+                                Text(
+                                  _viewMode == ParentScheduleViewMode.list
+                                      ? 'Daily Agenda View'
+                                      : 'Weekly Timetable Grid',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: theme.colorScheme.onSurface
+                                        .withValues(alpha: 0.6),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          SegmentedButton<ParentScheduleViewMode>(
+                            segments: const [
+                              ButtonSegment<ParentScheduleViewMode>(
+                                value: ParentScheduleViewMode.list,
+                                label: Text('List'),
+                                icon: Icon(Icons.view_agenda_outlined, size: 16),
                               ),
-                              Text(
-                                _viewMode == ParentScheduleViewMode.list
-                                    ? 'Daily Agenda View'
-                                    : 'Weekly Timetable Grid',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: theme.colorScheme.onSurface
-                                      .withValues(alpha: 0.6),
+                              ButtonSegment<ParentScheduleViewMode>(
+                                value: ParentScheduleViewMode.grid,
+                                label: Text('Timetable'),
+                                icon: Icon(
+                                  Icons.calendar_view_week_rounded,
+                                  size: 16,
                                 ),
                               ),
                             ],
-                          ),
-                        ),
-                        SegmentedButton<ParentScheduleViewMode>(
-                          segments: const [
-                            ButtonSegment<ParentScheduleViewMode>(
-                              value: ParentScheduleViewMode.list,
-                              label: Text('List'),
-                              icon: Icon(Icons.view_agenda_outlined, size: 16),
+                            selected: {_viewMode},
+                            onSelectionChanged: (
+                              Set<ParentScheduleViewMode> newSelection,
+                            ) {
+                              setState(() {
+                                _viewMode = newSelection.first;
+                              });
+                            },
+                            style: const ButtonStyle(
+                              visualDensity: VisualDensity.compact,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                             ),
-                            ButtonSegment<ParentScheduleViewMode>(
-                              value: ParentScheduleViewMode.grid,
-                              label: Text('Timetable'),
-                              icon:
-                                  Icon(Icons.calendar_view_week_rounded, size: 16),
-                            ),
-                          ],
-                          selected: {_viewMode},
-                          onSelectionChanged:
-                              (Set<ParentScheduleViewMode> newSelection) {
-                            setState(() {
-                              _viewMode = newSelection.first;
-                            });
-                          },
-                          style: ButtonStyle(
-                            visualDensity: VisualDensity.compact,
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
 
-                  // Content Area
-                  Expanded(
-                    child: schedules.isEmpty
-                        ? const Center(child: Text('No schedule records found.'))
-                        : _viewMode == ParentScheduleViewMode.list
-                            ? _buildListView(context, theme, schedules)
-                            : Padding(
+                    // Content Area
+                    Expanded(
+                      child: FutureBuilder<List<ScheduleModel>>(
+                        future: _schedulesFuture,
+                        builder: (context, snapshot) {
+                          if (snapshot.connectionState ==
+                              ConnectionState.waiting) {
+                            return const Center(
+                              child: CircularProgressIndicator(),
+                            );
+                          }
+                          final schedules = snapshot.data ?? [];
+                          if (schedules.isEmpty) {
+                            return const Center(
+                              child: Text('No schedule records found.'),
+                            );
+                          }
+                          return _viewMode == ParentScheduleViewMode.list
+                              ? _buildListView(context, theme, schedules)
+                              : Padding(
                                 padding: const EdgeInsets.all(8.0),
                                 child: TimetableGridWidget(
                                   schedules: schedules,
                                 ),
-                              ),
-                  ),
-                ],
-              ),
+                              );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
       ),
     );
   }
@@ -181,95 +216,41 @@ class _ParentScheduleViewState extends State<ParentScheduleView> {
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.bold,
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                  letterSpacing: 1.1,
+                  letterSpacing: 1.2,
+                  color: theme.colorScheme.primary,
                 ),
               ),
             ),
-            ...daySchedules.map(
-              (s) => Container(
-                margin: const EdgeInsets.only(bottom: 10),
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.surface,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color:
-                        theme.colorScheme.onSurface.withValues(alpha: 0.12),
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 4,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.primary,
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            s.subject,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 15,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Row(
-                            children: [
-                              Icon(
-                                Icons.place_outlined,
-                                size: 14,
-                                color: theme.colorScheme.onSurface
-                                    .withValues(alpha: 0.6),
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                s.room,
-                                style: TextStyle(
-                                  color: theme.colorScheme.onSurface
-                                      .withValues(alpha: 0.6),
-                                  fontSize: 13,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Text(
-                          s.startTime,
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: theme.colorScheme.primary,
-                          ),
-                        ),
-                        Text(
-                          s.endTime,
-                          style: TextStyle(
-                            color: theme.colorScheme.onSurface
-                                .withValues(alpha: 0.6),
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
+            ...daySchedules.map((s) => _buildScheduleCard(context, theme, s)),
           ],
         );
       },
+    );
+  }
+
+  Widget _buildScheduleCard(
+    BuildContext context,
+    ThemeData theme,
+    ScheduleModel s,
+  ) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: ListTile(
+        leading: Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.primary.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(Icons.school_outlined, color: theme.colorScheme.primary),
+        ),
+        title: Text(
+          s.subject,
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
+        subtitle: Text('${s.startTime} - ${s.endTime} • Room: ${s.room}'),
+      ),
     );
   }
 }

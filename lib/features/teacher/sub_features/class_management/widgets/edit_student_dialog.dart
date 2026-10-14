@@ -261,12 +261,8 @@ class _EditStudentDialogState extends State<EditStudentDialog> {
                       child: AppDatePickerField(
                         label: 'Birthday *',
                         initialDate: _birthday,
-                        firstDate: DateTime(1970, 1, 1),
-                        lastDate: DateTime(
-                          DateTime.now().year - 10,
-                          DateTime.now().month,
-                          DateTime.now().day,
-                        ),
+                        firstDate: BirthdayValidator.getMinDate(),
+                        lastDate: BirthdayValidator.getMaxDate('student'),
                         onDateSelected: (date) =>
                             setState(() => _birthday = date),
                         validator: (date) {

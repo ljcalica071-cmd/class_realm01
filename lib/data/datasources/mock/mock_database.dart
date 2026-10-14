@@ -2,8 +2,6 @@ import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/models/academic_models.dart';
 import 'package:class_realm/core/utils/deped_grading_engine.dart';
 
-// Mock password store: userId -> password (plain text, prototype only)
-final Map<String, String> _mockPasswords = {};
 
 class MockDatabase {
   // Singleton instance
@@ -33,116 +31,27 @@ class MockDatabase {
   Map<String, Map<String, double>> assessmentScores = {};
 
   // Teacher Academic Setup
-  String academicYear = "2024-2025";
-  String gradeLevel = "Grade 11";
-  String currentSubject = "General Mathematics";
-  List<String> sections = ["Section A", "Section B"];
+  String academicYear = "";
+  String gradeLevel = "";
+  String currentSubject = "";
+  List<String> sections = [];
 
   void _seedData() {
     _seedCanonicalData();
   }
 
   void _seedCanonicalData() {
-    academicYear = '2026-2027';
-    gradeLevel = 'Grade 11';
-    currentSubject = 'General Mathematics';
-    sections = ['Section A', 'Section B'];
+    academicYear = '';
+    gradeLevel = '';
+    currentSubject = '';
+    sections = [];
 
-    const List<Map<String, String>> studentRecords = [];
-
-    DateTime parseBirthday(String value) {
-      final parts = value.split('-').map(int.parse).toList();
-      return DateTime(parts[0], parts[1], parts[2]);
-    }
-
-    users = [
-      const UserModel(
-        id: 'usr_admin',
-        username: 'ljcalica971@gmail.com',
-        fullName: 'School Administrator',
-        email: 'ljcalica971@gmail.com',
-        role: UserRole.admin,
-      ),
-      const UserModel(
-        id: 'T001',
-        username: 'teacher',
-        fullName: 'Karen P. Gonzaga',
-        email: 'karen.gonzaga@classrealm.edu',
-        role: UserRole.teacher,
-        departmentOrSection: 'General Mathematics',
-        isSetupComplete: true,
-      ),
-      ...studentRecords.map((record) {
-        final fullName =
-            '${record['first']} ${record['middle']} ${record['last']}';
-        return UserModel(
-          id: record['id']!,
-          username: record['id'] == 'A01'
-              ? 'student'
-              : '${record['first']}${record['last']}'.toLowerCase().replaceAll(
-                  ' ',
-                  '',
-                ),
-          fullName: fullName,
-          email: record['email']!,
-          role: UserRole.student,
-          studentId: record['id'],
-          lrn: record['lrn'],
-          departmentOrSection: record['section'],
-          firstName: record['first'],
-          middleName: record['middle'],
-          lastName: record['last'],
-          gender: record['gender'],
-          birthday: parseBirthday(record['birthday']!),
-          contactNumber: record['phone'],
-          gradeLevel: '11',
-          parentGuardianName: record['parent'],
-          parentGuardianRelationship: record['relationship'],
-          parentGuardianContact: record['parentPhone'],
-        );
-      }),
-      ...studentRecords.map((record) {
-        final parentId = 'P${record['id']}';
-        return UserModel(
-          id: parentId,
-          username: record['id'] == 'A01' ? 'parent' : parentId.toLowerCase(),
-          fullName: record['parent']!,
-          email: record['parentEmail']!,
-          role: UserRole.parent,
-          linkedStudentId: record['id'],
-          contactNumber: record['parentPhone'],
-          parentGuardianRelationship: record['relationship'],
-        );
-      }),
-    ];
-
-    _mockPasswords
-      ..clear()
-      ..addAll({
-        'T001': 'teacher123',
-        for (final record in studentRecords) record['id']!: 'student123',
-        for (final record in studentRecords) 'P${record['id']}': 'parent123',
-      });
-
+    users = [];
     attendanceRecords = [];
     activities = [];
     assessmentScores = {};
     activitySubmissions = [];
 
-    QuestionModel question(String id, double points) => QuestionModel(
-      id: id,
-      questionText: 'General Mathematics question',
-      type: QuestionType.multipleChoice,
-      choices: const ['A', 'B', 'C', 'D'],
-      correctAnswer: 'A',
-      points: points,
-    );
-    List<QuestionModel> questions(String prefix, int count, double points) =>
-        List.generate(
-          count,
-          (index) => question('$prefix-Q${index + 1}', points),
-        );
-    final now = DateTime.now();
     quizzesAndExams = [];
     examReviews = [];
     assessmentResults = [];
@@ -154,32 +63,7 @@ class MockDatabase {
     lessonPlans = [];
     materials = [];
     schedules = [];
-    notifications = [
-      AppNotificationModel(
-        id: 'notif_att_1',
-        title: 'Alert: Low Attendance detected',
-        message: 'Student Daniel J. Mendoza (A04) has dropped below 80% attendance this month.',
-        timestamp: now.subtract(const Duration(days: 1)),
-        isRead: false,
-        type: 'attendance_alert',
-      ),
-      AppNotificationModel(
-        id: 'notif_risk_1',
-        title: 'Alert: At-Risk Student Identified',
-        message: 'Student Camille S. Villanueva (A05) current standing is below 75%. Remedial intervention recommended.',
-        timestamp: now.subtract(const Duration(hours: 3)),
-        isRead: false,
-        type: 'academic_alert',
-      ),
-      AppNotificationModel(
-        id: 'notif_att_2',
-        title: 'RFID Attendance Log Sync',
-        message: 'RFID Reader "Gate 1" synced 45 student logs at 07:45 AM.',
-        timestamp: now.subtract(const Duration(hours: 10)),
-        isRead: true,
-        type: 'system',
-      ),
-    ];
+    notifications = [];
   }
 
   double categoryAverageFor(String studentId, String category) {
@@ -240,17 +124,6 @@ class MockDatabase {
 
   // --- Helper CRUD Actions ---
 
-  // Auth Simulation
-  UserModel? authenticate(String username, String password) {
-    // Find user by username (case-sensitive for generated usernames)
-    final idx = users.indexWhere((u) => u.username == username);
-    if (idx == -1) return null;
-    final user = users[idx];
-    final storedPassword = _mockPasswords[user.id];
-    if (storedPassword == null || storedPassword != password) return null;
-    currentUser = user;
-    return currentUser;
-  }
 
   void logout() {
     currentUser = null;
@@ -285,7 +158,6 @@ class MockDatabase {
         parentGuardianRelationship: relationship,
       ),
     );
-    _mockPasswords[id] = 'parent123';
     return null;
   }
 
@@ -308,24 +180,11 @@ class MockDatabase {
     );
   }
 
-  // Teacher Approval / Rejection
+  // Teacher account status management
   void updateTeacherStatus(String teacherId, AccountStatus newStatus) {
     final idx = users.indexWhere((u) => u.id == teacherId);
     if (idx != -1) {
       users[idx] = users[idx].copyWith(status: newStatus);
-      if (newStatus == AccountStatus.pendingFirstLogin) {
-        final teacher = users[idx];
-        final lastName = (teacher.lastName ?? teacher.fullName.split(' ').last)
-            .toLowerCase();
-        String formattedBday = '19950101';
-        if (teacher.birthday != null) {
-          formattedBday =
-              teacher.birthday!.year.toString() +
-              teacher.birthday!.month.toString().padLeft(2, '0') +
-              teacher.birthday!.day.toString().padLeft(2, '0');
-        }
-        _mockPasswords[teacherId] = '$lastName$formattedBday';
-      }
     }
   }
 
@@ -381,7 +240,6 @@ class MockDatabase {
 
   void permanentlyDeleteStudent(String id, [String? subjectId]) {
     users.removeWhere((u) => u.id == id);
-    _mockPasswords.remove(id);
   }
 
   void updateStudent(
@@ -483,7 +341,6 @@ class MockDatabase {
       parentGuardianRelationship: parentRelationship,
     );
     users.add(newStudent);
-    _mockPasswords[id] = tempPassword;
 
     // Auto-create Parent Account
     final parentId = 'P$studentId';
@@ -499,35 +356,10 @@ class MockDatabase {
       parentGuardianRelationship: parentRelationship,
     );
     users.add(newParent);
-    _mockPasswords[parentId] = 'parent123'; // Default mock password for parents
 
     return null; // success
   }
 
-  /// Complete first login: validate temp password, set new password, activate account
-  /// Returns null on success, or an error message.
-  String? completeFirstLogin(
-    String userId,
-    String enteredTempPassword,
-    String newPassword,
-  ) {
-    final idx = users.indexWhere((u) => u.id == userId);
-    if (idx == -1) return 'Account not found.';
-    final storedTemp = _mockPasswords[userId];
-    if (storedTemp == null || storedTemp != enteredTempPassword) {
-      return 'Incorrect temporary password.';
-    }
-    if (newPassword == enteredTempPassword) {
-      return 'New password must be different from the temporary password.';
-    }
-    users[idx] = users[idx].copyWith(
-      status: AccountStatus.active,
-      password: newPassword,
-    );
-    _mockPasswords[userId] = newPassword;
-    currentUser = users[idx];
-    return null; // success
-  }
 
   void deactivateStudent(String id) {
     final idx = users.indexWhere((u) => u.id == id);

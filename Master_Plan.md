@@ -31,7 +31,7 @@
 | Teacher tries to archive a student's account while the student has active enrollments with other teachers | Do not let a single teacher hide or deactivate the shared student account. Require an authorized school-wide action, or let the teacher archive only the enrollment they own if that action is approved. | Proposed safe default; account/enrollment scope needs resolution |
 | Admin finds a duplicate student account with the same LRN | Verify which account is authoritative, then use a controlled merge or link-correction process that preserves all enrollments and grade history. Do not simply delete either account. | Proposed safe default |
 | Admin archives/deactivates a teacher account | Block that teacher's login while preserving the teacher profile and academic records. Do not automatically delete classes, enrollments, grades, or students. Define an explicit admin process for classes that need another owner. | Account states documented in §1.11; class ownership behavior proposed |
-| Admin restores a teacher account | Restore access only after the account is re-approved/reactivated and its academic assignments are checked for conflicts; keep historical records linked to their original owner unless an authorized reassignment is recorded. | Reactivation state shown in §1.11; restoration details proposed |
+| Admin restores a teacher account | Restore access only after the account is reactivated and its academic assignments are checked for conflicts; keep historical records linked to their original owner unless an authorized reassignment is recorded. | Reactivation state shown in §1.11; restoration details proposed |
 | Teacher or admin archives/deletes a parent account | Proposed behavior: disable that parent's login and remove only the affected parent-child link when requested. Keep the student's account and records, and preserve any other child links. | Parent lifecycle is TODO in §1.25; proposed safe default |
 | Admin permanently deletes a subject or section that has academic history | Do not hard-delete it through the ordinary UI. Keep it archived so historical records remain traceable; only consider permanent removal through the approved retention/privacy process after dependent records are reviewed. | Proposed safe default |
 | User requests permanent deletion of a teacher, student, or parent account | Do not cascade-delete academic records through the normal account screen. Route the request through an authorized review that checks ownership, linked records, retention requirements, and any required anonymization. | Not yet specified; proposed safe default |
@@ -91,7 +91,7 @@
   - [1.1 High-Level System Architecture](#11-high-level-system-architecture)
   - [1.2 User Roles & Platform Distribution](#12-user-roles--platform-distribution)
   - [1.3 Teacher Account Creation Flow](#13-teacher-account-creation-flow)
-  - [1.4 Admin Approval Flow](#14-admin-approval-flow)
+  - [1.4 Admin Teacher Account Management](#14-admin-teacher-account-management)
   - [1.5 First-Time Login & Password Change](#15-first-time-login--password-change)
   - [1.6 Academic Setup Wizard (Post-Login Onboarding)](#16-academic-setup-wizard-post-login-onboarding)
   - [1.7 Tutorial Mode (Coach Marks)](#17-tutorial-mode-coach-marks)
@@ -170,7 +170,7 @@ All text input fields across the system strictly follow the rules defined in `li
 
 | Entity | Defined rules | Detailed reference |
 |---|---|---|
-| Teacher registration | First/last name required, 2–50 characters; middle name optional; birthday must be a valid past date, age at least 21, year 1960 or later; email valid and unique; gender required; terms must be accepted. | §1.3, “Field Validation Rules” |
+| Admin-created teacher account | Admin supplies the teacher's profile details and email; email must be unique. Teacher completes first-login OTP and password setup. | §1.3 |
 | Password change/reset | Password must meet the rules in §1.5; confirmation must match. Forgot-password requests are limited to 3 per email per hour, with Firebase IP-based rate limiting. | §1.5; §1.17 |
 | Student identity | LRN required, exactly 12 digits, and unique. Birthday must be in the past; stated age range is 10–25 and birth year 2000 or later. Gender required. | §1.9; §1.30.B |
 
@@ -268,7 +268,7 @@ These are the system behaviors already described in the plan. Any unresolved or 
 | Student reaches 20% absence overall | Notify teachers/admin and require review/confirmation. Exact interaction with global account deactivation is unresolved. | §1.18 Rule 2; §1.16 |
 | Incoming transfer student has completed a term and brings grades | Teacher may enter previous grades and mark the student as a transferee; grades are carried into computation. | §1.14; §1.16 |
 | Teacher imports a spreadsheet with new and existing LRNs | Classify each row as new account, enrollment-only, or invalid/duplicate; let the teacher review valid rows and errors before committing. | §1.9; §1.13 |
-| User requests password reset for an unknown email | Return the same “check your email” response to prevent email enumeration. Pending/rejected/deactivated account states still control login. | §1.17 |
+| User requests password reset for an unknown email | Return the same “check your email” response to prevent email enumeration. Inactive account states still block login. | §1.17 |
 
 ## 4. Confirmed System Rulings
 
@@ -323,7 +323,7 @@ Use these sections when implementing each area; this prioritized reference does 
 
 | Planning need | Detailed sections |
 |---|---|
-| Architecture, roles, teacher account, approval, login | §1.1–1.5 |
+| Architecture, roles, teacher account creation, login | §1.1–1.5 |
 | School year, terms, subjects, sections, schedule | §1.6; “New Classroom Setup Architecture” |
 | Teacher subject/section lifecycle | §1.8 |
 | Student onboarding, import, deduplication, teacher data isolation | §1.9; §1.13 |
@@ -391,10 +391,10 @@ Use these sections when implementing each area; this prioritized reference does 
 
 ## 1.2 User Roles & Platform Distribution
 
-| Role | Platform | Registration | Account Creator |
+| Role | Platform | Account Creation | Account Creator |
 |---|---|---|---|
 | **Admin** | Web only | Pre-seeded (the capstone team) | System |
-| **Teacher** | Web only | Self-registration on web | Teacher themselves |
+| **Teacher** | Web | Admin-created account; first-login setup required | Admin |
 | **Student** | Mobile only | Created by Teacher | Teacher |
 | **Parent** | Mobile only | Created by Teacher | Teacher |
 
@@ -408,19 +408,19 @@ All accounts use the same formula for auto-generated credentials:
 | **Temp Password** | `{last_name_lowercase_no_spaces}{MMDDYYYY_of_birthday}` | `gonzaga03151990` |
 
 > [!NOTE]
-> Teachers set their own credentials during registration. The auto-generated formula above applies **only** to Student and Parent accounts created by a Teacher. Teachers still go through a temp-password-change flow on first login — their initial password is the auto-generated one based on the registration form data, which they must change immediately upon first approved login.
+> The auto-generated formula above applies to Student and Parent accounts created by a Teacher. Admin-created teacher accounts receive first-login credentials and must complete OTP/password setup before access.
 
 ---
 
 ## 1.3 Teacher Account Creation Flow
 
-### Registration Form (Web Only)
+### Admin-Only Teacher Account Form
 
-**URL:** `/register` — Only accessible on web. Mobile app must NOT show a registration link.
+Only an authenticated Admin may create a teacher account. There is no public teacher registration route or approval queue.
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│           TEACHER REGISTRATION FORM                  │
+│          ADMIN: CREATE TEACHER ACCOUNT                │
 ├─────────────────────────────────────────────────────┤
 │                                                      │
 │  ┌─── Personal Information ────────────────────────┐ │
@@ -433,12 +433,6 @@ All accounts use the same formula for auto-generated credentials:
 │  │  Email *         [________________]              │ │
 │  │  Gender *        [▼ dropdown     ]               │ │
 │  │                                                  │ │
-│  └──────────────────────────────────────────────────┘ │
-│                                                      │
-│  ┌─── Terms & Conditions ──────────────────────────┐ │
-│  │  ☐  I agree to the Terms and Conditions and     │ │
-│  │     Privacy Policy of ClassRealm.               │ │
-│  │     [View Terms] [View Privacy Policy]          │ │
 │  └──────────────────────────────────────────────────┘ │
 │                                                      │
 │  [ Create Account ]                                  │
@@ -455,14 +449,13 @@ All accounts use the same formula for auto-generated credentials:
 | `last_name` | `String` | Required. 2–50 chars. Same char rules. |
 | `birthday` | `DateTime` | Required. Must be a valid past date. **Age must be ≥ 21** (minimum teaching age). **Year must be ≥ 1960** (blocks implausible birthdates). Age is auto-calculated from birthday. |
 | `age` | `int` | Read-only. Auto-calculated: `today.year - birthday.year` adjusted for whether birthday has occurred this year. |
-| `email` | `String` | Required. Valid email format (`RegExp`). Must be unique in the system. Will receive confirmation and approval notifications. |
+| `email` | `String` | Required. Valid email format (`RegExp`). Must be unique in the system. Receives first-login instructions. |
 | `gender` | `Enum` | Required. Options: `Male`, `Female`. Dropdown. |
-| `terms_accepted` | `bool` | Required. Must be `true` to submit. Timestamp recorded. |
 
-### What Happens After Submission
+### Account Creation and First Login
 
 ```
-Teacher clicks "Create Account"
+Admin submits the teacher account form
 │
 ├── Client-side validation passes? 
 │   ├── NO → Show inline field errors, red borders, error messages
@@ -472,111 +465,17 @@ Teacher clicks "Create Account"
 │   ├── EMAIL EXISTS → Show error: "This email is already registered."
 │   └── UNIQUE ↓
 │
-├── Create Firebase Auth account (email + auto-generated temp password)
-│   └── Temp password = {lastname_lower}{MMDDYYYY_birthday}
+├── Create Auth account and teacher profile/settings
+│   └── Teacher status = 'pending_first_login'
 │
-├── Insert teacher record into Supabase `users` table
-│   ├── account_status = 'pending'
-│   ├── is_first_login = true
-│   ├── registration_date = now()
-│   └── terms_accepted_at = now()
-│
-├── Send email to teacher:
-│   Subject: "ClassRealm — Account Created Successfully"
-│   Body: "Your account has been created. Please wait for the 
-│          administrator to review and approve your registration.
-│          You will receive an email notification once approved."
-│
-├── Navigate to Pending Account Screen
-│   └── Message: "Your account is pending approval. 
-│                 You'll be notified via email when approved."
-│
-└── Send notification to Admin dashboard
-    └── "New teacher registration: {full_name} — Pending Review"
+├── Send first-login instructions and OTP to teacher
+├── Teacher sets a new password
+└── Set teacher status to 'active'
 ```
 
-> [!WARNING]
-> **Security Note:** The auto-generated temp password is deterministic (lastname + birthday). This is acceptable ONLY because the teacher is forced to change it on first login. The temp password is never shown on screen — it exists only to create the Firebase Auth entry. The teacher uses it to log in the first time, then immediately changes it.
+## 1.4 Admin Teacher Account Management
 
----
-
-## 1.4 Admin Approval Flow
-
-### What Admin Sees
-
-When a teacher registers, their record appears in the Admin's **Pending Approvals** tab.
-
-```
-┌──────────────────────────────────────────────────────────────────┐
-│  ⏳ PENDING TEACHER APPROVALS                         [3 pending]│
-├──────────────────────────────────────────────────────────────────┤
-│                                                                  │
-│  ┌────────────────────────────────────────────────────────────┐  │
-│  │  Karen P. Gonzaga                                          │  │
-│  │  Email: karen.gonzaga@email.com                            │  │
-│  │  Gender: Female  │  Age: 36  │  Birthday: Mar 15, 1990    │  │
-│  │  Registered: Sep 25, 2026 at 10:30 AM                     │  │
-│  │                                                            │  │
-│  │  [ ✅ Approve ]  [ ❌ Reject ]  [ 👁 View Details ]       │  │
-│  └────────────────────────────────────────────────────────────┘  │
-│                                                                  │
-│  ┌────────────────────────────────────────────────────────────┐  │
-│  │  Juan D. Santos                                            │  │
-│  │  Email: juan.santos@email.com                              │  │
-│  │  ...                                                       │  │
-│  └────────────────────────────────────────────────────────────┘  │
-│                                                                  │
-└──────────────────────────────────────────────────────────────────┘
-```
-
-### Approval Decision Flow
-
-```
-Admin clicks "Approve" on a pending teacher
-│
-├── Show confirmation dialog:
-│   "Are you sure you want to approve Karen P. Gonzaga's 
-│    teacher account? This will grant them full access."
-│   [ Cancel ]  [ Confirm Approve ]
-│
-├── Admin confirms
-│   ├── Update Supabase: account_status = 'active'
-│   ├── Update: approved_at = now(), approved_by = admin_id
-│   │
-│   ├── Send email to teacher:
-│   │   Subject: "ClassRealm — Account Approved! 🎉"
-│   │   Body: "Your teacher account has been approved.
-│   │          You can now log in using your email.
-│   │          Your temporary password is your last name (lowercase)
-│   │          followed by your birthday (MMDDYYYY).
-│   │          Example: gonzaga03151990
-│   │          You will be asked to change this on first login."
-│   │
-│   └── Show success toast: "Teacher account approved successfully."
-│
-Admin clicks "Reject"
-│
-├── Show confirmation dialog WITH reason field:
-│   "Please provide a reason for rejecting this registration."
-│   [Reason text field: ____________________________]
-│   [ Cancel ]  [ Confirm Reject ]
-│
-├── Admin confirms
-│   ├── Update Supabase: account_status = 'rejected'
-│   ├── Update: rejected_at = now(), rejection_reason = text
-│   │
-│   ├── Send email to teacher:
-│   │   Subject: "ClassRealm — Registration Not Approved"
-│   │   Body: "We're sorry, your registration has not been approved.
-│   │          Reason: {rejection_reason}
-│   │          If you believe this is an error, please contact
-│   │          the school administrator."
-│   │
-│   └── Show success toast: "Teacher registration rejected."
-```
-
-> [!TIP]
-> **Admin also has a "Create Teacher Directly" option:** When Admin creates a teacher account manually (from the Teacher Management tab), the account is set to `active` immediately — no approval needed. The temp password is still auto-generated using the same formula and included in the welcome email.
+Admin creates teacher accounts from Teacher Management. Newly created accounts stay `pending_first_login` until the teacher verifies the first-login OTP and sets a password. Admin can view, edit, archive/reactivate, or delete teacher accounts. There is no teacher self-registration, approval, or rejection workflow.
 
 ---
 
@@ -592,9 +491,8 @@ Teacher enters email + temp password on Login Screen
 │   └── VALID ↓
 │
 ├── Query Supabase for user record
-│   ├── account_status == 'pending'  → Navigate to Pending Account Screen
-│   ├── account_status == 'rejected' → Show error dialog with rejection reason
-│   ├── account_status == 'archived' → Show error: "Account deactivated."
+│   ├── Legacy 'pending'/'rejected' or archived/deactivated → Block login
+│   ├── account_status == 'pending_first_login' → Complete OTP/password setup
 │   └── account_status == 'active' ↓
 │
 ├── Check: is_first_login == true?
@@ -1184,15 +1082,9 @@ TEACHER JOURNEY — COMPLETE FLOW
 ════════════════════════════════
 
 1. CREATE ACCOUNT
-   └── Teacher visits ClassRealm web → clicks "Register" 
-       → fills form (first_name, middle_name, last_name, birthday, email, gender)
-       → accepts Terms & Conditions
-       → submits → sees "Account Created — Awaiting Approval"
-       → receives confirmation email
-
-2. WAIT FOR APPROVAL
-   └── Admin reviews registration → approves or rejects
-       → Teacher receives approval email with temp password instructions
+   └── Admin creates teacher account in Teacher Management
+       → account is set to 'pending_first_login'
+       → teacher receives first-login instructions/OTP
 
 3. FIRST LOGIN
    └── Teacher logs in with email + temp password
@@ -1245,23 +1137,13 @@ Every user account (Admin, Teacher, Student, Parent) follows this state machine:
                     │   CREATED   │
                     └──────┬──────┘
                            │
-              ┌────────────┼────────────┐
-              │            │            │
-              ▼            ▼            │
-     ┌──────────────┐ ┌──────────┐     │
-     │   PENDING    │ │  ACTIVE  │     │
-     │ (awaiting    │ │(directly │     │  (Admin-created accounts
-     │  approval)   │ │ by Admin)│     │   skip 'pending')
-     └──────┬───────┘ └────┬─────┘     │
-            │              │           │
-     ┌──────┼──────┐       │           │
-     │             │       │           │
-     ▼             ▼       ▼           │
-┌──────────┐ ┌──────────────────┐      │
-│ REJECTED │ │ PENDING FIRST    │      │
-│          │ │ LOGIN            │◄─────┘
-│          │ │ (must change pwd)│   (Student/Parent
-└──────────┘ └────────┬─────────┘   created by Teacher)
+                           │
+                           ▼
+      ┌──────────────────┐
+      │ PENDING FIRST    │
+      │ LOGIN            │
+      │ (OTP + new password) │
+      └────────┬─────────┘
                       │
                       ▼
                ┌──────────┐
@@ -1279,6 +1161,8 @@ Every user account (Admin, Teacher, Student, Parent) follows this state machine:
           │ (reactivate)   │ (restore)
           └────────────────
 ---
+
+Pre-seeded Admin accounts may start as `active`. Legacy `pending`/`rejected` teacher records are blocked and are not created by current workflows.
 
 ## 1.12 DepEd Curriculum Alignment (SY 2026-2027)
 
@@ -2137,12 +2021,12 @@ At any point during the school year:
 ## 1.26 Admin Portal Complete Flow
 
 > 🔲 **TODO — Awaiting detailed specifications.** Add your details below the marker.
-> Note: Basic approval/rejection flow is already defined in [Section 1.4](#14-admin-approval-flow).
+> Note: Teacher accounts are created and managed by Admin; no registration approval flow exists.
 
 ### Topics to Cover When Complete
 
-- [ ] Admin dashboard overview (total teachers, students, pending approvals)
-- [ ] Teacher account management (approve, reject, deactivate, view all)
+- [ ] Admin dashboard overview (total teachers, students, first-login pending)
+- [ ] Teacher account management (create, deactivate, view all)
 - [ ] Master Student Directory (search by LRN across all teachers/sections)
 - [ ] System settings (school year management, subject catalog editing)
 - [ ] Audit logs (who did what, when)
@@ -2233,7 +2117,7 @@ At any point during the school year:
 > Fields marked ✅ are already defined in earlier sections.
 > I-edit mo lang ang tables below para mag-add, mag-remove, o mag-change ng field requirements.
 
-### A. Teacher Account — Registration Form (Ref: Section 1.3)
+### A. Teacher Account — Admin Creation Form (Ref: Section 1.3)
 
 | # | Field Name | Type | Required? | Status | Notes |
 |---|---|---|---|---|---|
@@ -2244,7 +2128,6 @@ At any point during the school year:
 | 5 | Age | int | Auto-calc | ✅ Defined | Read-only, computed from birthday |
 | 6 | Email | String | ✅ Required | ✅ Defined | Must be unique in system |
 | 7 | Gender | Enum | ✅ Required | ✅ Defined | Male / Female |
-| 8 | Terms Accepted | bool | ✅ Required | ✅ Defined | Must be true to submit |
 | 9 | Name Extension (Jr., III) | String | ? | 🔲 TODO | _Decide if needed_ |
 | 10 | Phone / Contact Number | String | ? | 🔲 TODO | _Decide if needed_ |
 | 11 | DepEd Employee ID | String | ? | 🔲 TODO | _For Admin verification?_ |
@@ -2430,7 +2313,7 @@ At any point during the school year:
 
 | Question | Answer | Impact on Design |
 |---|---|---|
-| Who generates teacher's temp password? | Auto-generated: `{lastname_lower}{MMDDYYYY_birthday}`. Teacher changes it on first login after admin approval. | Same formula for all user types. Teacher never "chooses" their initial password — it's deterministic from their registration data. |
+| Who creates the teacher account? | Admin creates it. Teacher completes first-login OTP and password setup. | No teacher self-registration or approval workflow. |
 | Tutorial mode style? | Step-by-step overlay tooltips (coach marks / spotlight bubbles) | No dedicated walkthrough page. In-context tooltips that highlight sidebar items and key UI areas. |
 | What happens when a section is deleted? | Soft-delete (archive). All data preserved but hidden. Teacher can restore later. | `is_archived` flag on section, cascading hide for students/grades/attendance. No data loss. |
 | 3-term or 4-quarter? | 3 terms only (new DepEd format, SY 2026-2027 onwards) | System does NOT support the old 4-quarter format. Academic Setup shows 3 term date fields. |

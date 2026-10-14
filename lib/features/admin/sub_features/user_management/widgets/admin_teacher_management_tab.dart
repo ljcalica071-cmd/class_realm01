@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'dart:ui';
 import 'package:class_realm/core/theme/app_theme.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/shared/widgets/shared_widgets.dart';
-import 'package:class_realm/widgets/common/app_modals.dart';
+import 'package:class_realm/features/admin/sub_features/user_management/widgets/admin_add_teacher_dialog.dart';
+import 'package:class_realm/routes/app_routes.dart';
 
 class AdminTeacherManagementTab extends StatefulWidget {
   final List<UserModel> teachers;
@@ -25,6 +27,34 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
   String _statusFilter = 'All';
   int _currentPage = 1;
   static const int _itemsPerPage = 10;
+  Future<void> _addTeacher() async {
+    final created = await showGeneralDialog<bool>(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'Close',
+      barrierColor: Colors.black.withValues(alpha: 0.5),
+      transitionDuration: const Duration(milliseconds: 250),
+      pageBuilder: (context, animation, secondaryAnimation) {
+        return const AdminAddTeacherDialog();
+      },
+      transitionBuilder: (context, animation, secondaryAnimation, child) {
+        return FadeTransition(
+          opacity: animation,
+          child: ScaleTransition(
+            scale: Tween<double>(begin: 0.95, end: 1.0).animate(CurvedAnimation(
+              parent: animation,
+              curve: Curves.easeOut,
+            )),
+            child: child,
+          ),
+        );
+      },
+    );
+    
+    if (created == true && mounted) {
+      widget.onDataChanged();
+    }
+  }
 
   void _handleArchive(UserModel t) async {
     final confirm = await AppModals.showConfirmDialog(
@@ -83,27 +113,27 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
     final filtered = widget.teachers.where((t) {
       final matchesSearch = t.fullName.toLowerCase().contains(_searchQuery.toLowerCase()) ||
           t.email.toLowerCase().contains(_searchQuery.toLowerCase());
-          
+
       if (_statusFilter == 'All') return matchesSearch;
       if (_statusFilter == 'Active') return matchesSearch && t.status == AccountStatus.active;
       if (_statusFilter == 'Pending First Login') return matchesSearch && t.status == AccountStatus.pendingFirstLogin;
       if (_statusFilter == 'Archived') return matchesSearch && t.status == AccountStatus.archived;
-      
+
       return matchesSearch;
     }).toList();
 
     final totalItems = filtered.length;
     final totalPages = (totalItems / _itemsPerPage).ceil();
-    
+
     if (_currentPage > totalPages && totalPages > 0) {
       _currentPage = totalPages;
     }
 
     final startIndex = (_currentPage - 1) * _itemsPerPage;
     final endIndex = (startIndex + _itemsPerPage).clamp(0, totalItems);
-    
-    final paginatedItems = filtered.isEmpty 
-        ? <UserModel>[] 
+
+    final paginatedItems = filtered.isEmpty
+        ? <UserModel>[]
         : filtered.sublist(startIndex, endIndex);
 
     return Padding(
@@ -111,8 +141,10 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            runSpacing: 12,
+            spacing: 12,
             children: [
               Text(
                 'Teacher Accounts Directory',
@@ -122,8 +154,11 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
                   color: theme.colorScheme.onSurface,
                 ),
               ),
-              // We do not need a Create Account button here as they register on their own
-              // But if you want to keep it, you could. For now we will rely on self-registration.
+              FilledButton.icon(
+                onPressed: _addTeacher,
+                icon: const Icon(Icons.person_add_alt_1),
+                label: const Text('Add Teacher'),
+              ),
             ],
           ),
           const SizedBox(height: 16),
@@ -193,7 +228,7 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              'Newly registered faculty will appear here once submitted and approved.',
+                              'Teacher accounts created by an administrator will appear here.',
                               style: TextStyle(
                                 fontSize: 13,
                                 color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
@@ -226,7 +261,7 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
                                   children: [
                                     StatusBadge.fromAccountStatus(t.status),
                                     const SizedBox(width: 16),
-                                    
+
                                     if (t.status == AccountStatus.archived) ...[
                                       Tooltip(
                                         message: 'Recover Account',
@@ -257,7 +292,7 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
                             },
                           ),
                         ),
-                        
+
                         // Pagination Controls
                         if (totalPages > 1)
                           Padding(

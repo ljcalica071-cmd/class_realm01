@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:loading_animation_widget/loading_animation_widget.dart';
 import 'package:class_realm/core/theme/app_theme.dart';
+import 'package:class_realm/core/services/local_storage_service.dart';
+import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/data/mock_database.dart';
 import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/widgets/common/sync_status_badge.dart';
 import 'package:class_realm/features/parent/widgets/widgets.dart';
+import 'package:class_realm/data/repositories/supabase_parent_repository.dart';
 
 class ParentHomeScreen extends StatefulWidget {
   const ParentHomeScreen({super.key});
@@ -17,50 +20,48 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
   int _currentIndex = 0;
   int _selectedChildIndex = 0;
   bool _isSwitchingChild = false;
+  bool _isLoadingStudents = true;
+  List<UserModel> _linkedStudents = [];
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
-  List<UserModel> _getLinkedStudents(UserModel parent) {
-    final List<UserModel> students = [];
+  @override
+  void initState() {
+    super.initState();
+    _loadLinkedStudents();
+  }
 
-    for (final u in MockDatabase.instance.users) {
-      if (u.role == UserRole.student) {
-        final matchesLinkedId =
-            (parent.linkedStudentId != null &&
-            (u.id == parent.linkedStudentId ||
-                u.studentId == parent.linkedStudentId ||
-                u.lrn == parent.linkedStudentId));
-        final matchesParentName =
-            (u.parentGuardianName != null &&
-            parent.fullName.isNotEmpty &&
-            u.parentGuardianName!.toLowerCase().contains(
-              parent.fullName.toLowerCase(),
-            ));
-        final matchesParentPhone =
-            (u.parentGuardianContact != null &&
-            parent.contactNumber != null &&
-            u.parentGuardianContact == parent.contactNumber);
-        final isReyesFamily =
-            (parent.fullName.contains('Reyes') && u.lastName == 'Reyes');
+  Future<void> _loadLinkedStudents() async {
+    final parent =
+        AuthRepository.instance.currentUser ??
+        MockDatabase.instance.currentUser;
+    if (parent == null) {
+      if (mounted) setState(() => _isLoadingStudents = false);
+      return;
+    }
 
-        if (matchesLinkedId ||
-            matchesParentName ||
-            matchesParentPhone ||
-            isReyesFamily) {
-          if (!students.any((s) => s.id == u.id)) {
-            students.add(u);
-          }
-        }
+    try {
+      final repo = SupabaseParentRepository();
+      final students = await repo.getLinkedStudentsForParent(parent.id);
+      if (mounted) {
+        setState(() {
+          _linkedStudents = students;
+          _isLoadingStudents = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading linked students: $e');
+      if (mounted) {
+        setState(() => _isLoadingStudents = false);
       }
     }
+  }
 
-    if (students.isEmpty) {
-      final defaultStudent = MockDatabase.instance.users.firstWhere(
-        (u) => u.role == UserRole.student,
-      );
-      students.add(defaultStudent);
-    }
-
-    return students;
+  List<UserModel> _getLinkedStudents(UserModel parent) {
+    if (_linkedStudents.isNotEmpty) return _linkedStudents;
+    return MockDatabase.instance.users
+        .where((u) => u.role == UserRole.student && (u.id == parent.linkedStudentId || parent.linkedStudentId == null))
+        .take(1)
+        .toList();
   }
 
   void _switchChildWithLoading(int targetIndex) async {
@@ -68,14 +69,20 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
     _isSwitchingChild = true;
 
     final parent =
+        AuthRepository.instance.currentUser ??
         MockDatabase.instance.currentUser ??
-        MockDatabase.instance.users.firstWhere(
-          (u) => u.role == UserRole.parent,
+        UserModel(
+          id: 'parent',
+          username: 'parent',
+          fullName: 'Parent User',
+          email: '',
+          role: UserRole.parent,
         );
+
     final linkedStudents = _getLinkedStudents(parent);
+    if (linkedStudents.isEmpty) return;
     final targetChild = linkedStudents[targetIndex % linkedStudents.length];
 
-    // Show Loading Modal / Dialog in center of screen
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -101,13 +108,8 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
               ),
               const SizedBox(height: 6),
               Text(
-                'Loading profile & academic logs for\n${targetChild.fullName}...',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 13,
-                  color: Theme.of(context).colorScheme.onSurface
-                      .withValues(alpha: 0.65),
-                ),
+                'Loading ${targetChild.fullName}',
+                style: const TextStyle(fontSize: 13, color: Colors.grey),
               ),
             ],
           ),
@@ -115,34 +117,25 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
       ),
     );
 
-    // Simulate short network & state update delay
     await Future.delayed(const Duration(milliseconds: 650));
-
     if (!mounted) return;
 
-    // Pop the loading modal dialog
     Navigator.of(context, rootNavigator: true).pop();
-    _isSwitchingChild = false;
 
-    // Update state to switch student profile
     setState(() {
-      _selectedChildIndex = targetIndex;
+      _selectedChildIndex = targetIndex % linkedStudents.length;
+      _isSwitchingChild = false;
     });
 
-    // Show floating success toast/snack
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(
           children: [
-            const Icon(
-              Icons.check_circle_rounded,
-              color: Colors.greenAccent,
-              size: 20,
-            ),
+            const Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
             const SizedBox(width: 10),
             Expanded(
               child: Text(
-                'Switched child profile to ${targetChild.fullName}',
+                'Active child switched to ${targetChild.fullName}',
                 style: const TextStyle(fontWeight: FontWeight.w600),
               ),
             ),
@@ -159,60 +152,51 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final parent =
+        AuthRepository.instance.currentUser ??
         MockDatabase.instance.currentUser ??
-        MockDatabase.instance.users.firstWhere(
-          (u) => u.role == UserRole.parent,
+        UserModel(
+          id: 'parent',
+          username: 'parent',
+          fullName: 'Parent User',
+          email: '',
+          role: UserRole.parent,
         );
 
     final linkedStudents = _getLinkedStudents(parent);
-    final linkedStudent =
-        linkedStudents[_selectedChildIndex % linkedStudents.length];
+    final UserModel? linkedStudent = linkedStudents.isNotEmpty
+        ? linkedStudents[_selectedChildIndex % linkedStudents.length]
+        : null;
 
-    final attendance = MockDatabase.instance.attendanceRecords;
-    final notifications = MockDatabase.instance.notifications
-        .where(
-          (notification) =>
-              notification.type == 'attendance' &&
-              notification.title == 'Attendance Confirmed',
-        )
-        .toList();
-
-    final linkedAttendance = attendance
-        .where(
-          (record) =>
-              record.studentId == linkedStudent.id ||
-              record.studentId == linkedStudent.lrn ||
-              record.studentId == linkedStudent.studentId,
-        )
-        .toList();
-
-    final teacher = MockDatabase.instance.users.firstWhere(
-      (u) => u.role == UserRole.teacher,
-    );
-
-    final List<Widget> pages = [
-      ParentStudentOverviewTab(
-        linkedStudent: linkedStudent,
-        teacher: teacher,
-        allChildren: linkedStudents,
-        onSelectChild: (child) {
-          final idx = linkedStudents.indexWhere((c) => c.id == child.id);
-          if (idx != -1 && idx != _selectedChildIndex) {
-            _switchChildWithLoading(idx);
-          }
-        },
-      ),
-      ParentAttendanceTab(attendance: linkedAttendance),
-      ParentGradesTab(student: linkedStudent),
-      ParentNotificationsTab(notifications: notifications),
-      ParentProfileTab(parent: parent, linkedStudent: linkedStudent),
-    ];
+    final List<Widget> pages = linkedStudent != null
+        ? [
+            ParentStudentOverviewTab(
+              linkedStudent: linkedStudent,
+              allChildren: linkedStudents,
+              onSelectChild: (child) {
+                final idx = linkedStudents.indexWhere((c) => c.id == child.id);
+                if (idx != -1 && idx != _selectedChildIndex) {
+                  _switchChildWithLoading(idx);
+                }
+              },
+            ),
+            const ParentAttendanceTab(attendance: []),
+            ParentGradesTab(student: linkedStudent),
+            const ParentNotificationsTab(notifications: []),
+            ParentProfileTab(parent: parent, linkedStudent: linkedStudent),
+          ]
+        : [
+            _buildNoChildEmptyState(theme),
+            _buildNoChildEmptyState(theme),
+            _buildNoChildEmptyState(theme),
+            _buildNoChildEmptyState(theme),
+            ParentProfileTab(parent: parent, linkedStudent: null),
+          ];
 
     return Scaffold(
       key: _scaffoldKey,
       appBar: AppBar(
         title: const Text(
-          'Parent',
+          'Parent Portal',
           style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
         ),
         leading: IconButton(
@@ -223,7 +207,7 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
           if (linkedStudents.length > 1)
             IconButton(
               icon: const Icon(Icons.swap_horiz_rounded),
-              tooltip: 'Switch Child Profile (${linkedStudent.firstName})',
+              tooltip: 'Switch Child Profile (${linkedStudent?.firstName ?? ""})',
               onPressed: () {
                 _switchChildWithLoading(_selectedChildIndex + 1);
               },
@@ -236,10 +220,9 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
             ),
             tooltip: 'Toggle Theme',
             onPressed: () {
-              final isDark = theme.brightness == Brightness.dark;
-              AppTheme.themeModeNotifier.value = isDark
-                  ? ThemeMode.light
-                  : ThemeMode.dark;
+              final isDark = theme.brightness != Brightness.dark;
+              AppTheme.themeModeNotifier.value = isDark ? ThemeMode.dark : ThemeMode.light;
+              LocalStorageService.saveUserThemeMode(parent.id, isDark, email: parent.email);
             },
           ),
           const Center(
@@ -253,33 +236,25 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
       drawer: ParentDrawer(
         parent: parent,
         linkedStudent: linkedStudent,
-        teacher: teacher,
       ),
       body: Column(
         children: [
           // Active Child Banner (if parent has multiple children)
-          if (linkedStudents.length > 1)
+          if (linkedStudents.length > 1 && linkedStudent != null)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               color: theme.colorScheme.primaryContainer.withValues(alpha: 0.35),
               child: Row(
                 children: [
                   Icon(
-                    linkedStudent.gender == 'Female' ? Icons.girl : Icons.boy,
-                    color: theme.colorScheme.primary,
+                    Icons.account_circle,
                     size: 20,
+                    color: theme.colorScheme.primary,
                   ),
                   const SizedBox(width: 8),
-                  Text(
-                    'Active Child: ',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
-                    ),
-                  ),
                   Expanded(
                     child: Text(
-                      '${linkedStudent.fullName} (${linkedStudent.departmentOrSection})',
+                      'Viewing: ${linkedStudent.fullName} (${linkedStudent.departmentOrSection ?? "Active"})',
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 13,
@@ -288,58 +263,34 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  InkWell(
-                    onTap: () {
-                      _switchChildWithLoading(_selectedChildIndex + 1);
-                    },
-                    borderRadius: BorderRadius.circular(12),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.primary,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.swap_horiz_rounded,
-                            size: 14,
-                            color: Colors.white,
-                          ),
-                          SizedBox(width: 4),
-                          Text(
-                            'Switch',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
+                  TextButton.icon(
+                    style: TextButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
                     ),
+                    icon: const Icon(Icons.swap_horiz, size: 16),
+                    label: const Text('Switch', style: TextStyle(fontSize: 12)),
+                    onPressed: () => _switchChildWithLoading(_selectedChildIndex + 1),
                   ),
                 ],
               ),
             ),
-          Expanded(child: pages[_currentIndex]),
+          Expanded(
+            child: _isLoadingStudents
+                ? Center(
+                    child: LoadingAnimationWidget.staggeredDotsWave(
+                      color: theme.colorScheme.primary,
+                      size: 40,
+                    ),
+                  )
+                : pages[_currentIndex],
+          ),
         ],
       ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
-        onTap: (idx) => setState(() => _currentIndex = idx),
+        onTap: (index) => setState(() => _currentIndex = index),
         type: BottomNavigationBarType.fixed,
-        showSelectedLabels: true,
-        showUnselectedLabels: false,
-        selectedFontSize: 10,
-        unselectedFontSize: 10,
-        selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold),
-        selectedItemColor: theme.colorScheme.primary,
-        unselectedItemColor: theme.colorScheme.onSurface.withValues(alpha: 0.6),
         items: const [
           BottomNavigationBarItem(
             icon: Icon(Icons.dashboard_outlined),
@@ -347,8 +298,8 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
             label: 'Overview',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.fact_check_outlined),
-            activeIcon: Icon(Icons.fact_check),
+            icon: Icon(Icons.calendar_today_outlined),
+            activeIcon: Icon(Icons.calendar_today),
             label: 'Attendance',
           ),
           BottomNavigationBarItem(
@@ -367,6 +318,50 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
             label: 'Profile',
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildNoChildEmptyState(ThemeData theme) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(28),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 76,
+              height: 76,
+              decoration: BoxDecoration(
+                color: theme.colorScheme.primary.withValues(alpha: 0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.family_restroom_outlined,
+                size: 38,
+                color: theme.colorScheme.primary,
+              ),
+            ),
+            const SizedBox(height: 18),
+            Text(
+              'No Linked Student Found',
+              textAlign: TextAlign.center,
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+                fontSize: 18,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Your parent account has not been linked to a student yet. Contact the school administrator to connect your account to your child’s LRN.',
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+                height: 1.5,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

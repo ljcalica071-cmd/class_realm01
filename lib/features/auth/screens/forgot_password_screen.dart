@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:class_realm/core/theme/app_theme.dart';
 import 'package:class_realm/routes/app_routes.dart';
 import 'package:class_realm/widgets/common/app_buttons.dart';
 import 'package:class_realm/widgets/common/app_modals.dart';
@@ -20,6 +21,12 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   bool _isLoading = false;
 
   @override
+  void initState() {
+    super.initState();
+    AppTheme.themeModeNotifier.value = ThemeMode.light;
+  }
+
+  @override
   void dispose() {
     _emailController.dispose();
     _otpController.dispose();
@@ -35,18 +42,16 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     }
 
     setState(() => _isLoading = true);
-    Future.delayed(const Duration(milliseconds: 700), () {
-      if (!mounted) return;
-      setState(() {
-        _isLoading = false;
-        _step = 2;
-      });
-      AppModals.showSuccessDialog(
-        context: context,
-        title: 'OTP Sent Successfully',
-        message: 'A 6-digit verification code has been sent to ${_emailController.text.trim()}. (Simulated code: 123456)',
-      );
+    if (!mounted) return;
+    setState(() {
+      _isLoading = false;
+      _step = 2;
     });
+    AppModals.showSuccessDialog(
+      context: context,
+      title: 'OTP Sent Successfully',
+      message: 'A 6-digit verification code has been sent to ${_emailController.text.trim()}. (Simulated code: 123456)',
+    );
   }
 
   void _handleVerifyOtp() {
@@ -56,12 +61,10 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     }
 
     setState(() => _isLoading = true);
-    Future.delayed(const Duration(milliseconds: 600), () {
-      if (!mounted) return;
-      setState(() {
-        _isLoading = false;
-        _step = 3;
-      });
+    if (!mounted) return;
+    setState(() {
+      _isLoading = false;
+      _step = 3;
     });
   }
 
@@ -76,83 +79,86 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     }
 
     setState(() => _isLoading = true);
-    Future.delayed(const Duration(milliseconds: 700), () {
-      if (!mounted) return;
-      setState(() => _isLoading = false);
-      AppModals.showSuccessDialog(
-        context: context,
-        title: 'Password Reset Successful',
-        message: 'Your account password has been updated securely. You can now log in with your new password.',
-        confirmLabel: 'Continue to Sign In',
-        onConfirm: () => Navigator.pushReplacementNamed(context, AppRoutes.login),
-      );
-    });
+    if (!mounted) return;
+    setState(() => _isLoading = false);
+    AppModals.showSuccessDialog(
+      context: context,
+      title: 'Password Reset Successful',
+      message: 'Your account password has been updated securely. You can now log in with your new password.',
+      confirmLabel: 'Continue to Sign In',
+      onConfirm: () => Navigator.pushReplacementNamed(context, AppRoutes.login),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
+    return Theme(
+      data: AppTheme.lightTheme,
+      child: Builder(
+        builder: (context) {
+          final theme = AppTheme.lightTheme;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Account Recovery & Password Reset'),
-        backgroundColor: theme.colorScheme.primary,
-        foregroundColor: theme.colorScheme.onPrimary,
-      ),
-      body: Container(
-        width: double.infinity,
-        height: double.infinity,
-        decoration: BoxDecoration(
-          image: DecorationImage(
-            image: const AssetImage('assets/images/auth/school.jpg'),
-            fit: BoxFit.cover,
-            colorFilter: ColorFilter.mode(
-              isDark ? Colors.black87 : Colors.black54,
-              BlendMode.darken,
+          return Scaffold(
+            appBar: AppBar(
+              title: const Text('Account Recovery & Password Reset'),
+              backgroundColor: theme.colorScheme.primary,
+              foregroundColor: theme.colorScheme.onPrimary,
             ),
-          ),
-        ),
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
-            child: Container(
-              constraints: const BoxConstraints(maxWidth: 480),
-              padding: const EdgeInsets.all(32),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surface,
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.2),
-                    blurRadius: 20,
+            body: Container(
+              width: double.infinity,
+              height: double.infinity,
+              decoration: const BoxDecoration(
+                image: DecorationImage(
+                  image: AssetImage('assets/images/auth/school.jpg'),
+                  fit: BoxFit.cover,
+                  colorFilter: ColorFilter.mode(
+                    Colors.black54,
+                    BlendMode.darken,
                   ),
-                ],
+                ),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Icon(Icons.lock_reset, size: 48, color: theme.colorScheme.primary),
-                  const SizedBox(height: 16),
-                  Text(
-                    _step == 1
-                        ? 'Forgot Your Password?'
-                        : _step == 2
-                            ? 'Enter Verification Code'
-                            : 'Set New Password',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    _step == 1
-                        ? 'Enter your registered school email address to receive a secure OTP verification code.'
-                        : _step == 2
-                            ? 'We have sent a 6-digit confirmation code to ${_emailController.text}.'
-                            : 'Create a secure new password for your Eduardo Barretto SHS account.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 13, color: theme.colorScheme.onSurface.withValues(alpha: 0.6)),
-                  ),
+              child: Center(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(24),
+                  child: Container(
+                    constraints: const BoxConstraints(maxWidth: 480),
+                    padding: const EdgeInsets.all(32),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                      boxShadow: const [
+                        BoxShadow(
+                          color: Color(0x1F0F172A),
+                          blurRadius: 25,
+                          offset: Offset(0, 10),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Icon(Icons.lock_reset, size: 48, color: theme.colorScheme.primary),
+                        const SizedBox(height: 16),
+                        Text(
+                          _step == 1
+                              ? 'Forgot Your Password?'
+                              : _step == 2
+                                  ? 'Enter Verification Code'
+                                  : 'Set New Password',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          _step == 1
+                              ? 'Enter your registered school email address to receive a secure OTP verification code.'
+                              : _step == 2
+                                  ? 'We have sent a 6-digit confirmation code to ${_emailController.text}.'
+                                  : 'Create a secure new password for your Eduardo Barretto SHS account.',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(fontSize: 13, color: Color(0xFF475569)),
+                        ),
                   const SizedBox(height: 24),
 
                   // Step 1: Email Input
@@ -233,6 +239,9 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
             ),
           ),
         ),
+      ),
+    );
+        },
       ),
     );
   }

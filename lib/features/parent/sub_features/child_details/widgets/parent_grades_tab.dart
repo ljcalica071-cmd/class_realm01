@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:class_realm/data/mock_database.dart';
 import 'package:class_realm/models/user_model.dart';
 
 class ParentGradesTab extends StatelessWidget {
@@ -22,46 +21,50 @@ class ParentGradesTab extends StatelessWidget {
       );
     }
 
-    final database = MockDatabase.instance;
     return Padding(
       padding: const EdgeInsets.all(16),
-      child: Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: theme.colorScheme.surface,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: theme.colorScheme.onSurface.withValues(alpha: 0.12)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-              'Grade Breakdown & Component Scores',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+      child: Center(
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surface,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.12),
             ),
-            const SizedBox(height: 16),
-            ListTile(
-              title: const Text('Examinations (30%)'),
-              trailing: Text(
-                '${database.categoryAverageFor(student!.id, 'Examinations').toStringAsFixed(1)} / 100',
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 64,
+                height: 64,
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primary.withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.grade_outlined,
+                  size: 32,
+                  color: theme.colorScheme.primary,
+                ),
               ),
-            ),
-            const Divider(),
-            ListTile(
-              title: const Text('Written Works (20%)'),
-              trailing: Text(
-                '${database.categoryAverageFor(student!.id, 'Written Works').toStringAsFixed(1)} / 100',
+              const SizedBox(height: 16),
+              const Text(
+                'No Grades Available',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
-            ),
-            const Divider(),
-            ListTile(
-              title: const Text('Performance Task (50%)'),
-              trailing: Text(
-                '${database.categoryAverageFor(student!.id, 'Performance Task').toStringAsFixed(1)} / 100',
+              const SizedBox(height: 8),
+              Text(
+                'Official grading period records for ${student!.fullName} have not yet been posted.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: theme.colorScheme.onSurfaceVariant,
+                  fontSize: 14,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

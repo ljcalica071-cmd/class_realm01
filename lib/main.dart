@@ -5,6 +5,8 @@ import 'package:class_realm/firebase_options.dart';
 import 'package:class_realm/core/config/env_config.dart';
 import 'package:class_realm/core/services/supabase_service.dart';
 import 'package:class_realm/core/services/local_storage_service.dart';
+import 'package:class_realm/core/services/sync_coordinator.dart';
+import 'package:class_realm/data/datasources/local/app_database.dart';
 
 import 'package:flutter_web_plugins/url_strategy.dart';
 
@@ -15,7 +17,6 @@ import 'routes/app_routes.dart';
 import 'features/auth/screens/login_screen.dart';
 import 'features/auth/screens/register_screen.dart';
 import 'features/auth/screens/forgot_password_screen.dart';
-import 'features/auth/screens/pending_account_screen.dart';
 import 'features/auth/screens/first_login_screen.dart';
 import 'features/admin/screens/admin_dashboard_screen.dart';
 import 'features/teacher/sub_features/setup/screens/academic_setup_wizard_screen.dart';
@@ -27,8 +28,14 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   usePathUrlStrategy(); // Removes the # from the URL
 
-  // Initialize Local Storage (Hive)
+  // Initialize Local Storage & Drift SQLite Database
   await LocalStorageService.init();
+  try {
+    AppDatabase.instance;
+    SyncCoordinator.instance.startBackgroundSync();
+  } catch (e) {
+    debugPrint('Local database initialization notice: $e');
+  }
 
   // Initialize Environment Variables
   try {
@@ -87,14 +94,13 @@ class ClassRealmApp extends StatelessWidget {
           initialRoute: AppRoutes.login,
           routes: {
             AppRoutes.login: (context) => const LoginScreen(),
-            AppRoutes.register: (context) => const RegisterScreen(),
-            AppRoutes.forgotPassword: (context) => const ForgotPasswordScreen(),
-            AppRoutes.pendingAccount: (context) => const AuthGuard(
-              allowedRoles: [UserRole.teacher],
-              child: PendingAccountScreen(),
+            AppRoutes.adminAddTeacher: (context) => const AuthGuard(
+              allowedRoles: [UserRole.admin],
+              child: AdminAddTeacherScreen(),
             ),
+            AppRoutes.forgotPassword: (context) => const ForgotPasswordScreen(),
             AppRoutes.studentFirstLogin: (context) => const AuthGuard(
-              allowedRoles: [UserRole.student],
+              allowedRoles: [UserRole.student, UserRole.parent],
               child: FirstLoginScreen(),
             ),
             AppRoutes.teacherFirstLogin: (context) => const AuthGuard(

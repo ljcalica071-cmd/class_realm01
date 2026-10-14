@@ -6,6 +6,7 @@ import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/data/repositories/subject_repository.dart';
 import 'package:class_realm/data/repositories/supabase_student_repository.dart';
+import 'package:loading_animation_widget/loading_animation_widget.dart';
 
 /// DepEd-style Strengthened SHS Class Record (Gradebook).
 /// Mirrors the official DepEd grading spreadsheet layout with
@@ -59,14 +60,19 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
         _selectedSubject = firstSubject?['subject_name']?.toString();
         _selectedSection = firstSubject?['section_name']?.toString();
         _isLoadingSubjects = false;
+        _studentLoadError = null;
       });
       final subjectId = firstSubject?['id']?.toString();
       if (subjectId != null) await _fetchStudents(user.id, subjectId);
     } catch (error) {
+      debugPrint('Gradebook subjects load notice: $error');
       if (!mounted) return;
       setState(() {
-        _studentLoadError = 'Failed to load subjects: $error';
+        _teacherSubjects = [];
+        _selectedSubject = null;
+        _selectedSection = null;
         _isLoadingSubjects = false;
+        _studentLoadError = null;
       });
     }
   }
@@ -76,7 +82,6 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
     setState(() {
       _isLoadingStudents = true;
       _studentLoadError = null;
-      _students = [];
     });
     try {
       final students = await SupabaseStudentRepository().getStudentsForTeacher(
@@ -89,9 +94,10 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
         _isLoadingStudents = false;
       });
     } catch (error) {
+      debugPrint('Gradebook students load notice: $error');
       if (!mounted || request != _studentLoadRequest) return;
       setState(() {
-        _studentLoadError = 'Failed to load enrolled students: $error';
+        _students = [];
         _isLoadingStudents = false;
       });
     }
@@ -532,32 +538,14 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
                           ),
                         ),
                         if (_isLoadingSubjects || _isLoadingStudents)
-                          Positioned.fill(
-                            child: ColoredBox(
-                              color: cellBg,
-                              child: const Center(
-                                child: CircularProgressIndicator(),
-                              ),
-                            ),
-                          ),
-                        if (_studentLoadError != null &&
-                            !_isLoadingSubjects &&
-                            !_isLoadingStudents)
-                          Positioned.fill(
-                            child: ColoredBox(
-                              color: cellBg,
-                              child: Center(
-                                child: Padding(
-                                  padding: const EdgeInsets.all(24),
-                                  child: Text(
-                                    _studentLoadError!,
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(
-                                      color: theme.colorScheme.error,
-                                    ),
-                                  ),
-                                ),
-                              ),
+                          Positioned(
+                            top: 0,
+                            left: 0,
+                            right: 0,
+                            child: LinearProgressIndicator(
+                              minHeight: 3,
+                              color: theme.colorScheme.primary,
+                              backgroundColor: Colors.transparent,
                             ),
                           ),
                       ],
@@ -741,7 +729,7 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  sub != null ? sub : 'No subject selected',
+                  sub ?? 'No subject yet',
                   style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.bold,
@@ -751,7 +739,7 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  sec != null ? sec : 'No section selected',
+                  sec != null ? 'Section: $sec' : 'No section yet',
                   style: TextStyle(
                     fontSize: 12,
                     color: text.withValues(alpha: 0.7),
@@ -1308,26 +1296,89 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
     const numW = 30.0;
 
     if (students.isEmpty) {
-      return [
-        Container(
-          height: 36,
-          width: isLeft ? 230.0 : _calculateTotalWidth() - 230.0,
-          alignment: Alignment.centerLeft,
-          padding: isLeft ? const EdgeInsets.only(left: 38) : null,
+      return List.generate(3, (idx) {
+        final isFirst = idx == 0;
+        final isAlt = idx.isOdd;
+        final rowBg = isAlt ? altRowBg : cellBg;
+        return Container(
+          height: 32,
           decoration: BoxDecoration(
-            color: cellBg,
+            color: rowBg,
             border: Border(bottom: BorderSide(color: borderColor, width: 0.5)),
           ),
-          child: Text(
-            isLeft ? 'No students enrolled' : '',
-            style: TextStyle(
-              fontSize: 11,
-              fontStyle: FontStyle.italic,
-              color: cellText.withValues(alpha: 0.4),
-            ),
+          child: Row(
+            children: isLeft
+                ? [
+                    Container(
+                      width: numW,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        border: Border(
+                          right: BorderSide(color: borderColor, width: 0.5),
+                        ),
+                      ),
+                      child: Text(
+                        '${idx + 1}',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: cellText.withValues(alpha: 0.35),
+                        ),
+                      ),
+                    ),
+                    Container(
+                      width: nameW,
+                      alignment: Alignment.centerLeft,
+                      padding: const EdgeInsets.only(left: 8),
+                      decoration: BoxDecoration(
+                        border: Border(
+                          right: BorderSide(color: borderColor, width: 0.5),
+                        ),
+                      ),
+                      child: Text(
+                        isFirst ? 'No students yet' : '-',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontStyle:
+                              isFirst ? FontStyle.italic : FontStyle.normal,
+                          color: cellText.withValues(
+                            alpha: isFirst ? 0.45 : 0.2,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ]
+                : [
+                    ...List.generate(
+                      wwColumns,
+                      (_) => _emptyGridCell(colW, rowBg, borderColor, cellText),
+                    ),
+                    _emptyGridCell(computedW, rowBg, borderColor, cellText),
+                    _emptyGridCell(computedW, rowBg, borderColor, cellText),
+                    _emptyGridCell(computedW, rowBg, borderColor, cellText),
+                    ...List.generate(
+                      ptColumns,
+                      (_) => _emptyGridCell(colW, rowBg, borderColor, cellText),
+                    ),
+                    _emptyGridCell(computedW, rowBg, borderColor, cellText),
+                    _emptyGridCell(computedW, rowBg, borderColor, cellText),
+                    _emptyGridCell(computedW, rowBg, borderColor, cellText),
+                    ...List.generate(
+                      exColumns,
+                      (_) => _emptyGridCell(colW, rowBg, borderColor, cellText),
+                    ),
+                    ...List.generate(
+                      exColumns,
+                      (_) => _emptyGridCell(computedW, rowBg, borderColor, cellText),
+                    ),
+                    _emptyGridCell(computedW, rowBg, borderColor, cellText),
+                    _emptyGridCell(computedW, rowBg, borderColor, cellText),
+                    _emptyGridCell(computedW, rowBg, borderColor, cellText),
+                    _emptyGridCell(computedW, rowBg, borderColor, cellText),
+                  ],
           ),
-        ),
-      ];
+        );
+      });
     }
 
     return List.generate(students.length, (idx) {
@@ -1481,6 +1532,30 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
         ),
       );
     });
+  }
+
+  Widget _emptyGridCell(
+    double width,
+    Color bg,
+    Color border,
+    Color text,
+  ) {
+    return Container(
+      width: width,
+      height: 32,
+      decoration: BoxDecoration(
+        color: bg,
+        border: Border(right: BorderSide(color: border, width: 0.5)),
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        '-',
+        style: TextStyle(
+          fontSize: 11,
+          color: text.withValues(alpha: 0.2),
+        ),
+      ),
+    );
   }
 
   Widget _buildScoreCell(

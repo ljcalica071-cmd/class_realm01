@@ -1,8 +1,7 @@
 class AppRoutes {
   static const String login = '/';
-  static const String register = '/register';
+  static const String adminAddTeacher = '/admin/add-teacher';
   static const String forgotPassword = '/forgot-password';
-  static const String pendingAccount = '/pending-account';
   static const String studentFirstLogin = '/student/first-login';
   static const String teacherFirstLogin = '/teacher/first-login';
 

@@ -26,7 +26,7 @@ class _TeacherAcademicSetupTabState extends State<TeacherAcademicSetupTab> {
   double _wwWeight = 20.0;
   double _ptWeight = 50.0;
   double _exWeight = 30.0;
-  bool _customWeightOverride = false;
+  final bool _customWeightOverride = false;
 
   @override
   void initState() {

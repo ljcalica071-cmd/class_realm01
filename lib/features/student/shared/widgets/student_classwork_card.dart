@@ -1,10 +1,55 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:class_realm/models/student_dashboard_models.dart';
 
 class StudentClassworkCard extends StatelessWidget {
-  const StudentClassworkCard({super.key, required this.classwork});
+  const StudentClassworkCard({
+    super.key,
+    required this.classwork,
+    this.urlLauncher,
+  });
 
   final StudentClassworkModel classwork;
+  final Future<bool> Function(String url)? urlLauncher;
+
+  Future<void> _openAttachment(BuildContext context, String? signedUrl) async {
+    if (signedUrl == null || signedUrl.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Attachment download link is expired or unavailable.'),
+        ),
+      );
+      return;
+    }
+
+    try {
+      bool launched = false;
+      if (urlLauncher != null) {
+        launched = await urlLauncher!(signedUrl);
+      } else {
+        final uri = Uri.parse(signedUrl);
+        launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      }
+
+      if (!launched && context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Unable to open attachment.')),
+        );
+      }
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Unable to open attachment.')),
+        );
+      }
+    }
+  }
+
+  static String _formatFileSize(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    return '${(bytes / (1024 * 1024)).toStringAsFixed(2)} MiB';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -55,8 +100,8 @@ class StudentClassworkCard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Icon(
-                    classwork.type == 'performance_task'
-                        ? Icons.workspace_premium_outlined
+                    classwork.type == 'quiz' || classwork.type == 'exam'
+                        ? Icons.quiz_outlined
                         : Icons.assignment_outlined,
                     color: theme.colorScheme.onPrimaryContainer,
                   ),
@@ -98,6 +143,102 @@ class StudentClassworkCard extends StatelessWidget {
                 maxLines: 3,
                 overflow: TextOverflow.ellipsis,
                 style: theme.textTheme.bodyMedium,
+              ),
+            ],
+            if (classwork.instructions.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surfaceContainerHighest
+                      .withValues(alpha: 0.3),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: theme.colorScheme.outlineVariant
+                        .withValues(alpha: 0.5),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Instructions:',
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      classwork.instructions,
+                      style: theme.textTheme.bodyMedium,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            if (classwork.attachment != null) ...[
+              const SizedBox(height: 12),
+              InkWell(
+                onTap: () =>
+                    _openAttachment(context, classwork.attachment!.signedUrl),
+                borderRadius: BorderRadius.circular(10),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 10,
+                  ),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primaryContainer
+                        .withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: theme.colorScheme.primary.withValues(alpha: 0.3),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.attach_file,
+                        size: 20,
+                        color: theme.colorScheme.primary,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              classwork.attachment!.fileName,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                fontWeight: FontWeight.w600,
+                                color: theme.colorScheme.primary,
+                              ),
+                            ),
+                            if (classwork.attachment!.fileSizeBytes != null)
+                              Text(
+                                _formatFileSize(
+                                  classwork.attachment!.fileSizeBytes!,
+                                ),
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: theme.colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Icon(
+                        Icons.open_in_new,
+                        size: 18,
+                        color: theme.colorScheme.primary,
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ],
             const SizedBox(height: 12),

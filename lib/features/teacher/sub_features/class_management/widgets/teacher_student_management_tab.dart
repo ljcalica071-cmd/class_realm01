@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
@@ -6,6 +8,7 @@ import 'package:class_realm/models/user_model.dart';
 import 'package:loading_animation_widget/loading_animation_widget.dart';
 import 'package:class_realm/shared/widgets/shared_widgets.dart';
 import 'package:class_realm/features/teacher/sub_features/class_management/widgets/add_student_dialog.dart';
+import 'package:class_realm/features/teacher/sub_features/class_management/widgets/unified_enroll_student_dialog.dart';
 import 'package:class_realm/features/teacher/sub_features/class_management/widgets/edit_student_dialog.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/data/repositories/subject_repository.dart';
@@ -88,15 +91,17 @@ class _TeacherStudentManagementTabState
     if (sec != null) _selectedSectionFilter = sec;
   }
 
-  void _saveFilters() {
-    LocalStorageService.saveString(
-      'student_management_subject',
-      _selectedSubjectFilter,
-    );
-    LocalStorageService.saveString(
-      'student_management_section',
-      _selectedSectionFilter,
-    );
+  Future<void> _saveFilters() async {
+    await Future.wait([
+      LocalStorageService.saveString(
+        'student_management_subject',
+        _selectedSubjectFilter,
+      ),
+      LocalStorageService.saveString(
+        'student_management_section',
+        _selectedSectionFilter,
+      ),
+    ]);
   }
 
   Future<void> _loadData() async {
@@ -146,11 +151,9 @@ class _TeacherStudentManagementTabState
         });
       }
     } catch (e) {
+      debugPrint('Student load notice: $e');
       if (mounted) {
         setState(() => _isLoading = false);
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Failed to load students: $e')));
       }
     }
   }
@@ -321,16 +324,11 @@ class _TeacherStudentManagementTabState
         colStatusWidth +
         colActionsWidth;
 
-    return _isLoading
-        ? Center(
-            child: LoadingAnimationWidget.staggeredDotsWave(
-              color: theme.colorScheme.primary,
-              size: 50,
-            ),
-          )
-        : Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
+    return Stack(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Wrap(
@@ -409,7 +407,7 @@ class _TeacherStudentManagementTabState
                                     _selectedSectionFilter = '— All Sections —';
                                     _currentPage = 1;
                                   });
-                                  _saveFilters();
+                                  unawaited(_saveFilters());
                                 }
                               },
                             ),
@@ -450,7 +448,7 @@ class _TeacherStudentManagementTabState
                                     _selectedSectionFilter = val;
                                     _currentPage = 1;
                                   });
-                                  _saveFilters();
+                                  unawaited(_saveFilters());
                                 }
                               },
                             ),
@@ -554,14 +552,20 @@ class _TeacherStudentManagementTabState
                         AppButton.success(
                           icon: LucideIcons.upload,
                           label: 'Import Excel',
-                          onPressed: () => _showImportStudentsDialog(context),
+                          onPressed: () => UnifiedEnrollStudentDialog.show(
+                            context,
+                            teacherSubjects: _teacherSubjectsData,
+                            initialTabIndex: 1, // File import tab
+                            onStudentCreated: _loadData,
+                          ),
                         ),
                         AppButton.primary(
                           icon: LucideIcons.userPlus,
                           label: 'Add Students',
-                          onPressed: () => AddStudentDialog.show(
+                          onPressed: () => UnifiedEnrollStudentDialog.show(
                             context,
                             teacherSubjects: _teacherSubjectsData,
+                            initialTabIndex: 0, // Manual add tab
                             onStudentCreated: _loadData,
                           ),
                         ),
@@ -1381,7 +1385,20 @@ class _TeacherStudentManagementTabState
                 ),
               ],
             ),
-          );
+          ),
+          if (_isLoading)
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: LinearProgressIndicator(
+                minHeight: 3,
+                color: theme.colorScheme.primary,
+                backgroundColor: Colors.transparent,
+              ),
+            ),
+        ],
+      );
   }
 
   Widget _buildHeaderCell({

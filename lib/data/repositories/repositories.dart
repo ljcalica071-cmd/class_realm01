@@ -6,3 +6,7 @@ export 'schedule_repository.dart';
 export 'supabase_schedule_repository.dart';
 export 'student_repository.dart';
 export 'teacher_repository.dart';
+export 'learning_material_repository.dart';
+export 'supabase_learning_material_repository.dart';
+export 'teacher_classwork_repository.dart';
+export 'supabase_teacher_classwork_repository.dart';

@@ -35,7 +35,7 @@ class _AdminSettingsTabState extends State<AdminSettingsTab> {
             const SizedBox(height: 24),
             SwitchListTile(
               title: const Text('Enable Email Notifications (Simulated)'),
-              subtitle: const Text('Send automated alerts for teacher approval'),
+              subtitle: const Text('Send account and first-login notifications'),
               value: _emailNotifications,
               onChanged: (v) => setState(() => _emailNotifications = v),
             ),

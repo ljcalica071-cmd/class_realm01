@@ -29,75 +29,7 @@ class AppValidators {
     // Strict regex: basic format check
     final emailRegex = RegExp(r"^[a-zA-Z0-9.a-zA-Z0-9.!#$%&'*+-/=?^_`{|}~]+@[a-zA-Z0-9-]{2,}\.[a-zA-Z]{2,}$");
     if (!emailRegex.hasMatch(trimmed)) {
-      return 'Invalid email format. Please check the spelling.';
-    }
-
-    final parts = trimmed.split('@');
-    if (parts.length == 2) {
-      final username = parts[0];
-      if (username.length <= 1) {
-        return 'Invalid email format. Please check the spelling.';
-      }
-
-      final domainStr = parts[1];
-      final domainParts = domainStr.split('.');
-      
-      if (domainParts.length < 2 || domainParts[0].length < 2) {
-        return 'Invalid email domain. Domain name cannot be a single letter.';
-      }
-
-      final domainName = domainParts[0]; // e.g. "gamil"
-      final tld = domainParts.sublist(1).join('.'); // e.g. "coms"
-
-      // Disposable Domains
-      const disposable = [
-        'tempmail', 'throwaway', 'mailinator', '10minutemail',
-        'guerrillamail', 'sharklasers', 'yopmail', 'trashmail'
-      ];
-      if (disposable.contains(domainName)) {
-        return 'Disposable emails are not allowed.';
-      }
-
-      // Smart Typo Correction Dictionary
-      const knownDomains = {
-        'gmail': 'gmail', 'gmal': 'gmail', 'gamil': 'gmail', 'gmaill': 'gmail', 'gmai': 'gmail', 'gimail': 'gmail', 'gmil': 'gmail',
-        'yahoo': 'yahoo', 'yaho': 'yahoo', 'yahooo': 'yahoo', 'yahho': 'yahoo',
-        'hotmail': 'hotmail', 'hotmal': 'hotmail', 'hotmai': 'hotmail',
-        'outlook': 'outlook', 'outlok': 'outlook'
-      };
-
-      const knownTlds = {
-        'com': 'com', 'coms': 'com', 'con': 'com', 'coom': 'com', 'cmo': 'com',
-        'ph': 'ph', 'com.ph': 'com.ph', 'edu.ph': 'edu.ph'
-      };
-
-      // Check if it's a known domain provider that has a typo
-      final isKnownOrTypoDomain = knownDomains.containsKey(domainName);
-      if (isKnownOrTypoDomain) {
-        final correctDomainName = knownDomains[domainName]!;
-        
-        // If they used a weird TLD with a known domain, assume it's a typo of .com (or whatever default)
-        final correctTld = knownTlds.containsKey(tld) ? knownTlds[tld]! : 'com';
-        
-        final correctedDomain = '$correctDomainName.$correctTld';
-        
-        if (domainStr != correctedDomain) {
-          return 'Did you mean @$correctedDomain?';
-        }
-      }
-      
-      // If the domain is completely unknown, we allow it (could be deped.gov.ph or custom domain)
-      // but we block obvious weird TLDs if they don't look standard.
-      // (This is skipped for now to avoid false positives on legitimate school domains).
-      
-      const allowedDomains = [
-        'lu.edu.ph', 'pup.edu.ph', 'ched.gov.ph', 'gmail.com', 'yahoo.com', 
-        'outlook.com', 'hotmail.com', 'icloud.com', 'mail.com', 
-        'rocketmail.com', 'msn.com', 'ymail.com', 'yahoo.com.ph'
-      ];
-      if (!allowedDomains.contains(domainStr)) {
-        return 'Email domain @$domainStr is not allowed. Please use a recognized school or public email.';
-      }
+      return 'Invalid email';
     }
 
     return null;
@@ -135,5 +67,43 @@ class _CleanInputFormatter extends TextInputFormatter {
       text: text,
       selection: newValue.selection,
     );
+  }
+}
+
+extension BirthdayValidator on AppValidators {
+  static String? validateBirthday(DateTime? date, String role) {
+    if (date == null) return 'Birthdate is required.';
+
+    final today = DateTime.now();
+    int age = today.year - date.year;
+    if (today.month < date.month || (today.month == date.month && today.day < date.day)) {
+      age--;
+    }
+
+    if (date.year <= 1950) {
+      return 'Birthdates from 1950 and below are not supported.';
+    }
+
+    if (role == 'teacher' || role == 'parent') {
+      if (age < 18) return 'Must be at least 18 years old.';
+    } else if (role == 'student') {
+      if (age < 10) return 'Must be at least 10 years old.';
+    }
+
+    return null;
+  }
+
+  static DateTime getMinDate() {
+    return DateTime(1951, 1, 1);
+  }
+
+  static DateTime getMaxDate(String role) {
+    final now = DateTime.now();
+    if (role == 'teacher' || role == 'parent') {
+      return DateTime(now.year - 18, now.month, now.day);
+    } else if (role == 'student') {
+      return DateTime(now.year - 10, now.month, now.day);
+    }
+    return now;
   }
 }

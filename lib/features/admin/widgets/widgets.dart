@@ -1,5 +1,4 @@
 export 'package:class_realm/features/admin/sub_features/overview/widgets/admin_overview_tab.dart';
-export 'package:class_realm/features/admin/sub_features/user_management/widgets/admin_pending_approvals_tab.dart';
 export 'package:class_realm/features/admin/sub_features/profile/widgets/admin_profile_tab.dart';
 export 'package:class_realm/features/admin/sub_features/system_settings/widgets/admin_settings_tab.dart';
 export 'package:class_realm/features/admin/shared/widgets/admin_sidebar.dart';

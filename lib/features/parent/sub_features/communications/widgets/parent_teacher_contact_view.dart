@@ -2,13 +2,50 @@ import 'package:flutter/material.dart';
 import 'package:class_realm/models/user_model.dart';
 
 class ParentTeacherContactView extends StatelessWidget {
-  final UserModel teacher;
+  final UserModel? teacher;
 
-  const ParentTeacherContactView({super.key, required this.teacher});
+  const ParentTeacherContactView({super.key, this.teacher});
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final t = teacher;
+    if (t == null) {
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text('Teacher Contact'),
+        ),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.person_off_outlined,
+                  size: 48,
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'No Assigned Teacher',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'There is currently no assigned teacher contact for your linked student.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: theme.colorScheme.onSurfaceVariant,
+                    fontSize: 14,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
     return Scaffold(
       appBar: AppBar(
         title: const Text('Teacher Contact'),
@@ -50,7 +87,7 @@ class ParentTeacherContactView extends StatelessWidget {
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    teacher.fullName,
+                    t.fullName,
                     style: const TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
@@ -91,7 +128,7 @@ class ParentTeacherContactView extends StatelessWidget {
                       ),
                     ),
                     title: const Text('Email Address'),
-                    subtitle: Text(teacher.email),
+                    subtitle: Text(t.email),
                   ),
                   ListTile(
                     contentPadding: EdgeInsets.zero,

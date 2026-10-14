@@ -1,5 +1,4 @@
 export 'package:class_realm/features/teacher/sub_features/setup/widgets/teacher_academic_setup_tab.dart';
-export 'package:class_realm/features/teacher/sub_features/assessments/widgets/teacher_assessment_monitoring_tab.dart';
 export 'package:class_realm/features/teacher/sub_features/attendance/widgets/teacher_attendance_tab.dart';
 export 'package:class_realm/features/teacher/sub_features/setup/widgets/teacher_classroom_setup_tab.dart';
 export 'package:class_realm/features/teacher/sub_features/overview/widgets/teacher_dashboard_overview_tab.dart';
@@ -7,12 +6,10 @@ export 'package:class_realm/features/teacher/sub_features/assessments/widgets/te
 export 'package:class_realm/features/teacher/sub_features/grading/widgets/teacher_gradebook_tab.dart';
 export 'package:class_realm/features/teacher/sub_features/grading/widgets/teacher_grades_tab.dart';
 export 'package:class_realm/features/teacher/sub_features/grading/widgets/teacher_grading_system_tab.dart';
-export 'package:class_realm/features/teacher/sub_features/assessments/widgets/teacher_item_analysis_tab.dart';
 export 'package:class_realm/features/teacher/sub_features/schedule_and_lessons/widgets/teacher_learning_materials_tab.dart';
 export 'package:class_realm/features/teacher/sub_features/schedule_and_lessons/widgets/teacher_lesson_planning_tab.dart';
 export 'package:class_realm/features/teacher/sub_features/profile_and_reports/widgets/teacher_notifications_tab.dart';
 export 'package:class_realm/features/teacher/sub_features/class_management/widgets/teacher_parent_management_tab.dart';
-export 'package:class_realm/features/teacher/sub_features/profile_and_reports/widgets/teacher_performance_tab.dart';
 export 'package:class_realm/features/teacher/sub_features/profile_and_reports/widgets/teacher_profile_tab.dart';
 export 'package:class_realm/features/teacher/sub_features/profile_and_reports/widgets/teacher_reports_tab.dart';
 export 'package:class_realm/features/teacher/sub_features/schedule_and_lessons/widgets/teacher_schedule_tab.dart';

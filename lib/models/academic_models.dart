@@ -24,6 +24,8 @@ class AttendanceRecord {
   final String section;
   final DateTime date;
   final String timeIn;
+  final String? timeOut;
+  final String? remarks;
   final AttendanceStatus status;
   final String method; // 'RFID (ESP32)' or 'Manual'
   final bool isSynced;
@@ -31,10 +33,12 @@ class AttendanceRecord {
   AttendanceRecord({
     required this.id,
     required this.studentId,
-    required this.studentName,
-    required this.section,
+    this.studentName = '',
+    this.section = '',
     required this.date,
     required this.timeIn,
+    this.timeOut,
+    this.remarks,
     required this.status,
     this.method = 'Manual',
     this.isSynced = true,
@@ -47,6 +51,8 @@ class AttendanceRecord {
     String? section,
     DateTime? date,
     String? timeIn,
+    String? timeOut,
+    String? remarks,
     AttendanceStatus? status,
     String? method,
     bool? isSynced,
@@ -58,6 +64,8 @@ class AttendanceRecord {
       section: section ?? this.section,
       date: date ?? this.date,
       timeIn: timeIn ?? this.timeIn,
+      timeOut: timeOut ?? this.timeOut,
+      remarks: remarks ?? this.remarks,
       status: status ?? this.status,
       method: method ?? this.method,
       isSynced: isSynced ?? this.isSynced,
@@ -80,6 +88,10 @@ class ActivityModel {
   final bool
   isRequirement; // true if Performance Task / Requirement, false if Activity
   final String? attachmentName;
+  final String? subjectOfferingId;
+  final String? storagePath;
+  final String? mimeType;
+  final int? fileSizeBytes;
   final SubmissionType submissionType;
   final int submissionsCount;
   final int totalStudents;
@@ -99,6 +111,10 @@ class ActivityModel {
     this.isPublished = true,
     this.isRequirement = false,
     this.attachmentName,
+    this.subjectOfferingId,
+    this.storagePath,
+    this.mimeType,
+    this.fileSizeBytes,
     this.submissionType = SubmissionType.fileAndText,
     this.submissionsCount = 0,
     this.totalStudents = 35,
@@ -125,6 +141,10 @@ class ActivityModel {
     bool? isPublished,
     bool? isRequirement,
     String? attachmentName,
+    String? subjectOfferingId,
+    String? storagePath,
+    String? mimeType,
+    int? fileSizeBytes,
     SubmissionType? submissionType,
     int? submissionsCount,
     int? totalStudents,
@@ -144,11 +164,111 @@ class ActivityModel {
       isPublished: isPublished ?? this.isPublished,
       isRequirement: isRequirement ?? this.isRequirement,
       attachmentName: attachmentName ?? this.attachmentName,
+      subjectOfferingId: subjectOfferingId ?? this.subjectOfferingId,
+      storagePath: storagePath ?? this.storagePath,
+      mimeType: mimeType ?? this.mimeType,
+      fileSizeBytes: fileSizeBytes ?? this.fileSizeBytes,
       submissionType: submissionType ?? this.submissionType,
       submissionsCount: submissionsCount ?? this.submissionsCount,
       totalStudents: totalStudents ?? this.totalStudents,
       sectionDeadlines: sectionDeadlines ?? this.sectionDeadlines,
     );
+  }
+
+  factory ActivityModel.fromJson(Map<String, dynamic> json) {
+    final deadlineRaw = json['deadline'];
+    final assignedRaw = json['assigned_at'] ?? json['date_assigned'];
+    final parsedDeadline = deadlineRaw != null
+        ? DateTime.tryParse(deadlineRaw.toString()) ?? DateTime.now()
+        : DateTime.now();
+    final parsedAssigned = assignedRaw != null
+        ? DateTime.tryParse(assignedRaw.toString()) ?? DateTime.now()
+        : DateTime.now();
+
+    final classworkType = json['classwork_type']?.toString();
+    final gradingCat = json['grading_category']?.toString();
+    final isReq = classworkType == 'performance_task' ||
+        gradingCat == 'pt' ||
+        json['is_requirement'] == true;
+
+    final offering = json['subject_offerings'];
+    final subjectName = (offering is Map && offering['subjects'] is Map)
+        ? offering['subjects']['subject_name']?.toString() ?? ''
+        : json['subject']?.toString() ?? '';
+    final sectionName = (offering is Map && offering['sections'] is Map)
+        ? offering['sections']['section_name']?.toString() ?? ''
+        : json['section']?.toString() ?? '';
+    final gradeLevelName = (offering is Map && offering['sections'] is Map)
+        ? offering['sections']['grade_level']?.toString() ?? 'Grade 11'
+        : json['grade_level']?.toString() ?? 'Grade 11';
+
+    String? attName;
+    String? sPath;
+    String? mType;
+    int? sBytes;
+
+    if (json['attachment'] is Map) {
+      final att = json['attachment'] as Map;
+      attName = att['file_name']?.toString();
+      sPath = att['storage_path']?.toString();
+      mType = att['mime_type']?.toString();
+      sBytes = (att['file_size_bytes'] as num?)?.toInt();
+    } else if (json['classwork_attachments'] is List &&
+        (json['classwork_attachments'] as List).isNotEmpty) {
+      final att = (json['classwork_attachments'] as List).first;
+      if (att is Map) {
+        attName = att['file_name']?.toString();
+        sPath = att['storage_path']?.toString();
+        mType = att['mime_type']?.toString();
+        sBytes = (att['file_size_bytes'] as num?)?.toInt();
+      }
+    } else {
+      attName = json['attachment_name']?.toString();
+      sPath = json['storage_path']?.toString();
+      mType = json['mime_type']?.toString();
+      sBytes = (json['file_size_bytes'] as num?)?.toInt();
+    }
+
+    return ActivityModel(
+      id: json['id']?.toString() ?? '',
+      title: json['title']?.toString() ?? '',
+      description: json['description']?.toString() ?? '',
+      instructions: json['instructions']?.toString() ?? '',
+      subject: subjectName,
+      gradeLevel: gradeLevelName,
+      section: sectionName,
+      dateAssigned: parsedAssigned,
+      deadline: parsedDeadline,
+      maxScore: (json['max_score'] as num?)?.toDouble() ?? 100.0,
+      isPublished: json['is_published'] != false,
+      isRequirement: isReq,
+      attachmentName: attName,
+      subjectOfferingId: json['subject_offering_id']?.toString(),
+      storagePath: sPath,
+      mimeType: mType,
+      fileSizeBytes: sBytes,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'title': title,
+      'description': description,
+      'instructions': instructions,
+      'subject': subject,
+      'grade_level': gradeLevel,
+      'section': section,
+      'deadline': deadline.toIso8601String(),
+      'max_score': maxScore,
+      'is_published': isPublished,
+      'is_requirement': isRequirement,
+      'subject_offering_id': subjectOfferingId,
+      'attachment_name': attachmentName,
+      'storage_path': storagePath,
+      'mime_type': mimeType,
+      'file_size_bytes': fileSizeBytes,
+    };
   }
 }
 

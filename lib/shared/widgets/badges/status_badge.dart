@@ -32,10 +32,10 @@ class StatusBadge extends StatelessWidget {
         );
       case AccountStatus.pending:
         return StatusBadge(
-          text: 'Pending Approval',
-          backgroundColor: AppTheme.catOrange.withValues(alpha: 0.12),
-          textColor: AppTheme.catOrange,
-          icon: LucideIcons.clock,
+          text: 'First Login Pending',
+          backgroundColor: AppTheme.catPurple.withValues(alpha: 0.12),
+          textColor: AppTheme.catPurple,
+          icon: LucideIcons.lockKeyhole,
         );
       case AccountStatus.rejected:
         return StatusBadge(

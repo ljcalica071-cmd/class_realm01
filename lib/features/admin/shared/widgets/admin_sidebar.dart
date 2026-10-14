@@ -4,7 +4,6 @@ import 'package:class_realm/core/theme/app_theme.dart';
 class AdminSidebar extends StatelessWidget {
   final int selectedIndex;
   final bool isExpanded;
-  final int pendingCount;
   final ValueChanged<int> onSelect;
   final VoidCallback onLogout;
 
@@ -12,7 +11,6 @@ class AdminSidebar extends StatelessWidget {
     super.key,
     required this.selectedIndex,
     required this.isExpanded,
-    required this.pendingCount,
     required this.onSelect,
     required this.onLogout,
   });
@@ -112,21 +110,23 @@ class AdminSidebar extends StatelessWidget {
           // Nav Items
           _buildNavItem(context, 0, 'Dashboard', Icons.dashboard_outlined),
           _buildNavItem(context, 1, 'Teacher Management', Icons.people_outline),
-          _buildNavItem(context, 2, 'Pending Approvals', Icons.how_to_reg_outlined, badgeCount: pendingCount),
-          _buildNavItem(context, 3, 'System Statistics', Icons.bar_chart),
-          _buildNavItem(context, 4, 'Admin Profile', Icons.person_outline),
-          _buildNavItem(context, 5, 'Settings', Icons.settings_outlined),
+          _buildNavItem(context, 2, 'System Statistics', Icons.bar_chart),
+          _buildNavItem(context, 3, 'Admin Profile', Icons.person_outline),
+          _buildNavItem(context, 4, 'Settings', Icons.settings_outlined),
 
           const Spacer(),
           const Divider(color: Colors.white12, height: 1),
 
           // Logout
-          ListTile(
-            leading: const Icon(Icons.logout, color: AppTheme.catRed),
-            title: isExpanded
-                ? const Text('Logout', style: TextStyle(color: AppTheme.catRed))
-                : null,
-            onTap: onLogout,
+          Material(
+            color: Colors.transparent,
+            child: ListTile(
+              leading: const Icon(Icons.logout, color: AppTheme.catRed),
+              title: isExpanded
+                  ? const Text('Logout', style: TextStyle(color: AppTheme.catRed))
+                  : null,
+              onTap: onLogout,
+            ),
           ),
           const SizedBox(height: 16),
         ],

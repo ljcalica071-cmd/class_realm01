@@ -3,41 +3,63 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:loading_animation_widget/loading_animation_widget.dart';
 
 import 'package:class_realm/core/theme/app_theme.dart';
+import 'package:class_realm/core/utils/logout_helper.dart';
 import 'package:class_realm/data/mock_database.dart';
 import 'package:class_realm/models/academic_models.dart';
 import 'package:class_realm/models/user_model.dart';
-import 'package:class_realm/routes/app_routes.dart';
 import 'package:class_realm/widgets/common/sync_status_badge.dart';
 import 'package:class_realm/features/teacher/sub_features/assessments/screens/activity_submissions_screen.dart';
 import 'package:class_realm/features/teacher/sub_features/assessments/screens/create_assessment_flow.dart';
 import 'package:class_realm/features/teacher/sub_features/assessments/screens/create_requirement_flow.dart';
 import 'package:class_realm/features/teacher/widgets/tabs/tabs.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
+import 'package:class_realm/data/repositories/supabase_teacher_classwork_repository.dart';
 import 'package:class_realm/widgets/common/app_modals.dart';
+import 'package:class_realm/core/services/local_storage_service.dart';
 
 class TeacherDashboardScreen extends StatefulWidget {
-  const TeacherDashboardScreen({super.key});
+  const TeacherDashboardScreen({
+    super.key,
+    this.teacher,
+    this.initialSelectedIndex = 0,
+  });
+
+  final UserModel? teacher;
+  final int initialSelectedIndex;
 
   @override
   State<TeacherDashboardScreen> createState() => _TeacherDashboardScreenState();
 }
 
 class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
-  int _selectedIndex = 0;
+  late int _selectedIndex = widget.initialSelectedIndex;
   bool _isSidebarExpanded = true;
-  final String _selectedClassSection = 'Section A';
+  final String _selectedClassSection = 'All Sections';
   ActivityModel? _viewingSubmissionsFor;
   bool _isLoading = true;
+  List<ActivityModel>? _persistedActivities;
 
   @override
   void initState() {
     super.initState();
     _loadData();
+    _loadActivities();
+  }
+
+  Future<void> _loadActivities() async {
+    try {
+      final list =
+          await SupabaseTeacherClassworkRepository.instance.getActivities();
+      if (mounted) {
+        setState(() => _persistedActivities = list);
+      }
+    } catch (_) {
+      // Fallback gracefully to mock data if offline or error
+    }
   }
 
   Future<void> _loadData() async {
-    // Simulate fetching data for teacher for a smooth transition
-    await Future.delayed(const Duration(milliseconds: 1200));
+    // Data is loaded instantly via local cache or mock database
     if (mounted) {
       setState(() => _isLoading = false);
     }
@@ -64,7 +86,8 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     final activeStudents = allStudents.where((u) => !u.isArchived).toList();
     final archivedStudents = allStudents.where((u) => u.isArchived).toList();
 
-    final activities = MockDatabase.instance.activities;
+    final activities =
+        _persistedActivities ?? MockDatabase.instance.activities;
     final quizzesAndExams = MockDatabase.instance.quizzesAndExams;
     final lessonPlans = MockDatabase.instance.lessonPlans;
     final materials = MockDatabase.instance.materials;
@@ -200,27 +223,9 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                     LucideIcons.checkSquare,
                     theme,
                   ),
-                  _buildNavItem(
-                    20,
-                    'Assessment Monitoring',
-                    LucideIcons.shield,
-                    theme,
-                  ),
-                  _buildNavItem(
-                    7,
-                    'Item Analysis',
-                    LucideIcons.lineChart,
-                    theme,
-                  ),
                   _buildNavItem(9, 'Grades', LucideIcons.award, theme),
                   const SizedBox(height: 8),
                   _buildSectionHeader('INSIGHTS & MANAGEMENT', theme),
-                  _buildNavItem(
-                    13,
-                    'Performance Analytics',
-                    LucideIcons.trendingUp,
-                    theme,
-                  ),
                   _buildNavItem(14, 'My Schedule', LucideIcons.calendar, theme),
                   _buildNavItem(15, 'Notifications', LucideIcons.bell, theme),
                   _buildNavItem(16, 'Profile', LucideIcons.user, theme),
@@ -252,9 +257,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                   confirmLabel: 'Logout',
                   confirmColor: Colors.redAccent,
                   onConfirm: () async {
-                    await AuthRepository.instance.logout();
-                    if (mounted)
-                      Navigator.pushReplacementNamed(context, AppRoutes.login);
+                    await LogoutHelper.logout(context);
                   },
                 );
               },
@@ -320,9 +323,17 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                 ),
                 onPressed: () {
                   final isDark = theme.brightness == Brightness.dark;
-                  AppTheme.themeModeNotifier.value = isDark
-                      ? ThemeMode.light
-                      : ThemeMode.dark;
+                  final newIsDark = !isDark;
+                  AppTheme.themeModeNotifier.value = newIsDark
+                      ? ThemeMode.dark
+                      : ThemeMode.light;
+                  final teacher =
+                      widget.teacher ?? AuthRepository.instance.currentUser;
+                  if (teacher != null) {
+                    LocalStorageService.saveUserThemeMode(teacher.id, newIsDark, email: teacher.email);
+                  } else {
+                    LocalStorageService.saveThemeMode(newIsDark);
+                  }
                 },
               ),
               const SizedBox(width: 8),
@@ -338,10 +349,12 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                 backgroundColor: theme.colorScheme.primary,
                 radius: 18,
                 child: Text(
-                  AuthRepository.instance.currentUser?.firstName
+                  (widget.teacher ?? AuthRepository.instance.currentUser)
+                          ?.firstName
                           ?.substring(0, 1)
                           .toUpperCase() ??
-                      AuthRepository.instance.currentUser?.fullName
+                      (widget.teacher ?? AuthRepository.instance.currentUser)
+                          ?.fullName
                           .substring(0, 1)
                           .toUpperCase() ??
                       'T',
@@ -358,8 +371,10 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Text(
-                    AuthRepository.instance.currentUser?.firstName ??
-                        AuthRepository.instance.currentUser?.fullName ??
+                    (widget.teacher ?? AuthRepository.instance.currentUser)
+                            ?.firstName ??
+                        (widget.teacher ?? AuthRepository.instance.currentUser)
+                            ?.fullName ??
                         'Teacher',
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
@@ -458,8 +473,6 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         return 'Attendance Logs';
       case 6:
         return 'Exam Checker';
-      case 7:
-        return 'Item Analysis';
       case 8:
         return 'Grading Weights';
       case 9:
@@ -565,6 +578,8 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                 activities: activities,
                 assessments: quizzesAndExams,
                 selectedClassSection: _selectedClassSection,
+                repository: SupabaseTeacherClassworkRepository.instance,
+                onRefresh: _loadActivities,
                 onViewSubmissions: (act) =>
                     setState(() => _viewingSubmissionsFor = act),
               )
@@ -587,8 +602,6 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
           examReviews: examReviews,
           quizzes: quizzesAndExams,
         );
-      case 7:
-        return TeacherItemAnalysisTab(quizzes: quizzesAndExams);
       case 8:
         return TeacherGradingSystemTab(criteria: criteria);
       case 9:
@@ -607,14 +620,10 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         return const TeacherStudentManagementTab();
       case 19:
         return TeacherParentManagementTab(parents: parents);
-      case 13:
-        return TeacherPerformanceTab(students: activeStudents);
       case 14:
         return const TeacherScheduleTab();
       case 15:
         return const TeacherNotificationsTab();
-      case 20:
-        return TeacherAssessmentMonitoringTab(quizzes: quizzesAndExams);
       case 16:
         return const TeacherProfileTab();
       default:
@@ -637,7 +646,12 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
       CreateRequirementFlowDialog.show(
         context,
         initialSection: _selectedClassSection,
-        onRequirementCreated: () => setState(() {}),
+        isPerformanceTask: true,
+        repository: SupabaseTeacherClassworkRepository.instance,
+        onRequirementCreated: () {
+          _loadActivities();
+          setState(() {});
+        },
       );
       return;
     }
@@ -659,7 +673,11 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                   context,
                   initialSection: _selectedClassSection,
                   isPerformanceTask: false,
-                  onRequirementCreated: () => setState(() {}),
+                  repository: SupabaseTeacherClassworkRepository.instance,
+                  onRequirementCreated: () {
+                    _loadActivities();
+                    setState(() {});
+                  },
                 );
               },
               child: const Text('Activity / Assignment'),
@@ -685,7 +703,12 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                 CreateRequirementFlowDialog.show(
                   context,
                   initialSection: _selectedClassSection,
-                  onRequirementCreated: () => setState(() {}),
+                  isPerformanceTask: true,
+                  repository: SupabaseTeacherClassworkRepository.instance,
+                  onRequirementCreated: () {
+                    _loadActivities();
+                    setState(() {});
+                  },
                 );
               },
               child: const Text('Performance Task'),

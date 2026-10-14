@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:class_realm/core/theme/app_theme.dart';
 import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/widgets/common/sync_status_badge.dart';
+import 'package:class_realm/core/services/local_storage_service.dart';
+import 'package:class_realm/data/repositories/auth_repository.dart';
 
 class AdminTopbar extends StatelessWidget {
   final bool isSidebarExpanded;
@@ -62,9 +64,14 @@ class AdminTopbar extends StatelessWidget {
                 : Icons.dark_mode),
             onPressed: () {
               final notifier = AppTheme.themeModeNotifier;
-              notifier.value = notifier.value == ThemeMode.light
-                  ? ThemeMode.dark
-                  : ThemeMode.light;
+              final isDark = notifier.value == ThemeMode.light;
+              notifier.value = isDark ? ThemeMode.dark : ThemeMode.light;
+              final user = adminUser ?? AuthRepository.instance.currentUser;
+              if (user != null) {
+                LocalStorageService.saveUserThemeMode(user.id, isDark, email: user.email);
+              } else {
+                LocalStorageService.saveThemeMode(isDark);
+              }
             },
           ),
           if (!isMobile) const SizedBox(width: 8),

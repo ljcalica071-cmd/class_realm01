@@ -4,6 +4,7 @@ import 'package:class_realm/core/theme/app_theme.dart';
 import 'package:class_realm/data/mock_database.dart';
 import 'package:class_realm/models/academic_models.dart';
 import 'package:class_realm/models/user_model.dart';
+import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/shared/widgets/shared_widgets.dart';
 
 class StudentAssessmentScreen extends StatefulWidget {
@@ -152,41 +153,44 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
             ? DateTime.now().difference(_startTime!).inMinutes
             : 0;
 
-    Future.delayed(const Duration(milliseconds: 800), () {
-      if (!mounted) return;
-      setState(() {
-        _isSubmitting = false;
-        _currentStep = 2;
-      });
-
-      // Store result in MockDatabase
-      final student =
-          MockDatabase.instance.currentUser ??
-          MockDatabase.instance.users.firstWhere(
-            (u) => u.role == UserRole.student,
-          );
-      MockDatabase.instance.assessmentResults.removeWhere(
-        (r) =>
-            r.assessmentId == widget.assessment.id && r.studentId == student.id,
-      );
-      MockDatabase.instance.assessmentResults.add(
-        AssessmentResultModel(
-          id: 'res_${DateTime.now().millisecondsSinceEpoch}',
-          assessmentId: widget.assessment.id,
-          studentId: student.id,
-          studentName: student.fullName,
-          submittedAt: DateTime.now(),
-          durationTakenMinutes: durationTaken,
-          violationCount: _violations,
-          violationLog: List.from(_violationLog),
-          answers: Map.from(_studentAnswers),
-          scoreEarned: scoreEarned,
-          totalPoints: widget.assessment.totalPoints,
-          isReleased: widget.assessment.resultsReleased,
-          needsTeacherReview: widget.assessment.isExam,
-        ),
-      );
+    if (!mounted) return;
+    setState(() {
+      _isSubmitting = false;
+      _currentStep = 2;
     });
+
+    // Store result in MockDatabase
+    final student =
+        AuthRepository.instance.currentUser ??
+        MockDatabase.instance.currentUser ??
+        UserModel(
+          id: 'temp_student',
+          username: 'student',
+          fullName: 'Student',
+          email: '',
+          role: UserRole.student,
+        );
+    MockDatabase.instance.assessmentResults.removeWhere(
+      (r) =>
+          r.assessmentId == widget.assessment.id && r.studentId == student.id,
+    );
+    MockDatabase.instance.assessmentResults.add(
+      AssessmentResultModel(
+        id: 'res_${DateTime.now().millisecondsSinceEpoch}',
+        assessmentId: widget.assessment.id,
+        studentId: student.id,
+        studentName: student.fullName,
+        submittedAt: DateTime.now(),
+        durationTakenMinutes: durationTaken,
+        violationCount: _violations,
+        violationLog: List.from(_violationLog),
+        answers: Map.from(_studentAnswers),
+        scoreEarned: scoreEarned,
+        totalPoints: widget.assessment.totalPoints,
+        isReleased: widget.assessment.resultsReleased,
+        needsTeacherReview: widget.assessment.isExam,
+      ),
+    );
   }
 
   String _formatTime(int totalSeconds) {
@@ -685,9 +689,14 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
 
   Widget _buildResultView() {
     final student =
+        AuthRepository.instance.currentUser ??
         MockDatabase.instance.currentUser ??
-        MockDatabase.instance.users.firstWhere(
-          (u) => u.role == UserRole.student,
+        UserModel(
+          id: 'temp_student',
+          username: 'student',
+          fullName: 'Student',
+          email: '',
+          role: UserRole.student,
         );
     final result = MockDatabase.instance.assessmentResults.firstWhere(
       (r) => r.assessmentId == widget.assessment.id && r.studentId == student.id,

@@ -42,7 +42,10 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
   @override
   Widget build(BuildContext context) {
     final statuses = ['All', 'Graded', 'Pending', 'Unsubmitted'];
-    final sections = ['All Sections', 'Section A', 'Section B'];
+    final sections = [
+      'All Sections',
+      ...widget.activity.assignedSections.where((s) => s.isNotEmpty).toSet(),
+    ];
     final allStudents = MockDatabase.instance.users.where((u) {
       if (u.role != UserRole.student || u.isArchived) return false;
       if (_selectedSection != 'All Sections' &&

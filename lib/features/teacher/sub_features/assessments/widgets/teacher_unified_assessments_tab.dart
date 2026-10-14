@@ -1,25 +1,35 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
 
 import 'package:class_realm/core/theme/app_theme.dart';
 import 'package:class_realm/data/mock_database.dart';
+import 'package:class_realm/data/repositories/auth_repository.dart';
+import 'package:class_realm/data/repositories/subject_repository.dart';
+import 'package:class_realm/data/repositories/teacher_classwork_repository.dart';
+import 'package:class_realm/data/repositories/supabase_teacher_classwork_repository.dart';
 import 'package:class_realm/models/academic_models.dart';
 import 'package:class_realm/shared/widgets/shared_widgets.dart';
 import 'package:class_realm/features/teacher/sub_features/assessments/screens/create_assessment_flow.dart';
 import 'package:class_realm/features/teacher/sub_features/assessments/screens/create_requirement_flow.dart';
 import 'package:class_realm/features/teacher/sub_features/assessments/screens/edit_assessment_flow.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 class TeacherUnifiedAssessmentsTab extends StatefulWidget {
   final List<ActivityModel> activities;
   final List<QuizOrExamModel> assessments;
   final String selectedClassSection;
   final ValueChanged<ActivityModel>? onViewSubmissions;
+  final TeacherClassworkRepository? repository;
+  final VoidCallback? onRefresh;
 
   const TeacherUnifiedAssessmentsTab({
     super.key,
     required this.activities,
     required this.assessments,
-    this.selectedClassSection = 'Section A',
+    this.selectedClassSection = 'All Sections',
     this.onViewSubmissions,
+    this.repository,
+    this.onRefresh,
   });
 
   @override
@@ -30,11 +40,31 @@ class TeacherUnifiedAssessmentsTab extends StatefulWidget {
 class _TeacherUnifiedAssessmentsTabState
     extends State<TeacherUnifiedAssessmentsTab> {
   late String _selectedClassSection;
+  List<String> _teacherSections = [];
 
   @override
   void initState() {
     super.initState();
     _selectedClassSection = widget.selectedClassSection;
+    _loadTeacherSections();
+  }
+
+  Future<void> _loadTeacherSections() async {
+    try {
+      final teacherId = AuthRepository.instance.currentUser?.id;
+      if (teacherId == null) return;
+      final subjects = await SubjectRepository.instance.getTeacherSubjects(teacherId);
+      final sections = subjects
+          .map((s) => s['section_name']?.toString() ?? '')
+          .where((s) => s.isNotEmpty)
+          .toSet()
+          .toList()
+        ..sort();
+      if (!mounted) return;
+      setState(() {
+        _teacherSections = sections;
+      });
+    } catch (_) {}
   }
 
   String _monthName(int month) {
@@ -66,19 +96,22 @@ class _TeacherUnifiedAssessmentsTabState
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final bool matchAll =
+        _selectedClassSection == 'All Sections' || _selectedClassSection.isEmpty;
+
     final writtenWork = <Widget>[
       ...widget.activities
           .where(
             (item) =>
                 !item.isRequirement &&
-                item.assignedSections.contains(_selectedClassSection),
+                (matchAll || item.assignedSections.contains(_selectedClassSection)),
           )
           .map((item) => _buildUnifiedActivityCard(item, 'WW')),
       ...widget.assessments
           .where(
             (item) =>
                 !item.isExam &&
-                item.assignedSections.contains(_selectedClassSection),
+                (matchAll || item.assignedSections.contains(_selectedClassSection)),
           )
           .map((item) => _buildUnifiedAssessmentCard(item, 'WW')),
     ];
@@ -86,7 +119,7 @@ class _TeacherUnifiedAssessmentsTabState
         .where(
           (item) =>
               item.isRequirement &&
-              item.assignedSections.contains(_selectedClassSection),
+              (matchAll || item.assignedSections.contains(_selectedClassSection)),
         )
         .map((item) => _buildUnifiedActivityCard(item, 'PT'))
         .toList();
@@ -94,7 +127,7 @@ class _TeacherUnifiedAssessmentsTabState
         .where(
           (item) =>
               item.isExam &&
-              item.assignedSections.contains(_selectedClassSection),
+              (matchAll || item.assignedSections.contains(_selectedClassSection)),
         )
         .map((item) => _buildUnifiedAssessmentCard(item, 'EX'))
         .toList();
@@ -109,26 +142,62 @@ class _TeacherUnifiedAssessmentsTabState
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Classwork',
-                      style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w800,
-                        color: theme.colorScheme.onSurface,
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Classwork',
+                        style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w800,
+                          color: theme.colorScheme.onSurface,
+                        ),
                       ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Create activities, performance tasks, quizzes, and exams in one place.',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.surface,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.12),
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Create activities, performance tasks, quizzes, and exams in one place.',
+                  ),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      value: _teacherSections.contains(_selectedClassSection) ||
+                              _selectedClassSection == 'All Sections'
+                          ? _selectedClassSection
+                          : 'All Sections',
+                      isDense: true,
                       style: TextStyle(
                         fontSize: 13,
-                        color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                        fontWeight: FontWeight.w600,
+                        color: theme.colorScheme.onSurface,
                       ),
+                      items: [
+                        'All Sections',
+                        ..._teacherSections,
+                      ].toSet().map((sec) => DropdownMenuItem(value: sec, child: Text(sec))).toList(),
+                      onChanged: (val) {
+                        if (val != null) {
+                          setState(() => _selectedClassSection = val);
+                        }
+                      },
                     ),
-                  ],
+                  ),
                 ),
               ],
             ),
@@ -158,19 +227,25 @@ class _TeacherUnifiedAssessmentsTabState
                   _buildUnifiedCategoryView(
                     label: 'Written Works',
                     items: writtenWork,
-                    emptyMessage: 'No written work for this section yet.',
+                    emptyTitle: 'No written works yet',
+                    emptyMessage: 'Create assignments, activities, and quizzes for your students.',
+                    icon: LucideIcons.fileText,
                     onCreate: () => _showUnifiedCreateChooser(context, 'WW'),
                   ),
                   _buildUnifiedCategoryView(
                     label: 'Performance Tasks',
                     items: performanceTasks,
-                    emptyMessage: 'No performance tasks for this section yet.',
+                    emptyTitle: 'No performance tasks yet',
+                    emptyMessage: 'Create hands-on tasks, portfolios, and graded projects.',
+                    icon: LucideIcons.presentation,
                     onCreate: () => _showUnifiedCreateChooser(context, 'PT'),
                   ),
                   _buildUnifiedCategoryView(
                     label: 'Examinations',
                     items: examinations,
-                    emptyMessage: 'No examinations for this section yet.',
+                    emptyTitle: 'No examinations yet',
+                    emptyMessage: 'Create Summative Tests (ST1, ST2) and Term Examinations (TE).',
+                    icon: LucideIcons.award,
                     onCreate: () => _showUnifiedCreateChooser(context, 'EX'),
                   ),
                 ],
@@ -185,10 +260,11 @@ class _TeacherUnifiedAssessmentsTabState
   Widget _buildUnifiedCategoryView({
     required String label,
     required List<Widget> items,
+    required String emptyTitle,
     required String emptyMessage,
+    required IconData icon,
     required VoidCallback onCreate,
   }) {
-    final theme = Theme.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -202,24 +278,16 @@ class _TeacherUnifiedAssessmentsTabState
           ),
         ),
         const SizedBox(height: 12),
-        Expanded(child: _buildUnifiedItemList(items, emptyMessage, theme)),
-      ],
-    );
-  }
-
-  Widget _buildUnifiedItemList(List<Widget> items, String emptyMessage, ThemeData theme) {
-    if (items.isEmpty) {
-      return Center(
-        child: Text(
-          emptyMessage,
-          style: TextStyle(color: theme.colorScheme.onSurface.withValues(alpha: 0.6)),
+        Expanded(
+          child: _PaginatedUnifiedItemList(
+            items: items,
+            emptyTitle: emptyTitle,
+            emptyMessage: emptyMessage,
+            icon: icon,
+            pageSize: 20,
+          ),
         ),
-      );
-    }
-    return ListView.separated(
-      itemCount: items.length,
-      separatorBuilder: (_, _) => const SizedBox(height: 12),
-      itemBuilder: (_, index) => items[index],
+      ],
     );
   }
 
@@ -404,8 +472,18 @@ class _TeacherUnifiedAssessmentsTabState
   void _confirmDeleteActivity(ActivityModel item) {
     _showDeleteConfirmation(
       title: item.title,
-      onDelete: () {
-        setState(() => MockDatabase.instance.deleteActivity(item.id));
+      onDelete: () async {
+        if (widget.repository != null) {
+          try {
+            await widget.repository!.deleteActivity(item.id);
+          } catch (_) {
+            MockDatabase.instance.deleteActivity(item.id);
+          }
+        } else {
+          MockDatabase.instance.deleteActivity(item.id);
+        }
+        widget.onRefresh?.call();
+        setState(() {});
       },
     );
   }
@@ -426,12 +504,12 @@ class _TeacherUnifiedAssessmentsTabState
     showDialog(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: Text('Delete Item'),
+        title: const Text('Delete Item'),
         content: Text('Are you sure you want to delete this item?\n\n$title'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext),
-            child: Text('Cancel'),
+            child: const Text('Cancel'),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
@@ -442,7 +520,7 @@ class _TeacherUnifiedAssessmentsTabState
               onDelete();
               Navigator.pop(dialogContext);
             },
-            child: Text('Delete'),
+            child: const Text('Delete'),
           ),
         ],
       ),
@@ -450,14 +528,18 @@ class _TeacherUnifiedAssessmentsTabState
   }
 
   void _showEditActivityModal(ActivityModel item) {
-    if (!item.isRequirement) {
-      return;
-    }
     CreateRequirementFlowDialog.show(
       context,
       existingTask: item,
-      initialSection: item.assignedSections.first,
-      onRequirementCreated: () => setState(() {}),
+      initialSection: item.assignedSections.isNotEmpty
+          ? item.assignedSections.first
+          : '',
+      isPerformanceTask: item.isRequirement,
+      repository: widget.repository,
+      onRequirementCreated: () {
+        widget.onRefresh?.call();
+        setState(() {});
+      },
     );
   }
 
@@ -476,7 +558,12 @@ class _TeacherUnifiedAssessmentsTabState
       CreateRequirementFlowDialog.show(
         context,
         initialSection: _selectedClassSection,
-        onRequirementCreated: () => setState(() {}),
+        isPerformanceTask: true,
+        repository: widget.repository,
+        onRequirementCreated: () {
+          widget.onRefresh?.call();
+          setState(() {});
+        },
       );
       return;
     }
@@ -486,7 +573,7 @@ class _TeacherUnifiedAssessmentsTabState
         title: Text(
           category == null ? 'Create Classwork' : 'Create $category Item',
         ),
-        content: Text(
+        content: const Text(
           'Choose the grading category and use the appropriate creation flow.',
         ),
         actions: [
@@ -498,10 +585,14 @@ class _TeacherUnifiedAssessmentsTabState
                   context,
                   initialSection: _selectedClassSection,
                   isPerformanceTask: false,
-                  onRequirementCreated: () => setState(() {}),
+                  repository: widget.repository,
+                  onRequirementCreated: () {
+                    widget.onRefresh?.call();
+                    setState(() {});
+                  },
                 );
               },
-              child: Text('Activity / Assignment'),
+              child: const Text('Activity / Assignment'),
             ),
           if (category != 'PT')
             TextButton(
@@ -524,13 +615,175 @@ class _TeacherUnifiedAssessmentsTabState
                 CreateRequirementFlowDialog.show(
                   context,
                   initialSection: _selectedClassSection,
-                  onRequirementCreated: () => setState(() {}),
+                  isPerformanceTask: true,
+                  repository: widget.repository,
+                  onRequirementCreated: () {
+                    widget.onRefresh?.call();
+                    setState(() {});
+                  },
                 );
               },
-              child: Text('Classwork'),
+              child: const Text('Classwork'),
             ),
         ],
       ),
     );
   }
 }
+
+class _PaginatedUnifiedItemList extends StatefulWidget {
+  final List<Widget> items;
+  final String emptyTitle;
+  final String emptyMessage;
+  final IconData icon;
+  final int pageSize;
+
+  const _PaginatedUnifiedItemList({
+    required this.items,
+    required this.emptyTitle,
+    required this.emptyMessage,
+    required this.icon,
+    this.pageSize = 20,
+  });
+
+  @override
+  State<_PaginatedUnifiedItemList> createState() =>
+      _PaginatedUnifiedItemListState();
+}
+
+class _PaginatedUnifiedItemListState extends State<_PaginatedUnifiedItemList> {
+  int _visibleCount = 20;
+
+  @override
+  void initState() {
+    super.initState();
+    _visibleCount = widget.pageSize;
+  }
+
+  @override
+  void didUpdateWidget(covariant _PaginatedUnifiedItemList oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.items.length != widget.items.length) {
+      _visibleCount = widget.pageSize;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    if (widget.items.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.primary.withValues(alpha: 0.08),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                widget.icon,
+                size: 36,
+                color: theme.colorScheme.primary,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              widget.emptyTitle,
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: theme.colorScheme.onSurface,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              widget.emptyMessage,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 13,
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final effectiveVisible = min(_visibleCount, widget.items.length);
+    final visibleItems = widget.items.take(effectiveVisible).toList();
+    final hasMore = effectiveVisible < widget.items.length;
+
+    return ListView(
+      children: [
+        for (int i = 0; i < visibleItems.length; i++) ...[
+          visibleItems[i],
+          if (i < visibleItems.length - 1) const SizedBox(height: 12),
+        ],
+        if (hasMore) ...[
+          const SizedBox(height: 16),
+          Center(
+            child: Column(
+              children: [
+                Text(
+                  'Showing $effectiveVisible of ${widget.items.length} items',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                AppButton.outline(
+                  label:
+                      'Load More (Scroll to show ${widget.items.length - effectiveVisible} remaining)',
+                  icon: LucideIcons.chevronDown,
+                  isSmall: true,
+                  onPressed: () {
+                    setState(() {
+                      _visibleCount += widget.pageSize;
+                    });
+                  },
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+        ] else ...[
+          const SizedBox(height: 16),
+          Center(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.04),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    LucideIcons.checkCheck,
+                    size: 14,
+                    color: theme.colorScheme.primary,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    'All ${widget.items.length} items loaded',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+        ],
+      ],
+    );
+  }
+}
+

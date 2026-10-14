@@ -1,8 +1,3 @@
-import 'dart:convert';
-
-import 'package:http/http.dart' as http;
-import 'package:flutter_dotenv/flutter_dotenv.dart';
-
 /// Result returned by an email verification check.
 class EmailVerificationResult {
   final bool isValid;
@@ -27,13 +22,10 @@ class EmailVerificationResult {
 }
 
 /// Abstract contract for email verification.
-/// Can be implemented by:
-/// 1. `MockEmailVerificationService` (offline syntax + domain heuristic)
-/// 2. `ApiEmailVerificationService` (external API such as Hunter.io, ZeroBounce, or Abstract API)
-/// 3. `SupabaseEmailVerificationService` (direct Supabase Auth OTP verification)
+/// Implemented by `StrictEmailVerificationService` (RFC 5322 syntax + domain heuristics + typo detection).
 abstract class EmailVerificationService {
   /// Global service instance
-  static EmailVerificationService instance = ApiEmailVerificationService();
+  static EmailVerificationService instance = StrictEmailVerificationService();
 
   Future<EmailVerificationResult> verifyEmail(String email);
 }
@@ -119,62 +111,5 @@ class StrictEmailVerificationService implements EmailVerificationService {
     }
 
     return EmailVerificationResult.valid();
-  }
-}
-
-/// Modular HTTP Email Checker API implementation.
-/// Currently configured for Abstract API, but easily swappable via .env.
-class ApiEmailVerificationService implements EmailVerificationService {
-  @override
-  Future<EmailVerificationResult> verifyEmail(String email) async {
-    final trimmed = email.trim().toLowerCase();
-
-    // 1. Fast local regex check first before spending API credits
-    final mockFallback = StrictEmailVerificationService();
-    final localCheck = await mockFallback.verifyEmail(trimmed);
-    if (!localCheck.isValid) {
-      return localCheck;
-    }
-
-    final String? apiKey = dotenv.env['EMAIL_VALIDATION_API_KEY'];
-    final String? apiEndpoint = dotenv.env['EMAIL_VALIDATION_API_URL'];
-
-    // If API is not configured, fallback to valid to allow registration
-    if (apiKey == null ||
-        apiKey.isEmpty ||
-        apiEndpoint == null ||
-        apiEndpoint.isEmpty) {
-      return EmailVerificationResult.valid();
-    }
-
-    try {
-      // Endpoint logic for Abstract API: https://emailvalidation.abstractapi.com/v1/?api_key=...&email=...
-      final uri = Uri.parse('$apiEndpoint?api_key=$apiKey&email=$trimmed');
-      final response = await http.get(uri).timeout(const Duration(seconds: 8));
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body) as Map<String, dynamic>;
-
-        // Abstract API returns 'deliverability' string ('DELIVERABLE', 'UNDELIVERABLE', 'UNKNOWN')
-        final deliverability = data['deliverability']?.toString().toUpperCase();
-
-        if (deliverability == 'UNDELIVERABLE') {
-          return EmailVerificationResult.invalid(
-            'Invalid or non-existent email address.',
-          );
-        }
-
-        return EmailVerificationResult.valid();
-      } else {
-        // Graceful fallback: If API limit is reached or server error occurs,
-        // we allow the registration to proceed so the system is not blocked.
-        print('Email API Error: ${response.statusCode} - ${response.body}');
-        return EmailVerificationResult.valid();
-      }
-    } catch (e) {
-      // Graceful fallback on CORS or network timeout errors
-      print('Email API Network Error: $e');
-      return EmailVerificationResult.valid();
-    }
   }
 }

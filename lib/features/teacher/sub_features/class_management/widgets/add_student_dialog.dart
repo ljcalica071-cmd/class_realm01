@@ -7,7 +7,6 @@ import 'package:class_realm/widgets/common/app_modals.dart';
 import 'package:class_realm/widgets/common/app_text_field.dart';
 import 'package:class_realm/widgets/common/app_date_picker_field.dart';
 import 'package:class_realm/core/utils/validators.dart';
-import 'package:class_realm/core/services/email_service.dart';
 
 class AddStudentDialog extends StatefulWidget {
   final VoidCallback onStudentCreated;
@@ -106,15 +105,7 @@ class _AddStudentDialogState extends State<AddStudentDialog> {
       _lastNameCtrl.text.trim(),
     ].join(' ');
     final email = _emailCtrl.text.trim();
-
-    if (result.createdAccount && result.tempPassword != null) {
-      EmailService.sendStudentCredentials(
-        recipientEmail: email,
-        studentName: fullName,
-        studentId: result.studentId,
-        tempPassword: result.tempPassword!,
-      );
-    }
+    // Credentials email is sent server-side by the provision-student Edge Function.
 
     Navigator.of(context).pop();
     widget.onStudentCreated();
@@ -200,6 +191,7 @@ class _AddStudentDialogState extends State<AddStudentDialog> {
     );
   }
 
+  @override
   Widget build(BuildContext context) {
     return AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -259,7 +251,7 @@ class _AddStudentDialogState extends State<AddStudentDialog> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Expanded(
-                      flex: 3,
+                      flex: 4,
                       child: AppTextField(
                         label: 'First Name *',
                         controller: _firstNameCtrl,
@@ -285,7 +277,7 @@ class _AddStudentDialogState extends State<AddStudentDialog> {
                     ),
                     const SizedBox(width: 12),
                     Expanded(
-                      flex: 3,
+                      flex: 4,
                       child: AppTextField(
                         label: 'Last Name *',
                         controller: _lastNameCtrl,
@@ -334,22 +326,20 @@ class _AddStudentDialogState extends State<AddStudentDialog> {
                       child: AppDatePickerField(
                         label: 'Birthday *',
                         initialDate: _birthday,
-                        firstDate: DateTime(1970, 1, 1),
-                        lastDate: DateTime(
-                          DateTime.now().year - 10,
-                          DateTime.now().month,
-                          DateTime.now().day,
-                        ),
+                        firstDate: BirthdayValidator.getMinDate(),
+                        lastDate: BirthdayValidator.getMaxDate('student'),
                         onDateSelected: (d) => setState(() => _birthday = d),
                         validator: (d) {
                           if (d == null) return 'Birthday is required';
                           final now = DateTime.now();
                           int age = now.year - d.year;
                           if (now.month < d.month ||
-                              (now.month == d.month && now.day < d.day))
+                              (now.month == d.month && now.day < d.day)) {
                             age--;
-                          if (age < 10)
+                          }
+                          if (age < 10) {
                             return 'Student must be at least 10 years old.';
+                          }
                           return null;
                         },
                       ),
@@ -425,7 +415,7 @@ class _AddStudentDialogState extends State<AddStudentDialog> {
         ),
         const SizedBox(height: 6),
         DropdownButtonFormField<String>(
-          value: _gender,
+          initialValue: _gender,
           autovalidateMode: AutovalidateMode.onUserInteraction,
           decoration: InputDecoration(
             filled: true,
@@ -520,7 +510,7 @@ class _AddStudentDialogState extends State<AddStudentDialog> {
         ),
         const SizedBox(height: 6),
         DropdownButtonFormField<String>(
-          value: _selectedSubjectId,
+          initialValue: _selectedSubjectId,
           autovalidateMode: AutovalidateMode.onUserInteraction,
           decoration: InputDecoration(
             filled: true,

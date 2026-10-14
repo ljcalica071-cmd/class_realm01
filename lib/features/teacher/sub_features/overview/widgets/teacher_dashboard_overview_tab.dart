@@ -9,6 +9,7 @@ import 'package:class_realm/features/teacher/shared/widgets/teacher_top_summary_
 import 'package:class_realm/data/repositories/subject_repository.dart';
 import 'package:class_realm/data/repositories/supabase_schedule_repository.dart';
 import 'package:class_realm/data/repositories/supabase_student_repository.dart';
+import 'package:loading_animation_widget/loading_animation_widget.dart';
 
 class TeacherDashboardOverviewTab extends StatefulWidget {
   final List<UserModel> activeStudents;
@@ -90,10 +91,15 @@ class _TeacherDashboardOverviewTabState
         });
       }
     } catch (error) {
+      debugPrint('Dashboard stats notice: $error');
       if (mounted) {
         setState(() {
+          totalSubjects = 0;
+          totalSections = 0;
+          totalStudents = 0;
+          _schedules = [];
           isLoadingStats = false;
-          _loadError = 'Failed to load dashboard data: $error';
+          _loadError = null;
         });
       }
     }
@@ -354,34 +360,53 @@ class _TeacherDashboardOverviewTabState
                           ],
                         ),
                         if (isLoadingStats)
-                          const Padding(
-                            padding: EdgeInsets.symmetric(vertical: 24),
-                            child: Center(child: CircularProgressIndicator()),
-                          )
-                        else if (_loadError != null)
                           Padding(
                             padding: const EdgeInsets.symmetric(vertical: 24),
                             child: Center(
-                              child: Text(
-                                _loadError!,
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  color: theme.colorScheme.error,
-                                ),
+                              child: LoadingAnimationWidget.staggeredDotsWave(
+                                color: theme.colorScheme.primary,
+                                size: 36,
                               ),
                             ),
                           )
                         else if (sortedSchedules.isEmpty)
                           Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 24),
+                            padding: const EdgeInsets.symmetric(vertical: 28),
                             child: Center(
-                              child: Text(
-                                'No schedule entries have been added yet.',
-                                style: TextStyle(
-                                  color: theme.colorScheme.onSurface.withValues(
-                                    alpha: 0.5,
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(12),
+                                    decoration: BoxDecoration(
+                                      color: theme.colorScheme.primary.withValues(alpha: 0.08),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: Icon(
+                                      LucideIcons.calendarX2,
+                                      size: 32,
+                                      color: theme.colorScheme.primary,
+                                    ),
                                   ),
-                                ),
+                                  const SizedBox(height: 12),
+                                  Text(
+                                    'No classes scheduled yet',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
+                                      color: theme.colorScheme.onSurface,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'Configure your subjects in Classroom Setup and set up your weekly schedule.',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           )

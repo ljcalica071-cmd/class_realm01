@@ -2,11 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:loading_animation_widget/loading_animation_widget.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/models/user_model.dart';
-import 'package:class_realm/routes/app_routes.dart';
 import 'package:class_realm/widgets/common/app_modals.dart';
 import 'package:class_realm/features/admin/widgets/widgets.dart';
-import 'package:class_realm/core/services/email_service.dart';
 import 'package:class_realm/core/theme/app_theme.dart';
+import 'package:class_realm/core/utils/logout_helper.dart';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -20,7 +19,6 @@ class AdminDashboardScreen extends StatefulWidget {
 class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   int _selectedIndex = 0;
   bool _isSidebarExpanded = true;
-  List<UserModel> _pendingTeachers = [];
   List<UserModel> _teachers = [];
   bool _isLoading = true;
   RealtimeChannel? _realtimeChannel;
@@ -38,7 +36,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         .onPostgresChanges(
           event: PostgresChangeEvent.all,
           schema: 'public',
-          table: 'teacher_info',
+          table: 'teacher_settings',
           callback: (payload) {
             _loadData();
           },
@@ -64,11 +62,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
-    final pending = await AuthRepository.instance.getPendingTeachers();
     final allTeachers = await AuthRepository.instance.getTeachers();
     if (mounted) {
       setState(() {
-        _pendingTeachers = pending;
         _teachers = allTeachers;
         _isLoading = false;
       });
@@ -82,107 +78,20 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       case 1:
         return 'Teacher Management';
       case 2:
-        return 'Pending Teacher Approvals';
-      case 3:
         return 'System Statistics & Analytics';
-      case 4:
+      case 3:
         return 'Administrator Profile';
-      case 5:
+      case 4:
         return 'System Settings';
       default:
         return 'Admin Portal';
     }
   }
 
-  void _handleApproveTeacher(UserModel teacher) async {
-    final success = await AuthRepository.instance.approveTeacher(teacher.id);
-    if (!success) {
-      if (mounted) {
-        AppModals.showErrorDialog(
-          context: context,
-          title: 'Error',
-          message: 'Teacher approval failed. Please try again.',
-        );
-      }
-      return;
-    }
-
-    EmailService.instance.sendAdminNotificationEmail(
-      adminEmail: 'ljcalica071@gmail.com',
-      teacherName: teacher.fullName,
-      teacherEmail: teacher.email,
-    );
-
-    await _loadData();
-
-    if (mounted) {
-      AppModals.showSuccessDialog(
-        context: context,
-        title: 'Teacher Approved',
-        message:
-            '${teacher.fullName} has been approved and can now log in to the system.',
-      );
-    }
-  }
-
-  void _handleRejectTeacher(UserModel teacher) {
-    AppModals.showConfirmationDialog(
-      context: context,
-      title: 'Confirm Rejection',
-      message:
-          'Are you sure you want to reject the application for ${teacher.fullName}?',
-      confirmLabel: 'Okay',
-      confirmColor: AppTheme.catRed,
-      onConfirm: () async {
-        // We delete the record from database if rejected
-        final success = await AuthRepository.instance.deleteTeacherRecord(
-          teacher.id,
-        );
-        if (!success) {
-          if (mounted) {
-            AppModals.showErrorDialog(
-              context: context,
-              title: 'Error',
-              message: 'Failed to reject teacher.',
-            );
-          }
-          return;
-        }
-
-        final emailSent = await EmailService.instance.sendRejectionEmail(
-          recipientEmail: teacher.email,
-          recipientName: teacher.fullName,
-        );
-
-        if (emailSent) {
-          EmailService.instance.sendAdminNotificationEmail(
-            adminEmail: 'ljcalica071@gmail.com',
-            teacherName: teacher.fullName,
-            teacherEmail: teacher.email,
-            isRejection: true,
-          );
-        }
-
-        await _loadData();
-
-        if (mounted) {
-          AppModals.showSuccessDialog(
-            context: context,
-            title: 'Registration Rejected',
-            message:
-                'The registration for ${teacher.fullName} has been formally rejected and their record was deleted.',
-            confirmLabel: 'Confirm',
-          );
-        }
-      },
-    );
-  }
-
   Widget _buildBodyContent(
     List<UserModel> teachers,
     List<UserModel> students,
     List<UserModel> parents,
-    List<UserModel> pendingTeachers,
   ) {
     switch (_selectedIndex) {
       case 0:
@@ -190,10 +99,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           teachers: teachers,
           students: students,
           parents: parents,
-          pendingTeachers: pendingTeachers,
-          onViewAllPending: () => setState(() => _selectedIndex = 2),
-          onApprove: _handleApproveTeacher,
-          onReject: _handleRejectTeacher,
         );
       case 1:
         return AdminTeacherManagementTab(
@@ -201,31 +106,16 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           onDataChanged: _loadData,
         );
       case 2:
-        return AdminPendingApprovalsTab(
-          pendingTeachers: pendingTeachers,
-          onApprove: _handleApproveTeacher,
-          onReject: _handleRejectTeacher,
-        );
-      case 3:
         return AdminStatisticsTab(
           teachers: teachers,
           students: students,
           parents: parents,
         );
-      case 4:
+      case 3:
         return AdminProfileTab(
-          adminUser:
-              AuthRepository.instance.currentUser ??
-              UserModel(
-                id: 'admin_1',
-                username: 'ljcalica971@gmail.com',
-                fullName: 'System Admin',
-                email: 'ljcalica971@gmail.com',
-                role: UserRole.admin,
-                status: AccountStatus.active,
-              ),
+          adminUser: AuthRepository.instance.currentUser,
         );
-      case 5:
+      case 4:
         return const AdminSettingsTab();
       default:
         return const Center(child: Text('Coming Soon'));
@@ -255,7 +145,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     final sidebar = AdminSidebar(
       selectedIndex: _selectedIndex,
             isExpanded: isMobile ? true : _isSidebarExpanded,
-            pendingCount: _pendingTeachers.length,
             onSelect: (index) {
               setState(() => _selectedIndex = index);
               if (isMobile && Scaffold.of(context).isDrawerOpen) {
@@ -271,9 +160,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 confirmLabel: 'Logout',
                 confirmColor: AppTheme.catRed,
                 onConfirm: () async {
-                  await AuthRepository.instance.logout();
-                  if (mounted)
-                    Navigator.pushReplacementNamed(context, AppRoutes.login);
+                  await LogoutHelper.logout(context);
                 },
               );
             },
@@ -287,14 +174,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   onToggleSidebar: () =>
                       setState(() => _isSidebarExpanded = !_isSidebarExpanded),
                   title: _getTitle(_selectedIndex),
-                  adminUser: UserModel(
-                    id: 'admin_1',
-                    username: 'ljcalica971@gmail.com',
-                    fullName: 'System Admin',
-                    email: 'ljcalica971@gmail.com',
-                    role: UserRole.admin,
-                    status: AccountStatus.active,
-                  ),
+                  adminUser: AuthRepository.instance.currentUser,
                 ),
 
                 // Body content switch
@@ -305,7 +185,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                       teachers,
                       students,
                       parents,
-                      _pendingTeachers,
                     ),
                   ),
                 ),

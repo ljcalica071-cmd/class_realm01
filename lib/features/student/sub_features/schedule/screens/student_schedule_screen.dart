@@ -1,12 +1,17 @@
 import 'package:flutter/material.dart';
-import 'package:class_realm/data/mock_database.dart';
+import 'package:class_realm/core/theme/app_theme.dart';
+import 'package:class_realm/data/repositories/supabase_schedule_repository.dart';
 import 'package:class_realm/models/academic_models.dart';
+import 'package:class_realm/models/student_dashboard_models.dart';
 import 'package:class_realm/features/teacher/widgets/timetable_grid_widget.dart';
+import 'package:loading_animation_widget/loading_animation_widget.dart';
 
 enum ScheduleViewMode { list, grid }
 
 class StudentScheduleScreen extends StatefulWidget {
-  const StudentScheduleScreen({super.key});
+  final StudentDashboardData dashboardData;
+
+  const StudentScheduleScreen({super.key, required this.dashboardData});
 
   @override
   State<StudentScheduleScreen> createState() => _StudentScheduleScreenState();
@@ -14,6 +19,15 @@ class StudentScheduleScreen extends StatefulWidget {
 
 class _StudentScheduleScreenState extends State<StudentScheduleScreen> {
   ScheduleViewMode _viewMode = ScheduleViewMode.list;
+  late Future<List<ScheduleModel>> _schedulesFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _schedulesFuture = SupabaseScheduleRepository.instance.getSchedules(
+      section: widget.dashboardData.student.departmentOrSection,
+    );
+  }
 
   final List<String> _days = const [
     'Monday',
@@ -143,9 +157,7 @@ class _StudentScheduleScreenState extends State<StudentScheduleScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final section =
-        MockDatabase.instance.currentUser?.departmentOrSection ?? 'Section A';
-    final schedules = MockDatabase.instance.scheduleForSection(section);
+    final section = widget.dashboardData.student.departmentOrSection;
 
     return Scaffold(
       appBar: AppBar(
@@ -243,11 +255,40 @@ class _StudentScheduleScreenState extends State<StudentScheduleScreen> {
 
             // Main Content Area
             Expanded(
-              child: schedules.isEmpty
-                  ? const Center(child: Text('No schedule records found.'))
-                  : _viewMode == ScheduleViewMode.list
-                      ? _buildListView(context, theme, schedules)
-                      : _buildGridView(context, theme, schedules),
+              child: FutureBuilder<List<ScheduleModel>>(
+                future: _schedulesFuture,
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return Center(
+                      child: LoadingAnimationWidget.staggeredDotsWave(
+                        color: theme.colorScheme.primary,
+                        size: 40,
+                      ),
+                    );
+                  }
+                  if (snapshot.hasError) {
+                    return Center(
+                      child: Text(
+                        'Error loading schedule: ${snapshot.error}',
+                        style: TextStyle(color: theme.colorScheme.error),
+                      ),
+                    );
+                  }
+
+                  final schedules = snapshot.data ?? [];
+                  if (schedules.isEmpty) {
+                    return const Center(child: Text('No schedule records found.'));
+                  }
+
+                  return AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 300),
+                    child:
+                        _viewMode == ScheduleViewMode.list
+                            ? _buildListView(context, theme, schedules)
+                            : _buildGridView(context, theme, schedules),
+                  );
+                },
+              ),
             ),
           ],
         ),

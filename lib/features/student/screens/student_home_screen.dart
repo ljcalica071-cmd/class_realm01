@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:class_realm/core/theme/app_theme.dart';
+import 'package:class_realm/core/services/local_storage_service.dart';
+import 'package:class_realm/core/utils/logout_helper.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/data/repositories/student_dashboard_repository.dart';
 import 'package:class_realm/features/student/shared/widgets/student_classwork_card.dart';
@@ -9,11 +11,11 @@ import 'package:class_realm/features/student/sub_features/academics/screens/stud
 import 'package:class_realm/features/student/sub_features/profile/screens/student_settings_screen.dart';
 import 'package:class_realm/features/student/sub_features/schedule/screens/student_attendance_screen.dart';
 import 'package:class_realm/features/student/sub_features/schedule/screens/student_schedule_screen.dart';
-import 'package:class_realm/features/student/sub_features/tasks/screens/student_requirements_screen.dart';
 import 'package:class_realm/models/student_dashboard_models.dart';
 import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/routes/app_routes.dart';
 import 'package:class_realm/widgets/common/app_modals.dart';
+import 'package:loading_animation_widget/loading_animation_widget.dart';
 
 class StudentHomeScreen extends StatefulWidget {
   const StudentHomeScreen({super.key});
@@ -35,14 +37,15 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
     _loadDashboard();
   }
 
-  Future<void> _loadDashboard() async {
+  Future<void> _loadDashboard({bool forceRefresh = false}) async {
     setState(() {
       _isLoading = true;
       _loadError = null;
     });
     try {
       final dashboard = await StudentDashboardRepository.instance
-          .loadDashboard();
+          .loadDashboard(forceRefresh: forceRefresh);
+      AuthRepository.instance.setCurrentUser(dashboard.student);
       if (mounted) setState(() => _dashboard = dashboard);
     } catch (error) {
       if (mounted) setState(() => _loadError = error);
@@ -54,10 +57,13 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    if (_isLoading) {
+    if (_isLoading && _dashboard == null) {
       return Scaffold(
         body: Center(
-          child: CircularProgressIndicator(color: theme.colorScheme.primary),
+          child: LoadingAnimationWidget.staggeredDotsWave(
+            color: theme.colorScheme.primary,
+            size: 48,
+          ),
         ),
       );
     }
@@ -88,7 +94,7 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
                 ),
                 const SizedBox(height: 16),
                 FilledButton.icon(
-                  onPressed: _loadDashboard,
+                  onPressed: () => _loadDashboard(forceRefresh: true),
                   icon: const Icon(Icons.refresh),
                   label: const Text('Try again'),
                 ),
@@ -101,8 +107,9 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
 
     final student = _dashboard!.student;
     final classwork = _dashboard!.classwork;
+    final enrollments = _dashboard!.enrollments;
     final pages = [
-      _buildHomeTab(context, student, classwork),
+      _buildHomeTab(context, student, classwork, enrollments),
       _buildClassworkTab(
         context,
         classwork
@@ -155,13 +162,18 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
                   : Icons.dark_mode_outlined,
             ),
             onPressed: () {
-              AppTheme.themeModeNotifier.value =
-                  theme.brightness == Brightness.dark
-                  ? ThemeMode.light
-                  : ThemeMode.dark;
+              final isDark = theme.brightness != Brightness.dark;
+              AppTheme.themeModeNotifier.value = isDark ? ThemeMode.dark : ThemeMode.light;
+              LocalStorageService.saveUserThemeMode(student.id, isDark, email: student.email);
             },
           ),
         ],
+        bottom: _isLoading
+            ? const PreferredSize(
+                preferredSize: Size.fromHeight(3),
+                child: LinearProgressIndicator(minHeight: 3),
+              )
+            : null,
       ),
       drawer: _buildStudentDrawer(context, student),
       body: pages[_currentIndex],
@@ -271,7 +283,7 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
             context,
             icon: Icons.schedule_outlined,
             title: 'My Schedule',
-            onTap: () => _openPage(context, const StudentScheduleScreen()),
+            onTap: () => _openPage(context, StudentScheduleScreen(dashboardData: _dashboard!)),
           ),
           _drawerItem(
             context,
@@ -279,12 +291,6 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
             title: 'Learning Materials',
             onTap: () =>
                 _openPage(context, const StudentLearningMaterialsScreen()),
-          ),
-          _drawerItem(
-            context,
-            icon: Icons.assignment_turned_in_outlined,
-            title: 'Performance Task',
-            onTap: () => _openPage(context, const StudentRequirementsScreen()),
           ),
           _drawerItem(
             context,
@@ -321,9 +327,7 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
                 confirmLabel: 'Logout',
                 confirmColor: AppTheme.catRed,
                 onConfirm: () async {
-                  await AuthRepository.instance.logout();
-                  if (!context.mounted) return;
-                  Navigator.pushReplacementNamed(context, AppRoutes.login);
+                  await LogoutHelper.logout(context);
                 },
               );
             },
@@ -351,8 +355,10 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
     BuildContext context,
     UserModel student,
     List<StudentClassworkModel> classwork,
+    List<StudentEnrollmentModel> enrollments,
   ) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     final pending =
         classwork
             .where(
@@ -375,7 +381,7 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
     ].join(' · ');
 
     return RefreshIndicator(
-      onRefresh: _loadDashboard,
+      onRefresh: () => _loadDashboard(forceRefresh: true),
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -385,10 +391,19 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
               gradient: LinearGradient(
                 colors: [
                   theme.colorScheme.primary,
-                  theme.colorScheme.primary.withValues(alpha: 0.82),
+                  theme.colorScheme.primary.withValues(alpha: 0.85),
                 ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
               ),
-              borderRadius: BorderRadius.circular(18),
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(
+                  color: theme.colorScheme.primary.withValues(alpha: 0.25),
+                  blurRadius: 14,
+                  offset: const Offset(0, 6),
+                ),
+              ],
             ),
             child: Row(
               children: [
@@ -396,42 +411,115 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          student.lrn?.isNotEmpty == true
+                              ? 'LRN: ${student.lrn}'
+                              : 'Student Portal',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
                       const Text(
                         'Welcome back,',
-                        style: TextStyle(color: Colors.white70, fontSize: 14),
+                        style: TextStyle(color: Colors.white70, fontSize: 13),
                       ),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 2),
                       Text(
                         student.firstName?.isNotEmpty == true
                             ? student.firstName!
                             : student.fullName,
                         style: const TextStyle(
                           color: Colors.white,
-                          fontSize: 23,
+                          fontSize: 24,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
                       if (enrollmentLabel.isNotEmpty) ...[
-                        const SizedBox(height: 8),
-                        Text(
-                          enrollmentLabel,
-                          style: const TextStyle(
-                            color: Colors.white70,
-                            fontSize: 13,
-                          ),
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.school_outlined,
+                              size: 15,
+                              color: Colors.white70,
+                            ),
+                            const SizedBox(width: 5),
+                            Text(
+                              enrollmentLabel,
+                              style: const TextStyle(
+                                color: Colors.white70,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ],
                   ),
                 ),
-                Icon(
-                  Icons.school_outlined,
-                  color: theme.colorScheme.onPrimary,
-                  size: 38,
+                CircleAvatar(
+                  radius: 30,
+                  backgroundColor: Colors.white.withValues(alpha: 0.2),
+                  child: Text(
+                    student.fullName.isNotEmpty
+                        ? student.fullName.trim()[0].toUpperCase()
+                        : 'S',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 26,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ),
               ],
             ),
           ),
+          if (enrollments.isNotEmpty) ...[
+            const SizedBox(height: 24),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'My Enrolled Classes',
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                Text(
+                  '${enrollments.length} ${enrollments.length == 1 ? 'subject' : 'subjects'}',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Your registered subjects and assigned teachers.',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 12),
+            ...enrollments.map((e) => _buildEnrollmentCard(context, e)),
+          ],
           const SizedBox(height: 24),
           Row(
             children: [
@@ -447,13 +535,14 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
                 '${pending.length} pending',
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 4),
           Text(
-            'Activities, assignments, and performance tasks from your classes.',
+            'Activities and assignments from your enrolled classes.',
             style: theme.textTheme.bodyMedium?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
             ),
@@ -463,8 +552,9 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
             _emptyState(
               context,
               icon: Icons.task_alt_outlined,
-              title: 'You have no tasks yet',
-              message: 'When a teacher posts an activity, assignment, or performance task, it will show up here.',
+              title: 'You are all caught up!',
+              message:
+                  'When your teacher posts an activity or assignment, it will appear here.',
             )
           else
             ...todoItems.map(
@@ -473,6 +563,121 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
                 child: StudentClassworkCard(classwork: item),
               ),
             ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEnrollmentCard(
+    BuildContext context,
+    StudentEnrollmentModel item,
+  ) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: theme.colorScheme.onSurface.withValues(alpha: 0.1),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.primaryContainer,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(
+              Icons.book_outlined,
+              color: theme.colorScheme.primary,
+              size: 24,
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (item.subjectCode.isNotEmpty)
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.primary.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      item.subjectCode,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: theme.colorScheme.primary,
+                      ),
+                    ),
+                  ),
+                Text(
+                  item.subjectName.isNotEmpty ? item.subjectName : 'Enrolled Subject',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    Icon(
+                      Icons.person_outline,
+                      size: 15,
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        item.teacherName.isNotEmpty
+                            ? 'Teacher: ${item.teacherName}'
+                            : 'Assigned Teacher',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    Icon(
+                      Icons.meeting_room_outlined,
+                      size: 15,
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      '${item.sectionName.isNotEmpty ? item.sectionName : "Section"} · Grade ${item.gradeLevel}',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );

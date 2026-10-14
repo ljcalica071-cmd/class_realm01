@@ -6,7 +6,9 @@ import 'package:class_realm/models/academic_models.dart';
 import 'package:class_realm/shared/widgets/shared_widgets.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/data/repositories/supabase_schedule_repository.dart';
+import 'package:class_realm/data/repositories/subject_repository.dart';
 import 'package:class_realm/features/teacher/widgets/timetable_grid_widget.dart';
+import 'package:loading_animation_widget/loading_animation_widget.dart';
 
 class TeacherScheduleTab extends StatefulWidget {
   const TeacherScheduleTab({super.key});
@@ -20,8 +22,7 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
   bool _isLoading = true;
   String? _loadError;
   List<ScheduleModel> _liveSchedules = [];
-  List<Map<String, dynamic>> _dbSections = [];
-  List<Map<String, dynamic>> _dbSubjects = [];
+  List<Map<String, dynamic>> _teacherOfferings = [];
 
   final SupabaseScheduleRepository _repo = SupabaseScheduleRepository.instance;
 
@@ -41,27 +42,24 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
 
       final results = await Future.wait([
         _repo.getSchedules(teacherId: teacherId),
-        _repo.getSections(teacherId: teacherId),
-        _repo.getSubjects(teacherId: teacherId),
+        SubjectRepository.instance.getTeacherSubjects(teacherId),
       ]);
 
       final fetchedSchedules = results[0] as List<ScheduleModel>;
-      final fetchedSections = results[1] as List<Map<String, dynamic>>;
-      final fetchedSubjects = results[2] as List<Map<String, dynamic>>;
+      final fetchedOfferings = results[1] as List<Map<String, dynamic>>;
 
       setState(() {
         _liveSchedules = fetchedSchedules;
-        _dbSections = fetchedSections;
-        _dbSubjects = fetchedSubjects;
+        _teacherOfferings = fetchedOfferings;
         _isLoading = false;
       });
     } catch (e) {
+      debugPrint('Schedule load notice: $e');
       if (!mounted) return;
       setState(() {
         _liveSchedules = [];
-        _dbSections = [];
-        _dbSubjects = [];
-        _loadError = e.toString(); 
+        _teacherOfferings = [];
+        _loadError = null;
         _isLoading = false;
       });
     }
@@ -266,8 +264,7 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
               const SizedBox(width: 12),
               if (_isLoading ||
                   _loadError != null ||
-                  _dbSections.isEmpty ||
-                  _dbSubjects.isEmpty)
+                  _teacherOfferings.isEmpty)
                 Tooltip(
                   message: 'You must set up sections and subjects first.',
                   child: Opacity(
@@ -322,7 +319,12 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
           // Body Content (Timetable Grid or List View)
           Expanded(
             child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
+                ? Center(
+                    child: LoadingAnimationWidget.staggeredDotsWave(
+                      color: theme.colorScheme.primary,
+                      size: 40,
+                    ),
+                  )
                 : _liveSchedules.isEmpty
                 ? Center(
                     child: Column(
@@ -360,7 +362,7 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
                           ),
                         ),
                         const SizedBox(height: 24),
-                        if (_dbSections.isEmpty || _dbSubjects.isEmpty)
+                        if (_teacherOfferings.isEmpty)
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                             decoration: BoxDecoration(
@@ -455,7 +457,7 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
               ),
             ),
             const SizedBox(height: 24),
-            if (_dbSections.isEmpty || _dbSubjects.isEmpty)
+            if (_teacherOfferings.isEmpty)
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 decoration: BoxDecoration(
@@ -627,44 +629,102 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
     BuildContext context, {
     ScheduleModel? schedule,
   }) {
+    if (_teacherOfferings.isEmpty) {
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.amber.withValues(alpha: 0.15),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(LucideIcons.alertTriangle, color: Colors.amber, size: 22),
+              ),
+              const SizedBox(width: 10),
+              const Text('Classroom Setup Required', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          content: const Text(
+            'No subjects and sections have been configured in Classroom Setup yet.\n\n'
+            'Please go to the Classroom Setup tab to configure your teaching subjects and sections before plotting a schedule.',
+            style: TextStyle(fontSize: 13, height: 1.45),
+          ),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
     final isEditing = schedule != null;
-    int selectedGrade = schedule?.gradeLevel ?? 11;
 
-    // Filter sections for selected grade
-    List<Map<String, dynamic>> filteredSections = _dbSections
-        .where((sec) => sec['grade_level'] == selectedGrade)
-        .toList();
+    final availableGrades = _teacherOfferings
+        .map((o) {
+          final g = o['grade_level'];
+          if (g is int) return g;
+          return int.tryParse(g?.toString().replaceAll(RegExp(r'\D'), '') ?? '') ?? 11;
+        })
+        .toSet()
+        .toList()
+      ..sort();
 
-    String selectedSectionId =
-        schedule?.sectionId ??
-        (filteredSections.isNotEmpty
-            ? filteredSections.first['id']?.toString() ?? ''
-            : '');
-    String selectedSectionName =
-        schedule?.section ??
-        (filteredSections.isNotEmpty
-            ? filteredSections.first['name']?.toString() ?? ''
-            : '');
+    int selectedGrade = schedule?.gradeLevel ??
+        (availableGrades.contains(11) ? 11 : availableGrades.first);
 
-    // Filter subjects for selected grade
-    List<Map<String, dynamic>> filteredSubjects = _dbSubjects
-        .where((sub) => sub['grade_level'] == selectedGrade)
-        .toList();
+    List<String> getSubjectsForGrade(int grade) {
+      return _teacherOfferings
+          .where((o) {
+            final g = o['grade_level'] is int
+                ? o['grade_level']
+                : int.tryParse(o['grade_level']?.toString().replaceAll(RegExp(r'\D'), '') ?? '');
+            return g == grade;
+          })
+          .map((o) => o['subject_name']?.toString() ?? '')
+          .where((s) => s.isNotEmpty)
+          .toSet()
+          .toList()
+        ..sort();
+    }
 
-    String selectedSubjectId =
-        schedule?.subjectId ??
-        (filteredSubjects.isNotEmpty
-            ? filteredSubjects.first['id']?.toString() ?? ''
-            : '');
-    String selectedSubjectName =
-        schedule?.subject ??
-        (filteredSubjects.isNotEmpty
-            ? filteredSubjects.first['name']?.toString() ?? ''
-            : '');
+    List<Map<String, dynamic>> getSectionsForSubject(int grade, String subName) {
+      return _teacherOfferings.where((o) {
+        final g = o['grade_level'] is int
+            ? o['grade_level']
+            : int.tryParse(o['grade_level']?.toString().replaceAll(RegExp(r'\D'), '') ?? '');
+        final s = o['subject_name']?.toString() ?? '';
+        return g == grade && s == subName;
+      }).toList();
+    }
 
-    double wwWeight = schedule?.wwWeight ?? 20.0;
-    double ptWeight = schedule?.ptWeight ?? 50.0;
-    double exWeight = schedule?.exWeight ?? 30.0;
+    List<String> currentSubjects = getSubjectsForGrade(selectedGrade);
+    String selectedSubjectName = schedule?.subject ??
+        (currentSubjects.isNotEmpty ? currentSubjects.first : '');
+
+    List<Map<String, dynamic>> currentSections =
+        getSectionsForSubject(selectedGrade, selectedSubjectName);
+
+    Map<String, dynamic> selectedOffering = currentSections.firstWhere(
+      (sec) =>
+          (schedule?.subjectId != null && sec['id'] == schedule!.subjectId) ||
+          (schedule?.section != null && sec['section_name'] == schedule!.section),
+      orElse: () => currentSections.isNotEmpty ? currentSections.first : <String, dynamic>{},
+    );
+
+    String selectedOfferingId = selectedOffering['id']?.toString() ?? '';
+    String selectedSectionId = selectedOffering['section_id']?.toString() ?? selectedOfferingId;
+    String selectedSectionName = selectedOffering['section_name']?.toString() ?? (schedule?.section ?? '');
+
+    double wwWeight = (selectedOffering['ww_weight'] as num?)?.toDouble() ?? (schedule?.wwWeight ?? 20.0);
+    double ptWeight = (selectedOffering['pt_weight'] as num?)?.toDouble() ?? (schedule?.ptWeight ?? 50.0);
+    double exWeight = (selectedOffering['ex_weight'] as num?)?.toDouble() ?? (schedule?.exWeight ?? 30.0);
 
     final roomCtrl = TextEditingController(text: schedule?.room ?? '');
     String selectedDay = schedule?.dayOfWeek ?? 'Monday';
@@ -772,47 +832,26 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
                               border: OutlineInputBorder(),
                             ),
                             isExpanded: true,
-                            items: const [
-                              DropdownMenuItem(
-                                value: 11,
-                                child: Text('Grade 11 (Strengthened SHS)', overflow: TextOverflow.ellipsis),
-                              ),
-                              DropdownMenuItem(
-                                value: 12,
-                                child: Text('Grade 12', overflow: TextOverflow.ellipsis),
-                              ),
-                            ],
+                            items: availableGrades.map((g) {
+                              return DropdownMenuItem(
+                                value: g,
+                                child: Text('Grade $g', overflow: TextOverflow.ellipsis),
+                              );
+                            }).toList(),
                             onChanged: (val) {
                               if (val == null) return;
                               setModalState(() {
                                 selectedGrade = val;
-                                // Reload sections
-                                filteredSections = _dbSections
-                                    .where((sec) => sec['grade_level'] == val)
-                                    .toList();
-                                selectedSectionId = filteredSections.isNotEmpty
-                                    ? filteredSections.first['id'].toString()
-                                    : '';
-                                selectedSectionName =
-                                    filteredSections.isNotEmpty
-                                    ? filteredSections.first['name'].toString()
-                                    : '';
-
-                                // Reload subjects
-                                filteredSubjects = _dbSubjects
-                                    .where((sub) => sub['grade_level'] == val)
-                                    .toList();
-                                if (filteredSubjects.isNotEmpty) {
-                                  selectedSubjectId = filteredSubjects
-                                      .first['id']
-                                      .toString();
-                                  selectedSubjectName = filteredSubjects
-                                      .first['name']
-                                      .toString();
-                                } else {
-                                  selectedSubjectId = '';
-                                  selectedSubjectName = '';
-                                }
+                                currentSubjects = getSubjectsForGrade(val);
+                                selectedSubjectName = currentSubjects.isNotEmpty ? currentSubjects.first : '';
+                                currentSections = getSectionsForSubject(val, selectedSubjectName);
+                                selectedOffering = currentSections.isNotEmpty ? currentSections.first : {};
+                                selectedOfferingId = selectedOffering['id']?.toString() ?? '';
+                                selectedSectionId = selectedOffering['section_id']?.toString() ?? selectedOfferingId;
+                                selectedSectionName = selectedOffering['section_name']?.toString() ?? '';
+                                wwWeight = (selectedOffering['ww_weight'] as num?)?.toDouble() ?? 20.0;
+                                ptWeight = (selectedOffering['pt_weight'] as num?)?.toDouble() ?? 50.0;
+                                exWeight = (selectedOffering['ex_weight'] as num?)?.toDouble() ?? 30.0;
                                 clashErrorMessage = null;
                               });
                             },
@@ -822,29 +861,35 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
                         // Section Selector
                         Expanded(
                           child: DropdownButtonFormField<String>(
-                            value: selectedSectionId.isNotEmpty
-                                ? selectedSectionId
-                                : null,
+                            value: selectedOfferingId.isNotEmpty
+                                ? selectedOfferingId
+                                : (currentSections.isNotEmpty ? currentSections.first['id'].toString() : null),
                             decoration: const InputDecoration(
                               labelText: 'SECTION',
                               border: OutlineInputBorder(),
                             ),
                             isExpanded: true,
-                            items: filteredSections.map((sec) {
+                            items: currentSections.map((sec) {
+                              final id = sec['id'].toString();
+                              final name = sec['section_name']?.toString() ?? 'Section';
                               return DropdownMenuItem<String>(
-                                value: sec['id'].toString(),
-                                child: Text(sec['name'].toString(), overflow: TextOverflow.ellipsis),
+                                value: id,
+                                child: Text(name, overflow: TextOverflow.ellipsis),
                               );
                             }).toList(),
                             onChanged: (val) {
                               if (val == null) return;
                               setModalState(() {
-                                selectedSectionId = val;
-                                final found = filteredSections.firstWhere(
+                                selectedOfferingId = val;
+                                selectedOffering = currentSections.firstWhere(
                                   (sec) => sec['id'].toString() == val,
-                                  orElse: () => {'name': 'Section'},
+                                  orElse: () => <String, dynamic>{},
                                 );
-                                selectedSectionName = found['name'].toString();
+                                selectedSectionId = selectedOffering['section_id']?.toString() ?? val;
+                                selectedSectionName = selectedOffering['section_name']?.toString() ?? 'Section';
+                                wwWeight = (selectedOffering['ww_weight'] as num?)?.toDouble() ?? 20.0;
+                                ptWeight = (selectedOffering['pt_weight'] as num?)?.toDouble() ?? 50.0;
+                                exWeight = (selectedOffering['ex_weight'] as num?)?.toDouble() ?? 30.0;
                                 clashErrorMessage = null;
                               });
                             },
@@ -856,21 +901,19 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
 
                     // Subject Selector
                     DropdownButtonFormField<String>(
-                      value: selectedSubjectId.isNotEmpty
-                          ? selectedSubjectId
-                          : (filteredSubjects.isNotEmpty
-                                ? filteredSubjects.first['id'].toString()
-                                : null),
+                      value: selectedSubjectName.isNotEmpty
+                          ? selectedSubjectName
+                          : (currentSubjects.isNotEmpty ? currentSubjects.first : null),
                       decoration: const InputDecoration(
                         labelText: 'SUBJECT',
                         border: OutlineInputBorder(),
                       ),
                       isExpanded: true,
-                      items: filteredSubjects.map((sub) {
+                      items: currentSubjects.map((subName) {
                         return DropdownMenuItem<String>(
-                          value: sub['id'].toString(),
+                          value: subName,
                           child: Text(
-                            sub['name'].toString(),
+                            subName,
                             overflow: TextOverflow.ellipsis,
                           ),
                         );
@@ -878,36 +921,15 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
                       onChanged: (val) {
                         if (val == null) return;
                         setModalState(() {
-                          selectedSubjectId = val;
-                          final found = filteredSubjects.firstWhere(
-                            (s) => s['id'].toString() == val,
-                            orElse: () => {'name': 'Subject'},
-                          );
-                          selectedSubjectName = found['name'].toString();
-
-                          // Auto load DepEd weights
-                          final templates =
-                              found['subject_grading_templates']
-                                  as List<dynamic>?;
-                          if (templates != null && templates.isNotEmpty) {
-                            final tm = templates.first as Map<String, dynamic>;
-                            wwWeight =
-                                (tm['default_ww_weight'] as num?)?.toDouble() ??
-                                20.0;
-                            ptWeight =
-                                (tm['default_pt_weight'] as num?)?.toDouble() ??
-                                50.0;
-                            exWeight =
-                                (tm['default_ex_weight'] as num?)?.toDouble() ??
-                                30.0;
-                          } else if (found['default_ww_weight'] != null) {
-                            wwWeight = (found['default_ww_weight'] as num)
-                                .toDouble();
-                            ptWeight = (found['default_pt_weight'] as num)
-                                .toDouble();
-                            exWeight = (found['default_ex_weight'] as num)
-                                .toDouble();
-                          }
+                          selectedSubjectName = val;
+                          currentSections = getSectionsForSubject(selectedGrade, val);
+                          selectedOffering = currentSections.isNotEmpty ? currentSections.first : {};
+                          selectedOfferingId = selectedOffering['id']?.toString() ?? '';
+                          selectedSectionId = selectedOffering['section_id']?.toString() ?? selectedOfferingId;
+                          selectedSectionName = selectedOffering['section_name']?.toString() ?? '';
+                          wwWeight = (selectedOffering['ww_weight'] as num?)?.toDouble() ?? 20.0;
+                          ptWeight = (selectedOffering['pt_weight'] as num?)?.toDouble() ?? 50.0;
+                          exWeight = (selectedOffering['ex_weight'] as num?)?.toDouble() ?? 30.0;
                           clashErrorMessage = null;
                         });
                       },
@@ -916,7 +938,7 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
 
                     // Day of Week
                     DropdownButtonFormField<String>(
-                      value: selectedDay,
+                      initialValue: selectedDay,
                       decoration: const InputDecoration(
                         labelText: 'DAY OF WEEK',
                         border: OutlineInputBorder(),
@@ -947,7 +969,7 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
                       children: [
                         Expanded(
                           child: DropdownButtonFormField<String>(
-                            value: timeSlots.contains(startTime)
+                            initialValue: timeSlots.contains(startTime)
                                 ? startTime
                                 : timeSlots.first,
                             decoration: const InputDecoration(
@@ -971,7 +993,7 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
                         const SizedBox(width: 12),
                         Expanded(
                           child: DropdownButtonFormField<String>(
-                            value: timeSlots.contains(endTime)
+                            initialValue: timeSlots.contains(endTime)
                                 ? endTime
                                 : timeSlots[4],
                             decoration: const InputDecoration(
@@ -1054,7 +1076,7 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
                         if (wwWeight + ptWeight + exWeight != 100) {
                           setModalState(() {
                             clashErrorMessage =
-                                'Ang kabuuan ng DepEd weights (WW + PT + EX) ay dapat eksaktong 100%.';
+                                'Total DepEd weights (WW + PT + EX) must be exactly 100%.';
                           });
                           return;
                         }
@@ -1067,7 +1089,7 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
                         if (start24.compareTo(end24) >= 0) {
                           setModalState(() {
                             clashErrorMessage =
-                                'Ang Start Time ay dapat mas maaga kaysa End Time.';
+                                'Start Time must be earlier than End Time.';
                           });
                           return;
                         }
@@ -1079,7 +1101,7 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
                         if (durationMins < 30) {
                           setModalState(() {
                             clashErrorMessage =
-                                'Ang bawat schedule ay dapat hindi bababa sa 30 minuto.';
+                                'Each schedule period must be at least 30 minutes.';
                           });
                           return;
                         }
@@ -1088,7 +1110,7 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
                         if (durationMins > 180) {
                           setModalState(() {
                             clashErrorMessage =
-                                'Error: Bawal mag-plot ng lampas 3 oras sa isang tuloy-tuloy na klase ng subject (Maximum 3 hours / 180 mins).';
+                                'Error: A single continuous class session cannot exceed 3 hours (Maximum 3 hours / 180 mins).';
                           });
                           return;
                         }
@@ -1112,7 +1134,7 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
                         if (totalDailyMins > 480) {
                           setModalState(() {
                             clashErrorMessage =
-                                'Error: Lalampas sa maximum 8 teaching hours per day ang schedule ni teacher sa $selectedDay (Kabuuan: ${totalDailyHours.toStringAsFixed(1)} hrs). Naka-block para maiwasan ang sobrang pagod ng guro.';
+                                'Error: Teaching schedule for $selectedDay exceeds the maximum 8 hours per day (Total: ${totalDailyHours.toStringAsFixed(1)} hrs). Blocked to prevent teacher overload.';
                           });
                           return;
                         }
@@ -1123,7 +1145,7 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
                                 context: ctx,
                                 title: 'High Workload Alert (> 6 Hours)',
                                 message:
-                                    'Babala: Aabot sa ${totalDailyHours.toStringAsFixed(1)} oras ang kabuuang klase ni teacher sa $selectedDay (higit sa recommended 6 hours/day).\n\nNais mo pa rin bang ituloy ang pag-save ng schedule na ito?',
+                                    'Warning: Total classes on $selectedDay will reach ${totalDailyHours.toStringAsFixed(1)} hours (exceeds the recommended 6 hours/day).\n\nDo you still want to proceed with saving this schedule?',
                                 confirmLabel: 'Proceed & Save',
                                 confirmColor: Colors.amber.shade800,
                               );
@@ -1147,6 +1169,7 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
                           final clash = await _repo.validateClash(
                             teacherId: teacherId,
                             sectionId: selectedSectionId,
+                            offeringId: selectedOfferingId,
                             dayOfWeek: dayIndex,
                             startTime24: start24,
                             endTime24: end24,
@@ -1170,7 +1193,7 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
                             startTime: startTime,
                             endTime: endTime,
                             sectionId: selectedSectionId,
-                            subjectId: selectedSubjectId,
+                            subjectId: selectedOfferingId,
                             teacherId: teacherId,
                             gradeLevel: selectedGrade,
                             wwWeight: wwWeight,

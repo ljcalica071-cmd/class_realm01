@@ -47,19 +47,24 @@ dependencies:
   flutter_dotenv: ^5.1.0
   mailer: ^6.1.1
   loading_animation_widget: ^1.2.1
+  file_picker: ^8.1.2
+  url_launcher: ^6.3.0
+  csv: ^6.0.0
 
-  # Local Storage (Hive)
-  hive: ^2.2.3
-  hive_flutter: ^1.1.0
+  # Local Database / Offline-First Architecture (Drift SQLite)
+  drift: ^2.24.0
+  drift_flutter: ^0.2.0
+
+  # Local preferences (to be retired in later phase)
+  shared_preferences: ^2.5.5
 dev_dependencies:
   flutter_test:
     sdk: flutter
 
-  # The "flutter_lints" package below contains a set of recommended lints to
-  # encourage good coding practices. The lint set provided by the package is
-  # activated in the `analysis_options.yaml` file located at the root of your
-  # package. See that file for information about deactivating specific lint
-  # rules and activating additional ones.
+  # Drift Code Generator
+  drift_dev: ^2.24.0
+  build_runner: ^2.4.14
+
   flutter_lints: ^6.0.0
 
 # For information on the generic Dart part of this file, see the

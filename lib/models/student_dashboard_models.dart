@@ -1,18 +1,55 @@
 import 'package:class_realm/models/user_model.dart';
 
+class StudentEnrollmentModel {
+  const StudentEnrollmentModel({
+    required this.subjectId,
+    required this.subjectName,
+    required this.subjectCode,
+    required this.sectionName,
+    required this.gradeLevel,
+    required this.teacherName,
+  });
+
+  final String subjectId;
+  final String subjectName;
+  final String subjectCode;
+  final String sectionName;
+  final String gradeLevel;
+  final String teacherName;
+
+  factory StudentEnrollmentModel.fromJson(Map<String, dynamic> json) {
+    return StudentEnrollmentModel(
+      subjectId: json['subject_id']?.toString() ?? '',
+      subjectName: json['subject_name']?.toString() ?? '',
+      subjectCode: json['subject_code']?.toString() ?? '',
+      sectionName: json['section_name']?.toString() ?? '',
+      gradeLevel: json['grade_level']?.toString() ?? '',
+      teacherName: json['teacher_name']?.toString() ?? '',
+    );
+  }
+}
+
 class StudentDashboardData {
-  const StudentDashboardData({required this.student, required this.classwork});
+  const StudentDashboardData({
+    required this.student,
+    required this.classwork,
+    this.enrollments = const [],
+  });
 
   final UserModel student;
   final List<StudentClassworkModel> classwork;
+  final List<StudentEnrollmentModel> enrollments;
 
   factory StudentDashboardData.fromJson(Map<String, dynamic> json) {
     final studentJson = Map<String, dynamic>.from(json['student'] as Map);
-    final enrollments = (studentJson['enrollments'] as List? ?? const [])
+    final rawEnrollments = (studentJson['enrollments'] as List? ?? const [])
         .whereType<Map>()
         .map((item) => Map<String, dynamic>.from(item))
         .toList();
-    final primaryEnrollment = enrollments.isEmpty ? null : enrollments.first;
+    final enrollments = rawEnrollments
+        .map((item) => StudentEnrollmentModel.fromJson(item))
+        .toList();
+    final primaryEnrollment = rawEnrollments.isEmpty ? null : rawEnrollments.first;
     final birthdayValue = studentJson['birthday']?.toString();
     final firstName = studentJson['first_name']?.toString() ?? '';
     final middleName = studentJson['middle_name']?.toString();
@@ -49,6 +86,33 @@ class StudentDashboardData {
                 StudentClassworkModel.fromJson(Map<String, dynamic>.from(item)),
           )
           .toList(),
+      enrollments: enrollments,
+    );
+  }
+}
+
+class StudentAttachmentModel {
+  const StudentAttachmentModel({
+    required this.id,
+    required this.fileName,
+    this.mimeType,
+    this.fileSizeBytes,
+    this.signedUrl,
+  });
+
+  final String id;
+  final String fileName;
+  final String? mimeType;
+  final int? fileSizeBytes;
+  final String? signedUrl;
+
+  factory StudentAttachmentModel.fromJson(Map<String, dynamic> json) {
+    return StudentAttachmentModel(
+      id: json['id']?.toString() ?? '',
+      fileName: json['file_name']?.toString() ?? '',
+      mimeType: json['mime_type']?.toString(),
+      fileSizeBytes: (json['file_size_bytes'] as num?)?.toInt(),
+      signedUrl: json['signed_url']?.toString(),
     );
   }
 }
@@ -69,6 +133,7 @@ class StudentClassworkModel {
     required this.status,
     required this.score,
     required this.feedback,
+    this.attachment,
   });
 
   final String id;
@@ -85,6 +150,7 @@ class StudentClassworkModel {
   final String? status;
   final double? score;
   final String? feedback;
+  final StudentAttachmentModel? attachment;
 
   factory StudentClassworkModel.fromJson(Map<String, dynamic> json) {
     final subject = json['subject'] is Map
@@ -97,6 +163,19 @@ class StudentClassworkModel {
     final deadline = json['deadline']?.toString();
     final maxScore = json['max_score'];
     final score = submission['score'];
+
+    StudentAttachmentModel? parsedAttachment;
+    if (json['attachments'] is List && (json['attachments'] as List).isNotEmpty) {
+      final first = (json['attachments'] as List).first;
+      if (first is Map) {
+        parsedAttachment =
+            StudentAttachmentModel.fromJson(Map<String, dynamic>.from(first));
+      }
+    } else if (json['attachment'] is Map) {
+      parsedAttachment = StudentAttachmentModel.fromJson(
+        Map<String, dynamic>.from(json['attachment'] as Map),
+      );
+    }
 
     return StudentClassworkModel(
       id: json['id'].toString(),
@@ -113,6 +192,7 @@ class StudentClassworkModel {
       status: submission['status']?.toString(),
       score: score is num ? score.toDouble() : null,
       feedback: submission['feedback']?.toString(),
+      attachment: parsedAttachment,
     );
   }
 }

@@ -167,15 +167,6 @@ class TeacherReportsTab extends StatelessWidget {
               ),
               _buildReportCard(
                 context: context,
-                title: 'Item Analysis Summary',
-                subtitle: 'Periodical Examination Statistical Report',
-                icon: Icons.insights_outlined,
-                color: AppTheme.catOrange,
-                onDownload: () =>
-                    _showExportConfirm(context, 'Item Analysis Summary'),
-              ),
-              _buildReportCard(
-                context: context,
                 title: 'School Form 9 (SF9)',
                 subtitle: 'Learner Progress Report Card',
                 icon: Icons.badge_outlined,

@@ -46,13 +46,8 @@ class _AuthGuardState extends State<AuthGuard> {
       }
 
       // 3. Status checks
-      if (user.status == AccountStatus.pendingFirstLogin && widget.child.runtimeType.toString() != 'FirstLoginScreen') {
+      if ((user.status == AccountStatus.pendingFirstLogin || user.status == AccountStatus.pending) && widget.child.runtimeType.toString() != 'FirstLoginScreen') {
         _redirect(user.role == UserRole.teacher ? AppRoutes.teacherFirstLogin : AppRoutes.studentFirstLogin);
-        return;
-      }
-      
-      if (user.status == AccountStatus.pending) {
-        _redirect(AppRoutes.pendingAccount);
         return;
       }
       

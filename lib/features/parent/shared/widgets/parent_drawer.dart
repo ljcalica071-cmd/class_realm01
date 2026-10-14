@@ -1,23 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:class_realm/core/theme/app_theme.dart';
-import 'package:class_realm/data/mock_database.dart';
 import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/routes/app_routes.dart';
 import 'package:class_realm/features/parent/sub_features/child_details/widgets/parent_schedule_view.dart';
 import 'package:class_realm/features/parent/sub_features/communications/widgets/parent_teacher_contact_view.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/widgets/common/app_modals.dart';
+import 'package:class_realm/core/utils/logout_helper.dart';
 
 class ParentDrawer extends StatelessWidget {
   final UserModel parent;
   final UserModel? linkedStudent;
-  final UserModel teacher;
+  final UserModel? teacher;
 
   const ParentDrawer({
     super.key,
     required this.parent,
     required this.linkedStudent,
-    required this.teacher,
+    this.teacher,
   });
 
   @override
@@ -101,8 +101,7 @@ class ParentDrawer extends StatelessWidget {
                 confirmLabel: 'Logout',
                 confirmColor: AppTheme.catRed,
                 onConfirm: () async {
-                  await AuthRepository.instance.logout();
-                  if (context.mounted) Navigator.pushReplacementNamed(context, AppRoutes.login);
+                  await LogoutHelper.logout(context);
                 },
               );
             },

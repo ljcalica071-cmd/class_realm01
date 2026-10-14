@@ -16,75 +16,78 @@ class AppModals {
     final theme = Theme.of(context);
     return showDialog(
       context: context,
-      builder: (ctx) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        elevation: 16,
-        backgroundColor: theme.colorScheme.surface,
-        child: Container(
-          constraints: const BoxConstraints(maxWidth: 420),
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: (confirmColor ?? theme.colorScheme.primary).withValues(alpha: 0.12),
-                      shape: BoxShape.circle,
+      builder: (ctx) => Theme(
+        data: theme,
+        child: Dialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          elevation: 16,
+          backgroundColor: theme.colorScheme.surface,
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 420),
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: (confirmColor ?? theme.colorScheme.primary).withValues(alpha: 0.12),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(Icons.help_outline_rounded, color: confirmColor ?? theme.colorScheme.primary, size: 24),
                     ),
-                    child: Icon(Icons.help_outline_rounded, color: confirmColor ?? theme.colorScheme.primary, size: 24),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Text(
-                      title,
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: theme.colorScheme.onSurface,
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Text(
+                        title,
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: theme.colorScheme.onSurface,
+                        ),
                       ),
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              Text(
-                message,
-                style: TextStyle(
-                  fontSize: 14,
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.75),
-                  height: 1.5,
+                  ],
                 ),
-              ),
-              const SizedBox(height: 24),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  TextButton(
-                    onPressed: () => Navigator.of(ctx).pop(),
-                    style: TextButton.styleFrom(
-                      foregroundColor: theme.colorScheme.onSurface.withValues(alpha: 0.7),
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                const SizedBox(height: 16),
+                Text(
+                  message,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.75),
+                    height: 1.5,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: () => Navigator.of(ctx).pop(),
+                      style: TextButton.styleFrom(
+                        foregroundColor: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      ),
+                      child: Text(cancelLabel, style: const TextStyle(fontWeight: FontWeight.w600)),
                     ),
-                    child: Text(cancelLabel, style: const TextStyle(fontWeight: FontWeight.w600)),
-                  ),
-                  const SizedBox(width: 8),
-                  AppPrimaryButton(
-                    label: confirmLabel,
-                    backgroundColor: confirmColor ?? theme.colorScheme.primary,
-                    onPressed: () {
-                      Navigator.of(ctx).pop();
-                      onConfirm();
-                    },
-                    width: 120,
-                    height: 40,
-                  ),
-                ],
-              ),
-            ],
+                    const SizedBox(width: 8),
+                    AppPrimaryButton(
+                      label: confirmLabel,
+                      backgroundColor: confirmColor ?? theme.colorScheme.primary,
+                      onPressed: () {
+                        Navigator.of(ctx).pop();
+                        onConfirm();
+                      },
+                      width: 120,
+                      height: 40,
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -99,64 +102,67 @@ class AppModals {
     final theme = Theme.of(context);
     return showDialog(
       context: context,
-      builder: (ctx) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        elevation: 16,
-        backgroundColor: theme.colorScheme.surface,
-        child: Container(
-          constraints: const BoxConstraints(maxWidth: 420),
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: AppTheme.catRed.withValues(alpha: 0.12),
-                      shape: BoxShape.circle,
+      builder: (ctx) => Theme(
+        data: theme,
+        child: Dialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          elevation: 16,
+          backgroundColor: theme.colorScheme.surface,
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 420),
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: AppTheme.catRed.withValues(alpha: 0.12),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.error_outline_rounded, color: AppTheme.catRed, size: 24),
                     ),
-                    child: const Icon(Icons.error_outline_rounded, color: AppTheme.catRed, size: 24),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Text(
-                      title,
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: theme.colorScheme.onSurface,
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Text(
+                        title,
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: theme.colorScheme.onSurface,
+                        ),
                       ),
                     ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  message,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.75),
+                    height: 1.5,
                   ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              Text(
-                message,
-                style: TextStyle(
-                  fontSize: 14,
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.75),
-                  height: 1.5,
                 ),
-              ),
-              const SizedBox(height: 24),
-              Align(
-                alignment: Alignment.centerRight,
-                child: AppPrimaryButton(
-                  label: 'OK',
-                  backgroundColor: AppTheme.catRed,
-                  onPressed: () {
-                    Navigator.of(ctx).pop();
-                    if (onConfirm != null) onConfirm();
-                  },
-                  width: 100,
-                  height: 40,
+                const SizedBox(height: 24),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: AppPrimaryButton(
+                    label: 'OK',
+                    backgroundColor: AppTheme.catRed,
+                    onPressed: () {
+                      Navigator.of(ctx).pop();
+                      if (onConfirm != null) onConfirm();
+                    },
+                    width: 100,
+                    height: 40,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -315,60 +321,63 @@ class AppModals {
     final theme = Theme.of(context);
     return showDialog(
       context: context,
-      builder: (ctx) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        elevation: 16,
-        backgroundColor: theme.colorScheme.surface,
-        child: Container(
-          constraints: const BoxConstraints(maxWidth: 420),
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: AppTheme.catOrange.withValues(alpha: 0.12),
-                      shape: BoxShape.circle,
+      builder: (ctx) => Theme(
+        data: theme,
+        child: Dialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          elevation: 16,
+          backgroundColor: theme.colorScheme.surface,
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 420),
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: AppTheme.catOrange.withValues(alpha: 0.12),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.warning_amber_rounded,
+                          color: AppTheme.catOrange, size: 24),
                     ),
-                    child: const Icon(Icons.warning_amber_rounded,
-                        color: AppTheme.catOrange, size: 24),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Text(
-                      title,
-                      style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: theme.colorScheme.onSurface),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Text(
+                        title,
+                        style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: theme.colorScheme.onSurface),
+                      ),
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              Text(
-                message,
-                style: TextStyle(
-                    fontSize: 14,
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.75),
-                    height: 1.5),
-              ),
-              const SizedBox(height: 24),
-              Align(
-                alignment: Alignment.centerRight,
-                child: AppPrimaryButton(
-                  label: 'OK',
-                  backgroundColor: AppTheme.catOrange,
-                  onPressed: () => Navigator.of(ctx).pop(),
-                  width: 100,
-                  height: 40,
+                  ],
                 ),
-              ),
-            ],
+                const SizedBox(height: 16),
+                Text(
+                  message,
+                  style: TextStyle(
+                      fontSize: 14,
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.75),
+                      height: 1.5),
+                ),
+                const SizedBox(height: 24),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: AppPrimaryButton(
+                    label: 'OK',
+                    backgroundColor: AppTheme.catOrange,
+                    onPressed: () => Navigator.of(ctx).pop(),
+                    width: 100,
+                    height: 40,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -386,53 +395,56 @@ class AppModals {
     final theme = Theme.of(context);
     return showDialog<bool>(
       context: context,
-      builder: (ctx) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        elevation: 16,
-        backgroundColor: theme.colorScheme.surface,
-        child: Container(
-          constraints: const BoxConstraints(maxWidth: 440),
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: theme.colorScheme.onSurface),
-              ),
-              const SizedBox(height: 14),
-              Text(
-                message,
-                style: TextStyle(
-                    fontSize: 14,
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.75),
-                    height: 1.5),
-              ),
-              const SizedBox(height: 24),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  TextButton(
-                    onPressed: () => Navigator.of(ctx).pop(false),
-                    child: Text(cancelLabel,
-                        style: TextStyle(
-                            color: theme.colorScheme.onSurface.withValues(alpha: 0.7))),
-                  ),
-                  const SizedBox(width: 8),
-                  AppPrimaryButton(
-                    label: confirmLabel,
-                    backgroundColor: confirmColor ?? theme.colorScheme.primary,
-                    onPressed: () => Navigator.of(ctx).pop(true),
-                    width: 110,
-                    height: 40,
-                  ),
-                ],
-              ),
-            ],
+      builder: (ctx) => Theme(
+        data: theme,
+        child: Dialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          elevation: 16,
+          backgroundColor: theme.colorScheme.surface,
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 440),
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: theme.colorScheme.onSurface),
+                ),
+                const SizedBox(height: 14),
+                Text(
+                  message,
+                  style: TextStyle(
+                      fontSize: 14,
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.75),
+                      height: 1.5),
+                ),
+                const SizedBox(height: 24),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: () => Navigator.of(ctx).pop(false),
+                      child: Text(cancelLabel,
+                          style: TextStyle(
+                              color: theme.colorScheme.onSurface.withValues(alpha: 0.7))),
+                    ),
+                    const SizedBox(width: 8),
+                    AppPrimaryButton(
+                      label: confirmLabel,
+                      backgroundColor: confirmColor ?? theme.colorScheme.primary,
+                      onPressed: () => Navigator.of(ctx).pop(true),
+                      width: 110,
+                      height: 40,
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),

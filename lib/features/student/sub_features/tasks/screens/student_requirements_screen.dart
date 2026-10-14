@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:class_realm/data/repositories/student_dashboard_repository.dart';
 import 'package:class_realm/features/student/shared/widgets/student_classwork_card.dart';
 import 'package:class_realm/models/student_dashboard_models.dart';
+import 'package:loading_animation_widget/loading_animation_widget.dart';
 
 class StudentRequirementsScreen extends StatefulWidget {
   const StudentRequirementsScreen({super.key});
@@ -61,7 +62,12 @@ class _StudentRequirementsScreenState extends State<StudentRequirementsScreen> {
         ],
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? Center(
+              child: LoadingAnimationWidget.staggeredDotsWave(
+                color: theme.colorScheme.primary,
+                size: 40,
+              ),
+            )
           : _loadError != null
           ? _buildMessage(
               context,

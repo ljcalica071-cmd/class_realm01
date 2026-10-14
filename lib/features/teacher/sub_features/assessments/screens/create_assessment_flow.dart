@@ -6,10 +6,13 @@ import 'package:flutter/services.dart';
 
 import 'package:class_realm/core/theme/app_theme.dart';
 import 'package:class_realm/data/mock_database.dart';
+import 'package:class_realm/data/repositories/auth_repository.dart';
+import 'package:class_realm/data/repositories/subject_repository.dart';
 import 'package:class_realm/models/academic_models.dart';
 import 'package:class_realm/widgets/common/app_buttons.dart';
 import 'package:class_realm/widgets/common/app_modals.dart';
 import 'package:class_realm/widgets/common/app_text_field.dart';
+import 'package:class_realm/widgets/common/app_date_picker_field.dart';
 
 class CreateAssessmentFlowDialog extends StatefulWidget {
   final VoidCallback onAssessmentCreated;
@@ -20,7 +23,7 @@ class CreateAssessmentFlowDialog extends StatefulWidget {
   const CreateAssessmentFlowDialog({
     super.key,
     required this.onAssessmentCreated,
-    this.initialSection = 'Section A',
+    this.initialSection = '',
     this.initialIsExam = false,
     this.skipTypeSelection = false,
   });
@@ -28,7 +31,7 @@ class CreateAssessmentFlowDialog extends StatefulWidget {
   static Future<void> show(
     BuildContext context, {
     required VoidCallback onAssessmentCreated,
-    String initialSection = 'Section A',
+    String initialSection = '',
     bool initialIsExam = false,
     bool skipTypeSelection = false,
   }) {
@@ -79,8 +82,11 @@ class _CreateAssessmentFlowDialogState
   final _durationCtrl = TextEditingController(text: '30');
   final _gradingQuarterCtrl = TextEditingController(text: '1st Quarter');
   DateTime _scheduleDate = DateTime.now().add(const Duration(days: 2));
-  final Set<String> _selectedSections = {'Section A'};
+  final Set<String> _selectedSections = {};
   final Map<String, DateTime> _sectionDeadlines = {};
+  List<String> _availableSections = [];
+  String _subjectName = '';
+  bool _isLoadingSections = true;
 
   // Questions Builder
   final List<QuestionModel> _questions = [];
@@ -99,10 +105,45 @@ class _CreateAssessmentFlowDialogState
   @override
   void initState() {
     super.initState();
-    _sectionDeadlines['Section A'] = _scheduleDate;
-    _sectionDeadlines['Section B'] = _scheduleDate;
+    _loadTeacherSections();
     if (widget.skipTypeSelection) {
       _selectAssessmentType(widget.initialIsExam);
+    }
+  }
+
+  Future<void> _loadTeacherSections() async {
+    final teacherId = AuthRepository.instance.currentUser?.id;
+    if (teacherId == null) {
+      if (mounted) setState(() => _isLoadingSections = false);
+      return;
+    }
+    try {
+      final subjects = await SubjectRepository.instance.getTeacherSubjects(teacherId);
+      final sections = subjects
+          .map((s) => s['section_name']?.toString() ?? '')
+          .where((s) => s.isNotEmpty)
+          .toSet()
+          .toList()
+        ..sort();
+      final sub = subjects.isNotEmpty
+          ? (subjects.first['subject_name']?.toString() ?? '')
+          : '';
+      if (!mounted) return;
+      setState(() {
+        _availableSections = sections;
+        _subjectName = sub;
+        _isLoadingSections = false;
+        _selectedSections.clear();
+        if (sections.contains(widget.initialSection)) {
+          _selectedSections.add(widget.initialSection);
+          _sectionDeadlines[widget.initialSection] = _scheduleDate;
+        } else if (sections.isNotEmpty) {
+          _selectedSections.add(sections.first);
+          _sectionDeadlines[sections.first] = _scheduleDate;
+        }
+      });
+    } catch (_) {
+      if (mounted) setState(() => _isLoadingSections = false);
     }
   }
 
@@ -145,11 +186,12 @@ class _CreateAssessmentFlowDialogState
 
   Future<void> _selectAssessmentDeadline(String section) async {
     final current = _sectionDeadlines[section] ?? _scheduleDate;
-    final date = await showDatePicker(
-      context: context,
+    final date = await showAppDatePickerDialog(
+      context,
       initialDate: current,
-      firstDate: DateTime.now(),
+      firstDate: DateTime.now().subtract(const Duration(days: 1)),
       lastDate: DateTime(2100),
+      title: 'Select Assessment Deadline',
     );
     if (!mounted || date == null) return;
     final time = await showTimePicker(
@@ -388,7 +430,7 @@ class _CreateAssessmentFlowDialogState
       id: '${_isExam ? "exam" : "quiz"}_${DateTime.now().millisecondsSinceEpoch}',
       title: _titleCtrl.text.trim(),
       description: _descCtrl.text.trim(),
-      subject: 'General Mathematics',
+      subject: _subjectName.isNotEmpty ? _subjectName : 'General Subject',
       section: _selectedSections.join(', '),
       isExam: _isExam,
       durationMinutes: duration,
@@ -626,7 +668,31 @@ class _CreateAssessmentFlowDialogState
             style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
           ),
           const SizedBox(height: 8),
-          ...['Section A', 'Section B'].map(
+          if (_isLoadingSections)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 12),
+              child: Center(
+                child: SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ),
+            )
+          else if (_availableSections.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Text(
+                'No sections available yet. Please set up your sections in Classroom Setup first.',
+                style: TextStyle(
+                  color: AppTheme.catRed,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            )
+          else
+            ..._availableSections.map(
             (section) => Padding(
               padding: const EdgeInsets.only(bottom: 8),
               child: Row(
@@ -963,7 +1029,7 @@ class _CreateAssessmentFlowDialogState
                     badge: 'SUMMATIVE (30-40% WEIGHT)',
                     badgeColor: AppTheme.catRed.withValues(alpha: 0.1),
                     badgeTextColor: AppTheme.catRed,
-                    description: 'Official institutional quarterly or midterm examination. Integrated with answer keys, auto-checking, and item analysis.',
+                    description: 'Official institutional quarterly or midterm examination. Integrated with answer keys and auto-checking.',
                     icon: Icons.description_outlined,
                     iconColor: AppTheme.catRed,
                     iconBgColor: const Color(0xFFFEF2F2),
@@ -971,7 +1037,6 @@ class _CreateAssessmentFlowDialogState
                       'Typical duration: 60 - 120 mins',
                       'Requires official schedule date',
                       'Automated answer key matching',
-                      'Item Analysis difficulty index generation',
                     ],
                     onTap: () => _selectAssessmentType(true),
                   ),

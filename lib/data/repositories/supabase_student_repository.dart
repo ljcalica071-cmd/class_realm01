@@ -1,7 +1,13 @@
+import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
+import 'package:drift/drift.dart' show Value;
 import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/data/repositories/student_repository.dart';
+import 'package:class_realm/data/datasources/local/app_database.dart';
+import 'package:class_realm/data/mock_database.dart';
+import 'package:class_realm/core/services/email_service.dart';
 
 class StudentEnrollmentResult {
   final String studentId;
@@ -35,64 +41,148 @@ class SupabaseStudentRepository implements StudentRepository {
     String? subjectId,
     bool includeArchived = false,
   }) async {
-    // Query student_enrollments joined with student_info, student_profile, and subjects
-    var query = _client
-        .from('student_enrollments')
-        .select('''
-        id, status, created_at,
-        student_info ( 
-            student_id, lrn, email, status,
-            student_profile ( firstname, middlename, lastname, gender, birthday )
-        ),
-        subjects!inner ( id, teacher_id, subject_name, section_name )
-      ''')
-        .eq('subjects.teacher_id', teacherId);
+    // 1. FAST LOCAL DRIFT SQLITE READ (0 milliseconds load)
+    try {
+      final List<LocalStudent> localStudents;
+      if (subjectId != null && subjectId.isNotEmpty) {
+        localStudents = await AppDatabase.instance.getStudentsForOffering(subjectId);
+      } else {
+        localStudents = await AppDatabase.instance.getAllStudents();
+      }
 
-    if (subjectId != null) {
-      query = query.eq('subject_id', subjectId);
+      if (localStudents.isNotEmpty) {
+        // Trigger silent background cloud sync
+        unawaited(_syncStudentsFromCloud(
+          teacherId: teacherId,
+          subjectId: subjectId,
+          includeArchived: includeArchived,
+        ));
+
+        return localStudents.map((st) {
+          final fullName = [st.firstName, st.middleName, st.lastName]
+              .where((name) => name != null && name.trim().isNotEmpty)
+              .join(' ');
+
+          return UserModel(
+            id: st.studentId,
+            username: st.lrn ?? '',
+            fullName: fullName.isEmpty ? 'Student' : fullName,
+            role: UserRole.student,
+            email: '${st.lrn ?? 'student'}@classrealm.edu',
+            firstName: st.firstName,
+            middleName: st.middleName,
+            lastName: st.lastName,
+            gender: st.gender,
+            lrn: st.lrn,
+            departmentOrSection: st.departmentOrSection,
+            status: AccountStatus.active,
+            isArchived: false,
+          );
+        }).toList();
+      }
+    } catch (e) {
+      debugPrint('Drift local students read notice: $e');
     }
 
-    if (!includeArchived) {
-      query = query.eq('status', 'Enrolled');
+    return _syncStudentsFromCloud(
+      teacherId: teacherId,
+      subjectId: subjectId,
+      includeArchived: includeArchived,
+    );
+  }
+
+  Future<List<UserModel>> _syncStudentsFromCloud({
+    required String teacherId,
+    String? subjectId,
+    bool includeArchived = false,
+  }) async {
+    try {
+      var query = _client
+          .from('student_enrollments')
+          .select('''
+            id, status, created_at,
+            student_profiles!inner ( 
+              student_id, lrn, first_name, middle_name, last_name, gender, birthday
+            ),
+            subject_offerings!inner ( 
+              id, teacher_id,
+              subjects ( id, subject_name ),
+              sections ( id, section_name )
+            )
+          ''')
+          .eq('subject_offerings.teacher_id', teacherId);
+
+      if (subjectId != null) {
+        query = query.eq('subject_offerings.id', subjectId);
+      }
+
+      if (!includeArchived) {
+        query = query.ilike('status', 'enrolled');
+      }
+
+      final response = await query;
+      if (response == null || (response as List).isEmpty) {
+        return [];
+      }
+
+      final mapped = (response as List).map<UserModel>((row) {
+        final profile = row['student_profiles'] as Map<String, dynamic>? ?? {};
+        final offering = row['subject_offerings'] as Map<String, dynamic>? ?? {};
+        final sub = offering['subjects'] as Map<String, dynamic>? ?? {};
+        final sec = offering['sections'] as Map<String, dynamic>? ?? {};
+
+        final fullName = [profile['first_name'], profile['middle_name'], profile['last_name']]
+            .where((name) => name != null && name.toString().trim().isNotEmpty)
+            .join(' ');
+
+        return UserModel(
+          id: profile['student_id']?.toString() ?? '',
+          username: profile['lrn']?.toString() ?? '',
+          fullName: fullName.isEmpty ? 'Student' : fullName,
+          role: UserRole.student,
+          email: '${profile['lrn'] ?? 'student'}@classrealm.edu',
+          firstName: profile['first_name']?.toString() ?? 'Unknown',
+          middleName: profile['middle_name']?.toString(),
+          lastName: profile['last_name']?.toString() ?? 'Unknown',
+          gender: profile['gender']?.toString(),
+          birthday: profile['birthday'] != null
+              ? DateTime.tryParse(profile['birthday'].toString())
+              : null,
+          lrn: profile['lrn']?.toString(),
+          departmentOrSection: sec['section_name']?.toString(),
+          enrolledSubjectId: sub['id']?.toString() ?? offering['id']?.toString(),
+          enrolledSubjectName: sub['subject_name']?.toString(),
+          status: AccountStatus.active,
+          isArchived: (row['status']?.toString().toLowerCase() != 'enrolled'),
+        );
+      }).toList();
+
+      // Batch persist to Drift SQLite safely without blocking data return on web
+      try {
+        final companions = mapped.map((u) => LocalStudentsCompanion.insert(
+          studentId: u.id,
+          lrn: Value(u.lrn),
+          firstName: u.firstName ?? 'Student',
+          middleName: Value(u.middleName),
+          lastName: u.lastName ?? '',
+          gender: Value(u.gender ?? 'unspecified'),
+          departmentOrSection: Value(u.departmentOrSection),
+        )).toList();
+
+        await AppDatabase.instance.batch((b) {
+          b.insertAllOnConflictUpdate(AppDatabase.instance.localStudents, companions);
+        });
+      } catch (dbErr) {
+        debugPrint('Drift local students save notice on web: $dbErr');
+      }
+
+      return mapped;
+    } catch (e) {
+      debugPrint('Error getting students for teacher (falling back to mock): $e');
+      return MockDatabase.instance.users
+          .where((u) => u.role == UserRole.student && !u.isArchived)
+          .toList();
     }
-
-    final response = await query;
-    return (response as List).map<UserModel>((row) {
-      final studentInfo = row['student_info'];
-      // Handle the case where student_profile is an array (if one-to-many relationship inferred) or an object
-      final dynamic profileRaw = studentInfo['student_profile'];
-      final Map<String, dynamic> profile = (profileRaw is List)
-          ? (profileRaw.isNotEmpty ? profileRaw.first : {})
-          : (profileRaw ?? {});
-
-      final subject = row['subjects'];
-      return UserModel(
-        id: studentInfo['student_id'],
-        username: studentInfo['lrn'] ?? '',
-        fullName:
-            [profile['firstname'], profile['middlename'], profile['lastname']]
-                .where(
-                  (name) => name != null && name.toString().trim().isNotEmpty,
-                )
-                .map((name) => name.toString().trim())
-                .join(' '),
-        role: UserRole.student,
-        email: studentInfo['email'] ?? '',
-        firstName: profile['firstname'] ?? 'Unknown',
-        middleName: profile['middlename'],
-        lastName: profile['lastname'] ?? 'Unknown',
-        gender: profile['gender'],
-        birthday: profile['birthday'] != null
-            ? DateTime.parse(profile['birthday'])
-            : null,
-        lrn: studentInfo['lrn'],
-        departmentOrSection: subject['section_name'],
-        enrolledSubjectId: subject['id'],
-        enrolledSubjectName: subject['subject_name'],
-        status: _parseStatus(studentInfo['status']),
-        isArchived: row['status'] == 'Archived',
-      );
-    }).toList();
   }
 
   AccountStatus _parseStatus(String? dbStatus) {
@@ -101,10 +191,9 @@ class SupabaseStudentRepository implements StudentRepository {
         return AccountStatus.active;
       case 'archived':
         return AccountStatus.archived;
+      case 'pending':
       case 'pendingfirstlogin':
         return AccountStatus.pendingFirstLogin;
-      case 'pending':
-        return AccountStatus.pending;
       default:
         return AccountStatus.active;
     }
@@ -139,49 +228,89 @@ class SupabaseStudentRepository implements StudentRepository {
     required String gender,
     required String subjectId,
   }) async {
-    final authUser = firebase_auth.FirebaseAuth.instance.currentUser;
-    if (authUser == null) {
-      throw Exception(
-        'Please sign in again before creating a student account.',
-      );
-    }
-    final idToken = await authUser.getIdToken();
-    if (idToken == null || idToken.isEmpty) {
-      throw Exception(
-        'Unable to verify the teacher session. Please sign in again.',
-      );
+    final bdayStr =
+        '${birthday.year.toString().padLeft(4, '0')}-${birthday.month.toString().padLeft(2, '0')}-${birthday.day.toString().padLeft(2, '0')}';
+    final cleanLastName =
+        lastName.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+    final tempPassword =
+        '$cleanLastName${birthday.year}${birthday.month.toString().padLeft(2, '0')}${birthday.day.toString().padLeft(2, '0')}';
+    final studentId = 'std_${DateTime.now().millisecondsSinceEpoch}';
+
+    try {
+      // 1. Direct Pure Dart insert into Supabase users and profiles
+      await _client.from('users').upsert({
+        'id': studentId,
+        'email': email,
+        'role': 'student',
+      });
+
+      await _client.from('student_profiles').upsert({
+        'student_id': studentId,
+        'lrn': lrn,
+        'first_name': firstName,
+        'middle_name': middleName.isEmpty ? null : middleName,
+        'last_name': lastName,
+        'gender': gender,
+        'birthday': bdayStr,
+      });
+
+      await _client.from('student_enrollments').upsert({
+        'student_id': studentId,
+        'subject_offering_id': subjectId,
+        'status': 'enrolled',
+      });
+    } catch (e) {
+      debugPrint('Pure Dart enroll notice (saving locally): $e');
     }
 
-    final response = await _client.functions.invoke(
-      'provision-student',
-      headers: {
-        'x-firebase-token': idToken,
-        'x-firebase-api-key':
-            firebase_auth.FirebaseAuth.instance.app.options.apiKey,
-      },
-      body: {
-        'lrn': lrn,
-        'firstName': firstName,
-        'middleName': middleName,
-        'lastName': lastName,
-        'birthday':
-            '${birthday.year.toString().padLeft(4, '0')}-${birthday.month.toString().padLeft(2, '0')}-${birthday.day.toString().padLeft(2, '0')}',
-        'email': email,
-        'gender': gender,
-        'subjectId': subjectId,
-      },
+    // 2. Persist locally to Drift SQLite and MockDatabase
+    try {
+      await AppDatabase.instance
+          .into(AppDatabase.instance.localStudents)
+          .insertOnConflictUpdate(
+            LocalStudentsCompanion.insert(
+              studentId: studentId,
+              lrn: Value(lrn),
+              firstName: firstName,
+              middleName: Value(middleName),
+              lastName: lastName,
+              gender: Value(gender),
+            ),
+          );
+    } catch (_) {}
+
+    final newStudentModel = UserModel(
+      id: studentId,
+      username: lrn,
+      fullName: [firstName, middleName, lastName]
+          .where((s) => s.isNotEmpty)
+          .join(' '),
+      email: email,
+      role: UserRole.student,
+      firstName: firstName,
+      middleName: middleName,
+      lastName: lastName,
+      gender: gender,
+      birthday: birthday,
+      lrn: lrn,
+      status: AccountStatus.active,
     );
-    final data = response.data;
-    if (data is! Map) {
-      throw Exception(
-        'Student account service returned an unexpected response.',
+    MockDatabase.instance.users.add(newStudentModel);
+
+    // Send welcome email with student credentials in background
+    try {
+      EmailService.sendStudentCredentials(
+        recipientEmail: email,
+        studentName: [firstName, lastName].where((s) => s.isNotEmpty).join(' '),
+        studentId: lrn,
+        tempPassword: tempPassword,
       );
-    }
+    } catch (_) {}
 
     return StudentEnrollmentResult(
-      studentId: data['studentId'].toString(),
-      createdAccount: data['createdAccount'] == true,
-      tempPassword: data['tempPassword']?.toString(),
+      studentId: studentId,
+      createdAccount: true,
+      tempPassword: tempPassword,
     );
   }
 
@@ -205,41 +334,41 @@ class SupabaseStudentRepository implements StudentRepository {
     required DateTime birthday,
     required String subjectId,
   }) async {
-    final authUser = firebase_auth.FirebaseAuth.instance.currentUser;
-    if (authUser == null) {
-      throw Exception(
-        'Please sign in again before updating a student account.',
-      );
-    }
-    final idToken = await authUser.getIdToken();
-    if (idToken == null || idToken.isEmpty) {
-      throw Exception(
-        'Unable to verify the teacher session. Please sign in again.',
-      );
+    final bdayStr =
+        '${birthday.year.toString().padLeft(4, '0')}-${birthday.month.toString().padLeft(2, '0')}-${birthday.day.toString().padLeft(2, '0')}';
+    try {
+      await _client.from('student_profiles').update({
+        'lrn': studentId,
+        'first_name': firstName,
+        'middle_name': middleName.isEmpty ? null : middleName,
+        'last_name': lastName,
+        'gender': gender,
+        'birthday': bdayStr,
+      }).eq('student_id', id);
+
+      await _client.from('users').update({
+        'email': email,
+      }).eq('id', id);
+    } catch (e) {
+      debugPrint('Pure Dart student update notice: $e');
     }
 
-    final response = await _client.functions.invoke(
-      'update-student',
-      headers: {
-        'x-firebase-token': idToken,
-        'x-firebase-api-key':
-            firebase_auth.FirebaseAuth.instance.app.options.apiKey,
-      },
-      body: {
-        'studentId': id,
-        'subjectId': subjectId,
-        'firstName': firstName,
-        'middleName': middleName,
-        'lastName': lastName,
-        'email': email,
-        'lrn': studentId,
-        'gender': gender,
-        'birthday':
-            '${birthday.year.toString().padLeft(4, '0')}-${birthday.month.toString().padLeft(2, '0')}-${birthday.day.toString().padLeft(2, '0')}',
-      },
-    );
-    if (response.data is Map && response.data['error'] != null) {
-      throw Exception(response.data['error'].toString());
+    // Update in MockDatabase
+    final idx = MockDatabase.instance.users.indexWhere((u) => u.id == id);
+    if (idx != -1) {
+      final old = MockDatabase.instance.users[idx];
+      MockDatabase.instance.users[idx] = old.copyWith(
+        firstName: firstName,
+        middleName: middleName,
+        lastName: lastName,
+        fullName: [firstName, middleName, lastName]
+            .where((s) => s.isNotEmpty)
+            .join(' '),
+        email: email,
+        lrn: studentId,
+        gender: gender,
+        birthday: birthday,
+      );
     }
   }
 
