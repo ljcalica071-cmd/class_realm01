@@ -70,6 +70,8 @@ CREATE TABLE public.parent_profiles (
   last_name character varying NOT NULL,
   contact_number character varying NOT NULL,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
+  birthday date,
+  status character varying DEFAULT 'pending_first_login'::character varying,
   CONSTRAINT parent_profiles_pkey PRIMARY KEY (parent_id),
   CONSTRAINT parent_profiles_parent_id_fkey FOREIGN KEY (parent_id) REFERENCES public.users(id)
 );
@@ -341,6 +343,7 @@ CREATE TABLE public.folders (
   is_archived boolean NOT NULL DEFAULT false,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  is_visible_to_students boolean NOT NULL DEFAULT true,
   CONSTRAINT folders_pkey PRIMARY KEY (id),
   CONSTRAINT folders_subject_offering_id_fkey FOREIGN KEY (subject_offering_id) REFERENCES public.subject_offerings(id),
   CONSTRAINT folders_parent_folder_id_fkey FOREIGN KEY (parent_folder_id) REFERENCES public.folders(id)
@@ -355,6 +358,9 @@ CREATE TABLE public.learning_materials (
   is_archived boolean NOT NULL DEFAULT false,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  is_visible_to_students boolean NOT NULL DEFAULT true,
+  title character varying,
+  description text,
   CONSTRAINT learning_materials_pkey PRIMARY KEY (id),
   CONSTRAINT learning_materials_folder_id_fkey FOREIGN KEY (folder_id) REFERENCES public.folders(id)
 );
