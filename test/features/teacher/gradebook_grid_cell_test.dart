@@ -75,4 +75,31 @@ void main() {
 
     expect(tester.widget<TextField>(find.byType(TextField)).enabled, isFalse);
   });
+
+  testWidgets('renders square cell container with 13px bold text', (tester) async {
+    await tester.pumpWidget(buildCell(onChanged: (_) {}));
+
+    final containerFinder = find.byType(Container).first;
+    final container = tester.widget<Container>(containerFinder);
+    final boxDecoration = container.decoration as BoxDecoration?;
+    expect(boxDecoration?.borderRadius, BorderRadius.circular(2));
+
+    final textField = tester.widget<TextField>(find.byType(TextField));
+    expect(textField.style?.fontSize, 13);
+    expect(textField.style?.fontWeight, FontWeight.w600);
+    expect(textField.textAlignVertical, TextAlignVertical.center);
+  });
+
+  testWidgets('tapping anywhere in square cell requests focus', (tester) async {
+    await tester.pumpWidget(buildCell(onChanged: (_) {}));
+
+    final textField = tester.widget<TextField>(find.byType(TextField));
+    expect(textField.focusNode?.hasFocus, isFalse);
+
+    await tester.tap(find.byType(GestureDetector).first);
+    await tester.pump();
+
+    final focusedField = tester.widget<TextField>(find.byType(TextField));
+    expect(focusedField.focusNode?.hasFocus, isTrue);
+  });
 }

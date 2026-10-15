@@ -186,9 +186,7 @@ class LocalStorageService {
     Map<String, dynamic> payload,
   ) async {
     _validateGradebookKey(offeringId, termNumber);
-    final prefs = await _prefs;
-    final key = '${_cachePrefix}gradebook_${offeringId}_term_$termNumber';
-    await _ensureSaved(await prefs.setString(key, jsonEncode(payload)));
+    await saveJson('gradebook_${offeringId}_term_$termNumber', payload);
   }
 
   static Map<String, dynamic>? getGradebookSheet(
@@ -198,6 +196,15 @@ class LocalStorageService {
     _validateGradebookKey(offeringId, termNumber);
     final raw = getJson('gradebook_${offeringId}_term_$termNumber');
     return raw is Map ? Map<String, dynamic>.from(raw) : null;
+  }
+
+  static Future<void> clearGradebookSheet(
+    String offeringId,
+    int termNumber,
+  ) async {
+    _validateGradebookKey(offeringId, termNumber);
+    final prefs = await _prefs;
+    await prefs.remove('${_cachePrefix}gradebook_${offeringId}_term_$termNumber');
   }
 
   static void _validateGradebookKey(String offeringId, int termNumber) {

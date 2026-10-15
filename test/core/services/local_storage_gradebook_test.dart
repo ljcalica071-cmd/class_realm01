@@ -15,21 +15,25 @@ void main() {
     () async {
       final termOne = {
         'hps': {
-          'ww': {'0': 10},
+          'ww': {'1': 10, '2': 15},
+          'pt': {'1': 20},
+          'ex': {'st1': 30, 'st2': 30, 'te': 50},
         },
         'scores': {
           'student-1': {
-            'ww': {'0': 0},
+            'ww': {'1': 10, '2': 12},
+            'pt': {'1': 18},
+            'ex': {'st1': 28, 'st2': 27, 'te': 45},
           },
         },
       };
       final termTwo = {
         'hps': {
-          'ww': {'0': 20},
+          'ww': {'1': 20},
         },
         'scores': {
           'student-1': {
-            'ww': {'0': null},
+            'ww': {'1': null},
           },
         },
       };
@@ -46,6 +50,9 @@ void main() {
         'scores': {},
       });
       expect(LocalStorageService.getGradebookSheet('offering-a', 3), isNull);
+
+      await LocalStorageService.clearGradebookSheet('offering-a', 1);
+      expect(LocalStorageService.getGradebookSheet('offering-a', 1), isNull);
     },
   );
 }

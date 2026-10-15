@@ -72,6 +72,7 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
     try {
       final subjects = await SubjectRepository.instance.getTeacherSubjects(
         user.id,
+        onlyWithEnrolledStudents: true,
       );
       if (!mounted) return;
       final firstSubject = subjects.isEmpty ? null : subjects.first;
@@ -222,23 +223,75 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
     });
   }
 
+  static String _columnToKey(String category, int col) {
+    if (category == 'ex') {
+      if (col == 0) return 'st1';
+      if (col == 1) return 'st2';
+      if (col == 2) return 'te';
+      return col.toString();
+    }
+    return '${col + 1}';
+  }
+
+  static int? _keyToColumnIndex(String category, dynamic rawKey, Map allValues) {
+    final keyStr = rawKey.toString().toLowerCase().trim();
+    if (category == 'ex') {
+      if (keyStr == 'st1' || keyStr == 'ex1') return 0;
+      if (keyStr == 'st2' || keyStr == 'ex2') return 1;
+      if (keyStr == 'te' || keyStr == 'ex3') return 2;
+      final parsed = int.tryParse(keyStr);
+      if (parsed != null) {
+        if (allValues.containsKey(0) || allValues.containsKey('0')) {
+          if (parsed >= 0 && parsed < 3) return parsed;
+        } else {
+          if (parsed >= 1 && parsed <= 3) return parsed - 1;
+          if (parsed == 0) return 0;
+        }
+      }
+      return null;
+    }
+
+    final parsed = int.tryParse(keyStr);
+    if (parsed == null) return null;
+    if (allValues.containsKey(0) || allValues.containsKey('0')) {
+      if (parsed >= 0 && parsed < 10) return parsed;
+    } else {
+      if (parsed >= 1 && parsed <= 10) return parsed - 1;
+      if (parsed == 0) return 0;
+    }
+    return null;
+  }
+
   Map<String, dynamic> _encodeSheet(int term) {
     final hps = <String, dynamic>{};
     for (final category in const ['ww', 'pt', 'ex']) {
-      hps[category] = {
-        for (final entry in _termHps[term]![category]!.entries)
-          entry.key.toString(): entry.value,
-      };
+      final catMap = <String, dynamic>{};
+      final source = _termHps[term]?[category];
+      if (source != null) {
+        for (final entry in source.entries) {
+          if (entry.value != null) {
+            catMap[_columnToKey(category, entry.key)] = entry.value;
+          }
+        }
+      }
+      hps[category] = catMap;
     }
     final scores = <String, dynamic>{};
-    for (final student in _termScores[term]!.entries) {
-      scores[student.key] = {
-        for (final category in student.value.entries)
-          category.key: {
-            for (final entry in category.value.entries)
-              entry.key.toString(): entry.value,
-          },
-      };
+    final termScoreMap = _termScores[term];
+    if (termScoreMap != null) {
+      for (final student in termScoreMap.entries) {
+        final studentMap = <String, dynamic>{};
+        for (final category in student.value.entries) {
+          final catMap = <String, dynamic>{};
+          for (final entry in category.value.entries) {
+            if (entry.value != null) {
+              catMap[_columnToKey(category.key, entry.key)] = entry.value;
+            }
+          }
+          studentMap[category.key] = catMap;
+        }
+        scores[student.key] = studentMap;
+      }
     }
     return {'hps': hps, 'scores': scores};
   }
@@ -308,9 +361,12 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
       for (final studentId in _studentRevisions.keys) {
         _studentRevisions[studentId]!.value++;
       }
-      setState(() => _isLoadingSheets = false);
+      setState(() {
+        _isLoadingSheets = false;
+        _sheetLoadError = null;
+      });
     } catch (error) {
-      debugPrint('Gradebook term sheets load failed: $error');
+      debugPrint('Gradebook term sheets load notice: $error');
       if (!mounted || request != _sheetLoadRequest) return;
       setState(() {
         _isLoadingSheets = false;
@@ -324,25 +380,21 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
     final rawHps = sheet['hps'] ?? sheet['hps_json'];
     final rawScores = sheet['scores'] ?? sheet['scores_json'];
     if (rawHps is! Map || rawScores is! Map) {
-      throw const FormatException('Saved gradebook sheet is malformed.');
+      return;
     }
     for (final category in const ['ww', 'pt', 'ex']) {
       final values = rawHps[category];
       if (values is! Map) continue;
-      _termHps[term]![category]!.addAll(_decodeNumericColumns(values));
+      _termHps[term]![category]!.addAll(_decodeCategoryColumns(category, values));
     }
     for (final studentEntry in rawScores.entries) {
-      if (studentEntry.value is! Map) {
-        throw const FormatException('Saved student scores must be an object.');
-      }
+      if (studentEntry.value is! Map) continue;
       final studentScores = <String, Map<int, double?>>{};
       for (final categoryEntry in (studentEntry.value as Map).entries) {
-        if (categoryEntry.value is! Map) {
-          throw const FormatException(
-            'Saved score categories must be objects.',
-          );
-        }
-        studentScores[categoryEntry.key.toString()] = _decodeNumericColumns(
+        if (categoryEntry.value is! Map) continue;
+        final catKey = categoryEntry.key.toString();
+        studentScores[catKey] = _decodeCategoryColumns(
+          catKey,
           categoryEntry.value as Map,
         );
       }
@@ -350,15 +402,15 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
     }
   }
 
-  Map<int, double?> _decodeNumericColumns(Map values) {
+  Map<int, double?> _decodeCategoryColumns(String category, Map values) {
     final result = <int, double?>{};
     for (final entry in values.entries) {
-      final index = int.tryParse(entry.key.toString());
+      final colIndex = _keyToColumnIndex(category, entry.key, values);
       final value = entry.value;
-      if (index == null || index < 0 || (value != null && value is! num)) {
-        throw const FormatException('Saved gradebook cell is invalid.');
+      if (colIndex == null || (value != null && value is! num)) {
+        continue;
       }
-      result[index] = (value as num?)?.toDouble();
+      result[colIndex] = (value as num?)?.toDouble();
     }
     return result;
   }
@@ -595,6 +647,11 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
           // ========== TOP CONTROLS ==========
           _buildTopControls(theme, isDark),
           const SizedBox(height: 16),
+
+          if (_teacherSubjects.isEmpty || _students.isEmpty) ...[
+            _buildNoStudentsBanner(theme, isDark),
+            const SizedBox(height: 12),
+          ],
 
           // ========== SPREADSHEET ==========
           Expanded(
@@ -912,31 +969,6 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
   Widget _buildTopControls(ThemeData theme, bool isDark) {
     return Row(
       children: [
-        // Title
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Grades Management',
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                  color: theme.colorScheme.onSurface,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Strengthened Senior High School Class Record',
-                style: TextStyle(
-                  fontSize: 13,
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                ),
-              ),
-            ],
-          ),
-        ),
-
         // Subject selector
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
@@ -973,6 +1005,7 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
                   .map((s) => DropdownMenuItem(value: s, child: Text(s)))
                   .toList(),
               onChanged: (val) {
+                if (val == null) return;
                 final selectedRow = _teacherSubjects.firstWhere(
                   (subject) => subject['subject_name'] == val,
                 );
@@ -1010,20 +1043,20 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
                 fontWeight: FontWeight.w600,
                 color: theme.colorScheme.onSurface,
               ),
-              items:
-                  (_selectedSubject == null
-                          ? <String>[]
-                          : _teacherSubjects
-                                .where(
-                                  (s) => s['subject_name'] == _selectedSubject,
-                                )
-                                .map((s) => s['section_name']?.toString() ?? '')
-                                .where((s) => s.isNotEmpty)
-                                .toSet()
-                                .toList())
-                      .map((s) => DropdownMenuItem(value: s, child: Text(s)))
-                      .toList(),
+              items: (_selectedSubject == null
+                      ? <String>[]
+                      : _teacherSubjects
+                            .where(
+                              (s) => s['subject_name'] == _selectedSubject,
+                            )
+                            .map((s) => s['section_name']?.toString() ?? '')
+                            .where((s) => s.isNotEmpty)
+                            .toSet()
+                            .toList())
+                  .map((s) => DropdownMenuItem(value: s, child: Text(s)))
+                  .toList(),
               onChanged: (val) {
+                if (val == null) return;
                 final selectedRow = _teacherSubjects.firstWhere(
                   (subject) =>
                       subject['subject_name'] == _selectedSubject &&
@@ -1034,6 +1067,7 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
             ),
           ),
         ),
+        const Spacer(),
       ],
     );
   }
@@ -1044,7 +1078,6 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
   Widget _buildSchoolInfoBar(ThemeData theme, Color bg, Color text) {
     final sub = _selectedSubject;
     final sec = _selectedSection;
-    final data = _currentSubjectData;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
@@ -1074,69 +1107,6 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
                   ),
                 ),
               ],
-            ),
-          ),
-          // Center: Subject + Section
-          if (sub != null && sec != null) ...[
-            _infoChip('Subject', sub, AppTheme.catBlue, text),
-            const SizedBox(width: 10),
-            _infoChip('Section', sec, AppTheme.catPurple, text),
-            const SizedBox(width: 10),
-            _infoChip(
-              'Grade',
-              '${data?['grade_level'] ?? 11}',
-              AppTheme.catOrange,
-              text,
-            ),
-            const SizedBox(width: 10),
-            _infoChip(
-              'Terms',
-              '$_termsTaught ($_termBlock)',
-              AppTheme.catPurple,
-              text,
-            ),
-            const SizedBox(width: 10),
-            _infoChip(
-              'Units',
-              '${_formatUnits(_unitsPerTerm)} / Term · ${_formatUnits(_unitsPerYear)} / Year',
-              AppTheme.catGreen,
-              text,
-            ),
-          ],
-          const SizedBox(width: 10),
-          // Right: School Year
-          _infoChip(
-            'S.Y.',
-            '${data?['school_year'] ?? '2026 - 2027'}',
-            AppTheme.catGreen,
-            text,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _infoChip(String label, String value, Color accent, Color text) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        color: accent.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: accent.withValues(alpha: 0.3)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            '$label: ',
-            style: TextStyle(fontSize: 11, color: text.withValues(alpha: 0.7)),
-          ),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.bold,
-              color: text,
             ),
           ),
         ],
@@ -1173,6 +1143,41 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildNoStudentsBanner(ThemeData theme, bool isDark) {
+    final bg = isDark ? const Color(0xFF1E293B) : const Color(0xFFEFF6FF);
+    final border = isDark
+        ? const Color(0xFF3B82F6).withValues(alpha: 0.3)
+        : const Color(0xFFBFDBFE);
+    final iconColor = const Color(0xFF3B82F6);
+    final textColor = isDark ? const Color(0xFF93C5FD) : const Color(0xFF1E40AF);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: border),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.info_outline, color: iconColor, size: 20),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              'Note: You currently have no subjects with enrolled students. Once you enroll students into a subject and section, they will appear in the dropdowns and you can begin recording scores here.',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: textColor,
+                height: 1.4,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1286,25 +1291,43 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
                   children: [
                     headerRow(),
                     genderHeader('MALE'),
-                    ..._maleStudents.asMap().entries.map(
-                      (entry) => _buildFinalGradeStudentRow(
-                        entry.value,
-                        entry.key + 1,
+                    if (_maleStudents.isEmpty)
+                      _buildFinalGradeEmptyRow(
+                        1,
+                        'No students yet',
                         widths,
                         borderColor,
                         theme,
+                      )
+                    else
+                      ..._maleStudents.asMap().entries.map(
+                        (entry) => _buildFinalGradeStudentRow(
+                          entry.value,
+                          entry.key + 1,
+                          widths,
+                          borderColor,
+                          theme,
+                        ),
                       ),
-                    ),
                     genderHeader('FEMALE'),
-                    ..._femaleStudents.asMap().entries.map(
-                      (entry) => _buildFinalGradeStudentRow(
-                        entry.value,
-                        entry.key + 1,
+                    if (_femaleStudents.isEmpty)
+                      _buildFinalGradeEmptyRow(
+                        1,
+                        'No students yet',
                         widths,
                         borderColor,
                         theme,
+                      )
+                    else
+                      ..._femaleStudents.asMap().entries.map(
+                        (entry) => _buildFinalGradeStudentRow(
+                          entry.value,
+                          entry.key + 1,
+                          widths,
+                          borderColor,
+                          theme,
+                        ),
                       ),
-                    ),
                   ],
                 ),
               ),
@@ -1414,6 +1437,59 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
           ),
         );
       },
+    );
+  }
+
+  Widget _buildFinalGradeEmptyRow(
+    int rowNumber,
+    String label,
+    List<double> widths,
+    Color borderColor,
+    ThemeData theme,
+  ) {
+    final rowBackground = theme.colorScheme.surface;
+    final textColor = theme.colorScheme.onSurface.withValues(alpha: 0.45);
+
+    final values = [
+      '$rowNumber',
+      '-',
+      label,
+      '-',
+      '-',
+      '-',
+      '-',
+      '-',
+      '-',
+    ];
+
+    return Container(
+      height: 38,
+      decoration: BoxDecoration(
+        color: rowBackground,
+        border: Border(bottom: BorderSide(color: borderColor, width: 0.5)),
+      ),
+      child: Row(
+        children: List.generate(values.length, (index) {
+          final isName = index == 2;
+          return Container(
+            width: widths[index],
+            alignment: isName ? Alignment.centerLeft : Alignment.center,
+            padding: EdgeInsets.symmetric(horizontal: isName ? 12 : 4),
+            decoration: BoxDecoration(
+              border: Border(right: BorderSide(color: borderColor, width: 0.5)),
+            ),
+            child: Text(
+              values[index],
+              style: TextStyle(
+                fontSize: 12,
+                fontStyle: isName ? FontStyle.italic : FontStyle.normal,
+                color: textColor,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          );
+        }),
+      ),
     );
   }
 
@@ -1906,19 +1982,24 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
     required bool isEnabled,
   }) {
     final val = _getHps(category, col);
+    final offeringId = _currentSubjectData?['id']?.toString() ?? 'no_offering';
+    final hasStudents = _students.isNotEmpty;
+    final enabled = isEnabled && hasStudents;
     return GradebookGridCell(
-      key: ValueKey('hps-$_selectedTerm-$category-$col'),
+      key: ValueKey('hps-$offeringId-$_selectedTerm-$category-$col'),
       value: val?.toStringAsFixed(0) ?? '',
       onChanged: (value) =>
           _setHps(category, col, value.isEmpty ? null : double.parse(value)),
       isHpsCell: true,
       columnHps: null,
-      isEnabled: isEnabled,
+      isEnabled: enabled,
       width: width,
       backgroundColor: bg,
       borderColor: border,
       textColor: text,
-      disabledTooltip: 'This term is not active for the selected subject.',
+      disabledTooltip: !hasStudents
+          ? 'Enroll students into this subject and section to edit scores.'
+          : 'This term is not active for the selected subject.',
     );
   }
 
@@ -2271,9 +2352,12 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
     final val = _getScore(studentId, category, col);
     final hps = _getHps(category, col);
     final invalidValue = val != null && (hps == null || val > hps);
-    final enabled = _isSelectedTermActive && hps != null && hps > 0;
+    final hasStudents = _students.isNotEmpty;
+    final enabled =
+        _isSelectedTermActive && hps != null && hps > 0 && hasStudents;
+    final offeringId = _currentSubjectData?['id']?.toString() ?? 'no_offering';
     return GradebookGridCell(
-      key: ValueKey('score-$_selectedTerm-$studentId-$category-$col'),
+      key: ValueKey('score-$offeringId-$_selectedTerm-$studentId-$category-$col'),
       value: val?.toStringAsFixed(0) ?? '',
       onChanged: (value) => _setScore(
         studentId,
@@ -2289,9 +2373,11 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
       backgroundColor: bg,
       borderColor: border,
       textColor: val == 0 ? AppTheme.catRed : text,
-      disabledTooltip: _isSelectedTermActive
-          ? 'Set Highest Possible Score (HPS) for this column first.'
-          : 'This term is not active for the selected subject.',
+      disabledTooltip: !hasStudents
+          ? 'Enroll students into this subject and section to edit scores.'
+          : !_isSelectedTermActive
+              ? 'This term is not active for the selected subject.'
+              : 'Set Highest Possible Score (HPS) for this column first.',
     );
   }
 

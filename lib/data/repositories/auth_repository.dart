@@ -1,6 +1,9 @@
+import 'dart:convert';
 import 'dart:math';
 
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:firebase_auth/firebase_auth.dart' as firebase;
 import 'package:supabase_flutter/supabase_flutter.dart' hide User;
 import 'package:class_realm/models/user_model.dart' as custom;
@@ -680,14 +683,29 @@ class AuthRepository {
         return 'User account not found.';
       }
 
-      // 1. If currently signed into Firebase with this email, update directly
-      if (_firebaseAuth.currentUser != null &&
-          _firebaseAuth.currentUser!.email?.toLowerCase() == cleanEmail) {
-        try {
-          await _firebaseAuth.currentUser!.updatePassword(newPassword);
-        } catch (e) {
-          debugPrint('[AuthRepository] Firebase updatePassword error: $e');
-        }
+      // 1. Invoke Supabase Edge Function to update password in Firebase Authentication
+      final supabaseUrl = dotenv.env['SUPABASE_URL'] ?? 'https://wfilyatkfgqtybujmahf.supabase.co';
+      final supabaseAnonKey = dotenv.env['SUPABASE_ANON_KEY'] ?? '';
+
+      final resetUrl = Uri.parse('$supabaseUrl/functions/v1/reset-password');
+      final resp = await http.post(
+        resetUrl,
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': supabaseAnonKey,
+          'Authorization': 'Bearer $supabaseAnonKey',
+        },
+        body: jsonEncode({
+          'email': cleanEmail,
+          'new_password': newPassword,
+        }),
+      );
+
+      final respData = jsonDecode(resp.body) as Map<String, dynamic>?;
+      if (resp.statusCode != 200 || respData?['success'] != true) {
+        final err = respData?['error'] ?? 'Failed to update password in Firebase Auth.';
+        debugPrint('[AuthRepository] reset-password failed: $err');
+        return err.toString();
       }
 
       // 2. Update Supabase status to active

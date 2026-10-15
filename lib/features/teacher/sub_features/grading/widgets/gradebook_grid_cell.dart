@@ -118,36 +118,49 @@ class _GradebookGridCellState extends State<GradebookGridCell> {
         : widget.disabledTooltip;
     final cell = Container(
       width: widget.width,
-      height: 32,
-      decoration: BoxDecoration(color: backgroundColor, border: border),
+      height: 34,
+      decoration: BoxDecoration(
+        color: backgroundColor,
+        borderRadius: BorderRadius.circular(2),
+        border: border,
+      ),
       alignment: Alignment.center,
-      child: TextField(
-        controller: _controller,
-        focusNode: _focusNode,
-        enabled: widget.isEnabled,
-        onChanged: widget.onChanged,
-        textAlign: TextAlign.center,
-        keyboardType: TextInputType.number,
-        inputFormatters: [
-          _ScoreRangeTextInputFormatter(
-            isHpsCell: widget.isHpsCell,
-            columnHps: widget.columnHps,
-            onRejected: _showRangeWarning,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: widget.isEnabled ? () => _focusNode.requestFocus() : null,
+        child: SizedBox.expand(
+          child: Center(
+            child: TextField(
+              controller: _controller,
+              focusNode: _focusNode,
+              enabled: widget.isEnabled,
+              onChanged: widget.onChanged,
+              textAlign: TextAlign.center,
+              textAlignVertical: TextAlignVertical.center,
+              keyboardType: TextInputType.number,
+              inputFormatters: [
+                _ScoreRangeTextInputFormatter(
+                  isHpsCell: widget.isHpsCell,
+                  columnHps: widget.columnHps,
+                  onRejected: _showRangeWarning,
+                ),
+                FilteringTextInputFormatter.digitsOnly,
+                LengthLimitingTextInputFormatter(3),
+              ],
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: widget.isInvalidValue
+                    ? theme.colorScheme.error
+                    : widget.textColor,
+              ),
+              decoration: const InputDecoration(
+                border: InputBorder.none,
+                isDense: true,
+                contentPadding: EdgeInsets.zero,
+              ),
+            ),
           ),
-          FilteringTextInputFormatter.digitsOnly,
-          LengthLimitingTextInputFormatter(3),
-        ],
-        style: TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.w600,
-          color: widget.isInvalidValue
-              ? theme.colorScheme.error
-              : widget.textColor,
-        ),
-        decoration: const InputDecoration(
-          border: InputBorder.none,
-          isDense: true,
-          contentPadding: EdgeInsets.zero,
         ),
       ),
     );

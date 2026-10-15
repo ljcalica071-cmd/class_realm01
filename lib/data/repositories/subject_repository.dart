@@ -5,7 +5,6 @@ import 'package:drift/drift.dart' show Value;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:class_realm/core/services/local_storage_service.dart';
 import 'package:class_realm/data/datasources/local/app_database.dart';
-import 'package:class_realm/data/mock_database.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/models/user_model.dart';
 
@@ -206,84 +205,18 @@ class SubjectRepository {
     }
   }
 
-  /// Synchronously returns cached teacher subjects from local storage or mock fallback.
+  /// Synchronously returns cached teacher subjects from local storage.
   List<Map<String, dynamic>> getCachedTeacherSubjects(String teacherId) {
-    final cached = LocalStorageService.getTeacherSubjects(teacherId);
-    if (cached.isNotEmpty) {
-      return cached;
-    }
-
-    // Secondary fallback: reconstruct from MockDatabase so offline teachers still see layout
-    final mockDb = MockDatabase.instance;
-    final List<Map<String, dynamic>> mockOfferings = [];
-    if (mockDb.currentSubject.isNotEmpty && mockDb.sections.isNotEmpty) {
-      for (int i = 0; i < mockDb.sections.length; i++) {
-        final sec = mockDb.sections[i];
-        mockOfferings.add({
-          'id':
-              'offering_mock_${sec.toLowerCase().replaceAll(RegExp(r'\s+'), '_')}',
-          'subject_id': 'sub_mock_1',
-          'subject_name': mockDb.currentSubject,
-          'grade_level': mockDb.gradeLevel.contains('12') ? 12 : 11,
-          'section_id': 'sec_mock_$i',
-          'section_name': sec,
-          'ww_weight': 20.0,
-          'pt_weight': 50.0,
-          'ex_weight': 30.0,
-          'terms_taught': 3,
-          'term_block': '1ST, 2ND, 3RD',
-          'units_per_term': 2.0,
-          'st1_weight': 30.0,
-          'st2_weight': 30.0,
-          'te_weight': 40.0,
-          'school_year': '2026-2027',
-        });
-      }
-    }
-
-    if (mockOfferings.isEmpty) {
-      final studentSections = mockDb.users
-          .where(
-            (u) =>
-                u.role == UserRole.student &&
-                u.departmentOrSection != null &&
-                u.departmentOrSection!.isNotEmpty,
-          )
-          .map((u) => u.departmentOrSection!)
-          .toSet()
-          .toList();
-      for (int i = 0; i < studentSections.length; i++) {
-        final sec = studentSections[i];
-        mockOfferings.add({
-          'id':
-              'offering_auto_${sec.toLowerCase().replaceAll(RegExp(r'\s+'), '_')}',
-          'subject_id': 'sub_auto_1',
-          'subject_name': 'Core Academic Subject',
-          'grade_level': 11,
-          'section_id': 'sec_auto_$i',
-          'section_name': sec,
-          'ww_weight': 20.0,
-          'pt_weight': 50.0,
-          'ex_weight': 30.0,
-          'terms_taught': 3,
-          'term_block': '1ST, 2ND, 3RD',
-          'units_per_term': 2.0,
-          'st1_weight': 30.0,
-          'st2_weight': 30.0,
-          'te_weight': 40.0,
-          'school_year': '2026-2027',
-        });
-      }
-    }
-
-    return mockOfferings;
+    return LocalStorageService.getTeacherSubjects(teacherId);
   }
 
   /// Fetches all subjects for a specific teacher with Drift SQLite cache-first (0ms) and background sync.
   Future<List<Map<String, dynamic>>> getTeacherSubjects(
     String teacherId, {
     String schoolYear = '2026-2027',
+    bool onlyWithEnrolledStudents = false,
   }) async {
+    List<Map<String, dynamic>> results;
     // 1. FAST LOCAL DRIFT SQLITE READ (0 milliseconds load)
     try {
       final localOfferings = await AppDatabase.instance.getOfferingsForTeacher(
@@ -299,7 +232,7 @@ class SubjectRepository {
         // Trigger silent background sync without blocking UI
         unawaited(_syncOfferingsFromCloud(teacherId, schoolYear));
 
-        return localOfferings.map((r) {
+        results = localOfferings.map((r) {
           final metadata = cachedMetadata[r.id] ?? const <String, dynamic>{};
           return {
             'id': r.id,
@@ -320,13 +253,60 @@ class SubjectRepository {
             'school_year': r.schoolYear,
           };
         }).toList();
+
+        if (onlyWithEnrolledStudents) {
+          return _filterOfferingsWithEnrolledStudents(teacherId, results);
+        }
+        return results;
       }
     } catch (e) {
       debugPrint('Drift local read notice: $e');
     }
 
     // 2. Fallback / Initial fetch from cloud
-    return _syncOfferingsFromCloud(teacherId, schoolYear);
+    results = await _syncOfferingsFromCloud(teacherId, schoolYear);
+    if (onlyWithEnrolledStudents) {
+      return _filterOfferingsWithEnrolledStudents(teacherId, results);
+    }
+    return results;
+  }
+
+  Future<List<Map<String, dynamic>>> _filterOfferingsWithEnrolledStudents(
+    String teacherId,
+    List<Map<String, dynamic>> offerings,
+  ) async {
+    if (offerings.isEmpty) return [];
+    final offeringIds = offerings.map((m) => m['id'].toString()).toList();
+    try {
+      final enrollmentsResponse = await _client
+          .from('student_enrollments')
+          .select('subject_offering_id')
+          .inFilter('subject_offering_id', offeringIds)
+          .ilike('status', 'enrolled');
+
+      final activeOfferingIds = (enrollmentsResponse as List)
+          .map((e) => e['subject_offering_id']?.toString())
+          .where((id) => id != null && id.isNotEmpty)
+          .toSet();
+
+      return offerings.where((m) => activeOfferingIds.contains(m['id'])).toList();
+    } catch (enrollErr) {
+      debugPrint('Error filtering offerings by cloud enrollments: $enrollErr');
+      try {
+        final activeIds = <String>{};
+        for (final offering in offerings) {
+          final offId = offering['id'].toString();
+          final localStudents = await AppDatabase.instance.getStudentsForOffering(offId);
+          if (localStudents.isNotEmpty) {
+            activeIds.add(offId);
+          }
+        }
+        if (activeIds.isNotEmpty) {
+          return offerings.where((m) => activeIds.contains(m['id'])).toList();
+        }
+      } catch (_) {}
+      return [];
+    }
   }
 
   Future<List<Map<String, dynamic>>> _syncOfferingsFromCloud(
@@ -481,30 +461,34 @@ class SubjectRepository {
       return cached;
     }
     if (teacherId == null || teacherId.isEmpty) {
-      throw StateError(
-        'A signed-in teacher is required to fetch gradebook data.',
-      );
+      return null;
     }
-    await _verifyOfferingTeacher(offeringId, teacherId);
 
-    final row = await _client
-        .from('gradebook_term_sheets')
-        .select('hps_json, scores_json')
-        .eq('subject_offering_id', offeringId)
-        .eq('term_number', termNumber)
-        .maybeSingle();
-    if (row == null) return null;
+    try {
+      await _verifyOfferingTeacher(offeringId, teacherId);
 
-    final payload = {
-      'hps': Map<String, dynamic>.from(row['hps_json'] as Map),
-      'scores': Map<String, dynamic>.from(row['scores_json'] as Map),
-    };
-    await LocalStorageService.saveGradebookSheet(
-      offeringId,
-      termNumber,
-      payload,
-    );
-    return payload;
+      final row = await _client
+          .from('gradebook_term_sheets')
+          .select('hps_json, scores_json')
+          .eq('subject_offering_id', offeringId)
+          .eq('term_number', termNumber)
+          .maybeSingle();
+      if (row == null) return null;
+
+      final payload = {
+        'hps': Map<String, dynamic>.from(row['hps_json'] as Map? ?? {}),
+        'scores': Map<String, dynamic>.from(row['scores_json'] as Map? ?? {}),
+      };
+      await LocalStorageService.saveGradebookSheet(
+        offeringId,
+        termNumber,
+        payload,
+      );
+      return payload;
+    } catch (e) {
+      debugPrint('Notice loading gradebook sheet from cloud: $e');
+      return null;
+    }
   }
 
   Future<void> _syncGradebookTermSheet(
@@ -596,16 +580,20 @@ class SubjectRepository {
     String offeringId,
     String teacherId,
   ) async {
-    final offering = await _client
-        .from('subject_offerings')
-        .select('id')
-        .eq('id', offeringId)
-        .eq('teacher_id', teacherId)
-        .maybeSingle();
-    if (offering == null) {
-      throw StateError(
-        'The selected subject offering is not owned by this teacher.',
-      );
+    try {
+      final offering = await _client
+          .from('subject_offerings')
+          .select('id')
+          .eq('id', offeringId)
+          .eq('teacher_id', teacherId)
+          .maybeSingle();
+      if (offering == null) {
+        debugPrint(
+          'Notice: Offering $offeringId was not found for teacher $teacherId in cloud.',
+        );
+      }
+    } catch (e) {
+      debugPrint('Notice verifying offering teacher: $e');
     }
   }
 
