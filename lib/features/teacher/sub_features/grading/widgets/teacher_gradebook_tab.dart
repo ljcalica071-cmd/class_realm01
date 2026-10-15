@@ -1078,6 +1078,7 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
   Widget _buildSchoolInfoBar(ThemeData theme, Color bg, Color text) {
     final sub = _selectedSubject;
     final sec = _selectedSection;
+    final data = _currentSubjectData;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
@@ -1104,6 +1105,37 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
                   style: TextStyle(
                     fontSize: 12,
                     color: text.withValues(alpha: 0.7),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // Right: School Year
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: AppTheme.catGreen.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(
+                color: AppTheme.catGreen.withValues(alpha: 0.3),
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'S.Y.: ',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: text.withValues(alpha: 0.7),
+                  ),
+                ),
+                Text(
+                  '${data?['school_year'] ?? '2026-2027'}',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: text,
                   ),
                 ),
               ],
@@ -1187,154 +1219,194 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
     bool isDark,
     Color borderColor,
   ) {
-    const widths = [
-      30.0,
-      120.0,
-      220.0,
-      110.0,
-      110.0,
-      110.0,
-      110.0,
-      150.0,
-      110.0,
-    ];
-    const labels = [
-      '#',
-      'LRN',
-      "LEARNERS' NAMES",
-      'FIRST TERM',
-      'SECOND TERM',
-      'THIRD TERM',
-      'FINAL GRADE',
-      'DESCRIPTOR',
-      'REMARK',
-    ];
-    final tableWidth = widths.fold<double>(0, (sum, width) => sum + width);
     final headerColor = isDark
         ? theme.colorScheme.surfaceContainerHighest
         : const Color(0xFFE8EDF5);
+    const minTableWidth = 1040.0;
 
-    Widget headerRow() => Container(
-      height: 42,
-      decoration: BoxDecoration(
-        color: headerColor,
-        border: Border(bottom: BorderSide(color: borderColor)),
-      ),
-      child: Row(
-        children: List.generate(
-          labels.length,
-          (index) => _summaryCell(
-            labels[index],
-            widths[index],
-            theme.colorScheme.onSurface,
-            borderColor: borderColor,
-            bold: true,
-          ),
-        ),
-      ),
-    );
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final availableWidth = constraints.maxWidth;
+        final tableWidth = availableWidth > minTableWidth
+            ? availableWidth
+            : minTableWidth;
+        final extraWidth = tableWidth - minTableWidth;
 
-    Widget genderHeader(String label) => Container(
-      height: 26,
-      width: tableWidth,
-      alignment: Alignment.centerLeft,
-      padding: const EdgeInsets.only(left: 12),
-      color: isDark ? const Color(0xFF374151) : const Color(0xFF334155),
-      child: Text(
-        label,
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 10,
-          fontWeight: FontWeight.bold,
-          letterSpacing: 1,
-        ),
-      ),
-    );
+        final numW = 40.0;
+        final lrnW = 130.0;
+        final term1W = 100.0;
+        final term2W = 100.0;
+        final term3W = 100.0;
+        final finalGradeW = 105.0;
+        final nameW = 260.0 + (extraWidth * 0.55);
+        final descriptorW = 145.0 + (extraWidth * 0.25);
+        final remarkW = tableWidth -
+            (numW +
+                lrnW +
+                nameW +
+                term1W +
+                term2W +
+                term3W +
+                finalGradeW +
+                descriptorW);
 
-    final unitsEarned = _unitsPerYear;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          decoration: BoxDecoration(
-            color: headerColor.withValues(alpha: 0.65),
-            border: Border(bottom: BorderSide(color: borderColor)),
-          ),
-          child: Wrap(
-            spacing: 18,
-            runSpacing: 8,
-            children: [
-              _metadataLabel('NO. OF TERMS', '$_termsTaught', theme),
-              _metadataLabel('TERM BLOCKS', _termBlock, theme),
-              _metadataLabel(
-                'UNITS PER TERM',
-                _formatUnits(_unitsPerTerm),
-                theme,
-              ),
-              _metadataLabel(
-                'TOTAL UNITS EARNED',
-                _formatUnits(unitsEarned),
-                theme,
-              ),
-            ],
-          ),
-        ),
-        Expanded(
-          child: SingleChildScrollView(
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: SizedBox(
-                width: tableWidth,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    headerRow(),
-                    genderHeader('MALE'),
-                    if (_maleStudents.isEmpty)
-                      _buildFinalGradeEmptyRow(
-                        1,
-                        'No students yet',
-                        widths,
-                        borderColor,
-                        theme,
-                      )
-                    else
-                      ..._maleStudents.asMap().entries.map(
-                        (entry) => _buildFinalGradeStudentRow(
-                          entry.value,
-                          entry.key + 1,
-                          widths,
-                          borderColor,
-                          theme,
-                        ),
-                      ),
-                    genderHeader('FEMALE'),
-                    if (_femaleStudents.isEmpty)
-                      _buildFinalGradeEmptyRow(
-                        1,
-                        'No students yet',
-                        widths,
-                        borderColor,
-                        theme,
-                      )
-                    else
-                      ..._femaleStudents.asMap().entries.map(
-                        (entry) => _buildFinalGradeStudentRow(
-                          entry.value,
-                          entry.key + 1,
-                          widths,
-                          borderColor,
-                          theme,
-                        ),
-                      ),
-                  ],
+        final widths = [
+          numW,
+          lrnW,
+          nameW,
+          term1W,
+          term2W,
+          term3W,
+          finalGradeW,
+          descriptorW,
+          remarkW,
+        ];
+
+        Widget headerCell(String label, double width, double height) =>
+            Container(
+              width: width,
+              height: height,
+              alignment: Alignment.center,
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              decoration: BoxDecoration(
+                border: Border(
+                  right: BorderSide(color: borderColor, width: 0.5),
                 ),
+              ),
+              child: Text(
+                label,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  color: theme.colorScheme.onSurface,
+                  letterSpacing: 0.4,
+                ),
+              ),
+            );
+
+        Widget buildTwoTierHeader() => Container(
+              height: 52,
+              decoration: BoxDecoration(
+                color: headerColor,
+                border: Border(
+                  bottom: BorderSide(color: borderColor, width: 0.5),
+                ),
+              ),
+              child: Row(
+                children: [
+                  headerCell('#', numW, 52),
+                  headerCell('LRN', lrnW, 52),
+                  headerCell("LEARNERS' NAMES", nameW, 52),
+                  SizedBox(
+                    width: term1W + term2W + term3W,
+                    height: 52,
+                    child: Column(
+                      children: [
+                        Container(
+                          height: 26,
+                          width: term1W + term2W + term3W,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            border: Border(
+                              right:
+                                  BorderSide(color: borderColor, width: 0.5),
+                              bottom:
+                                  BorderSide(color: borderColor, width: 0.5),
+                            ),
+                          ),
+                          child: Text(
+                            'TERM GRADES',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              color: theme.colorScheme.onSurface,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ),
+                        SizedBox(
+                          height: 26,
+                          child: Row(
+                            children: [
+                              headerCell('FIRST TERM', term1W, 26),
+                              headerCell('SECOND TERM', term2W, 26),
+                              headerCell('THIRD TERM', term3W, 26),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  headerCell('FINAL GRADE', finalGradeW, 52),
+                  headerCell('DESCRIPTOR', descriptorW, 52),
+                  headerCell('REMARK', remarkW, 52),
+                ],
+              ),
+            );
+
+        Widget genderHeader(String label) => Container(
+              height: 26,
+              width: tableWidth,
+              alignment: Alignment.centerLeft,
+              padding: const EdgeInsets.only(left: 12),
+              color: isDark
+                  ? const Color(0xFF374151)
+                  : const Color(0xFF334155),
+              child: Text(
+                label,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1,
+                ),
+              ),
+            );
+
+        return SingleChildScrollView(
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: SizedBox(
+              width: tableWidth,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  buildTwoTierHeader(),
+                  genderHeader('MALE'),
+                  if (_maleStudents.isEmpty)
+                    ..._buildFinalGradeEmptyRows(widths, borderColor, theme)
+                  else
+                    ..._maleStudents.asMap().entries.map(
+                          (entry) => _buildFinalGradeStudentRow(
+                            entry.value,
+                            entry.key + 1,
+                            widths,
+                            borderColor,
+                            theme,
+                          ),
+                        ),
+                  genderHeader('FEMALE'),
+                  if (_femaleStudents.isEmpty)
+                    ..._buildFinalGradeEmptyRows(widths, borderColor, theme)
+                  else
+                    ..._femaleStudents.asMap().entries.map(
+                          (entry) => _buildFinalGradeStudentRow(
+                            entry.value,
+                            entry.key + 1,
+                            widths,
+                            borderColor,
+                            theme,
+                          ),
+                        ),
+                ],
               ),
             ),
           ),
-        ),
-      ],
+        );
+      },
     );
   }
 
@@ -1390,48 +1462,35 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
           ),
           child: Row(
             children: List.generate(values.length, (index) {
-              final finalGradeCell = index == 6;
-              final remarkCell = index == 8;
-              if (remarkCell && finalGrade != null) {
-                final passed = finalGrade >= 75;
-                final color = passed ? AppTheme.catGreen : AppTheme.catRed;
-                return Container(
-                  width: widths[index],
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    border: Border(
-                      right: BorderSide(color: borderColor, width: 0.5),
-                    ),
-                  ),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: color.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Text(
-                      values[index],
-                      style: TextStyle(
-                        color: color,
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                );
-              }
+              final isName = index == 2;
+              final isFinalGrade = index == 6;
+              final isRemark = index == 8;
               final isMuted = values[index] == 'N/A';
-              return _summaryCell(
-                values[index],
-                widths[index],
-                isMuted
-                    ? theme.colorScheme.onSurface.withValues(alpha: 0.4)
-                    : theme.colorScheme.onSurface,
-                borderColor: borderColor,
-                bold: finalGradeCell,
+              final textColor = isMuted
+                  ? theme.colorScheme.onSurface.withValues(alpha: 0.4)
+                  : theme.colorScheme.onSurface;
+
+              return Container(
+                width: widths[index],
+                alignment: isName ? Alignment.centerLeft : Alignment.center,
+                padding: EdgeInsets.symmetric(horizontal: isName ? 10 : 4),
+                decoration: BoxDecoration(
+                  border: Border(
+                    right: BorderSide(color: borderColor, width: 0.5),
+                  ),
+                ),
+                child: Text(
+                  values[index],
+                  style: TextStyle(
+                    fontSize: isName ? 12 : 11,
+                    fontWeight: (isFinalGrade || isRemark)
+                        ? FontWeight.bold
+                        : FontWeight.normal,
+                    color: textColor,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: isName ? TextAlign.left : TextAlign.center,
+                ),
               );
             }),
           ),
@@ -1474,15 +1533,16 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
           return Container(
             width: widths[index],
             alignment: isName ? Alignment.centerLeft : Alignment.center,
-            padding: EdgeInsets.symmetric(horizontal: isName ? 12 : 4),
+            padding: EdgeInsets.symmetric(horizontal: isName ? 10 : 4),
             decoration: BoxDecoration(
               border: Border(right: BorderSide(color: borderColor, width: 0.5)),
             ),
             child: Text(
               values[index],
               style: TextStyle(
-                fontSize: 12,
-                fontStyle: isName ? FontStyle.italic : FontStyle.normal,
+                fontSize: 11,
+                fontStyle:
+                    isName && label != '-' ? FontStyle.italic : FontStyle.normal,
                 color: textColor,
               ),
               overflow: TextOverflow.ellipsis,
@@ -1493,63 +1553,22 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
     );
   }
 
-  Widget _summaryCell(
-    String value,
-    double width,
-    Color textColor, {
-    required Color borderColor,
-    bool bold = false,
-  }) {
-    return Container(
-      width: width,
-      height: 38,
-      alignment: Alignment.center,
-      padding: const EdgeInsets.symmetric(horizontal: 6),
-      decoration: BoxDecoration(
-        border: Border(
-          right: BorderSide(color: borderColor, width: 0.5),
-          bottom: BorderSide(color: borderColor, width: 0.5),
-        ),
+  List<Widget> _buildFinalGradeEmptyRows(
+    List<double> widths,
+    Color borderColor,
+    ThemeData theme,
+  ) {
+    return [
+      _buildFinalGradeEmptyRow(
+        1,
+        'No students yet',
+        widths,
+        borderColor,
+        theme,
       ),
-      child: Text(
-        value,
-        maxLines: 2,
-        overflow: TextOverflow.ellipsis,
-        textAlign: TextAlign.center,
-        style: TextStyle(
-          fontSize: 10,
-          color: textColor,
-          fontWeight: bold ? FontWeight.bold : FontWeight.normal,
-        ),
-      ),
-    );
-  }
-
-  Widget _metadataLabel(String label, String value, ThemeData theme) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          label,
-          style: TextStyle(
-            color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
-            fontSize: 9,
-            fontWeight: FontWeight.bold,
-            letterSpacing: 0.4,
-          ),
-        ),
-        const SizedBox(height: 2),
-        Text(
-          value,
-          style: TextStyle(
-            color: theme.colorScheme.onSurface,
-            fontSize: 11,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ],
-    );
+      _buildFinalGradeEmptyRow(2, '-', widths, borderColor, theme),
+      _buildFinalGradeEmptyRow(3, '-', widths, borderColor, theme),
+    ];
   }
 
   // ====================================================================
