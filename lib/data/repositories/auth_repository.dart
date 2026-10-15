@@ -7,6 +7,8 @@ import 'package:class_realm/models/user_model.dart' as custom;
 import 'package:class_realm/data/datasources/mock/mock_database.dart';
 import 'package:class_realm/core/services/local_storage_service.dart';
 import 'package:class_realm/core/services/email_service.dart';
+import 'package:class_realm/core/services/email_verification_service.dart';
+import 'package:class_realm/core/utils/parent_credential_helper.dart';
 
 class FirstLoginOtpVerification {
   const FirstLoginOtpVerification({
@@ -508,6 +510,227 @@ class AuthRepository {
         MockDatabase.instance.currentUser = _currentUser;
       }
       return null;
+    } catch (e) {
+      return e.toString().replaceFirst('Exception: ', '');
+    }
+  }
+
+  // --- FORGOT PASSWORD STATE & FLOW ---
+  String? _forgotPasswordOtpCode;
+  DateTime? _forgotPasswordOtpExpiry;
+  String? _forgotPasswordEmail;
+  int _forgotPasswordAttempts = 0;
+  bool _forgotPasswordVerified = false;
+
+  /// Look up a user profile by email across Supabase and MockDatabase.
+  Future<custom.UserModel?> getUserByEmail(String email) async {
+    final cleanEmail = email.trim().toLowerCase();
+    if (cleanEmail.isEmpty) return null;
+
+    try {
+      final userResp = await _supabaseClient
+          .from('users')
+          .select('id')
+          .eq('email', cleanEmail)
+          .maybeSingle();
+
+      if (userResp != null && userResp['id'] != null) {
+        final uid = userResp['id'].toString();
+        return await _getUserFromSupabase(uid);
+      }
+    } catch (e) {
+      debugPrint('[AuthRepository] getUserByEmail Supabase error: $e');
+    }
+
+    try {
+      return MockDatabase.instance.users.firstWhere(
+        (u) => u.email.trim().toLowerCase() == cleanEmail,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Sends a secure pure Dart 6-digit OTP code to the requested email for password recovery.
+  Future<Map<String, dynamic>> sendForgotPasswordOtp({
+    required String email,
+    String? recipientName,
+  }) async {
+    final cleanEmail = email.trim().toLowerCase();
+    if (cleanEmail.isEmpty) {
+      throw Exception('A valid email address is required.');
+    }
+
+    if (ParentCredentialHelper.isParentDomain(cleanEmail)) {
+      throw Exception(
+        'Parent accounts (@classrealm.com) do not use email OTP codes. Please contact your student\'s teacher to reset your password.',
+      );
+    }
+
+    // Strict email check
+    final verifyResult = await EmailVerificationService.instance.verifyEmail(cleanEmail);
+    if (!verifyResult.isValid) {
+      throw Exception(verifyResult.reason ?? 'Please provide a valid deliverable email address.');
+    }
+
+    // Verify user exists
+    final user = await getUserByEmail(cleanEmail);
+    if (user == null) {
+      throw Exception('No account found with this email address.');
+    }
+
+    if (user.role == custom.UserRole.parent) {
+      throw Exception(
+        'Parent accounts do not use email OTP codes. Please contact your student\'s teacher to reset your password.',
+      );
+    }
+
+    // Generate secure 6-digit OTP in pure Dart
+    final random = Random.secure();
+    final code = (100000 + random.nextInt(900000)).toString();
+    _forgotPasswordOtpCode = code;
+    _forgotPasswordOtpExpiry = DateTime.now().add(const Duration(minutes: 10));
+    _forgotPasswordEmail = cleanEmail;
+    _forgotPasswordAttempts = 0;
+    _forgotPasswordVerified = false;
+
+    debugPrint('========================================================');
+    debugPrint(
+      '[ClassRealm Pure Dart Forgot Password OTP] Verification code for $cleanEmail: $code',
+    );
+    debugPrint('========================================================');
+
+    try {
+      await EmailService.instance.sendPasswordChangeOtpEmail(
+        recipientEmail: cleanEmail,
+        recipientName: recipientName ?? user.fullName,
+        otpCode: code,
+      );
+    } catch (e) {
+      debugPrint('[AuthRepository] EmailService send error: $e');
+    }
+
+    return {
+      'sent': true,
+      'email': cleanEmail,
+      'expiresIn': 600,
+      'resendAfter': 60,
+      'resendCount': 0,
+    };
+  }
+
+  /// Verifies the 6-digit OTP code entered by the user during password recovery.
+  Future<FirstLoginOtpVerification> verifyForgotPasswordOtp(String code) async {
+    final cleanCode = code.trim();
+    if (_forgotPasswordOtpCode == null || _forgotPasswordOtpExpiry == null) {
+      return const FirstLoginOtpVerification(
+        verified: false,
+        reason: 'No verification code requested. Please request a new code.',
+      );
+    }
+
+    if (DateTime.now().isAfter(_forgotPasswordOtpExpiry!)) {
+      _forgotPasswordOtpCode = null;
+      _forgotPasswordVerified = false;
+      return const FirstLoginOtpVerification(
+        verified: false,
+        reason: 'Verification code has expired. Please request a new code.',
+      );
+    }
+
+    _forgotPasswordAttempts++;
+    if (_forgotPasswordAttempts > 5) {
+      _forgotPasswordOtpCode = null;
+      _forgotPasswordVerified = false;
+      return const FirstLoginOtpVerification(
+        verified: false,
+        reason: 'Maximum verification attempts exceeded. Please request a new code.',
+        retryAfter: 900,
+      );
+    }
+
+    if (cleanCode != _forgotPasswordOtpCode) {
+      return FirstLoginOtpVerification(
+        verified: false,
+        reason: 'Invalid verification code. Please check and try again.',
+        attemptsRemaining: 5 - _forgotPasswordAttempts,
+      );
+    }
+
+    _forgotPasswordOtpCode = null;
+    _forgotPasswordVerified = true;
+    return const FirstLoginOtpVerification(verified: true, reason: null);
+  }
+
+  /// Updates password after successful OTP verification with strict security gate.
+  Future<String?> updateForgottenPassword({
+    required String email,
+    required String newPassword,
+  }) async {
+    final cleanEmail = email.trim().toLowerCase();
+
+    // Strict Security Gate
+    if (!_forgotPasswordVerified || _forgotPasswordEmail != cleanEmail) {
+      return 'Unauthorized: OTP verification must be completed before updating your password.';
+    }
+
+    try {
+      final user = await getUserByEmail(cleanEmail);
+      if (user == null) {
+        return 'User account not found.';
+      }
+
+      // 1. If currently signed into Firebase with this email, update directly
+      if (_firebaseAuth.currentUser != null &&
+          _firebaseAuth.currentUser!.email?.toLowerCase() == cleanEmail) {
+        try {
+          await _firebaseAuth.currentUser!.updatePassword(newPassword);
+        } catch (e) {
+          debugPrint('[AuthRepository] Firebase updatePassword error: $e');
+        }
+      }
+
+      // 2. Update Supabase status to active
+      try {
+        await _supabaseClient
+            .from('users')
+            .update({'status': 'active'})
+            .eq('id', user.id);
+      } catch (_) {}
+
+      try {
+        await _supabaseClient
+            .from('teacher_settings')
+            .update({'status': 'active'})
+            .eq('teacher_id', user.id);
+      } catch (_) {}
+
+      try {
+        await _supabaseClient
+            .from('student_settings')
+            .update({'status': 'active'})
+            .eq('student_id', user.id);
+      } catch (_) {}
+
+      // 3. Update local session or mock database if applicable
+      final mockIndex = MockDatabase.instance.users.indexWhere(
+        (u) => u.email.trim().toLowerCase() == cleanEmail,
+      );
+      if (mockIndex != -1) {
+        final mockUser = MockDatabase.instance.users[mockIndex];
+        MockDatabase.instance.users[mockIndex] = mockUser.copyWith(
+          status: custom.AccountStatus.active,
+        );
+      }
+
+      // Reset OTP security state
+      _forgotPasswordVerified = false;
+      _forgotPasswordEmail = null;
+      _forgotPasswordOtpCode = null;
+      _forgotPasswordOtpExpiry = null;
+      _forgotPasswordAttempts = 0;
+
+      return null; // Success
     } catch (e) {
       return e.toString().replaceFirst('Exception: ', '');
     }

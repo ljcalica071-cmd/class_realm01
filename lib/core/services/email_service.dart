@@ -14,7 +14,40 @@ class EmailService {
     required String subject,
     required String html,
   }) async {
-    // 1. Try Resend REST API (if configured)
+    // 1. Dispatch via Supabase send-email Edge Function (Nodemailer Gmail SMTP)
+    final supabaseUrl = dotenv.env['SUPABASE_URL'];
+    final supabaseAnonKey = dotenv.env['SUPABASE_ANON_KEY'];
+    if (supabaseUrl != null && supabaseUrl.isNotEmpty && supabaseAnonKey != null) {
+      try {
+        final url = Uri.parse('$supabaseUrl/functions/v1/send-email');
+        final response = await http.post(
+          url,
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': supabaseAnonKey,
+            'Authorization': 'Bearer $supabaseAnonKey',
+          },
+          body: jsonEncode({
+            'to': to.trim(),
+            'subject': subject,
+            'html': html,
+            'smtp_user': dotenv.env['SMTP_EMAIL'] ?? 'ljcalica071@gmail.com',
+            'smtp_pass': dotenv.env['SMTP_PASSWORD'] ?? 'wowtgfoenxnxewnl',
+          }),
+        );
+
+        if (response.statusCode >= 200 && response.statusCode < 300) {
+          debugPrint('[EmailService] Dispatched via Supabase Edge Function to $to: ${response.body}');
+          return true;
+        } else {
+          debugPrint('[EmailService] Supabase Edge Function error (${response.statusCode}): ${response.body}');
+        }
+      } catch (e) {
+        debugPrint('[EmailService] Supabase send-email error: $e');
+      }
+    }
+
+    // 2. Try Resend REST API (if configured)
     final resendApiKey = dotenv.env['RESEND_API_KEY'];
     if (resendApiKey != null && resendApiKey.trim().isNotEmpty) {
       try {

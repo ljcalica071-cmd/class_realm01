@@ -614,7 +614,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   TextButton(
                     onPressed: () {
-                      // Navigate to forgot password
+                      Navigator.pushNamed(context, AppRoutes.forgotPassword);
                     },
                     style: TextButton.styleFrom(
                       padding: EdgeInsets.zero,

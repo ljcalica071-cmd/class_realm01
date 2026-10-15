@@ -34,6 +34,66 @@ class AppValidators {
 
     return null;
   }
+
+  /// Password complexity validator methods
+  static bool hasMinLength(String? value, {int minLength = 8}) {
+    if (value == null) return false;
+    return value.length >= minLength;
+  }
+
+  static bool hasUppercase(String? value) {
+    if (value == null) return false;
+    return RegExp(r'[A-Z]').hasMatch(value);
+  }
+
+  static bool hasLowercase(String? value) {
+    if (value == null) return false;
+    return RegExp(r'[a-z]').hasMatch(value);
+  }
+
+  static bool hasNumber(String? value) {
+    if (value == null) return false;
+    return RegExp(r'[0-9]').hasMatch(value);
+  }
+
+  static bool passwordsMatch(String? password, String? confirmPassword) {
+    if (password == null || confirmPassword == null) return false;
+    if (password.isEmpty || confirmPassword.isEmpty) return false;
+    return password == confirmPassword;
+  }
+
+  static PasswordValidationResult validatePasswordComplexity({
+    required String? password,
+    required String? confirmPassword,
+  }) {
+    final pwd = password ?? '';
+    return PasswordValidationResult(
+      hasMinLength: hasMinLength(pwd),
+      hasUpper: hasUppercase(pwd),
+      hasLower: hasLowercase(pwd),
+      hasNumber: hasNumber(pwd),
+      passwordsMatch: passwordsMatch(pwd, confirmPassword),
+    );
+  }
+}
+
+class PasswordValidationResult {
+  final bool hasMinLength;
+  final bool hasUpper;
+  final bool hasLower;
+  final bool hasNumber;
+  final bool passwordsMatch;
+
+  const PasswordValidationResult({
+    required this.hasMinLength,
+    required this.hasUpper,
+    required this.hasLower,
+    required this.hasNumber,
+    required this.passwordsMatch,
+  });
+
+  bool get isValid =>
+      hasMinLength && hasUpper && hasLower && hasNumber && passwordsMatch;
 }
 
 class _CleanInputFormatter extends TextInputFormatter {
