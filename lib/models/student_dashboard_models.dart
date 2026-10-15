@@ -49,7 +49,9 @@ class StudentDashboardData {
     final enrollments = rawEnrollments
         .map((item) => StudentEnrollmentModel.fromJson(item))
         .toList();
-    final primaryEnrollment = rawEnrollments.isEmpty ? null : rawEnrollments.first;
+    final primaryEnrollment = rawEnrollments.isEmpty
+        ? null
+        : rawEnrollments.first;
     final birthdayValue = studentJson['birthday']?.toString();
     final firstName = studentJson['first_name']?.toString() ?? '';
     final middleName = studentJson['middle_name']?.toString();
@@ -162,14 +164,16 @@ class StudentClassworkModel {
     final assignedAt = json['assigned_at']?.toString();
     final deadline = json['deadline']?.toString();
     final maxScore = json['max_score'];
-    final score = submission['score'];
+    final score = json['score'] ?? submission['score'];
 
     StudentAttachmentModel? parsedAttachment;
-    if (json['attachments'] is List && (json['attachments'] as List).isNotEmpty) {
+    if (json['attachments'] is List &&
+        (json['attachments'] as List).isNotEmpty) {
       final first = (json['attachments'] as List).first;
       if (first is Map) {
-        parsedAttachment =
-            StudentAttachmentModel.fromJson(Map<String, dynamic>.from(first));
+        parsedAttachment = StudentAttachmentModel.fromJson(
+          Map<String, dynamic>.from(first),
+        );
       }
     } else if (json['attachment'] is Map) {
       parsedAttachment = StudentAttachmentModel.fromJson(
@@ -179,19 +183,22 @@ class StudentClassworkModel {
 
     return StudentClassworkModel(
       id: json['id'].toString(),
-      type: json['classwork_type']?.toString() ?? 'assignment',
+      type: (json['type'] ?? json['classwork_type'])?.toString() ?? 'activity',
       title: json['title']?.toString() ?? '',
       description: json['description']?.toString() ?? '',
       instructions: json['instructions']?.toString() ?? '',
-      subjectName: subject['subject_name']?.toString() ?? '',
-      sectionName: subject['section_name']?.toString() ?? '',
-      gradeLevel: subject['grade_level']?.toString() ?? '',
+      subjectName:
+          (json['subject_name'] ?? subject['subject_name'])?.toString() ?? '',
+      sectionName:
+          (json['section_name'] ?? subject['section_name'])?.toString() ?? '',
+      gradeLevel:
+          (json['grade_level'] ?? subject['grade_level'])?.toString() ?? '',
       assignedAt: assignedAt == null ? null : DateTime.tryParse(assignedAt),
       deadline: deadline == null ? null : DateTime.tryParse(deadline),
       maxScore: maxScore is num ? maxScore.toDouble() : 0,
-      status: submission['status']?.toString(),
+      status: (json['status'] ?? submission['status'])?.toString(),
       score: score is num ? score.toDouble() : null,
-      feedback: submission['feedback']?.toString(),
+      feedback: (json['feedback'] ?? submission['feedback'])?.toString(),
       attachment: parsedAttachment,
     );
   }

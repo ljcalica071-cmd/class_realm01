@@ -59,7 +59,12 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
   List<UserModel> _getLinkedStudents(UserModel parent) {
     if (_linkedStudents.isNotEmpty) return _linkedStudents;
     return MockDatabase.instance.users
-        .where((u) => u.role == UserRole.student && (u.id == parent.linkedStudentId || parent.linkedStudentId == null))
+        .where(
+          (u) =>
+              u.role == UserRole.student &&
+              (u.id == parent.linkedStudentId ||
+                  parent.linkedStudentId == null),
+        )
         .take(1)
         .toList();
   }
@@ -131,7 +136,11 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
       SnackBar(
         content: Row(
           children: [
-            const Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
+            const Icon(
+              Icons.check_circle_rounded,
+              color: Colors.white,
+              size: 20,
+            ),
             const SizedBox(width: 10),
             Expanded(
               child: Text(
@@ -207,7 +216,8 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
           if (linkedStudents.length > 1)
             IconButton(
               icon: const Icon(Icons.swap_horiz_rounded),
-              tooltip: 'Switch Child Profile (${linkedStudent?.firstName ?? ""})',
+              tooltip:
+                  'Switch Child Profile (${linkedStudent?.firstName ?? ""})',
               onPressed: () {
                 _switchChildWithLoading(_selectedChildIndex + 1);
               },
@@ -221,8 +231,14 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
             tooltip: 'Toggle Theme',
             onPressed: () {
               final isDark = theme.brightness != Brightness.dark;
-              AppTheme.themeModeNotifier.value = isDark ? ThemeMode.dark : ThemeMode.light;
-              LocalStorageService.saveUserThemeMode(parent.id, isDark, email: parent.email);
+              AppTheme.themeModeNotifier.value = isDark
+                  ? ThemeMode.dark
+                  : ThemeMode.light;
+              LocalStorageService.saveUserThemeMode(
+                parent.id,
+                isDark,
+                email: parent.email,
+              );
             },
           ),
           const Center(
@@ -233,59 +249,76 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
           ),
         ],
       ),
-      drawer: ParentDrawer(
-        parent: parent,
-        linkedStudent: linkedStudent,
-      ),
-      body: Column(
-        children: [
-          // Active Child Banner (if parent has multiple children)
-          if (linkedStudents.length > 1 && linkedStudent != null)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              color: theme.colorScheme.primaryContainer.withValues(alpha: 0.35),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.account_circle,
-                    size: 20,
-                    color: theme.colorScheme.primary,
+      drawer: ParentDrawer(parent: parent, linkedStudent: linkedStudent),
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final content = Column(
+            children: [
+              // Active Child Banner (if parent has multiple children)
+              if (linkedStudents.length > 1 && linkedStudent != null)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
                   ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Viewing: ${linkedStudent.fullName} (${linkedStudent.departmentOrSection ?? "Active"})',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 13,
+                  color: theme.colorScheme.primaryContainer.withValues(
+                    alpha: 0.35,
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.account_circle,
+                        size: 20,
                         color: theme.colorScheme.primary,
                       ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Viewing: ${linkedStudent.fullName} (${linkedStudent.departmentOrSection ?? "Active"})',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                            color: theme.colorScheme.primary,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      TextButton.icon(
+                        style: TextButton.styleFrom(
+                          visualDensity: VisualDensity.compact,
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                        ),
+                        icon: const Icon(Icons.swap_horiz, size: 16),
+                        label: const Text(
+                          'Switch',
+                          style: TextStyle(fontSize: 12),
+                        ),
+                        onPressed: () =>
+                            _switchChildWithLoading(_selectedChildIndex + 1),
+                      ),
+                    ],
                   ),
-                  TextButton.icon(
-                    style: TextButton.styleFrom(
-                      visualDensity: VisualDensity.compact,
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                    ),
-                    icon: const Icon(Icons.swap_horiz, size: 16),
-                    label: const Text('Switch', style: TextStyle(fontSize: 12)),
-                    onPressed: () => _switchChildWithLoading(_selectedChildIndex + 1),
-                  ),
-                ],
+                ),
+              Expanded(
+                child: _isLoadingStudents
+                    ? Center(
+                        child: LoadingAnimationWidget.staggeredDotsWave(
+                          color: theme.colorScheme.primary,
+                          size: 40,
+                        ),
+                      )
+                    : pages[_currentIndex],
               ),
+            ],
+          );
+          if (constraints.maxWidth <= 600) return content;
+          return Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 520),
+              child: content,
             ),
-          Expanded(
-            child: _isLoadingStudents
-                ? Center(
-                    child: LoadingAnimationWidget.staggeredDotsWave(
-                      color: theme.colorScheme.primary,
-                      size: 40,
-                    ),
-                  )
-                : pages[_currentIndex],
-          ),
-        ],
+          );
+        },
       ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,

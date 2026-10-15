@@ -9,7 +9,7 @@ plugins {
 
 android {
     namespace = "com.classrealm.class_realm"
-    compileSdk = flutter.compileSdkVersion
+    compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
     compileOptions {

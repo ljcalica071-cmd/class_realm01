@@ -133,6 +133,12 @@ CREATE TABLE public.subject_offerings (
   is_archived boolean NOT NULL DEFAULT false,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  terms_taught smallint NOT NULL DEFAULT 3 CHECK (terms_taught >= 1 AND terms_taught <= 3),
+  term_block character varying NOT NULL DEFAULT '1ST, 2ND, 3RD'::character varying,
+  units_per_term numeric NOT NULL DEFAULT 2.0,
+  st1_weight numeric NOT NULL DEFAULT 30.00,
+  st2_weight numeric NOT NULL DEFAULT 30.00,
+  te_weight numeric NOT NULL DEFAULT 40.00,
   CONSTRAINT subject_offerings_pkey PRIMARY KEY (id),
   CONSTRAINT subject_offerings_subject_id_fkey FOREIGN KEY (subject_id) REFERENCES public.subjects(id),
   CONSTRAINT subject_offerings_section_id_fkey FOREIGN KEY (section_id) REFERENCES public.sections(id),
@@ -403,6 +409,7 @@ CREATE TABLE public.term_grades (
   is_finalized boolean NOT NULL DEFAULT false,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  term_number smallint NOT NULL DEFAULT 1 CHECK (term_number >= 1 AND term_number <= 3),
   CONSTRAINT term_grades_pkey PRIMARY KEY (id),
   CONSTRAINT term_grades_student_id_fkey FOREIGN KEY (student_id) REFERENCES public.student_profiles(student_id),
   CONSTRAINT term_grades_subject_offering_id_fkey FOREIGN KEY (subject_offering_id) REFERENCES public.subject_offerings(id)
@@ -433,4 +440,14 @@ CREATE TABLE public.first_login_otp_verifications (
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   updated_at timestamp with time zone NOT NULL DEFAULT now(),
   CONSTRAINT first_login_otp_verifications_pkey PRIMARY KEY (user_id)
+);
+CREATE TABLE public.gradebook_term_sheets (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  subject_offering_id uuid NOT NULL,
+  term_number smallint NOT NULL CHECK (term_number >= 1 AND term_number <= 3),
+  hps_json jsonb NOT NULL DEFAULT '{"ex": {}, "pt": {}, "ww": {}}'::jsonb,
+  scores_json jsonb NOT NULL DEFAULT '{}'::jsonb,
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT gradebook_term_sheets_pkey PRIMARY KEY (id),
+  CONSTRAINT gradebook_term_sheets_subject_offering_id_fkey FOREIGN KEY (subject_offering_id) REFERENCES public.subject_offerings(id)
 );

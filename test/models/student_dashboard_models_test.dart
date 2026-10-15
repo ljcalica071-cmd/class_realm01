@@ -18,23 +18,38 @@ void main() {
           'section_name': 'Section Gauss',
           'grade_level': '11',
         },
-        'submission': null,
+        'submission': {
+          'status': 'graded',
+          'score': 47,
+          'feedback': 'Clear work and complete answers.',
+        },
         'attachments': [
           {
             'id': 'att-1',
             'file_name': 'Trigo_Worksheet.pdf',
             'mime_type': 'application/pdf',
             'file_size_bytes': 2097152,
-            'signed_url': 'https://storage.mock.local/classwork/signed_url_token',
-          }
+            'signed_url':
+                'https://storage.mock.local/classwork/signed_url_token',
+          },
         ],
       };
 
       final model = StudentClassworkModel.fromJson(json);
 
       expect(model.id, 'cw-100');
+      expect(model.type, 'activity');
+      expect(model.subjectName, 'Pre-Calculus');
+      expect(model.sectionName, 'Section Gauss');
+      expect(model.gradeLevel, '11');
       expect(model.title, 'Trigonometric Identities Worksheet');
-      expect(model.instructions, 'Answer odd-numbered items on clean bond paper.');
+      expect(
+        model.instructions,
+        'Answer odd-numbered items on clean bond paper.',
+      );
+      expect(model.status, 'graded');
+      expect(model.score, 47);
+      expect(model.feedback, 'Clear work and complete answers.');
       expect(model.attachment, isNotNull);
       expect(model.attachment!.fileName, 'Trigo_Worksheet.pdf');
       expect(model.attachment!.mimeType, 'application/pdf');
@@ -64,6 +79,30 @@ void main() {
       expect(model.id, 'cw-101');
       expect(model.instructions, 'Prepare a 5-minute presentation.');
       expect(model.attachment, isNull);
+    });
+
+    test('parses flat classwork and submission fields', () {
+      final json = {
+        'id': 'cw-102',
+        'type': 'assignment',
+        'title': 'Research Summary',
+        'subject_name': 'English',
+        'section_name': 'Section Rizal',
+        'grade_level': '12',
+        'status': 'graded',
+        'score': 18,
+        'feedback': 'Well done.',
+      };
+
+      final model = StudentClassworkModel.fromJson(json);
+
+      expect(model.type, 'assignment');
+      expect(model.subjectName, 'English');
+      expect(model.sectionName, 'Section Rizal');
+      expect(model.gradeLevel, '12');
+      expect(model.status, 'graded');
+      expect(model.score, 18);
+      expect(model.feedback, 'Well done.');
     });
   });
 }

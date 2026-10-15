@@ -16,6 +16,7 @@ import 'package:class_realm/data/repositories/subject_repository.dart';
 import 'package:class_realm/data/repositories/supabase_student_repository.dart';
 import 'package:class_realm/data/repositories/supabase_parent_repository.dart';
 import 'package:class_realm/core/services/local_storage_service.dart';
+import 'package:class_realm/core/utils/parent_credential_helper.dart';
 
 class TeacherParentManagementTab extends StatefulWidget {
   final List<UserModel>? parents;
@@ -320,7 +321,7 @@ class _TeacherParentManagementTabState
     const colSectionWidth = 140.0;
     const colContactWidth = 160.0;
     const colStatusWidth = 140.0;
-    const colActionsWidth = 150.0;
+    const colActionsWidth = 180.0;
 
     const totalTableWidth = colCheckWidth +
         colNumWidth +
@@ -987,6 +988,26 @@ class _TeacherParentManagementTabState
                                                             ),
                                                           ),
 
+                                                          // Reset Parent Password (active only)
+                                                          if (!_showArchivedParents)
+                                                            IconButton(
+                                                              tooltip:
+                                                                  'Reset Parent Password',
+                                                              icon: const Icon(
+                                                                Icons
+                                                                    .lock_reset_outlined,
+                                                                size: 19,
+                                                                color: Color(
+                                                                    0xFF64748B),
+                                                              ),
+                                                              splashRadius: 18,
+                                                              onPressed: () =>
+                                                                  _handleResetParentPassword(
+                                                                p,
+                                                                studentName,
+                                                              ),
+                                                            ),
+
                                                           // Edit Parent
                                                           if (!_showArchivedParents)
                                                             IconButton(
@@ -1278,16 +1299,21 @@ class _TeacherParentManagementTabState
   }
 
   void _showCredentialSlip(UserModel parent, String studentName) {
-    final formattedLastName = (parent.lastName ?? parent.fullName.split(' ').last)
-        .toLowerCase()
-        .replaceAll(RegExp(r'\s+'), '');
+    final rawLastName = parent.lastName ??
+        (parent.fullName.contains(' ')
+            ? parent.fullName.split(' ').last
+            : parent.fullName);
+    final formattedLastName =
+        ParentCredentialHelper.sanitizeLastName(rawLastName);
     final email = parent.email.isNotEmpty && parent.email.contains('@')
         ? parent.email
-        : '$formattedLastName@classrealm.com';
-    final bdayStr = parent.birthday != null
-        ? '${parent.birthday!.year}${parent.birthday!.month.toString().padLeft(2, '0')}${parent.birthday!.day.toString().padLeft(2, '0')}'
-        : 'YYYYMMDD';
-    final tempPassword = '$formattedLastName$bdayStr';
+        : ParentCredentialHelper.generateEmail(formattedLastName);
+    final tempPassword = parent.birthday != null
+        ? ParentCredentialHelper.generateTempPassword(
+            rawLastName,
+            parent.birthday!,
+          )
+        : '${formattedLastName}YYYYMMDD';
     final phone = parent.contactNumber ?? 'N/A';
 
     final credentialsText = '''
@@ -1391,6 +1417,66 @@ Instructions:
         ),
       ),
     );
+  }
+
+  Future<void> _handleResetParentPassword(UserModel parent, String studentName) async {
+    final rawLastName = parent.lastName ??
+        (parent.fullName.contains(' ')
+            ? parent.fullName.split(' ').last
+            : parent.fullName);
+    final tempPasswordSample = parent.birthday != null
+        ? ParentCredentialHelper.generateTempPassword(rawLastName, parent.birthday!)
+        : '[lastname][YYYYMMDD]';
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Icon(Icons.lock_reset_outlined, color: Theme.of(context).colorScheme.primary, size: 24),
+            const SizedBox(width: 8),
+            const Text('Reset Parent Password'),
+          ],
+        ),
+        content: Text(
+          'This will reset the account of ${parent.fullName} back to Pending First Login with their default temporary password ($tempPasswordSample).\n\nUse this if the parent forgot their password or requires their account credentials to be reissued.',
+          style: const TextStyle(fontSize: 14, height: 1.5),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          AppPrimaryButton(
+            label: 'Reset Password',
+            onPressed: () => Navigator.of(ctx).pop(true),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    setState(() => _isLoading = true);
+    try {
+      final repo = SupabaseParentRepository();
+      final updatedParent = await repo.resetParentToDefaultPassword(parent);
+      await _loadData();
+      if (mounted) {
+        setState(() => _isLoading = false);
+        _showCredentialSlip(updatedParent, studentName);
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        AppModals.showErrorDialog(
+          context: context,
+          title: 'Reset Failed',
+          message: 'Unable to reset parent password: $e',
+        );
+      }
+    }
   }
 
   Widget _buildCredentialCardRow(String label, String value, {bool isSecret = false}) {

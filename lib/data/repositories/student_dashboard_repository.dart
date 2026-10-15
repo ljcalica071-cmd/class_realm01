@@ -1,11 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 import 'package:class_realm/core/services/supabase_service.dart';
+import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/models/student_dashboard_models.dart';
 import 'package:class_realm/data/datasources/local/app_database.dart';
-import 'package:class_realm/data/mock_database.dart';
 import 'package:class_realm/models/user_model.dart';
 
 class StudentDashboardRepository {
@@ -17,7 +18,9 @@ class StudentDashboardRepository {
   StudentDashboardData? _cachedDashboard;
   StudentDashboardData? get currentDashboard => _cachedDashboard;
 
-  Future<StudentDashboardData> loadDashboard({bool forceRefresh = false}) async {
+  Future<StudentDashboardData> loadDashboard({
+    bool forceRefresh = false,
+  }) async {
     if (!forceRefresh && _cachedDashboard != null) {
       return _cachedDashboard!;
     }
@@ -25,7 +28,9 @@ class StudentDashboardRepository {
     // 1. FAST LOCAL DRIFT SQLITE READ (0 milliseconds load)
     if (!forceRefresh) {
       try {
-        final cachedJsonStr = await AppDatabase.instance.getSetting('cached_student_dashboard');
+        final cachedJsonStr = await AppDatabase.instance.getSetting(
+          'cached_student_dashboard',
+        );
         if (cachedJsonStr != null && cachedJsonStr.isNotEmpty) {
           final data = jsonDecode(cachedJsonStr) as Map<String, dynamic>;
           _cachedDashboard = StudentDashboardData.fromJson(data);
@@ -44,7 +49,9 @@ class StudentDashboardRepository {
     final authUser = firebase_auth.FirebaseAuth.instance.currentUser;
     if (authUser == null) {
       if (_cachedDashboard != null) return _cachedDashboard!;
-      return _fallbackMock();
+      throw StateError(
+        'A signed-in student session is required to load the dashboard.',
+      );
     }
 
     final uid = authUser.uid;
@@ -54,7 +61,9 @@ class StudentDashboardRepository {
       // 1. Fetch student profile directly via Pure Dart
       final profileRes = await client
           .from('student_profiles')
-          .select('student_id, lrn, first_name, middle_name, last_name, birthday, gender')
+          .select(
+            'student_id, lrn, first_name, middle_name, last_name, birthday, gender',
+          )
           .eq('student_id', uid)
           .maybeSingle();
 
@@ -74,19 +83,23 @@ class StudentDashboardRepository {
           .ilike('status', 'enrolled');
 
       final enrollmentsList = (enrollmentRows as List? ?? []).map((row) {
-        final offering = row['subject_offerings'] as Map<String, dynamic>? ?? {};
+        final offering =
+            row['subject_offerings'] as Map<String, dynamic>? ?? {};
         final sub = offering['subjects'] as Map<String, dynamic>? ?? {};
         final sec = offering['sections'] as Map<String, dynamic>? ?? {};
-        final teacher = offering['teacher_profiles'] as Map<String, dynamic>? ?? {};
-        final teacherName = [teacher['first_name'], teacher['last_name']]
-            .where((n) => n != null && n.toString().trim().isNotEmpty)
-            .join(' ');
+        final teacher =
+            offering['teacher_profiles'] as Map<String, dynamic>? ?? {};
+        final teacherName = [
+          teacher['first_name'],
+          teacher['last_name'],
+        ].where((n) => n != null && n.toString().trim().isNotEmpty).join(' ');
         return {
           'subject_id': row['subject_offering_id']?.toString() ?? '',
           'subject_name': sub['subject_name']?.toString() ?? '',
           'subject_code': sub['subject_code']?.toString() ?? '',
           'section_name': sec['section_name']?.toString() ?? '',
-          'grade_level': (sec['grade_level'] ?? sub['grade_level'])?.toString() ?? '',
+          'grade_level':
+              (sec['grade_level'] ?? sub['grade_level'])?.toString() ?? '',
           'teacher_name': teacherName,
         };
       }).toList();
@@ -96,57 +109,71 @@ class StudentDashboardRepository {
           .where((id) => id.isNotEmpty)
           .toList();
 
-      // 3. Fetch classwork items directly via Pure Dart
+      // 3. Fetch classwork items and the current student's submissions.
       List<Map<String, dynamic>> classworkList = [];
       if (offeringIds.isNotEmpty) {
-        try {
-          final items = await client
-              .from('classwork_items')
-              .select('''
-                id,
-                subject_offering_id,
-                classwork_type,
-                title,
-                description,
-                instructions,
-                assigned_at,
-                deadline,
-                max_score,
-                subject_offerings (
-                  subjects ( subject_name ),
-                  sections ( section_name, grade_level )
-                )
-              ''')
-              .filter('subject_offering_id', 'in', offeringIds)
-              .eq('is_published', true)
-              .eq('is_archived', false)
-              .order('deadline', ascending: true);
+        final submissionRows = await client
+            .from('student_classwork_submissions')
+            .select('classwork_id, status, score, feedback')
+            .eq('student_id', uid);
+        final submissionsByClassworkId = <String, Map<String, dynamic>>{};
+        for (final row in submissionRows as List) {
+          final submission = Map<String, dynamic>.from(row as Map);
+          final classworkId = submission['classwork_id']?.toString();
+          if (classworkId != null) {
+            submissionsByClassworkId[classworkId] = submission;
+          }
+        }
 
-          classworkList = (items as List? ?? []).map<Map<String, dynamic>>((i) {
-            final m = Map<String, dynamic>.from(i as Map);
-            final off = m['subject_offerings'] as Map<String, dynamic>? ?? {};
-            final s = off['subjects'] as Map<String, dynamic>? ?? {};
-            final sec = off['sections'] as Map<String, dynamic>? ?? {};
-            return {
-              'id': m['id']?.toString() ?? '',
-              'subject_offering_id': m['subject_offering_id']?.toString() ?? '',
-              'type': m['classwork_type']?.toString() ?? 'activity',
-              'title': m['title']?.toString() ?? '',
-              'description': m['description']?.toString(),
-              'instructions': m['instructions']?.toString(),
-              'assigned_at': m['assigned_at']?.toString(),
-              'deadline': m['deadline']?.toString(),
-              'max_score': m['max_score'] is num ? m['max_score'] : 100,
-              'subject_name': s['subject_name']?.toString() ?? '',
-              'section_name': sec['section_name']?.toString() ?? '',
-              'grade_level': sec['grade_level']?.toString() ?? '',
-              'status': 'pending',
-            };
-          }).toList();
-        } catch (_) {}
+        final items = await client
+            .from('classwork_items')
+            .select('''
+              id,
+              subject_offering_id,
+              classwork_type,
+              title,
+              description,
+              instructions,
+              assigned_at,
+              deadline,
+              max_score,
+              subject_offerings (
+                subjects ( subject_name ),
+                sections ( section_name, grade_level )
+              )
+            ''')
+            .filter('subject_offering_id', 'in', offeringIds)
+            .eq('is_published', true)
+            .eq('is_archived', false)
+            .order('deadline', ascending: true);
+
+        classworkList = (items as List? ?? []).map<Map<String, dynamic>>((i) {
+          final m = Map<String, dynamic>.from(i as Map);
+          final off = m['subject_offerings'] as Map<String, dynamic>? ?? {};
+          final s = off['subjects'] as Map<String, dynamic>? ?? {};
+          final sec = off['sections'] as Map<String, dynamic>? ?? {};
+          final submission = submissionsByClassworkId[m['id']?.toString()];
+          return {
+            'id': m['id']?.toString() ?? '',
+            'subject_offering_id': m['subject_offering_id']?.toString() ?? '',
+            'type': m['classwork_type']?.toString() ?? 'activity',
+            'title': m['title']?.toString() ?? '',
+            'description': m['description']?.toString(),
+            'instructions': m['instructions']?.toString(),
+            'assigned_at': m['assigned_at']?.toString(),
+            'deadline': m['deadline']?.toString(),
+            'max_score': m['max_score'] is num ? m['max_score'] : 100,
+            'subject_name': s['subject_name']?.toString() ?? '',
+            'section_name': sec['section_name']?.toString() ?? '',
+            'grade_level': sec['grade_level']?.toString() ?? '',
+            'status': submission?['status']?.toString() ?? 'pending',
+            'score': submission?['score'],
+            'feedback': submission?['feedback'],
+          };
+        }).toList();
       }
 
-      final p = profileRes as Map<String, dynamic>? ?? {};
+      final p = profileRes ?? <String, dynamic>{};
       final data = <String, dynamic>{
         'student': {
           'id': uid,
@@ -162,45 +189,45 @@ class StudentDashboardRepository {
         'classwork': classworkList,
       };
 
-      // Persist to Drift SQLite local settings table
-      await AppDatabase.instance.setSetting('cached_student_dashboard', jsonEncode(data));
+      try {
+        await AppDatabase.instance.setSetting(
+          'cached_student_dashboard',
+          jsonEncode(data),
+        );
+      } catch (_) {}
 
       _cachedDashboard = StudentDashboardData.fromJson(data);
       return _cachedDashboard!;
     } catch (e) {
       debugPrint('Pure Dart student dashboard notice: $e');
       if (_cachedDashboard != null) return _cachedDashboard!;
-      return _fallbackMock();
+      return _fallbackForAuthenticatedUser(authUser);
     }
   }
 
-  StudentDashboardData _fallbackMock() {
-    final mockUser = MockDatabase.instance.users
-        .firstWhere((u) => u.role == UserRole.student, orElse: () => MockDatabase.instance.users.first);
-    final data = <String, dynamic>{
-      'student': {
-        'id': mockUser.id,
-        'email': mockUser.email,
-        'lrn': mockUser.lrn ?? '',
-        'first_name': mockUser.firstName ?? '',
-        'middle_name': mockUser.middleName,
-        'last_name': mockUser.lastName ?? '',
-        'gender': mockUser.gender,
-        'birthday': mockUser.birthday?.toIso8601String(),
-        'enrollments': [
-          {
-            'subject_id': 'mock_sub_1',
-            'subject_name': 'Science 10',
-            'subject_code': 'SCI10',
-            'section_name': 'Rizal',
-            'grade_level': 'Grade 10',
-            'teacher_name': 'Teacher Ramos',
-          }
-        ],
-      },
-      'classwork': [],
-    };
-    _cachedDashboard = StudentDashboardData.fromJson(data);
-    return _cachedDashboard!;
+  StudentDashboardData _fallbackForAuthenticatedUser(
+    firebase_auth.User authUser,
+  ) {
+    final currentUser = AuthRepository.instance.currentUser;
+    final student =
+        currentUser != null &&
+            currentUser.id == authUser.uid &&
+            currentUser.role == UserRole.student
+        ? currentUser
+        : UserModel(
+            id: authUser.uid,
+            username: authUser.email ?? '',
+            fullName: authUser.displayName ?? '',
+            email: authUser.email ?? '',
+            role: UserRole.student,
+            studentId: authUser.uid,
+          );
+    final dashboard = StudentDashboardData(
+      student: student,
+      classwork: const [],
+      enrollments: const [],
+    );
+    _cachedDashboard = dashboard;
+    return dashboard;
   }
 }

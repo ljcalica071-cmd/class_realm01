@@ -13,7 +13,6 @@ import 'package:class_realm/features/student/sub_features/schedule/screens/stude
 import 'package:class_realm/features/student/sub_features/schedule/screens/student_schedule_screen.dart';
 import 'package:class_realm/models/student_dashboard_models.dart';
 import 'package:class_realm/models/user_model.dart';
-import 'package:class_realm/routes/app_routes.dart';
 import 'package:class_realm/widgets/common/app_modals.dart';
 import 'package:loading_animation_widget/loading_animation_widget.dart';
 
@@ -43,8 +42,9 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
       _loadError = null;
     });
     try {
-      final dashboard = await StudentDashboardRepository.instance
-          .loadDashboard(forceRefresh: forceRefresh);
+      final dashboard = await StudentDashboardRepository.instance.loadDashboard(
+        forceRefresh: forceRefresh,
+      );
       AuthRepository.instance.setCurrentUser(dashboard.student);
       if (mounted) setState(() => _dashboard = dashboard);
     } catch (error) {
@@ -59,46 +59,52 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
     final theme = Theme.of(context);
     if (_isLoading && _dashboard == null) {
       return Scaffold(
-        body: Center(
-          child: LoadingAnimationWidget.staggeredDotsWave(
-            color: theme.colorScheme.primary,
-            size: 48,
+        body: _mobileFrame(
+          context,
+          Center(
+            child: LoadingAnimationWidget.staggeredDotsWave(
+              color: theme.colorScheme.primary,
+              size: 48,
+            ),
           ),
         ),
       );
     }
     if (_loadError != null || _dashboard == null) {
       return Scaffold(
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  Icons.cloud_off_outlined,
-                  size: 42,
-                  color: theme.colorScheme.error,
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  'We could not load your student dashboard.',
-                  textAlign: TextAlign.center,
-                  style: theme.textTheme.titleMedium,
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  _loadError.toString(),
-                  textAlign: TextAlign.center,
-                  style: theme.textTheme.bodySmall,
-                ),
-                const SizedBox(height: 16),
-                FilledButton.icon(
-                  onPressed: () => _loadDashboard(forceRefresh: true),
-                  icon: const Icon(Icons.refresh),
-                  label: const Text('Try again'),
-                ),
-              ],
+        body: _mobileFrame(
+          context,
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.cloud_off_outlined,
+                    size: 42,
+                    color: theme.colorScheme.error,
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'We could not load your student dashboard.',
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    _loadError.toString(),
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.bodySmall,
+                  ),
+                  const SizedBox(height: 16),
+                  FilledButton.icon(
+                    onPressed: () => _loadDashboard(forceRefresh: true),
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Try again'),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -163,8 +169,14 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
             ),
             onPressed: () {
               final isDark = theme.brightness != Brightness.dark;
-              AppTheme.themeModeNotifier.value = isDark ? ThemeMode.dark : ThemeMode.light;
-              LocalStorageService.saveUserThemeMode(student.id, isDark, email: student.email);
+              AppTheme.themeModeNotifier.value = isDark
+                  ? ThemeMode.dark
+                  : ThemeMode.light;
+              LocalStorageService.saveUserThemeMode(
+                student.id,
+                isDark,
+                email: student.email,
+              );
             },
           ),
         ],
@@ -176,7 +188,7 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
             : null,
       ),
       drawer: _buildStudentDrawer(context, student),
-      body: pages[_currentIndex],
+      body: _mobileFrame(context, pages[_currentIndex]),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
         onTap: (index) => setState(() => _currentIndex = index),
@@ -216,6 +228,20 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _mobileFrame(BuildContext context, Widget child) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth <= 600) return child;
+        return Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 520),
+            child: child,
+          ),
+        );
+      },
     );
   }
 
@@ -283,7 +309,10 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
             context,
             icon: Icons.schedule_outlined,
             title: 'My Schedule',
-            onTap: () => _openPage(context, StudentScheduleScreen(dashboardData: _dashboard!)),
+            onTap: () => _openPage(
+              context,
+              StudentScheduleScreen(dashboardData: _dashboard!),
+            ),
           ),
           _drawerItem(
             context,
@@ -358,7 +387,6 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
     List<StudentEnrollmentModel> enrollments,
   ) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
     final pending =
         classwork
             .where(
@@ -553,8 +581,7 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
               context,
               icon: Icons.task_alt_outlined,
               title: 'You are all caught up!',
-              message:
-                  'When your teacher posts an activity or assignment, it will appear here.',
+              message: 'When your teacher posts an activity or assignment, it will appear here.',
             )
           else
             ...todoItems.map(
@@ -632,7 +659,9 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
                     ),
                   ),
                 Text(
-                  item.subjectName.isNotEmpty ? item.subjectName : 'Enrolled Subject',
+                  item.subjectName.isNotEmpty
+                      ? item.subjectName
+                      : 'Enrolled Subject',
                   style: theme.textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),

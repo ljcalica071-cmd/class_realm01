@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:class_realm/core/theme/app_theme.dart';
+import 'package:class_realm/core/utils/parent_credential_helper.dart';
 import 'package:class_realm/routes/app_routes.dart';
 import 'package:class_realm/widgets/common/app_buttons.dart';
 import 'package:class_realm/widgets/common/app_modals.dart';
@@ -38,6 +39,46 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   void _handleSendOtp() {
     if (_emailController.text.isEmpty || !_emailController.text.contains('@')) {
       AppModals.showErrorDialog(context: context, title: 'Invalid Email', message: 'Please enter a valid registered email address.');
+      return;
+    }
+
+    if (ParentCredentialHelper.isParentDomain(_emailController.text)) {
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          contentPadding: const EdgeInsets.all(24),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(Icons.info_outline, color: Theme.of(context).colorScheme.primary, size: 22),
+              ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Text(
+                  'Parent Account Recovery',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+          content: const Text(
+            'Parent accounts (@classrealm.com) do not use email OTP codes. Please ask your child\'s Subject Teacher or Class Adviser to click "Reset Parent Password" in the Teacher Portal so you can sign in again using your default password.',
+            style: TextStyle(fontSize: 14, height: 1.5),
+          ),
+          actions: [
+            AppPrimaryButton(
+              label: 'Understood',
+              onPressed: () => Navigator.of(ctx).pop(),
+            ),
+          ],
+        ),
+      );
       return;
     }
 

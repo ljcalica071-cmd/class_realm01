@@ -2,7 +2,6 @@ import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/models/academic_models.dart';
 import 'package:class_realm/core/utils/deped_grading_engine.dart';
 
-
 class MockDatabase {
   // Singleton instance
   static final MockDatabase instance = MockDatabase._init();
@@ -124,7 +123,6 @@ class MockDatabase {
 
   // --- Helper CRUD Actions ---
 
-
   void logout() {
     currentUser = null;
   }
@@ -197,10 +195,9 @@ class MockDatabase {
         isSynced: syncStatus == SyncStatus.online,
       );
     } else {
-      final student = users.firstWhere(
-        (u) => u.studentId == studentId,
-        orElse: () => users.first,
-      );
+      final studentIndex = users.indexWhere((u) => u.studentId == studentId);
+      if (studentIndex == -1) return;
+      final student = users[studentIndex];
       attendanceRecords.add(
         AttendanceRecord(
           id: 'att_${DateTime.now().millisecondsSinceEpoch}',
@@ -359,7 +356,6 @@ class MockDatabase {
 
     return null; // success
   }
-
 
   void deactivateStudent(String id) {
     final idx = users.indexWhere((u) => u.id == id);

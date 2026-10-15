@@ -11,6 +11,8 @@ import 'package:class_realm/routes/app_routes.dart';
 import 'package:class_realm/widgets/common/app_buttons.dart';
 import 'package:class_realm/widgets/common/app_modals.dart';
 import 'package:loading_animation_widget/loading_animation_widget.dart';
+import 'package:class_realm/core/utils/parent_credential_helper.dart';
+import 'package:class_realm/data/repositories/supabase_parent_repository.dart';
 
 class FirstLoginScreen extends StatefulWidget {
   const FirstLoginScreen({super.key});
@@ -22,6 +24,8 @@ class FirstLoginScreen extends StatefulWidget {
 class _FirstLoginScreenState extends State<FirstLoginScreen> with SingleTickerProviderStateMixin {
   final _newPassCtrl = TextEditingController();
   final _confirmPassCtrl = TextEditingController();
+  final _parentPhoneCtrl = TextEditingController();
+  final _childLrnLast4Ctrl = TextEditingController();
   bool _obscureNew = true;
   bool _obscureConfirm = true;
   bool _isLoading = false;
@@ -64,6 +68,8 @@ class _FirstLoginScreenState extends State<FirstLoginScreen> with SingleTickerPr
   void dispose() {
     _newPassCtrl.dispose();
     _confirmPassCtrl.dispose();
+    _parentPhoneCtrl.dispose();
+    _childLrnLast4Ctrl.dispose();
     super.dispose();
   }
 
@@ -85,7 +91,68 @@ class _FirstLoginScreenState extends State<FirstLoginScreen> with SingleTickerPr
       return;
     }
 
-    if (user.role != UserRole.parent) {
+    if (user.role == UserRole.parent) {
+      final phone = _parentPhoneCtrl.text.trim();
+      final lrn4 = _childLrnLast4Ctrl.text.trim();
+
+      if (phone.length != 11 || !phone.startsWith('09')) {
+        setState(() => _isLoading = false);
+        AppModals.showErrorDialog(
+          context: context,
+          title: 'Phone Number Required',
+          message: 'Please enter your registered 11-digit mobile phone number starting with 09.',
+        );
+        return;
+      }
+
+      if (lrn4.length != 4) {
+        setState(() => _isLoading = false);
+        AppModals.showErrorDialog(
+          context: context,
+          title: 'LRN Required',
+          message: 'Please enter the last 4 digits of your linked child\'s 12-digit LRN.',
+        );
+        return;
+      }
+
+      final lastName = user.lastName ??
+          (user.fullName.contains(' ')
+              ? user.fullName.split(' ').last
+              : user.fullName);
+      final tempPassword = ParentCredentialHelper.generateTempPassword(
+        lastName,
+        user.birthday ?? DateTime.now(),
+      );
+
+      if (_newPassCtrl.text.trim().toLowerCase() == tempPassword.toLowerCase()) {
+        setState(() => _isLoading = false);
+        AppModals.showErrorDialog(
+          context: context,
+          title: 'Password Rule Violation',
+          message:
+              'Your new password cannot be the same as your temporary password. Please choose a different, secure password.',
+        );
+        return;
+      }
+
+      final verified = await SupabaseParentRepository()
+          .verifyParentIdentityForFirstLogin(
+        parentId: user.id,
+        contactNumber: phone,
+        childLrnLast4: lrn4,
+      );
+
+      if (!verified) {
+        setState(() => _isLoading = false);
+        AppModals.showErrorDialog(
+          context: context,
+          title: 'Identity Verification Failed',
+          message:
+              'Identity verification failed. Please enter the exact 11-digit phone number and the last 4 digits of your child\'s LRN registered with the teacher.',
+        );
+        return;
+      }
+    } else {
       late Map<String, dynamic> otpResponse;
       try {
         otpResponse = await AuthRepository.instance.sendFirstLoginOtp();
@@ -168,6 +235,130 @@ class _FirstLoginScreenState extends State<FirstLoginScreen> with SingleTickerPr
               fontSize: 12,
               color: isValid ? Colors.green.shade700 : Colors.grey.shade600,
               fontWeight: isValid ? FontWeight.w500 : FontWeight.normal,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildParentIdentityVerificationSection(ThemeData theme) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.primary.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: theme.colorScheme.primary.withValues(alpha: 0.2),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primary.withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.shield_outlined,
+                  size: 20,
+                  color: theme.colorScheme.primary,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Parent Identity Verification',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: theme.colorScheme.onSurface,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Confirm your registered details to verify and activate your account.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _parentPhoneCtrl,
+            keyboardType: TextInputType.number,
+            maxLength: 11,
+            inputFormatters: [
+              FilteringTextInputFormatter.digitsOnly,
+              LengthLimitingTextInputFormatter(11),
+            ],
+            buildCounter: (context, {required currentLength, required isFocused, maxLength}) => null,
+            decoration: InputDecoration(
+              labelText: 'Registered 11-Digit Phone Number *',
+              hintText: '09XXXXXXXXX',
+              hintStyle: const TextStyle(color: Color(0xFF94A3B8)),
+              filled: true,
+              fillColor: Colors.white,
+              prefixIcon: Icon(
+                Icons.phone_android_outlined,
+                size: 20,
+                color: theme.colorScheme.primary,
+              ),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide(color: theme.colorScheme.outline.withValues(alpha: 0.3)),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide(color: theme.colorScheme.primary, width: 1.5),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _childLrnLast4Ctrl,
+            keyboardType: TextInputType.number,
+            maxLength: 4,
+            inputFormatters: [
+              FilteringTextInputFormatter.digitsOnly,
+              LengthLimitingTextInputFormatter(4),
+            ],
+            buildCounter: (context, {required currentLength, required isFocused, maxLength}) => null,
+            decoration: InputDecoration(
+              labelText: 'Last 4 Digits of Child\'s LRN *',
+              hintText: 'e.g. 1234',
+              hintStyle: const TextStyle(color: Color(0xFF94A3B8)),
+              filled: true,
+              fillColor: Colors.white,
+              prefixIcon: Icon(
+                Icons.badge_outlined,
+                size: 20,
+                color: theme.colorScheme.primary,
+              ),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide(color: theme.colorScheme.outline.withValues(alpha: 0.3)),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide(color: theme.colorScheme.primary, width: 1.5),
+              ),
             ),
           ),
         ],
@@ -262,6 +453,11 @@ class _FirstLoginScreenState extends State<FirstLoginScreen> with SingleTickerPr
                             ),
                           ),
                           const SizedBox(height: 32),
+
+                          if (user?.role == UserRole.parent) ...[
+                            _buildParentIdentityVerificationSection(theme),
+                            const SizedBox(height: 20),
+                          ],
 
                           // New Password
                           TextField(

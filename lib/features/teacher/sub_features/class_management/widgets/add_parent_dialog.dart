@@ -11,6 +11,7 @@ import 'package:class_realm/widgets/common/app_text_field.dart';
 import 'package:class_realm/widgets/common/app_date_picker_field.dart';
 import 'package:class_realm/core/utils/validators.dart';
 import 'package:class_realm/core/services/email_service.dart';
+import 'package:class_realm/core/utils/parent_credential_helper.dart';
 
 import 'package:class_realm/data/repositories/supabase_parent_repository.dart';
 
@@ -59,7 +60,18 @@ class _AddParentDialogState extends State<AddParentDialog> {
   bool _isSubmitting = false;
 
   @override
+  void initState() {
+    super.initState();
+    _lastNameCtrl.addListener(_onLastNameChanged);
+  }
+
+  void _onLastNameChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
   void dispose() {
+    _lastNameCtrl.removeListener(_onLastNameChanged);
     _firstNameCtrl.dispose();
     _middleNameCtrl.dispose();
     _lastNameCtrl.dispose();
@@ -108,12 +120,8 @@ class _AddParentDialogState extends State<AddParentDialog> {
         ? _customRelationshipCtrl.text.trim() 
         : _relationship!;
 
-    final formattedLastName = lastName.toLowerCase().replaceAll(RegExp(r'\s+'), '');
-    final bdayStr =
-        '${_birthday!.year}${_birthday!.month.toString().padLeft(2, '0')}${_birthday!.day.toString().padLeft(2, '0')}';
-
-    final tempPassword = '$formattedLastName$bdayStr';
-    final parentEmail = '$formattedLastName@classrealm.com';
+    final tempPassword = ParentCredentialHelper.generateTempPassword(lastName, _birthday!);
+    final parentEmail = ParentCredentialHelper.generateEmail(lastName);
     final primaryStudent = _selectedStudents.first;
 
     UserModel? createdUser;
@@ -143,12 +151,14 @@ class _AddParentDialogState extends State<AddParentDialog> {
       }
     }
 
+    final finalEmail = createdUser?.email ?? parentEmail;
+
     // Also sync to MockDatabase
     final newParent = createdUser ??
         UserModel(
           id: 'parent_${DateTime.now().millisecondsSinceEpoch}',
-          username: parentEmail,
-          email: parentEmail,
+          username: finalEmail,
+          email: finalEmail,
           fullName: fullName,
           firstName: firstName,
           middleName: middleName,
@@ -172,7 +182,7 @@ class _AddParentDialogState extends State<AddParentDialog> {
       _showConfirmationDialog(
         context: context,
         fullName: fullName,
-        email: parentEmail,
+        email: finalEmail,
         contactNumber: contactNumber,
         tempPassword: tempPassword,
         linkedStudentName: _selectedStudents.map((s) => s.fullName).join(', '),
@@ -507,6 +517,8 @@ Instructions:
                     },
                   ),
                 ],
+                const SizedBox(height: 12),
+                _buildCredentialPreviewCard(Theme.of(context)),
                 const SizedBox(height: 16),
                 const _SectionLabel('Link Students'),
                 _buildLinkStudentSection(Theme.of(context)),
@@ -550,6 +562,138 @@ Instructions:
           ],
         ),
       ],
+    );
+  }
+
+  Widget _buildCredentialPreviewCard(ThemeData theme) {
+    final rawLastName = _lastNameCtrl.text.trim();
+    final sanitizedLastName = rawLastName.isNotEmpty
+        ? ParentCredentialHelper.sanitizeLastName(rawLastName)
+        : 'lastname';
+    final previewEmail = ParentCredentialHelper.generateEmail(
+      rawLastName.isNotEmpty ? rawLastName : 'lastname',
+    );
+    final previewPassword = _birthday != null
+        ? ParentCredentialHelper.generateTempPassword(
+            rawLastName.isNotEmpty ? rawLastName : 'lastname',
+            _birthday!,
+          )
+        : '$sanitizedLastName[YYYYMMDD]';
+
+    return Container(
+      margin: const EdgeInsets.only(top: 8, bottom: 8),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.primary.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: theme.colorScheme.primary.withValues(alpha: 0.2),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.badge_outlined,
+                size: 16,
+                color: theme.colorScheme.primary,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'LIVE CREDENTIAL PREVIEW',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.8,
+                  color: theme.colorScheme.primary,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Login Email',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.surface,
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(
+                          color: theme.colorScheme.outline.withValues(alpha: 0.25),
+                        ),
+                      ),
+                      child: Text(
+                        previewEmail,
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w700,
+                          color: theme.colorScheme.primary,
+                          fontFamily: 'monospace',
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Temporary Password',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.surface,
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(
+                          color: theme.colorScheme.outline.withValues(alpha: 0.25),
+                        ),
+                      ),
+                      child: Text(
+                        previewPassword,
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w700,
+                          color: _birthday != null
+                              ? AppTheme.catGreen
+                              : theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                          fontFamily: 'monospace',
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 
