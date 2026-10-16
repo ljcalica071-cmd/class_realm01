@@ -1,6 +1,4 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter/services.dart';
 import 'package:class_realm/core/constants/asset_paths.dart';
 import 'package:class_realm/core/services/local_storage_service.dart';
@@ -10,7 +8,6 @@ import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/routes/app_routes.dart';
 import 'package:class_realm/core/utils/validators.dart';
 import 'package:class_realm/shared/widgets/shared_widgets.dart';
-import 'package:loading_animation_widget/loading_animation_widget.dart';
 import 'package:class_realm/core/utils/parent_credential_helper.dart';
 import 'package:class_realm/data/repositories/supabase_parent_repository.dart';
 

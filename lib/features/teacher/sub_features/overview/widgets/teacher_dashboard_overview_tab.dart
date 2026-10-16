@@ -36,7 +36,6 @@ class _TeacherDashboardOverviewTabState
   int totalSections = 0;
   int totalStudents = 0;
   bool isLoadingStats = true;
-  String? _loadError;
   List<ScheduleModel> _schedules = [];
 
   @override
@@ -51,7 +50,6 @@ class _TeacherDashboardOverviewTabState
       if (mounted) {
         setState(() {
           isLoadingStats = false;
-          _loadError = 'Sign in as a teacher to load your dashboard.';
         });
       }
       return;
@@ -99,7 +97,6 @@ class _TeacherDashboardOverviewTabState
           totalStudents = 0;
           _schedules = [];
           isLoadingStats = false;
-          _loadError = null;
         });
       }
     }

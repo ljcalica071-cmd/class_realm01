@@ -655,7 +655,7 @@ class SubjectRepository {
     }
   }
 
-  /// Archives all subject offerings for a teacher and subject
+  /// Archives all subject offerings for a teacher and subject, synchronizing Drift & LocalStorage
   Future<void> archiveSubjectOffering({
     required String teacherId,
     required String subjectId,
@@ -665,9 +665,26 @@ class SubjectRepository {
         .update({'is_archived': true})
         .eq('teacher_id', teacherId)
         .eq('subject_id', subjectId);
+
+    try {
+      await AppDatabase.instance.updateOfferingsArchivedStatus(
+        teacherId: teacherId,
+        subjectId: subjectId,
+        isArchived: true,
+      );
+    } catch (e) {
+      debugPrint('Drift archive update notice: $e');
+    }
+
+    // Update LocalStorageService cache
+    final currentCached = LocalStorageService.getTeacherSubjects(teacherId);
+    final updated = currentCached
+        .where((s) => s['subject_id']?.toString() != subjectId)
+        .toList();
+    await LocalStorageService.saveTeacherSubjects(teacherId, updated);
   }
 
-  /// Restores all subject offerings for a teacher and subject
+  /// Restores all subject offerings for a teacher and subject, synchronizing Drift & LocalStorage
   Future<void> restoreSubjectOffering({
     required String teacherId,
     required String subjectId,
@@ -677,18 +694,472 @@ class SubjectRepository {
         .update({'is_archived': false})
         .eq('teacher_id', teacherId)
         .eq('subject_id', subjectId);
+
+    try {
+      await AppDatabase.instance.updateOfferingsArchivedStatus(
+        teacherId: teacherId,
+        subjectId: subjectId,
+        isArchived: false,
+      );
+    } catch (e) {
+      debugPrint('Drift restore update notice: $e');
+    }
+
+    // Resync active offerings from cloud into Drift & LocalStorage
+    await _syncOfferingsFromCloud(teacherId, '2026-2027');
   }
 
-  /// Permanently deletes subject offerings for a teacher and subject.
-  /// Note: Students remain unaffected in the system.
+  /// Safe child-to-parent cascade deletion for a single offering
+  Future<void> _cascadeDeleteOffering(String offeringId) async {
+    try {
+      // 1. Classwork items and submissions
+      try {
+        final classworks = await _client
+            .from('classwork_items')
+            .select('id')
+            .eq('subject_offering_id', offeringId);
+        final cwIds = (classworks as List)
+            .map((c) => c['id']?.toString())
+            .whereType<String>()
+            .toList();
+        if (cwIds.isNotEmpty) {
+          final subs = await _client
+              .from('student_classwork_submissions')
+              .select('id')
+              .inFilter('classwork_id', cwIds);
+          final subIds = (subs as List)
+              .map((s) => s['id']?.toString())
+              .whereType<String>()
+              .toList();
+          if (subIds.isNotEmpty) {
+            await _client
+                .from('submission_attachments')
+                .delete()
+                .inFilter('submission_id', subIds);
+            await _client
+                .from('student_classwork_submissions')
+                .delete()
+                .inFilter('id', subIds);
+          }
+          await _client
+              .from('classwork_attachments')
+              .delete()
+              .inFilter('classwork_id', cwIds);
+          await _client
+              .from('classwork_extensions')
+              .delete()
+              .inFilter('classwork_id', cwIds);
+          await _client
+              .from('classwork_items')
+              .delete()
+              .eq('subject_offering_id', offeringId);
+        }
+      } catch (e) {
+        debugPrint('Notice deleting classworks for $offeringId: $e');
+      }
+
+      // 2. Digital assessments
+      try {
+        final assessments = await _client
+            .from('digital_assessments')
+            .select('id')
+            .eq('subject_offering_id', offeringId);
+        final assessIds = (assessments as List)
+            .map((a) => a['id']?.toString())
+            .whereType<String>()
+            .toList();
+        if (assessIds.isNotEmpty) {
+          final attempts = await _client
+              .from('assessment_attempts')
+              .select('id')
+              .inFilter('assessment_id', assessIds);
+          final attemptIds = (attempts as List)
+              .map((a) => a['id']?.toString())
+              .whereType<String>()
+              .toList();
+          if (attemptIds.isNotEmpty) {
+            await _client
+                .from('anti_cheating_logs')
+                .delete()
+                .inFilter('attempt_id', attemptIds);
+            await _client
+                .from('assessment_responses')
+                .delete()
+                .inFilter('attempt_id', attemptIds);
+            await _client
+                .from('assessment_attempts')
+                .delete()
+                .inFilter('id', attemptIds);
+          }
+          final questions = await _client
+              .from('assessment_questions')
+              .select('id')
+              .inFilter('assessment_id', assessIds);
+          final qIds = (questions as List)
+              .map((q) => q['id']?.toString())
+              .whereType<String>()
+              .toList();
+          if (qIds.isNotEmpty) {
+            await _client
+                .from('assessment_question_options')
+                .delete()
+                .inFilter('question_id', qIds);
+            await _client
+                .from('assessment_questions')
+                .delete()
+                .inFilter('id', qIds);
+          }
+          await _client
+              .from('digital_assessment_extensions')
+              .delete()
+              .inFilter('assessment_id', assessIds);
+          await _client
+              .from('digital_assessments')
+              .delete()
+              .eq('subject_offering_id', offeringId);
+        }
+      } catch (e) {
+        debugPrint('Notice deleting assessments for $offeringId: $e');
+      }
+
+      // 3. Learning materials & folders
+      try {
+        final folders = await _client
+            .from('folders')
+            .select('id')
+            .eq('subject_offering_id', offeringId);
+        final folderIds = (folders as List)
+            .map((f) => f['id']?.toString())
+            .whereType<String>()
+            .toList();
+        if (folderIds.isNotEmpty) {
+          await _client
+              .from('learning_materials')
+              .delete()
+              .inFilter('folder_id', folderIds);
+          await _client
+              .from('folders')
+              .delete()
+              .eq('subject_offering_id', offeringId);
+        }
+      } catch (e) {
+        debugPrint('Notice deleting folders/materials for $offeringId: $e');
+      }
+
+      // 4. Attendance, gradebook sheets, term grades, schedule, enrollments
+      try {
+        await _client
+            .from('attendance_records')
+            .delete()
+            .eq('subject_offering_id', offeringId);
+      } catch (_) {}
+      try {
+        await _client
+            .from('gradebook_term_sheets')
+            .delete()
+            .eq('subject_offering_id', offeringId);
+      } catch (_) {}
+      try {
+        await _client
+            .from('term_grades')
+            .delete()
+            .eq('subject_offering_id', offeringId);
+      } catch (_) {}
+      try {
+        await _client
+            .from('teacher_schedule')
+            .delete()
+            .eq('subject_offering_id', offeringId);
+      } catch (_) {}
+      try {
+        await _client
+            .from('student_enrollments')
+            .delete()
+            .eq('subject_offering_id', offeringId);
+      } catch (_) {}
+
+      // 5. Delete offering row itself
+      await _client.from('subject_offerings').delete().eq('id', offeringId);
+    } catch (e) {
+      debugPrint('Cascade delete error for offering $offeringId: $e');
+      rethrow;
+    }
+  }
+
+  /// Permanently deletes all subject offerings for a teacher and subject with safe foreign-key cascade
+  /// Note: Student, parent, and user accounts remain completely untouched.
   Future<void> deleteSubjectOffering({
     required String teacherId,
     required String subjectId,
   }) async {
-    await _client
+    final offerings = await _client
         .from('subject_offerings')
-        .delete()
+        .select('id, section_id')
         .eq('teacher_id', teacherId)
         .eq('subject_id', subjectId);
+
+    final sectionIds = <String>{};
+    for (final off in (offerings as List)) {
+      final offId = off['id']?.toString();
+      final secId = off['section_id']?.toString();
+      if (secId != null) sectionIds.add(secId);
+      if (offId != null) {
+        await _cascadeDeleteOffering(offId);
+      }
+    }
+
+    // Clean up orphaned sections
+    for (final secId in sectionIds) {
+      try {
+        final remaining = await _client
+            .from('subject_offerings')
+            .select('id')
+            .eq('section_id', secId)
+            .limit(1);
+        if ((remaining as List).isEmpty) {
+          await _client.from('sections').delete().eq('id', secId);
+        }
+      } catch (_) {}
+    }
+
+    // Clean up orphaned subject
+    try {
+      final remainingSubjects = await _client
+          .from('subject_offerings')
+          .select('id')
+          .eq('subject_id', subjectId)
+          .limit(1);
+      if ((remainingSubjects as List).isEmpty) {
+        await _client.from('subjects').delete().eq('id', subjectId);
+      }
+    } catch (_) {}
+
+    // Update Drift SQLite & LocalStorageService
+    try {
+      await AppDatabase.instance.deleteOfferingsForSubject(
+        teacherId: teacherId,
+        subjectId: subjectId,
+      );
+    } catch (_) {}
+    final currentCached = LocalStorageService.getTeacherSubjects(teacherId);
+    final updatedCached = currentCached
+        .where((s) => s['subject_id']?.toString() != subjectId)
+        .toList();
+    await LocalStorageService.saveTeacherSubjects(teacherId, updatedCached);
+  }
+
+  /// Permanently deletes a single subject offering with safe cascade
+  Future<void> deleteSingleOffering(String offeringId) async {
+    final offRow = await _client
+        .from('subject_offerings')
+        .select('id, teacher_id, subject_id, section_id')
+        .eq('id', offeringId)
+        .maybeSingle();
+    if (offRow == null) return;
+
+    final teacherId = offRow['teacher_id']?.toString();
+    final secId = offRow['section_id']?.toString();
+    final subjectId = offRow['subject_id']?.toString();
+
+    await _cascadeDeleteOffering(offeringId);
+
+    if (secId != null) {
+      try {
+        final remaining = await _client
+            .from('subject_offerings')
+            .select('id')
+            .eq('section_id', secId)
+            .limit(1);
+        if ((remaining as List).isEmpty) {
+          await _client.from('sections').delete().eq('id', secId);
+        }
+      } catch (_) {}
+    }
+
+    if (subjectId != null) {
+      try {
+        final remainingSub = await _client
+            .from('subject_offerings')
+            .select('id')
+            .eq('subject_id', subjectId)
+            .limit(1);
+        if ((remainingSub as List).isEmpty) {
+          await _client.from('subjects').delete().eq('id', subjectId);
+        }
+      } catch (_) {}
+    }
+
+    try {
+      await AppDatabase.instance.deleteOfferingById(offeringId);
+    } catch (_) {}
+
+    if (teacherId != null) {
+      final currentCached = LocalStorageService.getTeacherSubjects(teacherId);
+      final updated = currentCached
+          .where((s) => s['id']?.toString() != offeringId)
+          .toList();
+      await LocalStorageService.saveTeacherSubjects(teacherId, updated);
+    }
+  }
+
+  /// Updates a subject, its grading configuration, and its sections
+  Future<void> updateSubjectAndSections({
+    required String teacherId,
+    required String subjectId,
+    required String subjectName,
+    required String gradeLevel,
+    required double wwWeight,
+    required double ptWeight,
+    required double exWeight,
+    required int termsTaught,
+    required String termBlock,
+    required double unitsPerTerm,
+    required double st1Weight,
+    required double st2Weight,
+    required double teWeight,
+    required List<Map<String, dynamic>> sections,
+    String schoolYear = '2026-2027',
+  }) async {
+    final cleanSubjectName = subjectName.trim();
+    final gLevel =
+        int.tryParse(gradeLevel.replaceAll(RegExp(r'[^0-9]'), '')) ?? 11;
+
+    // 1. Update subjects table
+    await _client.from('subjects').update({
+      'subject_name': cleanSubjectName,
+      'grade_level': gLevel,
+    }).eq('id', subjectId);
+
+    // 2. Resolve school year and term
+    final sy = await _client
+        .from('school_years')
+        .select('id')
+        .eq('year_name', schoolYear)
+        .maybeSingle();
+    final schoolYearId = sy?['id']?.toString() ?? 'sy_default';
+
+    final termRow = await _client
+        .from('terms')
+        .select('id')
+        .eq('school_year_id', schoolYearId)
+        .maybeSingle();
+    final termId = termRow?['id']?.toString() ?? 'term_default';
+
+    final resolvedTermBlock = termsTaught == 3
+        ? '1ST, 2ND, 3RD'
+        : termBlock.trim().isEmpty
+            ? (termsTaught == 1 ? 'FIRST TERM' : '1ST & 2ND')
+            : termBlock;
+
+    // 3. Update existing offerings weights and term metadata
+    final offeringUpdateData = {
+      'ww_weight': wwWeight,
+      'pt_weight': ptWeight,
+      'ex_weight': exWeight,
+      'terms_taught': termsTaught,
+      'term_block': resolvedTermBlock,
+      'units_per_term': unitsPerTerm,
+      'st1_weight': st1Weight,
+      'st2_weight': st2Weight,
+      'te_weight': teWeight,
+    };
+
+    try {
+      await _client
+          .from('subject_offerings')
+          .update(offeringUpdateData)
+          .eq('teacher_id', teacherId)
+          .eq('subject_id', subjectId);
+    } on PostgrestException catch (error) {
+      if (!_isMissingTermMetadata(error)) rethrow;
+      final legacy = Map<String, dynamic>.from(offeringUpdateData)
+        ..removeWhere((k, _) => _termMetadataColumns.contains(k));
+      await _client
+          .from('subject_offerings')
+          .update(legacy)
+          .eq('teacher_id', teacherId)
+          .eq('subject_id', subjectId);
+    }
+
+    // 4. Update or add sections
+    for (final secConfig in sections) {
+      final secName = (secConfig['name']?.toString() ?? '').trim();
+      if (secName.isEmpty) continue;
+
+      final existingOfferingId = secConfig['id']?.toString();
+
+      if (existingOfferingId != null &&
+          existingOfferingId.isNotEmpty &&
+          !existingOfferingId.startsWith('row_')) {
+        // Find existing offering's section_id
+        final off = await _client
+            .from('subject_offerings')
+            .select('section_id')
+            .eq('id', existingOfferingId)
+            .maybeSingle();
+        final secId = off?['section_id']?.toString();
+        if (secId != null) {
+          await _client
+              .from('sections')
+              .update({'section_name': secName, 'grade_level': gLevel})
+              .eq('id', secId);
+        }
+      } else {
+        // Newly added section: find or insert section, then insert subject_offering
+        final existingSec = await _client
+            .from('sections')
+            .select('id')
+            .eq('section_name', secName)
+            .eq('grade_level', gLevel)
+            .eq('school_year_id', schoolYearId)
+            .maybeSingle();
+
+        String sectionId;
+        if (existingSec != null) {
+          sectionId = existingSec['id'].toString();
+        } else {
+          final insSec = await _client
+              .from('sections')
+              .insert({
+                'section_name': secName,
+                'grade_level': gLevel,
+                'school_year_id': schoolYearId,
+                'is_archived': false,
+              })
+              .select('id')
+              .single();
+          sectionId = insSec['id'].toString();
+        }
+
+        final newOfferingData = {
+          'subject_id': subjectId,
+          'section_id': sectionId,
+          'teacher_id': teacherId,
+          'term_id': termId,
+          'ww_weight': wwWeight,
+          'pt_weight': ptWeight,
+          'ex_weight': exWeight,
+          'terms_taught': termsTaught,
+          'term_block': resolvedTermBlock,
+          'units_per_term': unitsPerTerm,
+          'st1_weight': st1Weight,
+          'st2_weight': st2Weight,
+          'te_weight': teWeight,
+          'is_archived': false,
+        };
+
+        try {
+          await _client.from('subject_offerings').insert(newOfferingData);
+        } on PostgrestException catch (error) {
+          if (!_isMissingTermMetadata(error)) rethrow;
+          final legacy = Map<String, dynamic>.from(newOfferingData)
+            ..removeWhere((k, _) => _termMetadataColumns.contains(k));
+          await _client.from('subject_offerings').insert(legacy);
+        }
+      }
+    }
+
+    // 5. Resync cloud offerings into local database and cache
+    await _syncOfferingsFromCloud(teacherId, schoolYear);
   }
 }

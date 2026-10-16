@@ -5,15 +5,12 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import 'package:class_realm/core/theme/app_theme.dart';
 import 'package:class_realm/models/user_model.dart';
-import 'package:loading_animation_widget/loading_animation_widget.dart';
 import 'package:class_realm/shared/widgets/shared_widgets.dart';
-import 'package:class_realm/features/teacher/sub_features/class_management/widgets/add_student_dialog.dart';
 import 'package:class_realm/features/teacher/sub_features/class_management/widgets/unified_enroll_student_dialog.dart';
 import 'package:class_realm/features/teacher/sub_features/class_management/widgets/edit_student_dialog.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/data/repositories/subject_repository.dart';
 import 'package:class_realm/data/repositories/supabase_student_repository.dart';
-import 'package:class_realm/data/datasources/mock/mock_database.dart';
 import 'package:class_realm/core/services/local_storage_service.dart';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -299,9 +296,6 @@ class _TeacherStudentManagementTabState
     final endIndex = (startIndex + _itemsPerPage).clamp(0, displayList.length);
     final paginatedList = displayList.sublist(startIndex, endIndex);
 
-    bool allSelected =
-        paginatedList.isNotEmpty &&
-        paginatedList.every((s) => _selectedStudentIds.contains(s.id));
 
     const colNumWidth = 56.0;
     const colLastNameWidth = 150.0;
@@ -1193,16 +1187,17 @@ class _TeacherStudentManagementTabState
                                           fontSize: 13,
                                         ),
                                       ),
-                                      onPressed: () {
+                                      onPressed: () async {
                                         final selectedCount =
                                             _selectedStudentIds.length;
+                                        for (final id
+                                            in _selectedStudentIds) {
+                                          await SupabaseStudentRepository()
+                                              .restoreStudent(id);
+                                        }
                                         setState(() {
-                                          for (final id
-                                              in _selectedStudentIds) {
-                                            MockDatabase.instance
-                                                .restoreStudent(id);
-                                          }
                                           _selectedStudentIds.clear();
+                                          _loadData();
                                         });
                                         ScaffoldMessenger.of(
                                           context,
@@ -1474,108 +1469,6 @@ class _TeacherStudentManagementTabState
     );
   }
 
-  void _showImportStudentsDialog(BuildContext context) {
-    showDialog<void>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text('Import Students'),
-        content: SizedBox(
-          width: 760,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              InkWell(
-                onTap: () {
-                  Navigator.of(dialogContext).pop();
-                  AppModals.showSuccessDialog(
-                    context: context,
-                    title: 'File Selected',
-                    message: 'Prototype only: the selected CSV or Excel file will be processed here.',
-                  );
-                },
-                borderRadius: BorderRadius.circular(8),
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 24,
-                    vertical: 28,
-                  ),
-                  decoration: BoxDecoration(
-                    border: Border.all(color: const Color(0xFFCBD5E1)),
-                    color: const Color(0xFFF8FAFC),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Column(
-                    children: [
-                      Icon(
-                        Icons.upload_file_outlined,
-                        size: 42,
-                        color: Color(0xFF94A3B8),
-                      ),
-                      SizedBox(height: 12),
-                      Text(
-                        'Click to select a CSV or Excel file',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      SizedBox(height: 8),
-                      Text(
-                        'Accepted: .csv, .xlsx, .xls',
-                        style: TextStyle(color: Color(0xFF475569)),
-                      ),
-                      SizedBox(height: 12),
-                      Text(
-                        'Required: LRN, Last Name, First Name, Gender, Birthday, Email, Student Contact, Parent Name, Parent Contact, Relationship',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: Color(0xFF475569)),
-                      ),
-                      SizedBox(height: 4),
-                      Text(
-                        'Optional: Middle Name',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: Color(0xFF475569)),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Please follow the format shown above so the system can accept the file. Download the template to ensure the columns and format are correct.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Color(0xFF475569), fontSize: 13),
-              ),
-              const SizedBox(height: 12),
-              ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF0F8A48),
-                  foregroundColor: Colors.white,
-                ),
-                icon: Icon(Icons.description_outlined),
-                label: Text('Download Template'),
-                onPressed: () {
-                  AppModals.showSuccessDialog(
-                    context: context,
-                    title: 'Template Ready',
-                    message: 'Student import template downloaded. Fill in the required columns before importing.',
-                  );
-                },
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: Text('Close'),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildPageButton(
     String label,
     VoidCallback onTap,
@@ -1603,36 +1496,5 @@ class _TeacherStudentManagementTabState
         ),
       ),
     );
-  }
-}
-
-class _SyncScrollController {
-  final ScrollController controller1 = ScrollController();
-  final ScrollController controller2 = ScrollController();
-  bool _isScrolling1 = false;
-  bool _isScrolling2 = false;
-
-  _SyncScrollController() {
-    controller1.addListener(() {
-      if (_isScrolling2) return;
-      _isScrolling1 = true;
-      if (controller1.hasClients && controller2.hasClients) {
-        controller2.jumpTo(controller1.offset);
-      }
-      _isScrolling1 = false;
-    });
-    controller2.addListener(() {
-      if (_isScrolling1) return;
-      _isScrolling2 = true;
-      if (controller1.hasClients && controller2.hasClients) {
-        controller1.jumpTo(controller2.offset);
-      }
-      _isScrolling2 = false;
-    });
-  }
-
-  void dispose() {
-    controller1.dispose();
-    controller2.dispose();
   }
 }

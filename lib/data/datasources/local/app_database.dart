@@ -88,6 +88,38 @@ class AppDatabase extends _$AppDatabase {
         .watch();
   }
 
+  /// Update archive status for subject offerings of a teacher and subject
+  Future<void> updateOfferingsArchivedStatus({
+    required String teacherId,
+    required String subjectId,
+    required bool isArchived,
+  }) async {
+    await (update(localSubjectOfferings)
+          ..where((t) =>
+              t.teacherId.equals(teacherId) & t.subjectId.equals(subjectId)))
+        .write(LocalSubjectOfferingsCompanion(
+      isArchived: Value(isArchived),
+    ));
+  }
+
+  /// Delete offerings for a teacher and subject
+  Future<void> deleteOfferingsForSubject({
+    required String teacherId,
+    required String subjectId,
+  }) async {
+    await (delete(localSubjectOfferings)
+          ..where((t) =>
+              t.teacherId.equals(teacherId) & t.subjectId.equals(subjectId)))
+        .go();
+  }
+
+  /// Delete a single offering by id
+  Future<void> deleteOfferingById(String offeringId) async {
+    await (delete(localSubjectOfferings)
+          ..where((t) => t.id.equals(offeringId)))
+        .go();
+  }
+
   /// Get all local students (Instant 0ms read)
   Future<List<LocalStudent>> getAllStudents() {
     return select(localStudents).get();

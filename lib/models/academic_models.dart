@@ -683,6 +683,8 @@ class ScheduleModel {
     this.exWeight,
   });
 
+  String get subjectName => subject;
+
   int get startMinutes => _parseTimeToMinutes(startTime);
   int get endMinutes => _parseTimeToMinutes(endTime);
   int get durationMinutes => endMinutes - startMinutes;

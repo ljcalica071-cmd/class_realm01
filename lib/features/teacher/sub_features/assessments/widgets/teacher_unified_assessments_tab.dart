@@ -6,7 +6,6 @@ import 'package:class_realm/data/mock_database.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/data/repositories/subject_repository.dart';
 import 'package:class_realm/data/repositories/teacher_classwork_repository.dart';
-import 'package:class_realm/data/repositories/supabase_teacher_classwork_repository.dart';
 import 'package:class_realm/models/academic_models.dart';
 import 'package:class_realm/shared/widgets/shared_widgets.dart';
 import 'package:class_realm/features/teacher/sub_features/assessments/screens/create_assessment_flow.dart';

@@ -379,6 +379,11 @@ class SupabaseStudentRepository implements StudentRepository {
           .from('student_enrollments')
           .update({'status': 'Archived'})
           .match({'student_id': id, 'subject_id': subjectId});
+    } else {
+      await _client
+          .from('student_enrollments')
+          .update({'status': 'Archived'})
+          .eq('student_id', id);
     }
   }
 
@@ -389,6 +394,11 @@ class SupabaseStudentRepository implements StudentRepository {
           .from('student_enrollments')
           .update({'status': 'Enrolled'})
           .match({'student_id': id, 'subject_id': subjectId});
+    } else {
+      await _client
+          .from('student_enrollments')
+          .update({'status': 'Enrolled'})
+          .eq('student_id', id);
     }
   }
 
@@ -405,6 +415,8 @@ class SupabaseStudentRepository implements StudentRepository {
         'student_id': id,
         'subject_id': subjectId,
       });
+    } else {
+      await _client.from('student_enrollments').delete().eq('student_id', id);
     }
   }
 }

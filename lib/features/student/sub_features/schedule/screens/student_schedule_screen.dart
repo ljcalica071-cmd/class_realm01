@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:class_realm/core/theme/app_theme.dart';
 import 'package:class_realm/data/repositories/supabase_schedule_repository.dart';
 import 'package:class_realm/models/academic_models.dart';
 import 'package:class_realm/models/student_dashboard_models.dart';

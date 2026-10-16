@@ -1,5 +1,3 @@
-import 'dart:math';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:class_realm/core/theme/app_theme.dart';
@@ -10,7 +8,6 @@ import 'package:class_realm/widgets/common/app_modals.dart';
 import 'package:class_realm/widgets/common/app_text_field.dart';
 import 'package:class_realm/widgets/common/app_date_picker_field.dart';
 import 'package:class_realm/core/utils/validators.dart';
-import 'package:class_realm/core/services/email_service.dart';
 import 'package:class_realm/core/utils/parent_credential_helper.dart';
 
 import 'package:class_realm/data/repositories/supabase_parent_repository.dart';
@@ -555,7 +552,8 @@ Instructions:
             AppPrimaryButton(
               label: 'Create Account',
               icon: Icons.person_add_alt_1,
-              onPressed: _submit,
+              isLoading: _isSubmitting,
+              onPressed: _isSubmitting ? null : _submit,
               width: 200,
               height: 44,
             ),

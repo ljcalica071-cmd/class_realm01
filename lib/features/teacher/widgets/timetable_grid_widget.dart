@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:class_realm/models/academic_models.dart';
+import 'package:class_realm/core/theme/subject_palette.dart';
 
 class TimetableGridWidget extends StatelessWidget {
   final List<ScheduleModel> schedules;
@@ -24,34 +25,24 @@ class TimetableGridWidget extends StatelessWidget {
     'Sunday',
   ];
 
-  Color _getSectionColor(String section) {
-    const pastelPalette = [
-      Color(0xFFE0F2FE), // Sky
-      Color(0xFFDCFCE7), // Emerald
-      Color(0xFFFEF3C7), // Amber
-      Color(0xFFF3E8FF), // Purple
-      Color(0xFFFFE4E6), // Rose
-      Color(0xFFCFFAFE), // Cyan
-      Color(0xFFFCE7F3), // Pink
-      Color(0xFFE0E7FF), // Indigo
-      Color(0xFFD1FAE5), // Mint
-      Color(0xFFFFEDD5), // Orange
-    ];
-    final hash = section.hashCode.abs();
-    return pastelPalette[hash % pastelPalette.length];
+  Color _getSectionColor(String subject, BuildContext context) {
+    final uniqueSubjects = schedules.map((s) => s.subject).toSet().toList();
+    final baseColor = SubjectPalette.getColorForSubject(
+      subject,
+      teacherSubjectNames: uniqueSubjects,
+    );
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return SubjectPalette.getPastelBackground(baseColor, isDark: isDark);
   }
 
-  Color _getSubjectDarkColor(String subject) {
-    final hash = subject.hashCode.abs();
-    final colors = const [
-      Color(0xFF1E3A8A),
-      Color(0xFF14532D),
-      Color(0xFF7C2D12),
-      Color(0xFF831843),
-      Color(0xFF4C1D95),
-      Color(0xFF92400E),
-    ];
-    return colors[hash % colors.length];
+  Color _getSubjectDarkColor(String subject, BuildContext context) {
+    final uniqueSubjects = schedules.map((s) => s.subject).toSet().toList();
+    final baseColor = SubjectPalette.getColorForSubject(
+      subject,
+      teacherSubjectNames: uniqueSubjects,
+    );
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return SubjectPalette.getTextColor(baseColor, isDark: isDark);
   }
 
   String _formatTimeLabel(int slotIndex) {
@@ -128,7 +119,8 @@ class TimetableGridWidget extends StatelessWidget {
                   child: Stack(
                     children: [
                       _buildGridBackground(dayWidth),
-                      ...schedules.map((s) => _buildScheduleBlock(s, dayWidth)),
+                      ...schedules
+                          .map((s) => _buildScheduleBlock(s, dayWidth, context)),
                     ],
                   ),
                 ),
@@ -235,7 +227,11 @@ class TimetableGridWidget extends StatelessWidget {
     );
   }
 
-  Widget _buildScheduleBlock(ScheduleModel s, double dayWidth) {
+  Widget _buildScheduleBlock(
+    ScheduleModel s,
+    double dayWidth,
+    BuildContext context,
+  ) {
     final int dayIndex = days.indexOf(s.dayOfWeek);
     if (dayIndex == -1) return const SizedBox.shrink();
 
@@ -248,8 +244,8 @@ class TimetableGridWidget extends StatelessWidget {
     final double topOffset = startMinutesRelative * pixelsPerMinute;
     final double blockHeight = s.durationMinutes * pixelsPerMinute;
 
-    final Color bgColor = _getSectionColor(s.section);
-    final Color textColor = _getSubjectDarkColor(s.subject);
+    final Color bgColor = _getSectionColor(s.subject, context);
+    final Color textColor = _getSubjectDarkColor(s.subject, context);
 
     return Positioned(
       left: timeColumnWidth + (dayIndex * dayWidth) + 4,

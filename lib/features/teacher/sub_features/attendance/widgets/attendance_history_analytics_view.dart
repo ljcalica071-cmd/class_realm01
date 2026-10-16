@@ -39,11 +39,9 @@ class _AttendanceHistoryAnalyticsViewState
   late DateTime _customEndDate;
 
   bool _isLoadingAnalytics = true;
-  String? _analyticsError;
   AttendanceAnalyticsSummary? _analyticsSummary;
 
   bool _isLoadingHistory = true;
-  String? _historyError;
   List<AttendanceWorkspaceRecord> _historyRows = [];
   int _historyOffset = 0;
   bool _historyHasMore = false;
@@ -105,7 +103,6 @@ class _AttendanceHistoryAnalyticsViewState
   Future<void> _loadAnalytics() async {
     setState(() {
       _isLoadingAnalytics = true;
-      _analyticsError = null;
     });
 
     try {
@@ -122,7 +119,6 @@ class _AttendanceHistoryAnalyticsViewState
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _analyticsError = null;
         _analyticsSummary = const AttendanceAnalyticsSummary(
           presenceRate: null,
           absencesAndExcuses: 0,
@@ -142,7 +138,6 @@ class _AttendanceHistoryAnalyticsViewState
   Future<void> _loadInitialHistory() async {
     setState(() {
       _isLoadingHistory = true;
-      _historyError = null;
       _historyRows = [];
       _historyOffset = 0;
       _historyHasMore = false;
@@ -168,7 +163,6 @@ class _AttendanceHistoryAnalyticsViewState
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _historyError = null;
         _historyRows = [];
         _isLoadingHistory = false;
       });
@@ -1325,37 +1319,6 @@ class _AttendanceHistoryAnalyticsViewState
           fontSize: 10,
           fontWeight: FontWeight.bold,
         ),
-      ),
-    );
-  }
-
-  Widget _buildErrorCard(ThemeData theme, String message, {VoidCallback? onRetry}) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.error.withValues(alpha: 0.05),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: theme.colorScheme.error.withValues(alpha: 0.2),
-        ),
-      ),
-      child: Row(
-        children: [
-          Icon(LucideIcons.alertCircle, color: theme.colorScheme.error, size: 24),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              message,
-              style: TextStyle(color: theme.colorScheme.error, fontSize: 13),
-            ),
-          ),
-          if (onRetry != null)
-            AppButton.outline(
-              label: 'Retry',
-              isSmall: true,
-              onPressed: onRetry,
-            ),
-        ],
       ),
     );
   }

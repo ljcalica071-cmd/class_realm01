@@ -5,6 +5,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/data/mock_database.dart';
 import 'package:class_realm/core/utils/parent_credential_helper.dart';
+import 'package:class_realm/data/repositories/supabase_learning_material_repository.dart';
+
 
 class SupabaseParentRepository {
   final SupabaseClient _client;
@@ -824,4 +826,60 @@ class SupabaseParentRepository {
     await _client.from('parent_profiles').delete().eq('parent_id', parentId);
     await _client.from('users').delete().eq('id', parentId);
   }
+
+  /// Read-only helper: fetches learning materials for a parent's linked student,
+  /// ensuring enrollment isolation and hierarchical visibility.
+  Future<List<Map<String, dynamic>>> getStudentLearningMaterialsForParent({
+    required String parentId,
+    required String studentId,
+  }) async {
+    try {
+      // 1. Verify link between parent and student
+      final link = await _client
+          .from('parent_student_links')
+          .select('student_id')
+          .eq('parent_id', parentId)
+          .eq('student_id', studentId)
+          .maybeSingle();
+
+      if (link == null) return [];
+
+      // 2. Fetch enrolled subject offerings
+      final enrollments = await _client
+          .from('student_enrollments')
+          .select('subject_offering_id')
+          .eq('student_id', studentId)
+          .eq('status', 'enrolled');
+
+      if (enrollments == null || (enrollments as List).isEmpty) return [];
+
+      final offeringIds = (enrollments as List)
+          .map((e) => e['subject_offering_id']?.toString())
+          .whereType<String>()
+          .toList();
+
+      // 3. Fetch materials using hierarchical visibility
+      final materials = <Map<String, dynamic>>[];
+      for (final oId in offeringIds) {
+        final list = await SupabaseLearningMaterialRepository.instance
+            .getStudentMaterialsWithHierarchy(subjectOfferingId: oId);
+        for (final m in list) {
+          materials.add({
+            'id': m.id,
+            'title': m.displayName,
+            'fileName': m.fileName,
+            'format': m.fileExtension,
+            'size': m.formattedSize,
+            'description': m.description,
+            'createdAt': m.createdAt.toIso8601String(),
+          });
+        }
+      }
+      return materials;
+    } catch (e) {
+      debugPrint('Error getting student materials for parent: $e');
+      return [];
+    }
+  }
 }
+

@@ -7,6 +7,7 @@ import 'package:class_realm/data/repositories/subject_repository.dart';
 import 'package:class_realm/features/teacher/sub_features/class_management/widgets/unified_enroll_student_dialog.dart';
 import 'package:class_realm/models/subject_catalog_model.dart';
 import 'package:class_realm/shared/widgets/shared_widgets.dart';
+import 'package:class_realm/core/theme/subject_palette.dart';
 import 'package:loading_animation_widget/loading_animation_widget.dart';
 
 /// Pre-defined grading templates
@@ -65,6 +66,12 @@ class _SubjectClass {
   final int wwWeight;
   final int ptWeight;
   final int exWeight;
+  final int termsTaught;
+  final String termBlock;
+  final double unitsPerTerm;
+  final double st1Weight;
+  final double st2Weight;
+  final double teWeight;
   final List<_ClassSection> sections;
 
   _SubjectClass({
@@ -75,6 +82,12 @@ class _SubjectClass {
     required this.wwWeight,
     required this.ptWeight,
     required this.exWeight,
+    this.termsTaught = 3,
+    this.termBlock = '1ST, 2ND, 3RD',
+    this.unitsPerTerm = 2.0,
+    this.st1Weight = 30.0,
+    this.st2Weight = 30.0,
+    this.teWeight = 40.0,
     required this.sections,
   });
 
@@ -85,10 +98,11 @@ class _SubjectClass {
 /// Editable section row inside the add form.
 class _SectionRowDraft {
   final String id;
+  final bool isExisting;
   final TextEditingController nameCtrl = TextEditingController();
   final FocusNode focusNode = FocusNode();
 
-  _SectionRowDraft(this.id);
+  _SectionRowDraft(this.id, {this.isExisting = false});
 
   void dispose() {
     nameCtrl.dispose();
@@ -116,6 +130,7 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
 
   bool _showAddForm = false;
   bool _isViewingArchived = false;
+  _SubjectClass? _editingSubject;
 
   final List<_SubjectClass> _subjects = [];
   final List<_SubjectClass> _archivedSubjects = [];
@@ -142,6 +157,7 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
   // ── Validation state ──
   bool _submitted = false;
   String? _subjectError;
+  String? _termBlockError;
   final Map<String, String> _sectionErrors = {};
 
   bool _isLoadingSubjects = false;
@@ -325,58 +341,6 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
                     alignment: WrapAlignment.end,
                     crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
-                      // View Archived / Active Toggle Button
-                      OutlinedButton.icon(
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 11,
-                          ),
-                          side: BorderSide(
-                            color: _isViewingArchived
-                                ? theme.colorScheme.primary
-                                : theme.colorScheme.outline.withValues(
-                                    alpha: 0.35,
-                                  ),
-                          ),
-                          backgroundColor: _isViewingArchived
-                              ? theme.colorScheme.primary.withValues(
-                                  alpha: 0.08,
-                                )
-                              : Colors.transparent,
-                        ),
-                        onPressed: () {
-                          setState(() {
-                            _isViewingArchived = !_isViewingArchived;
-                            _showAddForm = false;
-                          });
-                        },
-                        icon: Icon(
-                          _isViewingArchived
-                              ? LucideIcons.layers
-                              : LucideIcons.archive,
-                          size: 16,
-                          color: _isViewingArchived
-                              ? theme.colorScheme.primary
-                              : theme.colorScheme.onSurface.withValues(
-                                  alpha: 0.8,
-                                ),
-                        ),
-                        label: Text(
-                          _isViewingArchived
-                              ? 'Active Subjects (${_subjects.length})'
-                              : 'Archived Subjects (${_archivedSubjects.length})',
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: _isViewingArchived
-                                ? theme.colorScheme.primary
-                                : theme.colorScheme.onSurface.withValues(
-                                    alpha: 0.85,
-                                  ),
-                          ),
-                        ),
-                      ),
                       AppButton.outline(
                         icon: LucideIcons.calendar,
                         label: 'Timetable & Schedule',
@@ -432,12 +396,21 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
                 ),
               ),
               const Spacer(),
-              if (_isViewingArchived)
-                TextButton.icon(
-                  onPressed: () => setState(() => _isViewingArchived = false),
-                  icon: const Icon(LucideIcons.arrowLeft, size: 14),
-                  label: const Text('Back to Active Subjects'),
-                ),
+              AppButton.outline(
+                icon: _isViewingArchived
+                    ? LucideIcons.bookOpen
+                    : LucideIcons.archive,
+                label: _isViewingArchived
+                    ? 'Active Subjects (${_subjects.length})'
+                    : 'Archived Subjects (${_archivedSubjects.length})',
+                onPressed: () {
+                  setState(() {
+                    _isViewingArchived = !_isViewingArchived;
+                    _showAddForm = false;
+                    _editingSubject = null;
+                  });
+                },
+              ),
             ],
           ),
 
@@ -577,6 +550,7 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
             return _buildResponsiveSubjectCard(
               _subjects[index],
               isArchived: false,
+              index: index,
             );
           },
         );
@@ -665,6 +639,7 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
             return _buildResponsiveSubjectCard(
               _archivedSubjects[index],
               isArchived: true,
+              index: index,
             );
           },
         );
@@ -678,14 +653,21 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
   Widget _buildResponsiveSubjectCard(
     _SubjectClass subject, {
     required bool isArchived,
+    int index = 0,
   }) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final muted = theme.colorScheme.onSurface.withValues(alpha: 0.6);
     final sectionCount = subject.sections.length;
 
-    // Distinct theme colors based on subject name
-    final cardAccentColor = _getSubjectAccentColor(subject.name);
+    // Deterministic unique accessible color per teacher's subjects
+    final cardAccentColor = SubjectPalette.getColorForSubject(
+      subject.name,
+      teacherSubjectNames: (isArchived ? _archivedSubjects : _subjects)
+          .map((s) => s.name)
+          .toList(),
+      index: index,
+    );
 
     return Container(
       decoration: BoxDecoration(
@@ -719,44 +701,11 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Header: Subject Icon Avatar, Subject Info, Actions ──
+          // ── Header: Subject Info, Actions ──
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Visual Subject Avatar
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: isArchived
-                        ? [Colors.grey.shade400, Colors.grey.shade600]
-                        : [
-                            cardAccentColor,
-                            cardAccentColor.withValues(alpha: 0.75),
-                          ],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: isArchived
-                      ? []
-                      : [
-                          BoxShadow(
-                            color: cardAccentColor.withValues(alpha: 0.3),
-                            blurRadius: 8,
-                            offset: const Offset(0, 3),
-                          ),
-                        ],
-                ),
-                child: Icon(
-                  _getSubjectIcon(subject.name),
-                  size: 22,
-                  color: Colors.white,
-                ),
-              ),
-              const SizedBox(width: 12),
-              // Subject Title and Grade
+              // Clean Left-Aligned Subject Title and Grade (No avatar box)
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -774,13 +723,13 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
                         ],
                       ],
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 6),
                     Text(
                       subject.name,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        fontSize: 15,
+                        fontSize: 16,
                         fontWeight: FontWeight.bold,
                         color: isArchived ? muted : theme.colorScheme.onSurface,
                       ),
@@ -788,29 +737,14 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
                   ],
                 ),
               ),
-              // Archive / Delete Actions
-              if (isArchived) ...[
+              // Archive / Edit Actions on Active Cards (Archived cards have actions in footer)
+              if (!isArchived) ...[
                 IconButton(
-                  tooltip: 'Restore to Active',
+                  tooltip: 'Edit subject and sections',
                   visualDensity: VisualDensity.compact,
-                  icon: Icon(
-                    LucideIcons.rotateCcw,
-                    size: 17,
-                    color: theme.colorScheme.primary,
-                  ),
-                  onPressed: () => _restoreSubject(subject),
+                  icon: Icon(LucideIcons.pencil, size: 17, color: muted),
+                  onPressed: () => _openEditSubjectForm(subject),
                 ),
-                IconButton(
-                  tooltip: 'Permanently Delete',
-                  visualDensity: VisualDensity.compact,
-                  icon: Icon(
-                    LucideIcons.trash2,
-                    size: 17,
-                    color: theme.colorScheme.error,
-                  ),
-                  onPressed: () => _confirmPermanentDelete(subject),
-                ),
-              ] else ...[
                 IconButton(
                   tooltip: 'Archive subject',
                   visualDensity: VisualDensity.compact,
@@ -977,30 +911,21 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
 
           // ── Footer Action Buttons ──
           if (!isArchived)
-            Row(
-              children: [
-                Expanded(
-                  child: AppButton.primary(
-                    icon: LucideIcons.userPlus,
-                    label: 'Add Students',
-                    onPressed: () {
-                      final firstSec = subject.sections.isNotEmpty
-                          ? subject.sections.first
-                          : null;
-                      _openEnrollmentDialog(
-                        initialSubjectId: firstSec?.id,
-                        initialSectionName: firstSec?.name,
-                      );
-                    },
-                  ),
-                ),
-                const SizedBox(width: 8),
-                TextButton.icon(
-                  onPressed: () => widget.onNavigateTo?.call(14),
-                  icon: const Icon(LucideIcons.calendar, size: 14),
-                  label: const Text('Schedule', style: TextStyle(fontSize: 12)),
-                ),
-              ],
+            SizedBox(
+              width: double.infinity,
+              child: AppButton.primary(
+                icon: LucideIcons.userPlus,
+                label: 'Add Students',
+                onPressed: () {
+                  final firstSec = subject.sections.isNotEmpty
+                      ? subject.sections.first
+                      : null;
+                  _openEnrollmentDialog(
+                    initialSubjectId: firstSec?.id,
+                    initialSectionName: firstSec?.name,
+                  );
+                },
+              ),
             )
           else
             Row(
@@ -1008,26 +933,39 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
                 Expanded(
                   child: OutlinedButton.icon(
                     style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
                       side: BorderSide(color: theme.colorScheme.primary),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
                     ),
-                    icon: const Icon(LucideIcons.rotateCcw, size: 14),
+                    icon: const Icon(LucideIcons.rotateCcw, size: 15),
                     label: const Text(
                       'Restore Subject',
-                      style: TextStyle(fontSize: 12),
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
                     ),
                     onPressed: () => _restoreSubject(subject),
                   ),
                 ),
-                const SizedBox(width: 8),
-                IconButton(
-                  tooltip: 'Permanently Delete',
-                  icon: Icon(
-                    LucideIcons.trash2,
-                    size: 16,
-                    color: theme.colorScheme.error,
+                const SizedBox(width: 12),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      backgroundColor: theme.colorScheme.error.withValues(alpha: 0.08),
+                      side: BorderSide(color: theme.colorScheme.error),
+                      foregroundColor: theme.colorScheme.error,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                    icon: const Icon(LucideIcons.trash2, size: 15),
+                    label: const Text(
+                      'Delete Permanently',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                    ),
+                    onPressed: () => _confirmPermanentDelete(subject),
                   ),
-                  onPressed: () => _confirmPermanentDelete(subject),
                 ),
               ],
             ),
@@ -1036,42 +974,110 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
     );
   }
 
-  Color _getSubjectAccentColor(String name) {
-    final lower = name.toLowerCase();
-    if (lower.contains('math')) return const Color(0xFF2563EB); // Royal Blue
-    if (lower.contains('science')) {
-      return const Color(0xFF059669); // Emerald Green
+  void _openEditSubjectForm(_SubjectClass subject) {
+    for (final row in _sectionRows) {
+      row.dispose();
     }
-    if (lower.contains('comm') || lower.contains('komunikasyon')) {
-      return const Color(0xFF7C3AED); // Purple
+    _sectionRows.clear();
+    for (final sec in subject.sections) {
+      final draft = _SectionRowDraft(sec.id, isExisting: true);
+      draft.nameCtrl.text = sec.name;
+      _sectionRows.add(draft);
     }
-    if (lower.contains('career') || lower.contains('life')) {
-      return const Color(0xFFD97706); // Amber
+    if (_sectionRows.isEmpty) {
+      _sectionRows.add(_SectionRowDraft(_newId('row')));
     }
-    if (lower.contains('kasaysayan') ||
-        lower.contains('history') ||
-        lower.contains('lipunan')) {
-      return const Color(0xFFDC2626); // Crimson
-    }
-    return const Color(0xFF0D9488); // Teal Default
+
+    setState(() {
+      _editingSubject = subject;
+      _selectedTemplate = null;
+      _subjectCtrl.text = subject.name;
+      _gradeLevel = subject.gradeLevel;
+      _wwCtrl.text = subject.wwWeight.toString();
+      _ptCtrl.text = subject.ptWeight.toString();
+      _exCtrl.text = subject.exWeight.toString();
+      _termsTaught = subject.termsTaught;
+      _termBlock = subject.termBlock;
+      _unitsPerTerm = subject.unitsPerTerm;
+      _st1Weight = subject.st1Weight;
+      _st2Weight = subject.st2Weight;
+      _teWeight = subject.teWeight;
+      _showAddForm = true;
+      _submitted = false;
+      _subjectError = null;
+      _termBlockError = null;
+      _sectionErrors.clear();
+    });
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _subjectFocus.requestFocus();
+    });
   }
 
-  IconData _getSubjectIcon(String name) {
-    final lower = name.toLowerCase();
-    if (lower.contains('math')) return LucideIcons.binary;
-    if (lower.contains('science')) return LucideIcons.atom;
-    if (lower.contains('comm') || lower.contains('komunikasyon')) {
-      return LucideIcons.messageSquare;
-    }
-    if (lower.contains('career') || lower.contains('life')) {
-      return LucideIcons.briefcase;
-    }
-    if (lower.contains('kasaysayan') ||
-        lower.contains('history') ||
-        lower.contains('lipunan')) {
-      return LucideIcons.landmark;
-    }
-    return LucideIcons.bookOpen;
+  Future<bool> _confirmDeleteSection(String sectionName) async {
+    final result = await _showConstrainedDialog<bool>(
+      context: context,
+      maxWidth: 440,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.error.withValues(alpha: 0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  LucideIcons.alertTriangle,
+                  size: 20,
+                  color: Theme.of(context).colorScheme.error,
+                ),
+              ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Text(
+                  'Remove Section?',
+                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Text(
+            'Removing "$sectionName" will permanently delete that section\'s offering records (student enrollments, attendance, gradebook scores, schedules, and classwork for that section).',
+            style: TextStyle(
+              fontSize: 13,
+              height: 1.45,
+              color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.85),
+            ),
+          ),
+          const SizedBox(height: 20),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
+              const SizedBox(width: 8),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Theme.of(context).colorScheme.error,
+                  foregroundColor: Theme.of(context).colorScheme.onError,
+                  elevation: 0,
+                ),
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Remove Section'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+    return result ?? false;
   }
 
   void _openEnrollmentDialog({
@@ -1261,6 +1267,7 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
                     : value == 1
                     ? 'FIRST TERM'
                     : '1ST & 2ND';
+                _termBlockError = null;
               });
             },
           ),
@@ -1289,6 +1296,8 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
 
     final termBlockField = _buildLabeledField(
       label: 'Term Block (Active Term)',
+      isRequired: true,
+      error: _termBlockError,
       field: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1296,13 +1305,15 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
             padding: const EdgeInsets.symmetric(horizontal: 12),
             decoration: BoxDecoration(
               border: Border.all(
-                color: theme.colorScheme.outline.withValues(alpha: 0.4),
+                color: _termBlockError != null
+                    ? theme.colorScheme.error
+                    : theme.colorScheme.outline.withValues(alpha: 0.4),
               ),
               borderRadius: BorderRadius.circular(12),
             ),
             child: DropdownButtonHideUnderline(
               child: DropdownButton<String>(
-                value: _termBlock,
+                value: _termBlock.isNotEmpty ? _termBlock : null,
                 isExpanded: true,
                 items: termBlockOptions
                     .map(
@@ -1318,7 +1329,12 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
                 onChanged: _termsTaught == 3
                     ? null
                     : (value) {
-                        if (value != null) setState(() => _termBlock = value);
+                        if (value != null) {
+                          setState(() {
+                            _termBlock = value;
+                            _termBlockError = null;
+                          });
+                        }
                       },
               ),
             ),
@@ -1435,7 +1451,9 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
           Row(
             children: [
               Text(
-                'Add Subject & Sections',
+                _editingSubject != null
+                    ? 'Edit Subject & Sections'
+                    : 'Add Subject & Sections',
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
@@ -1575,7 +1593,9 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
                         size: 28,
                       )
                     : AppButton.primary(
-                        label: 'Save Subject',
+                        label: _editingSubject != null
+                            ? 'Save Changes'
+                            : 'Save Subject',
                         onPressed: isTotalValid ? _saveSubject : null,
                       ),
               ],
@@ -1693,8 +1713,30 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
     );
   }
 
-  void _removeSectionRow(_SectionRowDraft row) {
+  void _removeSectionRow(_SectionRowDraft row) async {
     if (_sectionRows.length <= 1) return;
+
+    if (row.isExisting && _editingSubject != null) {
+      final confirmed = await _confirmDeleteSection(row.nameCtrl.text);
+      if (!confirmed) return;
+
+      try {
+        await SubjectRepository.instance.deleteSingleOffering(row.id);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Section "${row.nameCtrl.text}" removed.')),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed to remove section: $e')),
+          );
+        }
+        return;
+      }
+    }
+
     setState(() {
       _sectionRows.remove(row);
       _sectionErrors.remove(row.id);
@@ -1719,12 +1761,21 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
       subjectError = 'Subject name is required.';
     } else if (name.length < 2) {
       subjectError = 'Subject name is too short.';
-    } else if (_subjects.any(
-      (s) =>
-          s.name.toLowerCase() == name.toLowerCase() &&
-          s.gradeLevel == _gradeLevel,
-    )) {
+    } else if (_subjects
+        .where((s) =>
+            s.id != _editingSubject?.id &&
+            s.subjectId != _editingSubject?.subjectId)
+        .any(
+          (s) =>
+              s.name.toLowerCase() == name.toLowerCase() &&
+              s.gradeLevel == _gradeLevel,
+        )) {
       subjectError = 'You already have this subject for $_gradeLevel.';
+    }
+
+    String? termBlockError;
+    if (_termsTaught < 3 && _termBlock.trim().isEmpty) {
+      termBlockError = 'Term block is required.';
     }
 
     final sectionErrors = <String, String>{};
@@ -1747,11 +1798,15 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
 
     setState(() {
       _subjectError = subjectError;
+      _termBlockError = termBlockError;
       _sectionErrors
         ..clear()
         ..addAll(sectionErrors);
     });
-    return subjectError == null && sectionErrors.isEmpty && _isWeightValid;
+    return subjectError == null &&
+        termBlockError == null &&
+        sectionErrors.isEmpty &&
+        _isWeightValid;
   }
 
   Future<void> _loadSubjects() async {
@@ -1783,6 +1838,13 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
           final ww = (row['ww_weight'] as num?)?.toInt() ?? 20;
           final pt = (row['pt_weight'] as num?)?.toInt() ?? 50;
           final ex = (row['ex_weight'] as num?)?.toInt() ?? 30;
+          final termsTaught = (row['terms_taught'] as num?)?.toInt() ?? 3;
+          final termBlock = row['term_block']?.toString() ?? '1ST, 2ND, 3RD';
+          final unitsPerTerm =
+              (row['units_per_term'] as num?)?.toDouble() ?? 2.0;
+          final st1Weight = (row['st1_weight'] as num?)?.toDouble() ?? 30.0;
+          final st2Weight = (row['st2_weight'] as num?)?.toDouble() ?? 30.0;
+          final teWeight = (row['te_weight'] as num?)?.toDouble() ?? 40.0;
 
           final key = '${name}_$gl';
           if (!grouped.containsKey(key)) {
@@ -1794,6 +1856,12 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
               wwWeight: ww,
               ptWeight: pt,
               exWeight: ex,
+              termsTaught: termsTaught,
+              termBlock: termBlock,
+              unitsPerTerm: unitsPerTerm,
+              st1Weight: st1Weight,
+              st2Weight: st2Weight,
+              teWeight: teWeight,
               sections: [],
             );
           }
@@ -1825,6 +1893,8 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
     if (!_validate()) {
       if (_subjectError != null) {
         _subjectFocus.requestFocus();
+      } else if (_termBlockError != null) {
+        // Validation error for term block
       } else if (_sectionErrors.isNotEmpty) {
         final firstInvalid = _sectionRows.firstWhere(
           (row) => _sectionErrors.containsKey(row.id),
@@ -1845,30 +1915,62 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
     setState(() => _isSaving = true);
 
     try {
-      await SubjectRepository.instance.saveSubjects(
-        teacherId: teacherId,
-        subjectName: _subjectCtrl.text.trim(),
-        gradeLevel: _gradeLevel,
-        wwWeight: double.parse(_wwCtrl.text),
-        ptWeight: double.parse(_ptCtrl.text),
-        exWeight: double.parse(_exCtrl.text),
-        sectionNames: _sectionRows.map((r) => r.nameCtrl.text.trim()).toList(),
-        schoolYear: _currentSchoolYear,
-        termsTaught: _termsTaught,
-        termBlock: _termBlock,
-        unitsPerTerm: _unitsPerTerm,
-        st1Weight: _st1Weight,
-        st2Weight: _st2Weight,
-        teWeight: _teWeight,
-      );
+      if (_editingSubject != null) {
+        await SubjectRepository.instance.updateSubjectAndSections(
+          subjectId: _editingSubject!.subjectId,
+          teacherId: teacherId,
+          subjectName: _subjectCtrl.text.trim(),
+          gradeLevel: _gradeLevel,
+          wwWeight: double.parse(_wwCtrl.text),
+          ptWeight: double.parse(_ptCtrl.text),
+          exWeight: double.parse(_exCtrl.text),
+          schoolYear: _currentSchoolYear,
+          termsTaught: _termsTaught,
+          termBlock: _termBlock,
+          unitsPerTerm: _unitsPerTerm,
+          st1Weight: _st1Weight,
+          st2Weight: _st2Weight,
+          teWeight: _teWeight,
+          sections: _sectionRows
+              .map((r) => {
+                    'id': r.id,
+                    'name': r.nameCtrl.text.trim(),
+                    'isExisting': r.isExisting,
+                  })
+              .toList(),
+        );
+      } else {
+        await SubjectRepository.instance.saveSubjects(
+          teacherId: teacherId,
+          subjectName: _subjectCtrl.text.trim(),
+          gradeLevel: _gradeLevel,
+          wwWeight: double.parse(_wwCtrl.text),
+          ptWeight: double.parse(_ptCtrl.text),
+          exWeight: double.parse(_exCtrl.text),
+          sectionNames:
+              _sectionRows.map((r) => r.nameCtrl.text.trim()).toList(),
+          schoolYear: _currentSchoolYear,
+          termsTaught: _termsTaught,
+          termBlock: _termBlock,
+          unitsPerTerm: _unitsPerTerm,
+          st1Weight: _st1Weight,
+          st2Weight: _st2Weight,
+          teWeight: _teWeight,
+        );
+      }
 
       await _loadSubjects();
 
       if (mounted) {
+        final isEdit = _editingSubject != null;
         _resetForm(close: true);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Subject and sections saved successfully!'),
+          SnackBar(
+            content: Text(
+              isEdit
+                  ? 'Subject and sections updated successfully!'
+                  : 'Subject and sections saved successfully!',
+            ),
           ),
         );
       }
@@ -1889,6 +1991,7 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
       row.dispose();
     }
     setState(() {
+      _editingSubject = null;
       _selectedTemplate = null;
       _subjectCtrl.clear();
       _wwCtrl.clear();
@@ -1906,6 +2009,7 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
         ..add(_SectionRowDraft(_newId('row')));
       _submitted = false;
       _subjectError = null;
+      _termBlockError = null;
       _sectionErrors.clear();
       if (close) _showAddForm = false;
     });

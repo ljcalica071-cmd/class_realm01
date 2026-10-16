@@ -4,7 +4,6 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
-import 'package:loading_animation_widget/loading_animation_widget.dart';
 
 import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/features/auth/services/login_attempt_limiter.dart';
