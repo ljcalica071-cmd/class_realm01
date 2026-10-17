@@ -145,14 +145,16 @@ class AdminProfileTab extends StatelessWidget {
                   const SizedBox(height: 12),
                   LayoutBuilder(
                     builder: (context, detailsConstraints) {
-                      final columns = detailsConstraints.maxWidth >= 700 ? 2 : 1;
+                      final columns = detailsConstraints.maxWidth >= 900
+                          ? 3
+                          : (detailsConstraints.maxWidth >= 600 ? 2 : 1);
                       return GridView.count(
                         crossAxisCount: columns,
                         shrinkWrap: true,
                         physics: const NeverScrollableScrollPhysics(),
                         crossAxisSpacing: 16,
                         mainAxisSpacing: 16,
-                        childAspectRatio: columns == 1 ? 4.2 : 2.8,
+                        childAspectRatio: columns == 1 ? 4.2 : 2.5,
                         children: [
                           _ProfileDetailCard(
                             icon: Icons.badge_outlined,
@@ -168,11 +170,6 @@ class AdminProfileTab extends StatelessWidget {
                             icon: Icons.alternate_email,
                             label: 'Email address',
                             value: email,
-                          ),
-                          _ProfileDetailCard(
-                            icon: Icons.fingerprint,
-                            label: 'Account ID',
-                            value: user.id,
                           ),
                         ],
                       );

@@ -30,7 +30,7 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
   Future<void> _addTeacher() async {
     final created = await showGeneralDialog<bool>(
       context: context,
-      barrierDismissible: true,
+      barrierDismissible: false,
       barrierLabel: 'Close',
       barrierColor: Colors.black.withValues(alpha: 0.5),
       transitionDuration: const Duration(milliseconds: 250),
@@ -141,10 +141,8 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Wrap(
-            alignment: WrapAlignment.spaceBetween,
-            runSpacing: 12,
-            spacing: 12,
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
                 'Teacher Accounts Directory',
@@ -153,11 +151,6 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
                   fontWeight: FontWeight.bold,
                   color: theme.colorScheme.onSurface,
                 ),
-              ),
-              FilledButton.icon(
-                onPressed: _addTeacher,
-                icon: const Icon(Icons.person_add_alt_1),
-                label: const Text('Add Teacher'),
               ),
             ],
           ),
@@ -178,6 +171,21 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
                     hintText: 'Search teachers by name or email...',
                     prefixIcon: Icon(Icons.search, size: 20),
                     isDense: true,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              SizedBox(
+                height: 44,
+                child: FilledButton.icon(
+                  onPressed: _addTeacher,
+                  icon: const Icon(Icons.person_add_alt_1, size: 18),
+                  label: const Text('Add Teacher'),
+                  style: FilledButton.styleFrom(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
                   ),
                 ),
               ),

@@ -30,6 +30,8 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog> {
   String? _gender;
   DateTime? _birthday;
   bool _isLoading = false;
+  bool _isResending = false;
+  bool _isVerifying = false;
   bool _submitted = false;
   String? _error;
   String? _successMessage;
@@ -43,7 +45,9 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog> {
   int _resendSecondsRemaining = 0;
   int _failedAttempts = 0;
   String? _activeChallengeEmail;
+  DateTime? _activeChallengeExpiresAt;
 
+  bool get _isAnyBusy => _isLoading || _isResending || _isVerifying;
   bool get _isLockedOut => _failedAttempts >= 5;
 
   @override
@@ -88,14 +92,16 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog> {
 
     final email = _emailController.text.trim().toLowerCase();
 
-    // Anti-spam mechanism: If active OTP already sent to this exact email and 60s cooldown is still ticking,
-    // seamlessly proceed directly to Step 2 without spamming duplicate email or triggering server rate limit
-    if (_activeChallengeEmail == email && _resendSecondsRemaining > 0) {
+    // Anti-spam mechanism: If active OTP already sent to this exact email and 10-minute expiry is still active,
+    // seamlessly proceed directly to Step 2 without spamming duplicate email or generating a new code.
+    if (_activeChallengeEmail == email &&
+        _activeChallengeExpiresAt != null &&
+        DateTime.now().isBefore(_activeChallengeExpiresAt!)) {
       setState(() {
         _step = TeacherCreationStep.otpVerification;
         _error = null;
         _successMessage =
-            'A 6-digit verification OTP code has been sent to ${_emailController.text.trim()}.';
+            'An active verification code is already valid for ${_emailController.text.trim()}.';
       });
       Future.delayed(const Duration(milliseconds: 150), () {
         if (mounted) _otpFocusNode.requestFocus();
@@ -121,9 +127,24 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog> {
       );
 
       _activeChallengeEmail = email;
+      final expiresAtStr = res['expiresAt']?.toString();
+      if (expiresAtStr != null) {
+        _activeChallengeExpiresAt = DateTime.tryParse(expiresAtStr);
+      } else {
+        _activeChallengeExpiresAt =
+            DateTime.now().add(const Duration(minutes: 10));
+      }
+
       final remainingCooldown =
           (res['remainingCooldownSeconds'] as num?)?.toInt() ?? 60;
-      _startResendTimer(remainingCooldown);
+      if (res['reused'] == true) {
+        if (_resendSecondsRemaining <= 0 && remainingCooldown > 0) {
+          _startResendTimer(remainingCooldown);
+        }
+      } else {
+        _startResendTimer(remainingCooldown);
+      }
+
       if (res['failedAttempts'] != null) {
         _failedAttempts = (res['failedAttempts'] as num).toInt();
       }
@@ -132,8 +153,9 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog> {
         setState(() {
           _step = TeacherCreationStep.otpVerification;
           _error = null;
-          _successMessage =
-              'A 6-digit verification OTP code has been sent to ${_emailController.text.trim()}.';
+          _successMessage = res['reused'] == true
+              ? 'An active verification code is already valid for ${_emailController.text.trim()}.'
+              : 'A 6-digit verification OTP code has been sent to ${_emailController.text.trim()}.';
         });
         Future.delayed(const Duration(milliseconds: 150), () {
           if (mounted) _otpFocusNode.requestFocus();
@@ -141,6 +163,8 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog> {
       }
     } catch (error) {
       if (!mounted) return;
+      _activeChallengeEmail = null;
+      _activeChallengeExpiresAt = null;
       setState(() => _error = _messageFor(error));
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -148,10 +172,10 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog> {
   }
 
   Future<void> _resendOtpCode() async {
-    if (_resendSecondsRemaining > 0 || _isLoading || _isLockedOut) return;
+    if (_resendSecondsRemaining > 0 || _isAnyBusy || _isLockedOut) return;
 
     setState(() {
-      _isLoading = true;
+      _isResending = true;
       _error = null;
       _successMessage = null;
     });
@@ -169,6 +193,14 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog> {
       );
       if (mounted) {
         _activeChallengeEmail = email;
+        final expiresAtStr = res['expiresAt']?.toString();
+        if (expiresAtStr != null) {
+          _activeChallengeExpiresAt = DateTime.tryParse(expiresAtStr);
+        } else {
+          _activeChallengeExpiresAt =
+              DateTime.now().add(const Duration(minutes: 10));
+        }
+
         _startResendTimer(60);
         if (res['failedAttempts'] != null) {
           _failedAttempts = (res['failedAttempts'] as num).toInt();
@@ -195,12 +227,12 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog> {
         setState(() => _error = _messageFor(error));
       }
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) setState(() => _isResending = false);
     }
   }
 
   Future<void> _verifyOtpAndCreate() async {
-    if (_isLockedOut) return;
+    if (_isAnyBusy || _isLockedOut) return;
 
     final code = _otpController.text.trim();
     if (code.length != 6) {
@@ -209,7 +241,7 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog> {
     }
 
     setState(() {
-      _isLoading = true;
+      _isVerifying = true;
       _error = null;
     });
 
@@ -264,7 +296,7 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog> {
         }
       }
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) setState(() => _isVerifying = false);
     }
   }
 
@@ -282,7 +314,7 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog> {
               controller: _otpController,
               focusNode: _otpFocusNode,
               autofocus: true,
-              enabled: !_isLockedOut,
+              enabled: !_isLockedOut && !_isAnyBusy,
               keyboardType: TextInputType.number,
               inputFormatters: [
                 FilteringTextInputFormatter.digitsOnly,
@@ -292,7 +324,7 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog> {
                 setState(() {
                   if (!_isLockedOut) _error = null;
                 });
-                if (val.length == 6 && !_isLockedOut && !_isLoading) {
+                if (val.length == 6 && !_isLockedOut && !_isAnyBusy) {
                   _verifyOtpAndCreate();
                 }
               },
@@ -372,6 +404,9 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog> {
   }
 
   String _messageFor(Object error) {
+    if (error is AdminTeacherException) {
+      return error.message;
+    }
     String msg = error.toString().replaceFirst('Exception: ', '');
     if (msg.contains('details:')) {
       final match = RegExp(r'error:\s*([^,\}]+)').firstMatch(msg);
@@ -533,8 +568,10 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog> {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    return Dialog(
-      backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+    return PopScope(
+      canPop: !_isAnyBusy,
+      child: Dialog(
+        backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
       elevation: 8,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(24),
@@ -752,6 +789,10 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog> {
                             controller: _emailController,
                             keyboardType: TextInputType.emailAddress,
                             textInputAction: TextInputAction.done,
+                            inputFormatters: AppValidators.emailFormatters,
+                            autovalidateMode: _submitted
+                                ? AutovalidateMode.onUserInteraction
+                                : AutovalidateMode.onUserInteraction,
                             onFieldSubmitted: (_) => _sendOtpCode(),
                             decoration: _inputDecoration(
                               theme,
@@ -815,7 +856,7 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog> {
                                 ),
                                 const SizedBox(height: 2),
                                 Text(
-                                  'Check the 6-digit code sent to ${_emailController.text}.',
+                                  'Check the 6-digit code sent to ${_emailController.text}. (Valid for 10 minutes)',
                                   style: TextStyle(
                                     fontSize: 13,
                                     color: theme.colorScheme.onSurface,
@@ -846,176 +887,97 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog> {
                   ],
                 )
 
-              // --- STEP 3: SUCCESS & CREDENTIALS ---
+              // --- STEP 3: SUCCESS CONFIRMATION ---
               else
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
+                    const SizedBox(height: 12),
                     Container(
-                      width: 60,
-                      height: 60,
+                      width: 68,
+                      height: 68,
                       decoration: BoxDecoration(
-                        color: Colors.green.shade50,
+                        color: Colors.green.withValues(alpha: 0.12),
                         shape: BoxShape.circle,
-                        border: Border.all(color: Colors.green.shade300, width: 2),
+                        border: Border.all(
+                          color: Colors.green.shade400,
+                          width: 2.5,
+                        ),
                       ),
-                      child: Icon(
-                        LucideIcons.circleCheck,
-                        color: Colors.green.shade700,
-                        size: 34,
+                      child: Center(
+                        child: Icon(
+                          LucideIcons.check,
+                          color: Colors.green.shade600,
+                          size: 38,
+                        ),
                       ),
                     ),
-                    const SizedBox(height: 14),
+                    const SizedBox(height: 18),
                     Text(
                       'Teacher Account Created Successfully!',
                       textAlign: TextAlign.center,
                       style: theme.textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.w800,
-                        fontSize: 18,
+                        fontSize: 20,
+                        color: theme.colorScheme.onSurface,
                       ),
                     ),
-                    const SizedBox(height: 6),
-                    Text(
-                      'An automated welcome email with these credentials has been sent to $_createdEmail.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
-                      ),
-                    ),
-                    const SizedBox(height: 18),
-
-                    // Credentials Card
-                    Container(
-                      padding: const EdgeInsets.all(18),
-                      decoration: BoxDecoration(
-                        color: isDark ? const Color(0xFF0F172A) : Colors.grey.shade50,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: isDark ? Colors.white12 : Colors.grey.shade300,
+                    const SizedBox(height: 10),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Text(
+                        'The new teacher account has been successfully created and registered. An automated welcome email has been sent to ${_createdEmail ?? _emailController.text.trim()}.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 14,
+                          height: 1.5,
+                          color: theme.colorScheme.onSurface
+                              .withValues(alpha: 0.75),
                         ),
                       ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                    ),
+                    const SizedBox(height: 24),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 18,
+                        vertical: 14,
+                      ),
+                      decoration: BoxDecoration(
+                        color: isDark
+                            ? Colors.white.withValues(alpha: 0.05)
+                            : const Color(0xFFF1F5F9),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: isDark
+                              ? Colors.white12
+                              : const Color(0xFFE2E8F0),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                'TEACHER LOGIN CREDENTIALS',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w800,
-                                  letterSpacing: 0.8,
-                                  color: theme.colorScheme.primary,
-                                ),
-                              ),
-                              FilledButton.tonalIcon(
-                                onPressed: _copyCredentials,
-                                icon: Icon(
-                                  _copied ? LucideIcons.check : LucideIcons.copy,
-                                  size: 14,
-                                  color: _copied ? Colors.green : theme.colorScheme.primary,
-                                ),
-                                label: Text(_copied ? 'Copied!' : 'Copy'),
-                                style: FilledButton.styleFrom(
-                                  visualDensity: VisualDensity.compact,
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 10, vertical: 4),
-                                ),
-                              ),
-                            ],
+                          Icon(
+                            LucideIcons.shieldCheck,
+                            size: 18,
+                            color: theme.colorScheme.primary,
                           ),
-                          const Divider(height: 16),
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const SizedBox(
-                                width: 130,
-                                child: Text('Full Name:',
-                                    style: TextStyle(
-                                        fontSize: 13, color: Colors.grey)),
+                          const SizedBox(width: 10),
+                          Flexible(
+                            child: Text(
+                              'Teacher will be prompted to set their new password upon first login.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                                color: theme.colorScheme.onSurface
+                                    .withValues(alpha: 0.8),
                               ),
-                              Expanded(
-                                child: Text(
-                                  _createdFullName ?? '',
-                                  style: const TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const SizedBox(
-                                width: 130,
-                                child: Text('Email Address:',
-                                    style: TextStyle(
-                                        fontSize: 13, color: Colors.grey)),
-                              ),
-                              Expanded(
-                                child: Text(
-                                  _createdEmail ?? '',
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.bold,
-                                    color: theme.colorScheme.primary,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const SizedBox(
-                                width: 130,
-                                child: Text('Temporary Password:',
-                                    style: TextStyle(
-                                        fontSize: 13, color: Colors.grey)),
-                              ),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 3),
-                                decoration: BoxDecoration(
-                                  color: theme.colorScheme.primaryContainer
-                                      .withValues(alpha: 0.4),
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: Text(
-                                  _createdPassword ?? '',
-                                  style: const TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.bold,
-                                    letterSpacing: 1.1,
-                                  ),
-                                ),
-                              ),
-                            ],
+                            ),
                           ),
                         ],
                       ),
                     ),
                     const SizedBox(height: 12),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(LucideIcons.info, size: 14, color: Colors.grey.shade600),
-                        const SizedBox(width: 6),
-                        Text(
-                          'Teacher will be prompted to set their new password upon first login.',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
-                          ),
-                        ),
-                      ],
-                    ),
                   ],
                 ),
 
@@ -1058,7 +1020,7 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog> {
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
                     OutlinedButton(
-                      onPressed: _isLoading ? null : () => Navigator.pop(context),
+                      onPressed: _isAnyBusy ? null : () => Navigator.pop(context),
                       style: OutlinedButton.styleFrom(
                         backgroundColor: isDark
                             ? Colors.white.withValues(alpha: 0.08)
@@ -1079,7 +1041,7 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog> {
                     ),
                     const SizedBox(width: 12),
                     FilledButton(
-                      onPressed: _isLoading ? null : _sendOtpCode,
+                      onPressed: _isAnyBusy ? null : _sendOtpCode,
                       style: FilledButton.styleFrom(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 20,
@@ -1110,7 +1072,7 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     OutlinedButton.icon(
-                      onPressed: _isLoading
+                      onPressed: _isAnyBusy
                           ? null
                           : () {
                               setState(() {
@@ -1140,16 +1102,12 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog> {
                     ),
                     Row(
                       children: [
-                        OutlinedButton.icon(
-                          onPressed: (_isLoading ||
+                        OutlinedButton(
+                          onPressed: (_isAnyBusy ||
                                   _resendSecondsRemaining > 0 ||
                                   _isLockedOut)
                               ? null
                               : _resendOtpCode,
-                          icon: const Icon(LucideIcons.refreshCw, size: 14),
-                          label: Text(_resendSecondsRemaining > 0
-                              ? 'Resend (${_resendSecondsRemaining}s)'
-                              : 'Resend'),
                           style: OutlinedButton.styleFrom(
                             backgroundColor: isDark
                                 ? Colors.white.withValues(alpha: 0.08)
@@ -1169,11 +1127,38 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog> {
                               borderRadius: BorderRadius.circular(12),
                             ),
                           ),
+                          child: _isResending
+                              ? Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    SizedBox(
+                                      width: 14,
+                                      height: 14,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: theme.colorScheme.primary,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    const Text('Resending...'),
+                                  ],
+                                )
+                              : Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(LucideIcons.refreshCw, size: 14),
+                                    const SizedBox(width: 6),
+                                    Text(_resendSecondsRemaining > 0
+                                        ? 'Resend (${_resendSecondsRemaining}s)'
+                                        : 'Resend'),
+                                  ],
+                                ),
                         ),
                         const SizedBox(width: 8),
                         FilledButton(
-                          onPressed:
-                              (_isLoading || _isLockedOut) ? null : _verifyOtpAndCreate,
+                          onPressed: (_isAnyBusy || _isLockedOut)
+                              ? null
+                              : _verifyOtpAndCreate,
                           style: FilledButton.styleFrom(
                             padding: const EdgeInsets.symmetric(
                               horizontal: 20,
@@ -1183,7 +1168,7 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog> {
                               borderRadius: BorderRadius.circular(12),
                             ),
                           ),
-                          child: _isLoading
+                          child: _isVerifying
                               ? LoadingAnimationWidget.staggeredDotsWave(
                                   color: Colors.white,
                                   size: 20,
@@ -1211,6 +1196,7 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog> {
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 }

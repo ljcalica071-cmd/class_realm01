@@ -12,6 +12,8 @@ import 'package:class_realm/core/services/local_storage_service.dart';
 import 'package:class_realm/core/services/email_service.dart';
 import 'package:class_realm/core/services/email_verification_service.dart';
 import 'package:class_realm/core/utils/parent_credential_helper.dart';
+import 'package:class_realm/core/utils/validators.dart';
+import 'package:class_realm/firebase_options.dart';
 
 class FirstLoginOtpVerification {
   const FirstLoginOtpVerification({
@@ -821,26 +823,160 @@ class AuthRepository {
     required DateTime birthday,
     bool isResend = false,
   }) async {
+    final cleanEmail = email.trim().toLowerCase();
+
+    // 0. Verify domain deliverability (Ensure domain exists and can receive email)
+    final deliverability =
+        await AppValidators.checkDomainDeliverability(cleanEmail);
+    if (!deliverability.isDeliverable) {
+      throw AdminTeacherException(
+        deliverability.error ??
+            "The email domain is undeliverable (Address not found). Please verify the email address.",
+      );
+    }
+
+    // 1. Check if email is already registered in users table
+    try {
+      final existing = await _supabaseClient
+          .from('users')
+          .select('id')
+          .eq('email', cleanEmail)
+          .maybeSingle();
+      if (existing != null) {
+        throw const AdminTeacherException('This email is already registered.');
+      }
+    } catch (e) {
+      if (e is AdminTeacherException) rethrow;
+      debugPrint('Supabase user check notice: $e');
+    }
+
+    // 2. Check for existing active challenge in admin_teacher_email_challenges
+    Map<String, dynamic>? priorChallenge;
+    try {
+      final res = await _supabaseClient
+          .from('admin_teacher_email_challenges')
+          .select()
+          .eq('email', cleanEmail)
+          .maybeSingle();
+      if (res != null) {
+        priorChallenge = Map<String, dynamic>.from(res);
+      }
+    } catch (e) {
+      debugPrint('Supabase challenge lookup notice: $e');
+    }
+
+    final now = DateTime.now();
+
+    if (priorChallenge != null) {
+      // Check lockout
+      final lockedUntilStr = priorChallenge['locked_until']?.toString();
+      if (lockedUntilStr != null && lockedUntilStr.isNotEmpty) {
+        final lockedUntil = DateTime.tryParse(lockedUntilStr);
+        if (lockedUntil != null && now.isBefore(lockedUntil)) {
+          throw const AdminTeacherException(
+            'Too many incorrect codes. Please try again after 15 minutes.',
+            maxAttemptsExceeded: true,
+            failedAttempts: 5,
+          );
+        }
+      }
+
+      final priorFailedAttempts =
+          (priorChallenge['failed_attempts'] as num?)?.toInt() ?? 0;
+      if (priorFailedAttempts >= 5) {
+        throw const AdminTeacherException(
+          'Maximum verification attempts exceeded (5/5). Please click Back to recheck teacher details.',
+          maxAttemptsExceeded: true,
+          failedAttempts: 5,
+        );
+      }
+
+      final expiresAtStr = priorChallenge['expires_at']?.toString();
+      final expiresAt =
+          expiresAtStr != null ? DateTime.tryParse(expiresAtStr) : null;
+      final isChallengeActive = expiresAt != null && now.isBefore(expiresAt);
+
+      final lastSentAtStr = priorChallenge['last_sent_at']?.toString();
+      final lastSentAt =
+          lastSentAtStr != null ? DateTime.tryParse(lastSentAtStr) : null;
+      final secondsSinceLastSent =
+          lastSentAt != null ? now.difference(lastSentAt).inSeconds : 999;
+
+      // If an explicit resend, enforce 60s cooldown
+      if (isResend && secondsSinceLastSent < 58) {
+        final waitSec = (60 - secondsSinceLastSent).clamp(1, 60);
+        throw AdminTeacherException(
+            'Please wait ${waitSec}s before requesting another code.');
+      }
+    }
+
+    // 3. Generate a fresh 6-digit OTP code (valid for 10 minutes)
     final random = Random.secure();
     final code = (100000 + random.nextInt(900000)).toString();
-    _pendingOtpCode = code;
-    _pendingOtpExpiry = DateTime.now().add(const Duration(minutes: 10));
+    final expiresAt = now.add(const Duration(minutes: 10));
+    final currentFailedAttempts = isResend
+        ? ((priorChallenge?['failed_attempts'] as num?)?.toInt() ?? 0)
+        : 0;
 
     debugPrint('========================================================');
     debugPrint(
-      '[ClassRealm Pure Dart Admin Code] Verification code for $email: $code',
-    );
+        '[ClassRealm Teacher OTP] Code for $cleanEmail: $code (Valid for 10 mins)');
     debugPrint('========================================================');
 
+    // 4. Dispatch verification code via EmailService
+    final fullName = [firstName.trim(), middleName.trim(), lastName.trim()]
+        .where((s) => s.isNotEmpty)
+        .join(' ');
     try {
       await EmailService.instance.sendTeacherVerificationCode(
-        recipientEmail: email,
-        teacherName: '$firstName $lastName',
+        recipientEmail: cleanEmail,
+        teacherName: fullName,
         code: code,
       );
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('Email delivery failed: $e');
+      try {
+        await _supabaseClient
+            .from('admin_teacher_email_challenges')
+            .delete()
+            .eq('email', cleanEmail);
+      } catch (_) {}
+      final msg = e is EmailDeliveryException
+          ? e.message
+          : e.toString().replaceFirst('Exception: ', '');
+      throw AdminTeacherException(msg);
+    }
 
-    return {'sent': true, 'email': email};
+    // 5. Persist challenge in Supabase admin_teacher_email_challenges
+    final bdayStr =
+        '${birthday.year.toString().padLeft(4, '0')}-${birthday.month.toString().padLeft(2, '0')}-${birthday.day.toString().padLeft(2, '0')}';
+
+    try {
+      await _supabaseClient.from('admin_teacher_email_challenges').upsert({
+        'email': cleanEmail,
+        'code_hash': code,
+        'first_name': firstName.trim(),
+        'middle_name': middleName.trim().isEmpty ? null : middleName.trim(),
+        'last_name': lastName.trim(),
+        'gender': gender,
+        'birthday': bdayStr,
+        'created_by': currentUser?.id ?? 'admin',
+        'expires_at': expiresAt.toIso8601String(),
+        'last_sent_at': now.toIso8601String(),
+        'failed_attempts': currentFailedAttempts,
+        'locked_until': null,
+      });
+    } catch (e) {
+      debugPrint('Supabase challenge upsert notice: $e');
+    }
+
+    return {
+      'sent': true,
+      'email': cleanEmail,
+      'remainingCooldownSeconds': 60,
+      'failedAttempts': currentFailedAttempts,
+      'expiresAt': expiresAt.toIso8601String(),
+    };
   }
 
   Future<Map<String, dynamic>> sendAdminTeacherVerificationCode({
@@ -851,15 +987,16 @@ class AuthRepository {
     required String gender,
     required DateTime birthday,
     bool isResend = false,
-  }) => sendAdminTeacherVerification(
-    email: email,
-    firstName: firstName,
-    middleName: middleName,
-    lastName: lastName,
-    gender: gender,
-    birthday: birthday,
-    isResend: isResend,
-  );
+  }) =>
+      sendAdminTeacherVerification(
+        email: email,
+        firstName: firstName,
+        middleName: middleName,
+        lastName: lastName,
+        gender: gender,
+        birthday: birthday,
+        isResend: isResend,
+      );
 
   Future<Map<String, dynamic>> createTeacherDirectlyByAdmin({
     required String email,
@@ -911,7 +1048,208 @@ class AuthRepository {
     required String email,
     required String code,
   }) async {
-    return {'success': true};
+    final cleanEmail = email.trim().toLowerCase();
+    final cleanCode = code.trim();
+
+    // 1. Fetch challenge from admin_teacher_email_challenges
+    final challenge = await _supabaseClient
+        .from('admin_teacher_email_challenges')
+        .select()
+        .eq('email', cleanEmail)
+        .maybeSingle();
+
+    if (challenge == null) {
+      throw const AdminTeacherException(
+        'The verification code is invalid or has expired. Please request a new code.',
+      );
+    }
+
+    final now = DateTime.now();
+
+    // 2. Check lockout
+    final lockedUntilStr = challenge['locked_until']?.toString();
+    if (lockedUntilStr != null && lockedUntilStr.isNotEmpty) {
+      final lockedUntil = DateTime.tryParse(lockedUntilStr);
+      if (lockedUntil != null && now.isBefore(lockedUntil)) {
+        throw const AdminTeacherException(
+          'Too many incorrect codes. Please try again after 15 minutes.',
+          maxAttemptsExceeded: true,
+          failedAttempts: 5,
+        );
+      }
+    }
+
+    final failedAttempts =
+        (challenge['failed_attempts'] as num?)?.toInt() ?? 0;
+    if (failedAttempts >= 5) {
+      throw const AdminTeacherException(
+        'Maximum verification attempts exceeded (5/5). Please click Back to recheck teacher details.',
+        maxAttemptsExceeded: true,
+        failedAttempts: 5,
+      );
+    }
+
+    // 3. Check expiration (10 minutes)
+    final expiresAtStr = challenge['expires_at']?.toString();
+    final expiresAt =
+        expiresAtStr != null ? DateTime.tryParse(expiresAtStr) : null;
+    if (expiresAt == null || now.isAfter(expiresAt)) {
+      throw const AdminTeacherException(
+        'The verification code has expired (valid for 10 minutes). Please click Resend.',
+      );
+    }
+
+    // 4. Verify code match
+    final expectedCode = challenge['code_hash']?.toString().trim();
+    if (cleanCode != expectedCode) {
+      final newFailedAttempts = failedAttempts + 1;
+      final lockedUntil = newFailedAttempts >= 5
+          ? now.add(const Duration(minutes: 15)).toIso8601String()
+          : null;
+
+      try {
+        await _supabaseClient
+            .from('admin_teacher_email_challenges')
+            .update({
+              'failed_attempts': newFailedAttempts,
+              'locked_until': lockedUntil,
+            })
+            .eq('email', cleanEmail);
+      } catch (e) {
+        debugPrint('Supabase failed attempts update notice: $e');
+      }
+
+      if (newFailedAttempts >= 5) {
+        throw const AdminTeacherException(
+          'Maximum verification attempts exceeded (5/5). Please click Back to recheck teacher details.',
+          maxAttemptsExceeded: true,
+          failedAttempts: 5,
+        );
+      }
+
+      final remaining = 5 - newFailedAttempts;
+      throw AdminTeacherException(
+        'Incorrect verification code. $remaining attempt${remaining == 1 ? '' : 's'} remaining.',
+        failedAttempts: newFailedAttempts,
+        remainingAttempts: remaining,
+      );
+    }
+
+    // 5. Code is VALID! Extract details and create teacher account
+    final firstName = challenge['first_name']?.toString() ?? '';
+    final middleName = challenge['middle_name']?.toString();
+    final lastName = challenge['last_name']?.toString() ?? '';
+    final gender = challenge['gender']?.toString() ?? 'Male';
+    final birthdayStr = challenge['birthday']?.toString() ?? '2000-01-01';
+    final fullName = [
+      firstName,
+      if (middleName != null && middleName.isNotEmpty) middleName,
+      lastName
+    ].join(' ');
+
+    // Temporary password: lastname + birthdate digits (e.g. yuri19990101)
+    final bdayDigits = birthdayStr.replaceAll('-', '');
+    final tempPassword =
+        '${lastName.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '')}$bdayDigits';
+
+    String teacherId = 'tch_${DateTime.now().millisecondsSinceEpoch}';
+
+    // 6. Attempt Firebase Auth creation via Identity Toolkit REST API
+    try {
+      final apiKey = DefaultFirebaseOptions.web.apiKey;
+      final fbRes = await http.post(
+        Uri.parse(
+            'https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=$apiKey'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'email': cleanEmail,
+          'password': tempPassword,
+          'returnSecureToken': true,
+        }),
+      );
+      if (fbRes.statusCode == 200) {
+        final fbData = jsonDecode(fbRes.body);
+        if (fbData is Map && fbData['localId'] != null) {
+          teacherId = fbData['localId'].toString();
+          final idToken = fbData['idToken']?.toString();
+          if (idToken != null) {
+            try {
+              await http.post(
+                Uri.parse(
+                    'https://identitytoolkit.googleapis.com/v1/accounts:update?key=$apiKey'),
+                headers: {'Content-Type': 'application/json'},
+                body: jsonEncode({
+                  'idToken': idToken,
+                  'displayName': fullName,
+                }),
+              );
+            } catch (_) {}
+          }
+        }
+      } else {
+        final fbData = jsonDecode(fbRes.body);
+        if (fbData is Map && fbData['error']?['message'] == 'EMAIL_EXISTS') {
+          throw const AdminTeacherException(
+              'This email is already registered in Firebase Authentication.');
+        }
+      }
+    } catch (e) {
+      if (e is AdminTeacherException) rethrow;
+      debugPrint('Firebase Identity Toolkit notice: $e');
+    }
+
+    // 7. Insert/Upsert into Supabase tables
+    await _supabaseClient.from('users').upsert({
+      'id': teacherId,
+      'email': cleanEmail,
+      'role': 'teacher',
+      'status': 'pendingFirstLogin',
+    });
+
+    await _supabaseClient.from('teacher_profiles').upsert({
+      'teacher_id': teacherId,
+      'first_name': firstName,
+      'middle_name':
+          (middleName == null || middleName.isEmpty) ? null : middleName,
+      'last_name': lastName,
+      'gender': gender,
+      'birthday': birthdayStr,
+    });
+
+    await _supabaseClient.from('teacher_settings').upsert({
+      'teacher_id': teacherId,
+      'status': 'pendingFirstLogin',
+    });
+
+    // 8. Delete the challenge
+    try {
+      await _supabaseClient
+          .from('admin_teacher_email_challenges')
+          .delete()
+          .eq('email', cleanEmail);
+    } catch (e) {
+      debugPrint('Supabase challenge delete notice: $e');
+    }
+
+    // 9. Dispatch welcome email with credentials
+    try {
+      await EmailService.instance.sendTeacherWelcomeEmail(
+        recipientEmail: cleanEmail,
+        teacherName: fullName,
+        tempPassword: tempPassword,
+      );
+    } catch (mailErr) {
+      debugPrint('Welcome email notice: $mailErr');
+    }
+
+    return {
+      'success': true,
+      'created': true,
+      'email': cleanEmail,
+      'fullName': fullName,
+      'temporaryPassword': tempPassword,
+      'teacherId': teacherId,
+    };
   }
 
   // Admin: Delete Teacher Record (100% Pure Dart)

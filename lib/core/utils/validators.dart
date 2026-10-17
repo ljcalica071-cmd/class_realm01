@@ -1,4 +1,17 @@
+import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:http/http.dart' as http;
+
+class DomainDeliverabilityResult {
+  final bool isDeliverable;
+  final String? error;
+
+  const DomainDeliverabilityResult({
+    required this.isDeliverable,
+    this.error,
+  });
+}
 
 class AppValidators {
   /// Reusable input formatters for name fields (max 30 chars, no consecutive spaces/periods, capitalize first letter)
@@ -6,6 +19,12 @@ class AppValidators {
         LengthLimitingTextInputFormatter(30),
         FilteringTextInputFormatter.allow(RegExp(r"[a-zA-Z\s\-\.]")),
         _CleanInputFormatter(),
+      ];
+
+  /// Reusable input formatters for email fields (max 60 chars total, no spaces)
+  static List<TextInputFormatter> get emailFormatters => [
+        LengthLimitingTextInputFormatter(60),
+        FilteringTextInputFormatter.deny(RegExp(r'\s')),
       ];
 
   /// Name validator
@@ -25,14 +44,221 @@ class AppValidators {
       return 'Email address is required.';
     }
     final trimmed = value.trim().toLowerCase();
-    
-    // Strict regex: basic format check
-    final emailRegex = RegExp(r"^[a-zA-Z0-9.a-zA-Z0-9.!#$%&'*+-/=?^_`{|}~]+@[a-zA-Z0-9-]{2,}\.[a-zA-Z]{2,}$");
+
+    // Prevent spaces anywhere in email
+    if (trimmed.contains(' ')) {
+      return 'Email address cannot contain spaces.';
+    }
+
+    // Total email length constraint (Max 60 characters including name and domain)
+    if (trimmed.length > 60) {
+      return 'Email address cannot exceed 60 characters.';
+    }
+
+    // Must have exactly one '@' symbol
+    final parts = trimmed.split('@');
+    if (parts.length != 2) {
+      return 'Please enter a valid email address with an @ symbol.';
+    }
+
+    final localPart = parts[0];
+    final domainPart = parts[1];
+
+    if (localPart.isEmpty) {
+      return 'Email username is missing before @.';
+    }
+
+    if (domainPart.isEmpty) {
+      return 'Email domain is missing after @.';
+    }
+
+    // Local part constraints: alphanumeric and standard allowed symbols, no double dots
+    if (localPart.startsWith('.') || localPart.endsWith('.') || localPart.contains('..')) {
+      return 'Invalid email username format.';
+    }
+
+    // Domain part must contain at least one dot separating domain and TLD
+    final domainParts = domainPart.split('.');
+    if (domainParts.length < 2 || domainParts.any((part) => part.isEmpty)) {
+      return 'Please enter a valid domain (e.g. gmail.com).';
+    }
+
+    final tld = domainParts.last;
+    // TLD must only be letters and at least 2 characters (e.g. .com, .org, .edu, .ph)
+    if (!RegExp(r'^[a-z]{2,24}$').hasMatch(tld)) {
+      return 'Please enter a valid domain extension (e.g. .com, .edu.ph).';
+    }
+
+    // Common TLD typos
+    const tldTypos = {
+      'con': 'com',
+      'cpm': 'com',
+      'comm': 'com',
+      'cm': 'com',
+      'xom': 'com',
+      'vom': 'com',
+      'netw': 'net',
+      'og': 'org',
+      'ogr': 'org',
+    };
+    if (tldTypos.containsKey(tld)) {
+      return 'Invalid domain extension .$tld. Did you mean .${tldTypos[tld]}?';
+    }
+
+    // Disallow truncated TLD typo (e.g., .co when user intended .com, unless country-code like co.uk / co.za)
+    if (tld == 'co' && domainParts.length == 2 && 
+        (domainParts[0] == 'gmail' || domainParts[0] == 'yahoo' || domainParts[0] == 'hotmail' || domainParts[0] == 'outlook')) {
+      return 'Did you mean @${domainParts[0]}.com? Please check domain extension.';
+    }
+
+    // Common email domain typos check
+    const typoDomains = {
+      'gamil.com': 'gmail.com',
+      'gmial.com': 'gmail.com',
+      'gmai.com': 'gmail.com',
+      'gmaill.com': 'gmail.com',
+      'gmails.com': 'gmail.com',
+      'gmails.con': 'gmail.com',
+      'gmail.con': 'gmail.com',
+      'gmeil.com': 'gmail.com',
+      'gemail.com': 'gmail.com',
+      'gamil.co': 'gmail.com',
+      'gmail.co': 'gmail.com',
+      'yaho.com': 'yahoo.com',
+      'yahooo.com': 'yahoo.com',
+      'yahoo.con': 'yahoo.com',
+      'yhaoo.com': 'yahoo.com',
+      'hotmial.com': 'hotmail.com',
+      'hotmaill.com': 'hotmail.com',
+      'outlok.com': 'outlook.com',
+      'outloo.com': 'outlook.com',
+    };
+
+    if (typoDomains.containsKey(domainPart)) {
+      final suggestion = typoDomains[domainPart];
+      return 'Invalid domain. Did you mean @$suggestion?';
+    }
+
+    // Full standard RFC 5322 regex match
+    final emailRegex = RegExp(
+      r"^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$",
+    );
     if (!emailRegex.hasMatch(trimmed)) {
-      return 'Invalid email';
+      return 'Please enter a valid email address.';
     }
 
     return null;
+  }
+
+  /// Real-time domain deliverability check using DNS-over-HTTPS (DoH).
+  /// Verifies that the domain exists and has active MX records before dispatching verification codes.
+  static Future<DomainDeliverabilityResult> checkDomainDeliverability(String email) async {
+    final clean = email.trim().toLowerCase();
+    final parts = clean.split('@');
+    if (parts.length != 2) {
+      return const DomainDeliverabilityResult(
+        isDeliverable: false,
+        error: 'Please enter a valid email address.',
+      );
+    }
+
+    final domain = parts[1];
+
+    // Basic domain sanity
+    if (domain.length < 3 || !domain.contains('.')) {
+      return DomainDeliverabilityResult(
+        isDeliverable: false,
+        error: "The email domain '$domain' is invalid.",
+      );
+    }
+
+    // Fast check for known single-letter or non-resolving domains like a.com
+    final domainParts = domain.split('.');
+    if (domainParts[0].length <= 1 && domainParts.last == 'com') {
+      return DomainDeliverabilityResult(
+        isDeliverable: false,
+        error: "The email domain '$domain' cannot receive emails (Address not found). Check for typos and try again.",
+      );
+    }
+
+    try {
+      // 1. Query Google Public DNS over HTTPS for MX records
+      final uri = Uri.parse('https://dns.google/resolve?name=${Uri.encodeComponent(domain)}&type=MX');
+      final res = await http.get(uri).timeout(const Duration(milliseconds: 3500));
+
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        final status = data['Status'] as int?;
+
+        // Status 3 = NXDOMAIN (Non-Existent Domain)
+        if (status == 3) {
+          return DomainDeliverabilityResult(
+            isDeliverable: false,
+            error: "The email domain '$domain' does not exist (Address not found). Check for typos and try again.",
+          );
+        }
+
+        final answers = data['Answer'] as List<dynamic>?;
+        final mxRecords = answers?.where((a) => a['type'] == 15).toList() ?? [];
+
+        if (mxRecords.isNotEmpty) {
+          // Check for RFC 7505 Null MX (e.g. data is "." or "0 .")
+          final validMx = mxRecords.where((r) {
+            final dataStr = r['data']?.toString().trim() ?? '';
+            return dataStr.isNotEmpty && dataStr != '.' && dataStr != '0 .';
+          }).toList();
+
+          if (validMx.isNotEmpty) {
+            return const DomainDeliverabilityResult(isDeliverable: true);
+          } else {
+            return DomainDeliverabilityResult(
+              isDeliverable: false,
+              error: "The domain '$domain' is configured to reject incoming emails.",
+            );
+          }
+        }
+
+        // If Status == 0 but no MX records exist, check A record to verify if domain even exists
+        final aUri = Uri.parse('https://dns.google/resolve?name=${Uri.encodeComponent(domain)}&type=A');
+        final aRes = await http.get(aUri).timeout(const Duration(milliseconds: 3000));
+        if (aRes.statusCode == 200) {
+          final aData = jsonDecode(aRes.body);
+          if (aData['Status'] == 3) {
+            return DomainDeliverabilityResult(
+              isDeliverable: false,
+              error: "The email domain '$domain' does not exist (Address not found). Check for typos and try again.",
+            );
+          }
+          final aAnswers = aData['Answer'] as List<dynamic>?;
+          if (aAnswers == null || aAnswers.isEmpty) {
+            return DomainDeliverabilityResult(
+              isDeliverable: false,
+              error: "The email domain '$domain' has no mail servers configured to receive emails.",
+            );
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('[Deliverability] Google DoH notice: $e');
+      // 2. Fallback to Cloudflare DNS over HTTPS
+      try {
+        final cfUri = Uri.parse('https://cloudflare-dns.com/dns-query?name=${Uri.encodeComponent(domain)}&type=MX');
+        final cfRes = await http.get(cfUri, headers: {'Accept': 'application/dns-json'}).timeout(const Duration(milliseconds: 3000));
+        if (cfRes.statusCode == 200) {
+          final cfData = jsonDecode(cfRes.body);
+          if (cfData['Status'] == 3) {
+            return DomainDeliverabilityResult(
+              isDeliverable: false,
+              error: "The email domain '$domain' does not exist (Address not found). Check for typos and try again.",
+            );
+          }
+        }
+      } catch (cfErr) {
+        debugPrint('[Deliverability] Cloudflare DoH notice: $cfErr');
+      }
+    }
+
+    return const DomainDeliverabilityResult(isDeliverable: true);
   }
 
   /// Password complexity validator methods
