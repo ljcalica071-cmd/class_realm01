@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:ui';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -48,7 +49,19 @@ class _LoginScreenState extends State<LoginScreen> {
   void initState() {
     super.initState();
     _emailController.addListener(_handleEmailChanged);
-    
+    _passwordController.addListener(_handlePasswordChanged);
+
+    _passwordFocusNode.addListener(() {
+      if (_passwordFocusNode.hasFocus) {
+        final text = _passwordController.text;
+        if (!_passwordController.selection.isValid ||
+            _passwordController.selection.start == -1) {
+          _passwordController.selection =
+              TextSelection.collapsed(offset: text.length);
+        }
+      }
+    });
+
     // Load Remember Me state
     _rememberMe = LocalStorageService.isRememberMe;
     if (_rememberMe) {
@@ -67,6 +80,7 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   void dispose() {
     _emailController.removeListener(_handleEmailChanged);
+    _passwordController.removeListener(_handlePasswordChanged);
     _lockoutTimer?.cancel();
     _emailController.dispose();
     _passwordController.dispose();
@@ -77,8 +91,15 @@ class _LoginScreenState extends State<LoginScreen> {
 
   void _handleEmailChanged() {
     final isMockLoginEmail = _isMockLoginEmail;
-    if (isMockLoginEmail == _wasMockLoginEmail) return;
+    if (isMockLoginEmail == _wasMockLoginEmail) {
+      if (mounted) setState(() {});
+      return;
+    }
     _wasMockLoginEmail = isMockLoginEmail;
+    if (mounted) setState(() {});
+  }
+
+  void _handlePasswordChanged() {
     if (mounted) setState(() {});
   }
 
@@ -166,12 +187,19 @@ class _LoginScreenState extends State<LoginScreen> {
       if (user == null) {
         setState(() => _isLoading = false);
         _recordFailedAttempt();
+        TextInput.finishAutofillContext(shouldSave: false);
         if (_isRateLimited) return;
         AppModals.showErrorDialog(
           context: context,
           title: 'Authentication Failed',
           message:
               'Invalid email or password. Please check your credentials.',
+          onConfirm: () {
+            final len = _passwordController.text.length;
+            _passwordController.selection =
+                TextSelection.collapsed(offset: len);
+            _passwordFocusNode.requestFocus();
+          },
         );
         return;
       }
@@ -184,6 +212,7 @@ class _LoginScreenState extends State<LoginScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _isLoading = false);
+      TextInput.finishAutofillContext(shouldSave: false);
       if (e is LoginAttemptException) {
         if (e.providerRateLimited) {
           _beginLockoutCountdown(
@@ -198,6 +227,12 @@ class _LoginScreenState extends State<LoginScreen> {
             context: context,
             title: 'Authentication Failed',
             message: e.message,
+            onConfirm: () {
+              final len = _passwordController.text.length;
+              _passwordController.selection =
+                  TextSelection.collapsed(offset: len);
+              _passwordFocusNode.requestFocus();
+            },
           );
           return;
         }
@@ -206,6 +241,12 @@ class _LoginScreenState extends State<LoginScreen> {
         context: context,
         title: 'Login Error',
         message: e.toString().replaceAll('Exception: ', ''),
+        onConfirm: () {
+          final len = _passwordController.text.length;
+          _passwordController.selection =
+              TextSelection.collapsed(offset: len);
+          _passwordFocusNode.requestFocus();
+        },
       );
     }
   }
@@ -534,49 +575,104 @@ class _LoginScreenState extends State<LoginScreen> {
               const SizedBox(height: 16),
 
               // Password input
-              TextFormField(
-                controller: _passwordController,
-                focusNode: _passwordFocusNode,
-                autofillHints: const [AutofillHints.password],
-                textInputAction: TextInputAction.done,
-                onFieldSubmitted: (_) {
-                  if (!_isLoading && !_isRateLimited) {
-                    _handleLogin();
+              Focus(
+                onKeyEvent: (node, event) {
+                  if (event is KeyDownEvent &&
+                      event.logicalKey == LogicalKeyboardKey.backspace) {
+                    final text = _passwordController.text;
+                    final sel = _passwordController.selection;
+                    if (text.isNotEmpty) {
+                      if (!sel.isValid || sel.start == -1) {
+                        final newText = text.substring(0, text.length - 1);
+                        _passwordController.value = TextEditingValue(
+                          text: newText,
+                          selection: TextSelection.collapsed(offset: newText.length),
+                        );
+                        return KeyEventResult.handled;
+                      } else if (sel.isCollapsed && sel.start > 0) {
+                        final start = sel.start;
+                        final newText =
+                            text.substring(0, start - 1) + text.substring(start);
+                        _passwordController.value = TextEditingValue(
+                          text: newText,
+                          selection: TextSelection.collapsed(offset: start - 1),
+                        );
+                        return KeyEventResult.handled;
+                      } else if (!sel.isCollapsed && sel.start != sel.end) {
+                        final start = sel.start < sel.end ? sel.start : sel.end;
+                        final end = sel.start < sel.end ? sel.end : sel.start;
+                        final newText =
+                            text.substring(0, start) + text.substring(end);
+                        _passwordController.value = TextEditingValue(
+                          text: newText,
+                          selection: TextSelection.collapsed(offset: start),
+                        );
+                        return KeyEventResult.handled;
+                      }
+                    }
                   }
+                  return KeyEventResult.ignored;
                 },
-                obscureText: _obscurePassword,
-                style: const TextStyle(color: Color(0xFF0F172A), fontSize: 14),
-                validator: (v) =>
-                    v == null || v.isEmpty ? 'Password is required' : null,
-                decoration: InputDecoration(
-                  filled: true,
-                  fillColor: const Color(0xFFF8FAFC),
-                  prefixIcon: Icon(
-                    LucideIcons.lock,
-                    color: theme.colorScheme.primary,
-                  ),
-                  suffixIcon: IconButton(
-                    icon: Icon(
-                      _obscurePassword ? LucideIcons.eye : LucideIcons.eyeOff,
-                      color: const Color(0xFF64748B),
-                      size: 20,
-                    ),
-                    onPressed: () =>
-                        setState(() => _obscurePassword = !_obscurePassword),
-                  ),
-                  hintText: 'Password',
-                  hintStyle: const TextStyle(
-                    color: Color(0xFF94A3B8),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(
+                child: TextFormField(
+                  controller: _passwordController,
+                  focusNode: _passwordFocusNode,
+                  autofillHints: kIsWeb ? null : const [AutofillHints.password],
+                  textInputAction: TextInputAction.done,
+                  enableSuggestions: false,
+                  autocorrect: false,
+                  onTap: () {
+                    final text = _passwordController.text;
+                    if (!_passwordController.selection.isValid ||
+                        _passwordController.selection.start == -1) {
+                      _passwordController.selection =
+                          TextSelection.collapsed(offset: text.length);
+                    }
+                  },
+                  onFieldSubmitted: (_) {
+                    if (!_isLoading && !_isRateLimited) {
+                      _handleLogin();
+                    }
+                  },
+                  obscureText: _obscurePassword,
+                  style: const TextStyle(color: Color(0xFF0F172A), fontSize: 14),
+                  validator: (v) =>
+                      v == null || v.isEmpty ? 'Password is required' : null,
+                  decoration: InputDecoration(
+                    filled: true,
+                    fillColor: const Color(0xFFF8FAFC),
+                    prefixIcon: Icon(
+                      LucideIcons.lock,
                       color: theme.colorScheme.primary,
-                      width: 1.5,
+                    ),
+                    suffixIcon: IconButton(
+                      tooltip:
+                          _obscurePassword ? 'Show password' : 'Hide password',
+                      icon: Icon(
+                        _obscurePassword ? LucideIcons.eye : LucideIcons.eyeOff,
+                        color: const Color(0xFF64748B),
+                        size: 20,
+                      ),
+                      onPressed: () => setState(() {
+                        _obscurePassword = !_obscurePassword;
+                        final text = _passwordController.text;
+                        _passwordController.selection =
+                            TextSelection.collapsed(offset: text.length);
+                      }),
+                    ),
+                    hintText: 'Password',
+                    hintStyle: const TextStyle(
+                      color: Color(0xFF94A3B8),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(
+                        color: theme.colorScheme.primary,
+                        width: 1.5,
+                      ),
                     ),
                   ),
                 ),
