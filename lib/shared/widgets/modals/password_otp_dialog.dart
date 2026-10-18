@@ -7,6 +7,8 @@ import 'package:class_realm/data/repositories/auth_repository.dart';
 
 /// Reusable modal dialog for verifying a 6-digit OTP code dispatched via email.
 /// Used in both First Login Activation and Forgot Password Recovery flows.
+/// Features anti-spam rate limiting, animated cursor, 6 separate digit boxes,
+/// inline countdown timer placed directly above the boxes, and top-right close button.
 class PasswordOtpDialog extends StatefulWidget {
   final String email;
   final String title;
@@ -25,7 +27,7 @@ class PasswordOtpDialog extends StatefulWidget {
     this.subtitle,
     this.submitButtonLabel = 'Verify Account',
     this.initialResendCooldown = 60,
-    this.initialInputCountdown = 300,
+    this.initialInputCountdown = 600,
     this.initialResendCount = 0,
     this.onVerify,
     this.onResend,
@@ -35,20 +37,24 @@ class PasswordOtpDialog extends StatefulWidget {
   State<PasswordOtpDialog> createState() => _PasswordOtpDialogState();
 }
 
-class _PasswordOtpDialogState extends State<PasswordOtpDialog> {
+class _PasswordOtpDialogState extends State<PasswordOtpDialog>
+    with SingleTickerProviderStateMixin {
   final _otpController = TextEditingController();
-  FocusNode? _otpFocusNode;
-  FocusNode get _focusNode => _otpFocusNode ??= FocusNode();
+  final FocusNode _focusNode = FocusNode();
+  AnimationController? _cursorBlinkController;
+  int _selectedIndex = 0;
+
   String? _error;
   bool _isVerifying = false;
   bool _isLockedOut = false;
+  int _failedAttempts = 0;
 
   Timer? _resendTimer;
   int _resendCooldown = 60;
   int _resendAttempts = 0;
 
   Timer? _inputTimer;
-  int _inputCountdown = 300;
+  int _inputCountdown = 600;
 
   bool _isResending = false;
 
@@ -58,6 +64,42 @@ class _PasswordOtpDialogState extends State<PasswordOtpDialog> {
     _resendCooldown = widget.initialResendCooldown;
     _inputCountdown = widget.initialInputCountdown;
     _resendAttempts = widget.initialResendCount;
+
+    _cursorBlinkController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 500),
+    )..repeat(reverse: true);
+
+    _focusNode.addListener(() {
+      if (mounted) setState(() {});
+    });
+
+    _focusNode.onKeyEvent = (node, event) {
+      if (event is KeyDownEvent) {
+        if (event.logicalKey == LogicalKeyboardKey.backspace) {
+          _handleBackspaceKey();
+          return KeyEventResult.handled;
+        } else if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+          setState(() {
+            _selectedIndex =
+                (_selectedIndex - 1).clamp(0, _otpController.text.length);
+            _otpController.selection =
+                TextSelection.collapsed(offset: _selectedIndex);
+          });
+          return KeyEventResult.handled;
+        } else if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+          setState(() {
+            _selectedIndex =
+                (_selectedIndex + 1).clamp(0, _otpController.text.length);
+            _otpController.selection =
+                TextSelection.collapsed(offset: _selectedIndex);
+          });
+          return KeyEventResult.handled;
+        }
+      }
+      return KeyEventResult.ignored;
+    };
+
     _startTimers(reset: false);
   }
 
@@ -65,7 +107,7 @@ class _PasswordOtpDialogState extends State<PasswordOtpDialog> {
     if (reset) {
       setState(() {
         _resendCooldown = 60;
-        _inputCountdown = 300;
+        _inputCountdown = 600;
         _isLockedOut = false;
       });
     }
@@ -89,11 +131,102 @@ class _PasswordOtpDialogState extends State<PasswordOtpDialog> {
       } else if (_isLockedOut) {
         setState(() {
           _isLockedOut = false;
-          _error = 'The code has expired. Request a new code.';
+          _failedAttempts = 0;
+          _error = 'Lockout period ended. Please request a new verification code.';
         });
         timer.cancel();
       } else {
+        setState(() {
+          _error = 'The verification code has expired. Please request a new code.';
+        });
         timer.cancel();
+      }
+    });
+  }
+
+  String _formatOtpTimer(int totalSeconds) {
+    final m = (totalSeconds ~/ 60).toString().padLeft(2, '0');
+    final s = (totalSeconds % 60).toString().padLeft(2, '0');
+    return '$m:$s';
+  }
+
+  void _handleBackspaceKey() {
+    if (_isLockedOut || _isVerifying) return;
+    final text = _otpController.text;
+    if (text.isEmpty) {
+      if (_error != null) setState(() => _error = null);
+      return;
+    }
+
+    final sel = _otpController.selection;
+    if (!sel.isCollapsed && sel.start >= 0 && sel.end <= text.length) {
+      final newText = text.substring(0, sel.start) + text.substring(sel.end);
+      final nextIndex = sel.start.clamp(0, newText.length);
+      _otpController.value = TextEditingValue(
+        text: newText,
+        selection: TextSelection.collapsed(offset: nextIndex),
+      );
+      setState(() {
+        _selectedIndex = nextIndex;
+        _error = null;
+      });
+      return;
+    }
+
+    int deletePos = _selectedIndex;
+    if (deletePos > 0 && deletePos <= text.length) {
+      final newText =
+          text.substring(0, deletePos - 1) + text.substring(deletePos);
+      final nextIndex = (deletePos - 1).clamp(0, newText.length);
+      _otpController.value = TextEditingValue(
+        text: newText,
+        selection: TextSelection.collapsed(offset: nextIndex),
+      );
+      setState(() {
+        _selectedIndex = nextIndex;
+        _error = null;
+      });
+    } else if (deletePos == 0 && text.isNotEmpty) {
+      final newText = text.substring(1);
+      _otpController.value = TextEditingValue(
+        text: newText,
+        selection: const TextSelection.collapsed(offset: 0),
+      );
+      setState(() {
+        _selectedIndex = 0;
+        _error = null;
+      });
+    } else {
+      final newText = text.substring(0, text.length - 1);
+      final nextIndex = newText.length;
+      _otpController.value = TextEditingValue(
+        text: newText,
+        selection: TextSelection.collapsed(offset: nextIndex),
+      );
+      setState(() {
+        _selectedIndex = nextIndex;
+        _error = null;
+      });
+    }
+  }
+
+  void _onDigitBoxTapped(int index) {
+    if (_isLockedOut || _isVerifying) return;
+    _focusNode.requestFocus();
+    final text = _otpController.text;
+    setState(() {
+      _error = null;
+      if (index < text.length) {
+        _selectedIndex = index;
+        _otpController.selection = TextSelection(
+          baseOffset: index,
+          extentOffset: index + 1,
+        );
+      } else {
+        _selectedIndex = text.length.clamp(0, 5);
+        _otpController.selection = TextSelection.collapsed(
+          offset: text.length,
+        );
       }
     });
   }
@@ -158,10 +291,14 @@ class _PasswordOtpDialogState extends State<PasswordOtpDialog> {
   }
 
   Future<void> _handleResend() async {
-    if (_resendAttempts >= 4) {
-      setState(() {
-        _error = 'Maximum resend attempts reached.';
-      });
+    if (_resendAttempts >= 4 ||
+        _resendCooldown > 0 ||
+        _isLockedOut ||
+        _isVerifying ||
+        _isResending) {
+      if (_resendAttempts >= 4) {
+        setState(() => _error = 'Maximum resend attempts reached.');
+      }
       return;
     }
 
@@ -169,6 +306,7 @@ class _PasswordOtpDialogState extends State<PasswordOtpDialog> {
       _isResending = true;
       _error = null;
       _otpController.clear();
+      _selectedIndex = 0;
     });
 
     try {
@@ -176,19 +314,24 @@ class _PasswordOtpDialogState extends State<PasswordOtpDialog> {
       if (widget.onResend != null) {
         result = await widget.onResend!();
       } else {
-        result = await AuthRepository.instance.sendFirstLoginOtp();
+        result =
+            await AuthRepository.instance.sendFirstLoginOtp(isResend: true);
       }
 
       if (!mounted) return;
       setState(() {
         _isResending = false;
-        _resendAttempts = (result['resendCount'] as num?)?.toInt() ?? _resendAttempts + 1;
+        _resendAttempts =
+            (result['resendCount'] as num?)?.toInt() ?? _resendAttempts + 1;
         _resendCooldown = (result['resendAfter'] as num?)?.toInt() ?? 60;
-        _inputCountdown = (result['expiresIn'] as num?)?.toInt() ?? 300;
+        _inputCountdown = (result['expiresIn'] as num?)?.toInt() ?? 600;
         _error = null;
       });
       _startTimers(reset: false);
       _showResendSuccessToast('New verification code sent!');
+      Future.delayed(const Duration(milliseconds: 100), () {
+        if (mounted) _focusNode.requestFocus();
+      });
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -223,27 +366,48 @@ class _PasswordOtpDialogState extends State<PasswordOtpDialog> {
         return;
       }
 
+      _failedAttempts++;
       final reason = result.reason;
-      if (reason == 'locked') {
+      if (reason == 'locked' || _failedAttempts >= 5) {
         setState(() {
           _isLockedOut = true;
           _inputCountdown = result.retryAfter > 0 ? result.retryAfter : 900;
-          _error = 'Too many incorrect codes. Try again after 15 minutes.';
+          _error =
+              'Too many incorrect attempts. Please try again after 15 minutes.';
         });
         _startTimers(reset: false);
       } else {
-        final remaining = result.attemptsRemaining ?? 0;
+        final remaining =
+            result.attemptsRemaining ?? (5 - _failedAttempts).clamp(0, 5);
         setState(() {
           _error = reason == 'expired'
               ? 'This code has expired. Request a new code.'
               : 'Incorrect or expired code. $remaining attempt${remaining == 1 ? '' : 's'} remaining.';
         });
+        _selectedIndex = (_otpController.text.length - 1).clamp(0, 5);
+        _otpController.selection =
+            TextSelection.collapsed(offset: _otpController.text.length);
+        Future.delayed(const Duration(milliseconds: 50), () {
+          if (mounted) _focusNode.requestFocus();
+        });
       }
     } catch (error) {
       if (!mounted) return;
-      setState(() {
-        _error = 'Unable to verify code: ${error.toString().replaceFirst('Exception: ', '')}';
-      });
+      _failedAttempts++;
+      if (_failedAttempts >= 5) {
+        setState(() {
+          _isLockedOut = true;
+          _inputCountdown = 900;
+          _error =
+              'Too many incorrect attempts. Please try again after 15 minutes.';
+        });
+        _startTimers(reset: false);
+      } else {
+        setState(() {
+          _error =
+              'Unable to verify code: ${error.toString().replaceFirst('Exception: ', '')}';
+        });
+      }
     } finally {
       if (mounted) setState(() => _isVerifying = false);
     }
@@ -251,8 +415,10 @@ class _PasswordOtpDialogState extends State<PasswordOtpDialog> {
 
   @override
   void dispose() {
+    _cursorBlinkController?.dispose();
+    _cursorBlinkController = null;
     _otpController.dispose();
-    _otpFocusNode?.dispose();
+    _focusNode.dispose();
     _resendTimer?.cancel();
     _inputTimer?.cancel();
     super.dispose();
@@ -261,91 +427,194 @@ class _PasswordOtpDialogState extends State<PasswordOtpDialog> {
   Widget _buildOtpDigitBoxes(ThemeData theme) {
     final hasError = _error != null;
     final currentLength = _otpController.text.length;
+    final isFocused = _focusNode.hasFocus;
 
-    return Stack(
+    return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        // Invisible input field that handles keyboard, paste, backspace natively
-        Positioned.fill(
-          child: Opacity(
-            opacity: 0.0,
-            child: TextField(
-              controller: _otpController,
-              focusNode: _focusNode,
-              autofocus: true,
-              enabled: !_isLockedOut && !_isVerifying,
-              keyboardType: TextInputType.number,
-              inputFormatters: [
-                FilteringTextInputFormatter.digitsOnly,
-                LengthLimitingTextInputFormatter(6),
-              ],
-              onChanged: (val) {
-                setState(() {
-                  if (!_isLockedOut) _error = null;
-                });
-                if (val.length == 6 && !_isLockedOut && !_isVerifying) {
-                  _verify();
+        Stack(
+          alignment: Alignment.center,
+          children: [
+            // Invisible input field that catches keyboard text and system paste
+            Positioned.fill(
+              child: Opacity(
+                opacity: 0.0,
+                child: TextField(
+                  controller: _otpController,
+                  focusNode: _focusNode,
+                  autofocus: true,
+                  enabled: !_isLockedOut && !_isVerifying,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                    LengthLimitingTextInputFormatter(6),
+                  ],
+                  onChanged: (val) {
+                    setState(() {
+                      if (!_isLockedOut) _error = null;
+                      _selectedIndex = val.length.clamp(0, 5);
+                    });
+                    if (val.length == 6 && !_isLockedOut && !_isVerifying) {
+                      _verify();
+                    }
+                  },
+                ),
+              ),
+            ),
+
+            // Visual 6 separated digit boxes with proper focus, cursor & selection indicator
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: List.generate(6, (index) {
+                final isFilled = index < currentLength;
+                final digit = isFilled ? _otpController.text[index] : '';
+
+                final isSelected = isFocused && (_selectedIndex == index);
+                final isNextEmpty = isFocused &&
+                    (index == currentLength && currentLength < 6) &&
+                    (_selectedIndex >= currentLength);
+                final isActive = (isSelected || isNextEmpty) && !_isLockedOut;
+
+                Color borderColor;
+                double borderWidth = 1.0;
+                Color boxBg;
+                List<BoxShadow>? shadows;
+
+                if (hasError) {
+                  borderColor = Colors.red.shade500;
+                  borderWidth = isActive ? 2.0 : 1.6;
+                  boxBg = Colors.red.withValues(alpha: 0.04);
+                  if (isActive) {
+                    shadows = [
+                      BoxShadow(
+                        color: Colors.red.withValues(alpha: 0.18),
+                        blurRadius: 6,
+                        spreadRadius: 0,
+                      ),
+                    ];
+                  }
+                } else if (isActive) {
+                  borderColor = const Color(0xFF2563EB);
+                  borderWidth = 2.2;
+                  boxBg = const Color(0xFF2563EB).withValues(alpha: 0.06);
+                  shadows = [
+                    BoxShadow(
+                      color: const Color(0xFF2563EB).withValues(alpha: 0.25),
+                      blurRadius: 8,
+                      spreadRadius: 1,
+                    ),
+                  ];
+                } else if (isFilled) {
+                  borderColor = const Color(0xFF94A3B8);
+                  borderWidth = 1.4;
+                  boxBg = Colors.white;
+                } else {
+                  borderColor = const Color(0xFFCBD5E1);
+                  borderWidth = 1.0;
+                  boxBg = const Color(0xFFF8FAFC);
                 }
-              },
+
+                return GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => _onDigitBoxTapped(index),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    curve: Curves.easeOut,
+                    width: 48,
+                    height: 58,
+                    margin: const EdgeInsets.symmetric(horizontal: 4),
+                    decoration: BoxDecoration(
+                      color: boxBg,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: borderColor,
+                        width: borderWidth,
+                      ),
+                      boxShadow: shadows,
+                    ),
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        if (digit.isNotEmpty)
+                          Text(
+                            digit,
+                            style: TextStyle(
+                              fontSize: 24,
+                              fontWeight: FontWeight.bold,
+                              color: hasError
+                                  ? Colors.red.shade600
+                                  : const Color(0xFF0F172A),
+                            ),
+                          )
+                        else if (isActive && _cursorBlinkController != null)
+                          FadeTransition(
+                            opacity: _cursorBlinkController!,
+                            child: Container(
+                              width: 2.2,
+                              height: 24,
+                              decoration: BoxDecoration(
+                                color: hasError
+                                    ? Colors.red.shade600
+                                    : const Color(0xFF2563EB),
+                                borderRadius: BorderRadius.circular(1),
+                              ),
+                            ),
+                          )
+                        else
+                          Container(
+                            width: 6,
+                            height: 6,
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade400,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+
+                        if (isFilled && isActive && !hasError)
+                          Positioned(
+                            bottom: 6,
+                            child: Container(
+                              width: 18,
+                              height: 3,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF2563EB),
+                                borderRadius: BorderRadius.circular(2),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                );
+              }),
+            ),
+          ],
+        ),
+
+        // Clear code action button
+        if (_otpController.text.isNotEmpty &&
+            !_isLockedOut &&
+            !_isVerifying) ...[
+          const SizedBox(height: 8),
+          GestureDetector(
+            onTap: () {
+              setState(() {
+                _otpController.clear();
+                _selectedIndex = 0;
+                _error = null;
+              });
+              _focusNode.requestFocus();
+            },
+            child: const Text(
+              'Clear code',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF64748B),
+              ),
             ),
           ),
-        ),
-
-        // Visual 6 separated digit boxes matching the UI design
-        GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: () {
-            if (!_isLockedOut && !_isVerifying) _focusNode.requestFocus();
-          },
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: List.generate(6, (index) {
-              final isFilled = index < currentLength;
-              final isCurrent =
-                  index == currentLength && _focusNode.hasFocus && !hasError;
-              final digit = isFilled ? _otpController.text[index] : '';
-
-              Color borderColor;
-              double borderWidth = 1.0;
-              Color boxBg = const Color(0xFFF8FAFC);
-
-              if (hasError) {
-                borderColor = Colors.red.shade600;
-                borderWidth = 1.8;
-                boxBg = Colors.red.withValues(alpha: 0.04);
-              } else if (isCurrent) {
-                borderColor = const Color(0xFF2563EB);
-                borderWidth = 2.0;
-              } else if (isFilled) {
-                borderColor = Colors.grey.shade400;
-                borderWidth = 1.2;
-              } else {
-                borderColor = Colors.grey.shade300;
-              }
-
-              return Container(
-                width: 48,
-                height: 58,
-                margin: const EdgeInsets.symmetric(horizontal: 4),
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: boxBg,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: borderColor, width: borderWidth),
-                ),
-                child: Text(
-                  digit,
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                    color: hasError
-                        ? Colors.red.shade600
-                        : const Color(0xFF0F172A),
-                  ),
-                ),
-              );
-            }),
-          ),
-        ),
+        ],
       ],
     );
   }
@@ -355,7 +624,7 @@ class _PasswordOtpDialogState extends State<PasswordOtpDialog> {
     final theme = Theme.of(context);
 
     return PopScope(
-      canPop: false,
+      canPop: !_isVerifying,
       child: AlertDialog(
         backgroundColor: Colors.white,
         surfaceTintColor: Colors.transparent,
@@ -363,221 +632,235 @@ class _PasswordOtpDialogState extends State<PasswordOtpDialog> {
           borderRadius: BorderRadius.circular(24),
           side: const BorderSide(color: Color(0xFFE2E8F0), width: 1.5),
         ),
-        contentPadding: const EdgeInsets.all(32),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
         title: null,
         content: SizedBox(
           width: 380,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
+          child: Stack(
+            clipBehavior: Clip.none,
             children: [
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: const BoxDecoration(
-                  color: Color(0xFFEFF6FF),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  LucideIcons.shieldCheck,
-                  size: 38,
-                  color: Color(0xFF2563EB),
-                ),
-              ),
-              const SizedBox(height: 24),
-              Text(
-                widget.title,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w800,
-                  color: Color(0xFF0F172A),
+              // Top-right Close ('X') button replacing bottom Cancel button
+              Positioned(
+                top: -12,
+                right: -12,
+                child: IconButton(
+                  icon: const Icon(LucideIcons.x, size: 20, color: Color(0xFF64748B)),
+                  splashRadius: 20,
+                  tooltip: 'Close',
+                  onPressed: _isVerifying ? null : () => Navigator.pop(context, false),
                 ),
               ),
-              const SizedBox(height: 10),
-              Text(
-                widget.subtitle ??
-                    'We sent a 6-digit verification code to:\n${widget.email}',
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 13,
-                  color: Color(0xFF475569),
-                  height: 1.5,
-                ),
-              ),
-              const SizedBox(height: 28),
 
-              // Separated 6 digit boxes matching admin add teacher
-              _buildOtpDigitBoxes(theme),
+              // Modal Content
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const SizedBox(height: 4),
 
-              // Single inline error message below the input field
-              if (_error != null) ...[
-                const SizedBox(height: 14),
-                Center(
-                  child: Text(
-                    _error!,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                      color: Colors.red.shade600,
+                  // Shield Icon
+                  Container(
+                    padding: const EdgeInsets.all(18),
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFEFF6FF),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      LucideIcons.shieldCheck,
+                      size: 36,
+                      color: Color(0xFF2563EB),
                     ),
                   ),
-                ),
-              ],
 
-              const SizedBox(height: 16),
-              if (_isLockedOut)
-                Text(
-                  'Try again in ${(_inputCountdown ~/ 60).toString().padLeft(2, '0')}:${(_inputCountdown % 60).toString().padLeft(2, '0')}',
-                  style: const TextStyle(
-                    color: Color(0xFFDC2626),
-                    fontWeight: FontWeight.w600,
-                    fontSize: 13,
+                  const SizedBox(height: 18),
+
+                  // Title
+                  Text(
+                    widget.title,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w800,
+                      color: Color(0xFF0F172A),
+                    ),
                   ),
-                )
-              else if (_inputCountdown > 0)
-                AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 300),
-                  child: Container(
-                    key: ValueKey<int>(_inputCountdown > 0 ? 1 : 0),
+
+                  const SizedBox(height: 8),
+
+                  // Subtitle
+                  Text(
+                    widget.subtitle ??
+                        'We sent a 6-digit verification code to:\n${widget.email}',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: Color(0xFF475569),
+                      height: 1.5,
+                    ),
+                  ),
+
+                  const SizedBox(height: 18),
+
+                  // 1. Timer badge placed DIRECTLY ABOVE the 6 input boxes
+                  Container(
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 8,
+                      horizontal: 14,
+                      vertical: 6,
                     ),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFEFF6FF),
-                      borderRadius: BorderRadius.circular(100),
-                      border: Border.all(color: const Color(0xFFBFDBFE)),
+                      color: _inputCountdown <= 60
+                          ? Colors.red.withValues(alpha: 0.08)
+                          : const Color(0xFFEFF6FF),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: _inputCountdown <= 60
+                            ? Colors.red.shade400
+                            : const Color(0xFFBFDBFE),
+                        width: 1.2,
+                      ),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(
-                          LucideIcons.timer,
-                          size: 16,
-                          color: Color(0xFF2563EB),
+                        Icon(
+                          LucideIcons.clock,
+                          size: 14,
+                          color: _inputCountdown <= 60
+                              ? Colors.red.shade600
+                              : const Color(0xFF2563EB),
                         ),
-                        const SizedBox(width: 8),
+                        const SizedBox(width: 6),
                         Text(
-                          'Expires in ${(_inputCountdown ~/ 60).toString().padLeft(2, '0')}:${(_inputCountdown % 60).toString().padLeft(2, '0')}',
-                          style: const TextStyle(
-                            color: Color(0xFF2563EB),
+                          _isLockedOut
+                              ? 'Locked: try again in ${_formatOtpTimer(_inputCountdown)}'
+                              : _inputCountdown > 0
+                                  ? 'Expires in ${_formatOtpTimer(_inputCountdown)}'
+                                  : 'Code expired (time passed)',
+                          style: TextStyle(
+                            fontSize: 12,
                             fontWeight: FontWeight.w600,
-                            fontSize: 13,
+                            fontFamily: 'monospace',
+                            color: _inputCountdown <= 60 || _isLockedOut
+                                ? Colors.red.shade700
+                                : const Color(0xFF2563EB),
                           ),
                         ),
                       ],
                     ),
                   ),
-                )
-              else
-                const Text(
-                  'Code has expired. Please request a new one.',
-                  style: TextStyle(
-                    color: Color(0xFFDC2626),
-                    fontWeight: FontWeight.w600,
-                    fontSize: 13,
-                  ),
-                ),
 
-              const SizedBox(height: 24),
-              SizedBox(
-                width: double.infinity,
-                height: 50,
-                child: ElevatedButton(
-                  onPressed: _inputCountdown > 0 &&
-                          !_isLockedOut &&
-                          !_isVerifying &&
-                          _otpController.text.length == 6
-                      ? _verify
-                      : null,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF2563EB),
-                    foregroundColor: Colors.white,
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
+                  const SizedBox(height: 16),
+
+                  // 2. 6-digit OTP input boxes with active cursor & selection indicators
+                  _buildOtpDigitBoxes(theme),
+
+                  // 3. Error message below input field
+                  if (_error != null) ...[
+                    const SizedBox(height: 12),
+                    Center(
+                      child: Text(
+                        _error!,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.red.shade600,
+                        ),
+                      ),
+                    ),
+                  ],
+
+                  const SizedBox(height: 22),
+
+                  // 4. Verify Account Button
+                  SizedBox(
+                    width: double.infinity,
+                    height: 50,
+                    child: ElevatedButton(
+                      onPressed: _inputCountdown > 0 &&
+                              !_isLockedOut &&
+                              !_isVerifying &&
+                              _otpController.text.length == 6
+                          ? _verify
+                          : null,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF2563EB),
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
+                      child: _isVerifying
+                          ? LoadingAnimationWidget.staggeredDotsWave(
+                              color: Colors.white,
+                              size: 20,
+                            )
+                          : Text(
+                              widget.submitButtonLabel,
+                              style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                     ),
                   ),
-                  child: _isVerifying
-                      ? LoadingAnimationWidget.staggeredDotsWave(
-                          color: Colors.white,
-                          size: 20,
-                        )
-                      : Text(
-                          widget.submitButtonLabel,
-                          style: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                ),
-              ),
 
-              const SizedBox(height: 18),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Text(
-                    "Didn't receive the code? ",
-                    style: TextStyle(
-                      color: Color(0xFF64748B),
-                      fontSize: 13,
-                    ),
-                  ),
-                  _isResending
-                      ? LoadingAnimationWidget.staggeredDotsWave(
-                          color: const Color(0xFF2563EB),
-                          size: 16,
-                        )
-                      : OutlinedButton(
-                          onPressed: !_isLockedOut &&
-                                  _resendCooldown == 0 &&
-                                  _resendAttempts < 4
-                              ? _handleResend
-                              : null,
-                          style: OutlinedButton.styleFrom(
-                            backgroundColor: const Color(0xFFF8FAFC),
-                            side: const BorderSide(color: Color(0xFFCBD5E1)),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 6,
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                          ),
-                          child: Text(
-                            _resendAttempts >= 4
-                                ? 'Limit Reached'
-                                : _resendCooldown > 0
-                                    ? 'Resend in ${_resendCooldown}s'
-                                    : 'Resend',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 13,
-                              color: _resendAttempts >= 4
-                                  ? const Color(0xFFDC2626)
-                                  : const Color(0xFF2563EB),
-                            ),
-                          ),
+                  const SizedBox(height: 16),
+
+                  // 5. Resend Code Section
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Text(
+                        "Didn't receive the code? ",
+                        style: TextStyle(
+                          color: Color(0xFF64748B),
+                          fontSize: 13,
                         ),
+                      ),
+                      _isResending
+                          ? LoadingAnimationWidget.staggeredDotsWave(
+                              color: const Color(0xFF2563EB),
+                              size: 16,
+                            )
+                          : OutlinedButton(
+                              onPressed: !_isLockedOut &&
+                                      _resendCooldown == 0 &&
+                                      _resendAttempts < 4
+                                  ? _handleResend
+                                  : null,
+                              style: OutlinedButton.styleFrom(
+                                backgroundColor: const Color(0xFFF8FAFC),
+                                side:
+                                    const BorderSide(color: Color(0xFFCBD5E1)),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 6,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                              child: Text(
+                                _resendAttempts >= 4
+                                    ? 'Limit Reached'
+                                    : _resendCooldown > 0
+                                        ? 'Resend in ${_resendCooldown}s'
+                                        : 'Resend',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13,
+                                  color: _resendAttempts >= 4
+                                      ? const Color(0xFFDC2626)
+                                      : _resendCooldown > 0
+                                          ? const Color(0xFF64748B)
+                                          : const Color(0xFF2563EB),
+                                ),
+                              ),
+                            ),
+                    ],
+                  ),
                 ],
-              ),
-              const SizedBox(height: 12),
-              TextButton(
-                onPressed: _isVerifying
-                    ? null
-                    : () {
-                        Navigator.pop(context, false);
-                      },
-                child: const Text(
-                  'Cancel',
-                  style: TextStyle(
-                    color: Color(0xFF64748B),
-                    fontWeight: FontWeight.w600,
-                    fontSize: 13,
-                  ),
-                ),
               ),
             ],
           ),

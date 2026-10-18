@@ -202,11 +202,12 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
           subtitle: 'We sent a 6-digit verification code to:\n$email',
           submitButtonLabel: 'Verify & Reset Password',
           initialResendCooldown: (otpResult['resendAfter'] as num?)?.toInt() ?? 60,
-          initialInputCountdown: (otpResult['expiresIn'] as num?)?.toInt() ?? 300,
+          initialInputCountdown: (otpResult['expiresIn'] as num?)?.toInt() ?? 600,
           onVerify: (code) => AuthRepository.instance.verifyForgotPasswordOtp(code),
           onResend: () => AuthRepository.instance.sendForgotPasswordOtp(
             email: email,
             recipientName: user.fullName,
+            isResend: true,
           ),
         ),
       );

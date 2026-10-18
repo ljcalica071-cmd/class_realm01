@@ -180,8 +180,9 @@ class _FirstLoginScreenState extends State<FirstLoginScreen> with SingleTickerPr
           child: PasswordOtpDialog(
             email: user.email,
             initialResendCooldown: (otpResponse['resendAfter'] as num?)?.toInt() ?? 60,
-            initialInputCountdown: (otpResponse['expiresIn'] as num?)?.toInt() ?? 300,
+            initialInputCountdown: (otpResponse['expiresIn'] as num?)?.toInt() ?? 600,
             initialResendCount: (otpResponse['resendCount'] as num?)?.toInt() ?? 0,
+            onResend: () => AuthRepository.instance.sendFirstLoginOtp(isResend: true),
           ),
         ),
       );
@@ -361,7 +362,9 @@ class _FirstLoginScreenState extends State<FirstLoginScreen> with SingleTickerPr
               ? 'Teacher ${user.lastName ?? user.fullName}'
               : (user.firstName ?? user.fullName);
 
-          return Scaffold(
+          return PopScope(
+            canPop: !_isLoading,
+            child: Scaffold(
             body: Stack(
               children: [
                 Positioned.fill(
@@ -440,6 +443,7 @@ class _FirstLoginScreenState extends State<FirstLoginScreen> with SingleTickerPr
                           // New Password
                           TextField(
                             controller: _newPassCtrl,
+                            enabled: !_isLoading,
                             obscureText: _obscureNew,
                             maxLength: 30,
                             style: const TextStyle(color: Color(0xFF0F172A), fontSize: 14),
@@ -487,6 +491,7 @@ class _FirstLoginScreenState extends State<FirstLoginScreen> with SingleTickerPr
                           // Confirm Password
                           TextField(
                             controller: _confirmPassCtrl,
+                            enabled: !_isLoading,
                             obscureText: _obscureConfirm,
                             maxLength: 30,
                             style: const TextStyle(color: Color(0xFF0F172A), fontSize: 14),
@@ -540,8 +545,7 @@ class _FirstLoginScreenState extends State<FirstLoginScreen> with SingleTickerPr
 
                           // Submit Button
                           AppPrimaryButton(
-                            label: 'Activate Account & Set Password',
-                            icon: Icons.check_circle_outline,
+                            label: 'Set New Password',
                             isLoading: _isLoading,
                             onPressed: _isValid ? _submit : null,
                           ),
@@ -550,13 +554,29 @@ class _FirstLoginScreenState extends State<FirstLoginScreen> with SingleTickerPr
                           // Back to Login Link
                           Center(
                             child: TextButton.icon(
-                              onPressed: () {
-                                AuthRepository.instance.logout();
-                                AppTheme.themeModeNotifier.value = ThemeMode.light;
-                                Navigator.pushReplacementNamed(context, AppRoutes.login);
-                              },
-                              icon: const Icon(Icons.arrow_back, size: 16),
-                              label: const Text('Back to Login'),
+                              onPressed: _isLoading
+                                  ? null
+                                  : () {
+                                      AuthRepository.instance.logout();
+                                      AppTheme.themeModeNotifier.value = ThemeMode.light;
+                                      Navigator.pushReplacementNamed(context, AppRoutes.login);
+                                    },
+                              style: TextButton.styleFrom(
+                                foregroundColor: const Color(0xFF2563EB),
+                                disabledForegroundColor: const Color(0xFF94A3B8),
+                              ),
+                              icon: Icon(
+                                Icons.arrow_back,
+                                size: 16,
+                                color: _isLoading ? const Color(0xFF94A3B8) : const Color(0xFF2563EB),
+                              ),
+                              label: Text(
+                                'Back to Login',
+                                style: TextStyle(
+                                  color: _isLoading ? const Color(0xFF94A3B8) : const Color(0xFF2563EB),
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
                             ),
                           ),
                         ],
@@ -566,7 +586,8 @@ class _FirstLoginScreenState extends State<FirstLoginScreen> with SingleTickerPr
                 ),
               ],
             ),
-          );
+          ),
+        );
         },
       ),
     );

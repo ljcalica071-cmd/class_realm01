@@ -401,20 +401,64 @@ class AuthRepository {
 
   String? _pendingOtpCode;
   DateTime? _pendingOtpExpiry;
+  DateTime? _lastFirstLoginOtpSentAt;
+  int _firstLoginResendCount = 0;
   int _otpAttempts = 0;
 
-  Future<Map<String, dynamic>> sendFirstLoginOtp() async {
+  Future<Map<String, dynamic>> sendFirstLoginOtp({bool isResend = false}) async {
     final user = _firebaseAuth.currentUser;
     if (user == null || user.email == null) {
       throw Exception('A signed-in user session is required.');
+    }
+
+    final now = DateTime.now();
+
+    // 1. Anti-spam: If not an explicit resend, and an active code is still valid within 10 minutes,
+    // reuse existing OTP session! Prevents spamming emails when clicking 'X' and reopening.
+    if (!isResend &&
+        _pendingOtpCode != null &&
+        _pendingOtpExpiry != null &&
+        now.isBefore(_pendingOtpExpiry!)) {
+      final remainingExpiresIn =
+          _pendingOtpExpiry!.difference(now).inSeconds.clamp(0, 600);
+      final remainingCooldown = _lastFirstLoginOtpSentAt != null
+          ? (60 - now.difference(_lastFirstLoginOtpSentAt!).inSeconds).clamp(0, 60)
+          : 0;
+
+      return {
+        'sent': true,
+        'reused': true,
+        'email': user.email,
+        'expiresIn': remainingExpiresIn,
+        'resendAfter': remainingCooldown,
+        'resendCount': _firstLoginResendCount,
+      };
+    }
+
+    // 2. If explicit resend, enforce 60s cooldown and max 4 resend attempts
+    if (isResend) {
+      if (_lastFirstLoginOtpSentAt != null &&
+          now.difference(_lastFirstLoginOtpSentAt!).inSeconds < 60) {
+        final remaining =
+            60 - now.difference(_lastFirstLoginOtpSentAt!).inSeconds;
+        throw Exception(
+            'Please wait $remaining seconds before requesting another code.');
+      }
+      if (_firstLoginResendCount >= 4) {
+        throw Exception('Maximum resend attempts reached. Try again later.');
+      }
+      _firstLoginResendCount++;
+    } else {
+      _firstLoginResendCount = 0;
+      _otpAttempts = 0;
     }
 
     // Generate secure 6-digit OTP in pure Dart
     final random = Random.secure();
     final code = (100000 + random.nextInt(900000)).toString();
     _pendingOtpCode = code;
-    _pendingOtpExpiry = DateTime.now().add(const Duration(minutes: 10));
-    _otpAttempts = 0;
+    _pendingOtpExpiry = now.add(const Duration(minutes: 10)); // Exactly 10 minutes
+    _lastFirstLoginOtpSentAt = now;
 
     debugPrint('========================================================');
     debugPrint(
@@ -430,7 +474,14 @@ class AuthRepository {
       );
     } catch (_) {}
 
-    return {'sent': true, 'email': user.email, 'expires_in_minutes': 10};
+    return {
+      'sent': true,
+      'reused': false,
+      'email': user.email,
+      'expiresIn': 600, // 10 minutes
+      'resendAfter': 60, // 60 seconds
+      'resendCount': _firstLoginResendCount,
+    };
   }
 
   Future<FirstLoginOtpVerification> verifyFirstLoginOtp(String code) async {
@@ -446,16 +497,18 @@ class AuthRepository {
       _pendingOtpCode = null;
       return const FirstLoginOtpVerification(
         verified: false,
-        reason: 'Verification code has expired. Please request a new code.',
+        reason: 'expired',
       );
     }
 
     _otpAttempts++;
-    if (_otpAttempts > 5) {
+    if (_otpAttempts >= 5) {
       _pendingOtpCode = null;
       return const FirstLoginOtpVerification(
         verified: false,
-        reason: 'Maximum verification attempts exceeded. Please request a new code.',
+        reason: 'locked',
+        attemptsRemaining: 0,
+        retryAfter: 900,
       );
     }
 
@@ -463,11 +516,15 @@ class AuthRepository {
       return FirstLoginOtpVerification(
         verified: false,
         reason: 'Invalid verification code. Please check and try again.',
-        attemptsRemaining: 5 - _otpAttempts,
+        attemptsRemaining: (5 - _otpAttempts).clamp(0, 5),
       );
     }
 
     _pendingOtpCode = null;
+    _pendingOtpExpiry = null;
+    _lastFirstLoginOtpSentAt = null;
+    _firstLoginResendCount = 0;
+    _otpAttempts = 0;
     return const FirstLoginOtpVerification(verified: true, reason: null);
   }
 
@@ -523,6 +580,8 @@ class AuthRepository {
   // --- FORGOT PASSWORD STATE & FLOW ---
   String? _forgotPasswordOtpCode;
   DateTime? _forgotPasswordOtpExpiry;
+  DateTime? _lastForgotPasswordOtpSentAt;
+  int _forgotPasswordResendCount = 0;
   String? _forgotPasswordEmail;
   int _forgotPasswordAttempts = 0;
   bool _forgotPasswordVerified = false;
@@ -560,6 +619,7 @@ class AuthRepository {
   Future<Map<String, dynamic>> sendForgotPasswordOtp({
     required String email,
     String? recipientName,
+    bool isResend = false,
   }) async {
     final cleanEmail = email.trim().toLowerCase();
     if (cleanEmail.isEmpty) {
@@ -590,13 +650,54 @@ class AuthRepository {
       );
     }
 
+    final now = DateTime.now();
+
+    // Anti-spam: Reuse active OTP challenge if already sent and not expired
+    if (!isResend &&
+        _forgotPasswordOtpCode != null &&
+        _forgotPasswordEmail == cleanEmail &&
+        _forgotPasswordOtpExpiry != null &&
+        now.isBefore(_forgotPasswordOtpExpiry!)) {
+      final remainingExpiresIn =
+          _forgotPasswordOtpExpiry!.difference(now).inSeconds.clamp(0, 600);
+      final remainingCooldown = _lastForgotPasswordOtpSentAt != null
+          ? (60 - now.difference(_lastForgotPasswordOtpSentAt!).inSeconds).clamp(0, 60)
+          : 0;
+
+      return {
+        'sent': true,
+        'reused': true,
+        'email': cleanEmail,
+        'expiresIn': remainingExpiresIn,
+        'resendAfter': remainingCooldown,
+        'resendCount': _forgotPasswordResendCount,
+      };
+    }
+
+    if (isResend) {
+      if (_lastForgotPasswordOtpSentAt != null &&
+          now.difference(_lastForgotPasswordOtpSentAt!).inSeconds < 60) {
+        final remaining =
+            60 - now.difference(_lastForgotPasswordOtpSentAt!).inSeconds;
+        throw Exception(
+            'Please wait $remaining seconds before requesting another code.');
+      }
+      if (_forgotPasswordResendCount >= 4) {
+        throw Exception('Maximum resend attempts reached. Try again later.');
+      }
+      _forgotPasswordResendCount++;
+    } else {
+      _forgotPasswordResendCount = 0;
+      _forgotPasswordAttempts = 0;
+    }
+
     // Generate secure 6-digit OTP in pure Dart
     final random = Random.secure();
     final code = (100000 + random.nextInt(900000)).toString();
     _forgotPasswordOtpCode = code;
-    _forgotPasswordOtpExpiry = DateTime.now().add(const Duration(minutes: 10));
+    _forgotPasswordOtpExpiry = now.add(const Duration(minutes: 10)); // Exactly 10 minutes
+    _lastForgotPasswordOtpSentAt = now;
     _forgotPasswordEmail = cleanEmail;
-    _forgotPasswordAttempts = 0;
     _forgotPasswordVerified = false;
 
     debugPrint('========================================================');
@@ -617,10 +718,11 @@ class AuthRepository {
 
     return {
       'sent': true,
+      'reused': false,
       'email': cleanEmail,
       'expiresIn': 600,
       'resendAfter': 60,
-      'resendCount': 0,
+      'resendCount': _forgotPasswordResendCount,
     };
   }
 
