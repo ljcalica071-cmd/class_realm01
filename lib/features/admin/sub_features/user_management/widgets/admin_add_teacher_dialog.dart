@@ -17,7 +17,8 @@ class AdminAddTeacherDialog extends StatefulWidget {
   State<AdminAddTeacherDialog> createState() => _AdminAddTeacherDialogState();
 }
 
-class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog> {
+class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog>
+    with TickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
   final _firstNameController = TextEditingController();
   final _middleNameController = TextEditingController();
@@ -25,6 +26,19 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog> {
   final _emailController = TextEditingController();
   final _otpController = TextEditingController();
   final _otpFocusNode = FocusNode();
+
+  AnimationController? _cursorBlinkController;
+  int _selectedIndex = 0;
+
+  AnimationController get _effectiveCursorBlinkController {
+    if (_cursorBlinkController == null) {
+      _cursorBlinkController = AnimationController(
+        vsync: this,
+        duration: const Duration(milliseconds: 500),
+      )..repeat(reverse: true);
+    }
+    return _cursorBlinkController!;
+  }
 
   TeacherCreationStep _step = TeacherCreationStep.details;
   String? _gender;
@@ -43,6 +57,9 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog> {
 
   Timer? _resendTimer;
   int _resendSecondsRemaining = 0;
+  DateTime? _lastSentAt;
+  Timer? _otpExpiryTimer;
+  int _otpSecondsRemaining = 600;
   int _failedAttempts = 0;
   String? _activeChallengeEmail;
   DateTime? _activeChallengeExpiresAt;
@@ -51,8 +68,50 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog> {
   bool get _isLockedOut => _failedAttempts >= 5;
 
   @override
+  void initState() {
+    super.initState();
+    _cursorBlinkController ??= AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 500),
+    )..repeat(reverse: true);
+
+    _otpFocusNode.addListener(() {
+      if (mounted) setState(() {});
+    });
+
+    _otpFocusNode.onKeyEvent = (node, event) {
+      if (event is KeyDownEvent) {
+        if (event.logicalKey == LogicalKeyboardKey.backspace) {
+          _handleBackspaceKey();
+          return KeyEventResult.handled;
+        } else if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+          setState(() {
+            _selectedIndex =
+                (_selectedIndex - 1).clamp(0, _otpController.text.length);
+            _otpController.selection =
+                TextSelection.collapsed(offset: _selectedIndex);
+          });
+          return KeyEventResult.handled;
+        } else if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+          setState(() {
+            _selectedIndex =
+                (_selectedIndex + 1).clamp(0, _otpController.text.length);
+            _otpController.selection =
+                TextSelection.collapsed(offset: _selectedIndex);
+          });
+          return KeyEventResult.handled;
+        }
+      }
+      return KeyEventResult.ignored;
+    };
+  }
+
+  @override
   void dispose() {
+    _cursorBlinkController?.dispose();
+    _cursorBlinkController = null;
     _resendTimer?.cancel();
+    _otpExpiryTimer?.cancel();
     _firstNameController.dispose();
     _middleNameController.dispose();
     _lastNameController.dispose();
@@ -62,9 +121,38 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog> {
     super.dispose();
   }
 
+  String _formatOtpTimer(int totalSeconds) {
+    final m = (totalSeconds ~/ 60).toString().padLeft(2, '0');
+    final s = (totalSeconds % 60).toString().padLeft(2, '0');
+    return '$m:$s';
+  }
+
+  void _startOtpExpiryTimer([int seconds = 600]) {
+    _otpExpiryTimer?.cancel();
+    setState(() => _otpSecondsRemaining = seconds);
+    if (seconds <= 0) return;
+    _otpExpiryTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      if (_otpSecondsRemaining <= 1) {
+        timer.cancel();
+        setState(() {
+          _otpSecondsRemaining = 0;
+          _error =
+              'The verification code has expired (10 minutes passed). Please click Resend.';
+        });
+      } else {
+        setState(() => _otpSecondsRemaining--);
+      }
+    });
+  }
+
   void _startResendTimer([int seconds = 60]) {
     _resendTimer?.cancel();
     setState(() => _resendSecondsRemaining = seconds);
+    if (seconds <= 0) return;
     _resendTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (!mounted) {
         timer.cancel();
@@ -92,14 +180,26 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog> {
 
     final email = _emailController.text.trim().toLowerCase();
 
-    // Anti-spam mechanism: If active OTP already sent to this exact email and 10-minute expiry is still active,
-    // seamlessly proceed directly to Step 2 without spamming duplicate email or generating a new code.
+    // Anti-spam: Only reuse active session if sent within the last 60s cooldown in this current session
     if (_activeChallengeEmail == email &&
+        _lastSentAt != null &&
+        DateTime.now().difference(_lastSentAt!).inSeconds < 60 &&
         _activeChallengeExpiresAt != null &&
         DateTime.now().isBefore(_activeChallengeExpiresAt!)) {
+      final remainingOtp = _activeChallengeExpiresAt!
+          .difference(DateTime.now())
+          .inSeconds
+          .clamp(0, 600);
+      _startOtpExpiryTimer(remainingOtp);
+      final remainingCooldown =
+          (60 - DateTime.now().difference(_lastSentAt!).inSeconds).clamp(0, 60);
+      _startResendTimer(remainingCooldown);
       setState(() {
         _step = TeacherCreationStep.otpVerification;
         _error = null;
+        _selectedIndex = _otpController.text.length.clamp(0, 5);
+        _otpController.selection =
+            TextSelection.collapsed(offset: _otpController.text.length);
         _successMessage =
             'An active verification code is already valid for ${_emailController.text.trim()}.';
       });
@@ -135,15 +235,15 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog> {
             DateTime.now().add(const Duration(minutes: 10));
       }
 
-      final remainingCooldown =
-          (res['remainingCooldownSeconds'] as num?)?.toInt() ?? 60;
-      if (res['reused'] == true) {
-        if (_resendSecondsRemaining <= 0 && remainingCooldown > 0) {
-          _startResendTimer(remainingCooldown);
-        }
-      } else {
-        _startResendTimer(remainingCooldown);
-      }
+      final remainingCooldown = res['reused'] == true
+          ? ((res['remainingCooldownSeconds'] as num?)?.toInt() ?? 60)
+          : 60;
+      _lastSentAt = DateTime.now();
+      _startResendTimer(remainingCooldown);
+
+      final remainingOtp =
+          (res['remainingOtpSeconds'] as num?)?.toInt() ?? 600;
+      _startOtpExpiryTimer(remainingOtp);
 
       if (res['failedAttempts'] != null) {
         _failedAttempts = (res['failedAttempts'] as num).toInt();
@@ -153,6 +253,9 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog> {
         setState(() {
           _step = TeacherCreationStep.otpVerification;
           _error = null;
+          _selectedIndex = _otpController.text.length.clamp(0, 5);
+          _otpController.selection =
+              TextSelection.collapsed(offset: _otpController.text.length);
           _successMessage = res['reused'] == true
               ? 'An active verification code is already valid for ${_emailController.text.trim()}.'
               : 'A 6-digit verification OTP code has been sent to ${_emailController.text.trim()}.';
@@ -201,12 +304,15 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog> {
               DateTime.now().add(const Duration(minutes: 10));
         }
 
+        _lastSentAt = DateTime.now();
         _startResendTimer(60);
+        _startOtpExpiryTimer(600);
         if (res['failedAttempts'] != null) {
           _failedAttempts = (res['failedAttempts'] as num).toInt();
         }
         setState(() {
           _otpController.clear();
+          _selectedIndex = 0;
           // Attempts are preserved across resends! Do not reset _failedAttempts to 0.
           _error = null;
           _successMessage =
@@ -234,6 +340,12 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog> {
   Future<void> _verifyOtpAndCreate() async {
     if (_isAnyBusy || _isLockedOut) return;
 
+    if (_otpSecondsRemaining <= 0) {
+      setState(() => _error =
+          'The verification code has expired (10 minutes passed). Please click Resend.');
+      return;
+    }
+
     final code = _otpController.text.trim();
     if (code.length != 6) {
       setState(() => _error = 'Enter the complete 6-digit verification code.');
@@ -251,6 +363,7 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog> {
         code: code,
       );
       _resendTimer?.cancel();
+      _otpExpiryTimer?.cancel();
       if (mounted) {
         setState(() {
           _step = TeacherCreationStep.success;
@@ -265,130 +378,316 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog> {
       if (error is AdminTeacherException) {
         if (error.failedAttempts != null) {
           _failedAttempts = error.failedAttempts!;
-        } else {
-          _failedAttempts++;
         }
-        if (_failedAttempts >= 5 || error.maxAttemptsExceeded) {
-          _failedAttempts = 5;
-          setState(() {
-            _error = error.message;
-          });
-        } else {
-          setState(() {
-            _error = error.message;
-          });
-        }
+        setState(() {
+          _error = error.message;
+        });
       } else {
-        _failedAttempts++;
-        final remaining = (5 - _failedAttempts).clamp(0, 5);
-        if (_failedAttempts >= 5) {
-          setState(() {
-            _error =
-                'Maximum verification attempts exceeded (5/5). Please click Back to recheck teacher details.';
-          });
-        } else {
-          final serverMsg = _messageFor(error);
-          setState(() {
-            _error = serverMsg.contains('attempt')
-                ? serverMsg
-                : 'Incorrect or expired code. $remaining attempt${remaining == 1 ? '' : 's'} remaining.';
-          });
-        }
+        setState(() {
+          _error = _messageFor(error);
+        });
+      }
+      if (!_isLockedOut) {
+        _selectedIndex = (_otpController.text.length - 1).clamp(0, 5);
+        _otpController.selection =
+            TextSelection.collapsed(offset: _otpController.text.length);
+        Future.delayed(const Duration(milliseconds: 50), () {
+          if (mounted) _otpFocusNode.requestFocus();
+        });
       }
     } finally {
       if (mounted) setState(() => _isVerifying = false);
     }
   }
 
+  void _handleBackspaceKey() {
+    if (_isLockedOut || _isAnyBusy) return;
+    final text = _otpController.text;
+    if (text.isEmpty) {
+      if (_error != null) setState(() => _error = null);
+      return;
+    }
+
+    final sel = _otpController.selection;
+    if (!sel.isCollapsed && sel.start >= 0 && sel.end <= text.length) {
+      final newText = text.substring(0, sel.start) + text.substring(sel.end);
+      final nextIndex = sel.start.clamp(0, newText.length);
+      _otpController.value = TextEditingValue(
+        text: newText,
+        selection: TextSelection.collapsed(offset: nextIndex),
+      );
+      setState(() {
+        _selectedIndex = nextIndex;
+        _error = null;
+      });
+      return;
+    }
+
+    int deletePos = _selectedIndex;
+    if (deletePos > 0 && deletePos <= text.length) {
+      final newText =
+          text.substring(0, deletePos - 1) + text.substring(deletePos);
+      final nextIndex = (deletePos - 1).clamp(0, newText.length);
+      _otpController.value = TextEditingValue(
+        text: newText,
+        selection: TextSelection.collapsed(offset: nextIndex),
+      );
+      setState(() {
+        _selectedIndex = nextIndex;
+        _error = null;
+      });
+    } else if (deletePos == 0 && text.isNotEmpty) {
+      final newText = text.substring(1);
+      _otpController.value = TextEditingValue(
+        text: newText,
+        selection: const TextSelection.collapsed(offset: 0),
+      );
+      setState(() {
+        _selectedIndex = 0;
+        _error = null;
+      });
+    } else {
+      final newText = text.substring(0, text.length - 1);
+      final nextIndex = newText.length;
+      _otpController.value = TextEditingValue(
+        text: newText,
+        selection: TextSelection.collapsed(offset: nextIndex),
+      );
+      setState(() {
+        _selectedIndex = nextIndex;
+        _error = null;
+      });
+    }
+  }
+
+  void _onDigitBoxTapped(int index) {
+    if (_isLockedOut || _isAnyBusy) return;
+    _otpFocusNode.requestFocus();
+    final text = _otpController.text;
+    setState(() {
+      _error = null;
+      if (index < text.length) {
+        _selectedIndex = index;
+        _otpController.selection = TextSelection(
+          baseOffset: index,
+          extentOffset: index + 1,
+        );
+      } else {
+        _selectedIndex = text.length.clamp(0, 5);
+        _otpController.selection = TextSelection.collapsed(
+          offset: text.length,
+        );
+      }
+    });
+  }
+
   Widget _buildOtpDigitBoxes(ThemeData theme, bool isDark) {
     final hasError = _error != null;
     final currentLength = _otpController.text.length;
+    final isFocused = _otpFocusNode.hasFocus;
 
-    return Stack(
+    return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        // Invisible input field that handles keyboard, paste, backspace natively
-        Positioned.fill(
-          child: Opacity(
-            opacity: 0.0,
-            child: TextField(
-              controller: _otpController,
-              focusNode: _otpFocusNode,
-              autofocus: true,
-              enabled: !_isLockedOut && !_isAnyBusy,
-              keyboardType: TextInputType.number,
-              inputFormatters: [
-                FilteringTextInputFormatter.digitsOnly,
-                LengthLimitingTextInputFormatter(6),
-              ],
-              onChanged: (val) {
-                setState(() {
-                  if (!_isLockedOut) _error = null;
-                });
-                if (val.length == 6 && !_isLockedOut && !_isAnyBusy) {
-                  _verifyOtpAndCreate();
+        Stack(
+          alignment: Alignment.center,
+          children: [
+            // Invisible input field that catches keyboard text and system paste
+            Positioned.fill(
+              child: Opacity(
+                opacity: 0.0,
+                child: TextField(
+                  controller: _otpController,
+                  focusNode: _otpFocusNode,
+                  autofocus: true,
+                  enabled: !_isLockedOut && !_isAnyBusy,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                    LengthLimitingTextInputFormatter(6),
+                  ],
+                  onChanged: (val) {
+                    setState(() {
+                      if (!_isLockedOut) _error = null;
+                      _selectedIndex = val.length.clamp(0, 5);
+                    });
+                    if (val.length == 6 && !_isLockedOut && !_isAnyBusy) {
+                      _verifyOtpAndCreate();
+                    }
+                  },
+                ),
+              ),
+            ),
+
+            // Visual 6 separated digit boxes with proper focus, cursor & selection indicator
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: List.generate(6, (index) {
+                final isFilled = index < currentLength;
+                final digit = isFilled ? _otpController.text[index] : '';
+
+                final isSelected = isFocused && (_selectedIndex == index);
+                final isNextEmpty = isFocused &&
+                    (index == currentLength && currentLength < 6) &&
+                    (_selectedIndex >= currentLength);
+                final isActive = (isSelected || isNextEmpty) && !_isLockedOut;
+
+                Color borderColor;
+                double borderWidth = 1.0;
+                Color boxBg;
+                List<BoxShadow>? shadows;
+
+                if (hasError) {
+                  borderColor = Colors.red.shade500;
+                  borderWidth = isActive ? 2.0 : 1.6;
+                  boxBg = Colors.red.withValues(alpha: isDark ? 0.12 : 0.04);
+                  if (isActive) {
+                    shadows = [
+                      BoxShadow(
+                        color: Colors.red.withValues(alpha: 0.18),
+                        blurRadius: 6,
+                        spreadRadius: 0,
+                      ),
+                    ];
+                  }
+                } else if (isActive) {
+                  borderColor = theme.colorScheme.primary;
+                  borderWidth = 2.2;
+                  boxBg = theme.colorScheme.primary
+                      .withValues(alpha: isDark ? 0.14 : 0.06);
+                  shadows = [
+                    BoxShadow(
+                      color: theme.colorScheme.primary.withValues(alpha: 0.25),
+                      blurRadius: 8,
+                      spreadRadius: 1,
+                    ),
+                  ];
+                } else if (isFilled) {
+                  borderColor =
+                      isDark ? Colors.white38 : const Color(0xFF94A3B8);
+                  borderWidth = 1.4;
+                  boxBg = isDark ? const Color(0xFF1E293B) : Colors.white;
+                } else {
+                  borderColor =
+                      isDark ? Colors.white12 : const Color(0xFFCBD5E1);
+                  borderWidth = 1.0;
+                  boxBg = isDark
+                      ? const Color(0xFF0F172A).withValues(alpha: 0.5)
+                      : const Color(0xFFF8FAFC);
                 }
+
+                return GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => _onDigitBoxTapped(index),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    curve: Curves.easeOut,
+                    width: 48,
+                    height: 58,
+                    margin: const EdgeInsets.symmetric(horizontal: 4),
+                    decoration: BoxDecoration(
+                      color: boxBg,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: borderColor,
+                        width: borderWidth,
+                      ),
+                      boxShadow: shadows,
+                    ),
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        if (digit.isNotEmpty)
+                          Text(
+                            digit,
+                            style: TextStyle(
+                              fontSize: 24,
+                              fontWeight: FontWeight.bold,
+                              color: hasError
+                                  ? Colors.red.shade600
+                                  : theme.colorScheme.onSurface,
+                            ),
+                          )
+                        else if (isActive)
+                          FadeTransition(
+                            opacity: _effectiveCursorBlinkController,
+                            child: Container(
+                              width: 2.2,
+                              height: 24,
+                              decoration: BoxDecoration(
+                                color: hasError
+                                    ? Colors.red.shade600
+                                    : theme.colorScheme.primary,
+                                borderRadius: BorderRadius.circular(1),
+                              ),
+                            ),
+                          )
+                        else
+                          Container(
+                            width: 6,
+                            height: 6,
+                            decoration: BoxDecoration(
+                              color: isDark
+                                  ? Colors.white24
+                                  : Colors.grey.shade400,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+
+                        if (isFilled && isActive && !hasError)
+                          Positioned(
+                            bottom: 6,
+                            child: Container(
+                              width: 18,
+                              height: 3,
+                              decoration: BoxDecoration(
+                                color: theme.colorScheme.primary,
+                                borderRadius: BorderRadius.circular(2),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                );
+              }),
+            ),
+          ],
+        ),
+
+        // Clear code action button
+        if (_otpController.text.isNotEmpty && !_isLockedOut && !_isAnyBusy) ...[
+          const SizedBox(height: 8),
+          Center(
+            child: TextButton.icon(
+              onPressed: () {
+                setState(() {
+                  _otpController.clear();
+                  _selectedIndex = 0;
+                  _error = null;
+                });
+                _otpFocusNode.requestFocus();
               },
+              icon: Icon(
+                LucideIcons.x,
+                size: 14,
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+              ),
+              label: Text(
+                'Clear code',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                ),
+              ),
+              style: TextButton.styleFrom(
+                visualDensity: VisualDensity.compact,
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              ),
             ),
           ),
-        ),
-
-        // Visual 6 separated digit boxes matching the UI design
-        GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: () {
-            if (!_isLockedOut) _otpFocusNode.requestFocus();
-          },
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: List.generate(6, (index) {
-              final isFilled = index < currentLength;
-              final isCurrent =
-                  index == currentLength && _otpFocusNode.hasFocus && !hasError;
-              final digit = isFilled ? _otpController.text[index] : '';
-
-              Color borderColor;
-              double borderWidth = 1.0;
-              Color boxBg =
-                  isDark ? const Color(0xFF1E293B) : Colors.grey.shade50;
-
-              if (hasError) {
-                borderColor = Colors.red.shade600;
-                borderWidth = 1.8;
-                boxBg = Colors.red.withValues(alpha: isDark ? 0.08 : 0.03);
-              } else if (isCurrent) {
-                borderColor = theme.colorScheme.primary;
-                borderWidth = 2.0;
-              } else if (isFilled) {
-                borderColor = isDark ? Colors.white38 : Colors.grey.shade400;
-                borderWidth = 1.2;
-              } else {
-                borderColor = isDark ? Colors.white12 : Colors.grey.shade300;
-              }
-
-              return Container(
-                width: 48,
-                height: 58,
-                margin: const EdgeInsets.symmetric(horizontal: 4),
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: boxBg,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: borderColor, width: borderWidth),
-                ),
-                child: Text(
-                  digit,
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                    color: hasError
-                        ? Colors.red.shade600
-                        : theme.colorScheme.onSurface,
-                  ),
-                ),
-              );
-            }),
-          ),
-        ),
+        ],
       ],
     );
   }
@@ -582,70 +881,72 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog> {
         ),
       ),
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 620),
+        constraints: BoxConstraints(
+          maxWidth: 620,
+          maxHeight: MediaQuery.of(context).size.height * 0.9,
+        ),
         child: Padding(
           padding: const EdgeInsets.all(28.0),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // School Header
-              Center(
-                child: Column(
-                  children: [
-                    Image.asset(
-                      AssetPaths.schoolLogo,
-                      height: 52,
-                      width: 52,
-                      errorBuilder: (_, __, ___) => const Icon(
-                        LucideIcons.graduationCap,
-                        size: 40,
-                        color: Color(0xFF1A365D),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // School Header
+                Center(
+                  child: Column(
+                    children: [
+                      Image.asset(
+                        AssetPaths.schoolLogo,
+                        height: 52,
+                        width: 52,
+                        errorBuilder: (_, __, ___) => const Icon(
+                          LucideIcons.graduationCap,
+                          size: 40,
+                          color: Color(0xFF1A365D),
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Eduardo Barretto Sr. Integrated School',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: theme.colorScheme.primary,
+                      const SizedBox(height: 8),
+                      Text(
+                        'Eduardo Barretto Sr. Integrated School',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: theme.colorScheme.primary,
+                        ),
+                        textAlign: TextAlign.center,
                       ),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      _step == TeacherCreationStep.details
-                          ? 'Create Teacher Account'
-                          : _step == TeacherCreationStep.otpVerification
-                              ? 'Verify Email OTP'
-                              : 'Account Created Successfully',
-                      style: theme.textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.w800,
-                        fontSize: 20,
-                        color: theme.colorScheme.onSurface,
+                      const SizedBox(height: 2),
+                      Text(
+                        _step == TeacherCreationStep.details
+                            ? 'Create Teacher Account'
+                            : _step == TeacherCreationStep.otpVerification
+                                ? 'Verify Email OTP'
+                                : 'Account Created Successfully',
+                        style: theme.textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 20,
+                          color: theme.colorScheme.onSurface,
+                        ),
+                        textAlign: TextAlign.center,
                       ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-              const SizedBox(height: 14),
+                const SizedBox(height: 14),
 
-              // Step Breadcrumb Indicator
-              _buildStepIndicator(theme),
-              const SizedBox(height: 18),
+                // Step Breadcrumb Indicator
+                _buildStepIndicator(theme),
+                const SizedBox(height: 18),
 
-              // --- STEP 1: TEACHER DETAILS ---
-              if (_step == TeacherCreationStep.details)
-                Flexible(
-                  child: SingleChildScrollView(
-                    child: Form(
-                      key: _formKey,
-                      autovalidateMode: _submitted
-                          ? AutovalidateMode.onUserInteraction
-                          : AutovalidateMode.disabled,
-                      child: Column(
+                // --- STEP 1: TEACHER DETAILS ---
+                if (_step == TeacherCreationStep.details)
+                  Form(
+                    key: _formKey,
+                    autovalidateMode: _submitted
+                        ? AutovalidateMode.onUserInteraction
+                        : AutovalidateMode.disabled,
+                    child: Column(
                         mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
@@ -808,15 +1109,14 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog> {
                           ),
                         ],
                       ),
-                    ),
-                  ),
-                )
+                    )
 
               // --- STEP 2: VERIFY OTP ---
               else if (_step == TeacherCreationStep.otpVerification)
                 Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
+                    // 1. Verification code sent banner (without timer)
                     Container(
                       padding: const EdgeInsets.all(14),
                       decoration: BoxDecoration(
@@ -824,7 +1124,8 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog> {
                             .withValues(alpha: 0.35),
                         borderRadius: BorderRadius.circular(14),
                         border: Border.all(
-                          color: theme.colorScheme.primary.withValues(alpha: 0.2),
+                          color:
+                              theme.colorScheme.primary.withValues(alpha: 0.2),
                         ),
                       ),
                       child: Row(
@@ -832,7 +1133,8 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog> {
                           Container(
                             padding: const EdgeInsets.all(8),
                             decoration: BoxDecoration(
-                              color: theme.colorScheme.primary.withValues(alpha: 0.15),
+                              color: theme.colorScheme.primary
+                                  .withValues(alpha: 0.15),
                               shape: BoxShape.circle,
                             ),
                             child: Icon(
@@ -854,12 +1156,13 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog> {
                                     color: theme.colorScheme.primary,
                                   ),
                                 ),
-                                const SizedBox(height: 2),
+                                const SizedBox(height: 3),
                                 Text(
-                                  'Check the 6-digit code sent to ${_emailController.text}. (Valid for 10 minutes)',
+                                  'Check the 6-digit code sent to ${_emailController.text.trim()}. (Valid for 10 minutes)',
                                   style: TextStyle(
-                                    fontSize: 13,
-                                    color: theme.colorScheme.onSurface,
+                                    fontSize: 12,
+                                    color: theme.colorScheme.onSurface
+                                        .withValues(alpha: 0.85),
                                   ),
                                 ),
                               ],
@@ -868,8 +1171,62 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog> {
                         ],
                       ),
                     ),
-                    const SizedBox(height: 28),
+
+                    const SizedBox(height: 18),
+
+                    // 2. Timer badge placed directly above the 6-digit input boxes
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: _otpSecondsRemaining <= 60
+                            ? Colors.red.withValues(alpha: isDark ? 0.15 : 0.08)
+                            : theme.colorScheme.primary
+                                .withValues(alpha: isDark ? 0.15 : 0.08),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: _otpSecondsRemaining <= 60
+                              ? Colors.red.shade400
+                              : theme.colorScheme.primary
+                                  .withValues(alpha: 0.25),
+                          width: 1.2,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            LucideIcons.clock,
+                            size: 14,
+                            color: _otpSecondsRemaining <= 60
+                                ? Colors.red.shade600
+                                : theme.colorScheme.primary,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            _otpSecondsRemaining > 0
+                                ? 'Code expires in ${_formatOtpTimer(_otpSecondsRemaining)}'
+                                : 'Code expired (10 minutes passed)',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              fontFamily: 'monospace',
+                              color: _otpSecondsRemaining <= 60
+                                  ? (isDark
+                                      ? Colors.red.shade300
+                                      : Colors.red.shade700)
+                                  : theme.colorScheme.primary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(height: 16),
+
+                    // 3. 6-digit OTP input boxes with active cursor & selection indicators
                     _buildOtpDigitBoxes(theme, isDark),
+
                     if (_error != null) ...[
                       const SizedBox(height: 14),
                       Center(
@@ -1156,7 +1513,9 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog> {
                         ),
                         const SizedBox(width: 8),
                         FilledButton(
-                          onPressed: (_isAnyBusy || _isLockedOut)
+                          onPressed: (_isAnyBusy ||
+                                  _isLockedOut ||
+                                  _otpSecondsRemaining <= 0)
                               ? null
                               : _verifyOtpAndCreate,
                           style: FilledButton.styleFrom(
@@ -1197,6 +1556,7 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog> {
         ),
       ),
     ),
-  );
+  ),
+);
 }
 }

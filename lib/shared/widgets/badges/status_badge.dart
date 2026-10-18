@@ -46,7 +46,7 @@ class StatusBadge extends StatelessWidget {
         );
       case AccountStatus.archived:
         return StatusBadge(
-          text: 'Inactive',
+          text: 'Archived',
           backgroundColor: AppTheme.catSlate.withValues(alpha: 0.12),
           textColor: AppTheme.catSlate,
           icon: LucideIcons.archive,

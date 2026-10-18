@@ -6,6 +6,8 @@ class AppTextField extends StatelessWidget {
   final String? hint;
   final TextEditingController? controller;
   final bool obscureText;
+  final bool readOnly;
+  final bool enabled;
   final IconData? prefixIcon;
   final Widget? suffixIcon;
   final String? Function(String?)? validator;
@@ -21,6 +23,8 @@ class AppTextField extends StatelessWidget {
     this.hint,
     this.controller,
     this.obscureText = false,
+    this.readOnly = false,
+    this.enabled = true,
     this.prefixIcon,
     this.suffixIcon,
     this.validator,
@@ -49,6 +53,8 @@ class AppTextField extends StatelessWidget {
         TextFormField(
           controller: controller,
           obscureText: obscureText,
+          readOnly: readOnly,
+          enabled: enabled,
           maxLines: maxLines,
           keyboardType: keyboardType,
           inputFormatters: inputFormatters,

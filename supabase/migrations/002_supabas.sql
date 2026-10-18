@@ -31,7 +31,7 @@ CREATE TABLE public.teacher_profiles (
 CREATE TABLE public.teacher_settings (
   teacher_id character varying NOT NULL,
   contact_number character varying,
-  status character varying NOT NULL DEFAULT 'pending_first_login'::character varying CHECK (status::text = ANY (ARRAY['pending_first_login'::character varying::text, 'pending'::character varying::text, 'active'::character varying::text, 'inactive'::character varying::text])),
+  status character varying NOT NULL DEFAULT 'pending_first_login'::character varying CHECK (status::text = ANY (ARRAY['pending_first_login'::text, 'active'::text, 'archived'::text])),
   is_setup_complete boolean NOT NULL DEFAULT false,
   subject_specialization character varying,
   facebook_link text,
@@ -57,7 +57,7 @@ CREATE TABLE public.student_profiles (
 );
 CREATE TABLE public.student_settings (
   student_id character varying NOT NULL,
-  status character varying NOT NULL DEFAULT 'pending_first_login'::character varying CHECK (status::text = ANY (ARRAY['pending_first_login'::character varying, 'active'::character varying, 'inactive'::character varying]::text[])),
+  status character varying NOT NULL DEFAULT 'pending_first_login'::character varying CHECK (status::text = ANY (ARRAY['pending_first_login'::text, 'active'::text, 'archived'::text])),
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   updated_at timestamp with time zone NOT NULL DEFAULT now(),
   CONSTRAINT student_settings_pkey PRIMARY KEY (student_id),
@@ -71,7 +71,7 @@ CREATE TABLE public.parent_profiles (
   contact_number character varying NOT NULL,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   birthday date,
-  status character varying DEFAULT 'pending_first_login'::character varying,
+  status character varying DEFAULT 'pending_first_login'::character varying CHECK (status::text = ANY (ARRAY['pending_first_login'::text, 'active'::text, 'archived'::text])),
   CONSTRAINT parent_profiles_pkey PRIMARY KEY (parent_id),
   CONSTRAINT parent_profiles_parent_id_fkey FOREIGN KEY (parent_id) REFERENCES public.users(id)
 );
@@ -199,6 +199,12 @@ CREATE TABLE public.classwork_items (
   is_archived boolean NOT NULL DEFAULT false,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  term_number smallint NOT NULL DEFAULT 1 CHECK (term_number >= 1 AND term_number <= 3),
+  gradebook_column_index smallint CHECK (gradebook_column_index IS NULL OR gradebook_column_index >= 1 AND gradebook_column_index <= 10),
+  batch_group_id uuid,
+  target_student_ids ARRAY,
+  allow_late_submission boolean NOT NULL DEFAULT true,
+  updated_instructions_at timestamp with time zone,
   CONSTRAINT classwork_items_pkey PRIMARY KEY (id),
   CONSTRAINT classwork_items_subject_offering_id_fkey FOREIGN KEY (subject_offering_id) REFERENCES public.subject_offerings(id)
 );
@@ -218,8 +224,8 @@ CREATE TABLE public.classwork_attachments (
   classwork_id uuid NOT NULL,
   file_name character varying NOT NULL,
   storage_url character varying NOT NULL,
-  mime_type character varying,
-  file_size_bytes bigint CHECK (file_size_bytes IS NULL OR file_size_bytes >= 0),
+  mime_type character varying CHECK (mime_type::text = ANY (ARRAY['application/pdf'::character varying, 'application/msword'::character varying, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'::character varying]::text[])),
+  file_size_bytes bigint CHECK (file_size_bytes > 0 AND file_size_bytes <= 3145728),
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   CONSTRAINT classwork_attachments_pkey PRIMARY KEY (id),
   CONSTRAINT classwork_attachments_classwork_id_fkey FOREIGN KEY (classwork_id) REFERENCES public.classwork_items(id)
@@ -228,7 +234,7 @@ CREATE TABLE public.student_classwork_submissions (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   classwork_id uuid NOT NULL,
   student_id character varying NOT NULL,
-  status character varying NOT NULL DEFAULT 'pending'::character varying CHECK (status::text = ANY (ARRAY['pending'::character varying, 'submitted'::character varying, 'graded'::character varying]::text[])),
+  status character varying NOT NULL DEFAULT 'pending'::character varying CHECK (status::text = ANY (ARRAY['pending'::text, 'submitted'::text, 'late_submitted'::text, 'graded'::text, 'returned_corrupted'::text, 'reopened'::text])),
   submitted_at timestamp with time zone,
   score numeric CHECK (score IS NULL OR score >= 0::numeric),
   feedback character varying,
@@ -236,6 +242,11 @@ CREATE TABLE public.student_classwork_submissions (
   graded_by character varying,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  submission_count integer NOT NULL DEFAULT 0 CHECK (submission_count >= 0 AND submission_count <= 5),
+  last_uploaded_at timestamp with time zone,
+  is_file_corrupted boolean NOT NULL DEFAULT false,
+  dispute_note text,
+  dispute_status character varying CHECK (dispute_status IS NULL OR (dispute_status::text = ANY (ARRAY['open'::character varying, 'resolved'::character varying, 'dismissed'::character varying]::text[]))),
   CONSTRAINT student_classwork_submissions_pkey PRIMARY KEY (id),
   CONSTRAINT student_classwork_submissions_classwork_id_fkey FOREIGN KEY (classwork_id) REFERENCES public.classwork_items(id),
   CONSTRAINT student_classwork_submissions_student_id_fkey FOREIGN KEY (student_id) REFERENCES public.student_profiles(student_id),
@@ -247,7 +258,7 @@ CREATE TABLE public.submission_attachments (
   file_name character varying NOT NULL,
   storage_url character varying NOT NULL,
   mime_type character varying NOT NULL CHECK (mime_type::text = ANY (ARRAY['application/pdf'::character varying, 'application/msword'::character varying, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'::character varying]::text[])),
-  file_size_bytes bigint CHECK (file_size_bytes >= 0),
+  file_size_bytes bigint CHECK (file_size_bytes > 0 AND file_size_bytes <= 3145728),
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   CONSTRAINT submission_attachments_pkey PRIMARY KEY (id),
   CONSTRAINT submission_attachments_submission_id_fkey FOREIGN KEY (submission_id) REFERENCES public.student_classwork_submissions(id)
@@ -359,14 +370,15 @@ CREATE TABLE public.learning_materials (
   folder_id uuid NOT NULL,
   file_name character varying NOT NULL,
   storage_path_url character varying NOT NULL,
-  mime_type character varying,
-  file_size_bytes bigint CHECK (file_size_bytes IS NULL OR file_size_bytes >= 0),
+  mime_type character varying CHECK (mime_type IS NULL OR (mime_type::text = ANY (ARRAY['application/pdf'::character varying, 'application/msword'::character varying, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'::character varying, 'application/vnd.ms-powerpoint'::character varying, 'application/vnd.openxmlformats-officedocument.presentationml.presentation'::character varying, 'text/markdown'::character varying, 'text/uri-list'::character varying]::text[]))),
+  file_size_bytes bigint CHECK (file_size_bytes IS NULL OR file_size_bytes >= 0 AND file_size_bytes <= 3145728),
   is_archived boolean NOT NULL DEFAULT false,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   updated_at timestamp with time zone NOT NULL DEFAULT now(),
   is_visible_to_students boolean NOT NULL DEFAULT true,
   title character varying,
   description text,
+  available_from timestamp with time zone,
   CONSTRAINT learning_materials_pkey PRIMARY KEY (id),
   CONSTRAINT learning_materials_folder_id_fkey FOREIGN KEY (folder_id) REFERENCES public.folders(id)
 );

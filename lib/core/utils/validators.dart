@@ -113,6 +113,7 @@ class AppValidators {
 
     // Common email domain typos check
     const typoDomains = {
+      'gmsil.com': 'gmail.com',
       'gamil.com': 'gmail.com',
       'gmial.com': 'gmail.com',
       'gmai.com': 'gmail.com',
@@ -122,6 +123,12 @@ class AppValidators {
       'gmail.con': 'gmail.com',
       'gmeil.com': 'gmail.com',
       'gemail.com': 'gmail.com',
+      'gmaul.com': 'gmail.com',
+      'gmaol.com': 'gmail.com',
+      'gmaik.com': 'gmail.com',
+      'gmaip.com': 'gmail.com',
+      'gnail.com': 'gmail.com',
+      'gmal.com': 'gmail.com',
       'gamil.co': 'gmail.com',
       'gmail.co': 'gmail.com',
       'yaho.com': 'yahoo.com',
@@ -139,6 +146,23 @@ class AppValidators {
       return 'Invalid domain. Did you mean @$suggestion?';
     }
 
+    // Dynamic fuzzy typo check against major providers (Levenshtein distance <= 2)
+    const majorProviders = [
+      'gmail.com',
+      'yahoo.com',
+      'outlook.com',
+      'hotmail.com',
+      'icloud.com',
+    ];
+
+    if (!majorProviders.contains(domainPart)) {
+      for (final provider in majorProviders) {
+        if (_levenshtein(domainPart, provider) <= 2) {
+          return 'Invalid domain. Did you mean @$provider?';
+        }
+      }
+    }
+
     // Full standard RFC 5322 regex match
     final emailRegex = RegExp(
       r"^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$",
@@ -148,6 +172,32 @@ class AppValidators {
     }
 
     return null;
+  }
+
+  /// Calculates Levenshtein distance between two strings
+  static int _levenshtein(String s, String t) {
+    if (s == t) return 0;
+    if (s.isEmpty) return t.length;
+    if (t.isEmpty) return s.length;
+
+    List<int> v0 = List<int>.generate(t.length + 1, (i) => i);
+    List<int> v1 = List<int>.filled(t.length + 1, 0);
+
+    for (int i = 0; i < s.length; i++) {
+      v1[0] = i + 1;
+      for (int j = 0; j < t.length; j++) {
+        int cost = (s[i] == t[j]) ? 0 : 1;
+        v1[j + 1] = [
+          v1[j] + 1,
+          v0[j + 1] + 1,
+          v0[j] + cost,
+        ].reduce((a, b) => a < b ? a : b);
+      }
+      for (int j = 0; j <= t.length; j++) {
+        v0[j] = v1[j];
+      }
+    }
+    return v1[t.length];
   }
 
   /// Real-time domain deliverability check using DNS-over-HTTPS (DoH).
@@ -181,6 +231,23 @@ class AppValidators {
       );
     }
 
+    // Known parked / squatter keywords to reject
+    const parkedKeywords = [
+      'catchall',
+      'park',
+      'sedo',
+      'bodis',
+      'above.com',
+      'subdomain',
+      'dan.com',
+      'parking',
+      'sinkhole',
+      'blackhole',
+      'localhost',
+      '127.0.0.1',
+      '0.0.0.0',
+    ];
+
     try {
       // 1. Query Google Public DNS over HTTPS for MX records
       final uri = Uri.parse('https://dns.google/resolve?name=${Uri.encodeComponent(domain)}&type=MX');
@@ -202,10 +269,14 @@ class AppValidators {
         final mxRecords = answers?.where((a) => a['type'] == 15).toList() ?? [];
 
         if (mxRecords.isNotEmpty) {
-          // Check for RFC 7505 Null MX (e.g. data is "." or "0 .")
+          // Check for RFC 7505 Null MX and reject parked / squatter domains
           final validMx = mxRecords.where((r) {
-            final dataStr = r['data']?.toString().trim() ?? '';
-            return dataStr.isNotEmpty && dataStr != '.' && dataStr != '0 .';
+            final dataStr = (r['data']?.toString().toLowerCase().trim() ?? '');
+            if (dataStr.isEmpty || dataStr == '.' || dataStr == '0 .') return false;
+            for (final kw in parkedKeywords) {
+              if (dataStr.contains(kw)) return false;
+            }
+            return true;
           }).toList();
 
           if (validMx.isNotEmpty) {
@@ -213,7 +284,7 @@ class AppValidators {
           } else {
             return DomainDeliverabilityResult(
               isDeliverable: false,
-              error: "The domain '$domain' is configured to reject incoming emails.",
+              error: "The email domain '$domain' cannot receive emails (Address not found). Check for typos and try again.",
             );
           }
         }
@@ -251,6 +322,24 @@ class AppValidators {
               isDeliverable: false,
               error: "The email domain '$domain' does not exist (Address not found). Check for typos and try again.",
             );
+          }
+          final cfAnswers = cfData['Answer'] as List<dynamic>?;
+          final cfMx = cfAnswers?.where((a) => a['type'] == 15).toList() ?? [];
+          if (cfMx.isNotEmpty) {
+            final validMx = cfMx.where((r) {
+              final dataStr = (r['data']?.toString().toLowerCase().trim() ?? '');
+              if (dataStr.isEmpty || dataStr == '.' || dataStr == '0 .') return false;
+              for (final kw in parkedKeywords) {
+                if (dataStr.contains(kw)) return false;
+              }
+              return true;
+            }).toList();
+            if (validMx.isEmpty) {
+              return DomainDeliverabilityResult(
+                isDeliverable: false,
+                error: "The email domain '$domain' cannot receive emails (Address not found). Check for typos and try again.",
+              );
+            }
           }
         }
       } catch (cfErr) {

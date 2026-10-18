@@ -80,10 +80,14 @@ void main() {
       expect(res, contains('gmail.com'));
     });
 
-    test('rejects common typo domains like nazhiyuri@gamil.com', () {
-      final res = AppValidators.validateEmail('nazhiyuri@gamil.com');
-      expect(res, isNotNull);
-      expect(res, contains('gmail.com'));
+    test('rejects common typo domains like nazhiyuri@gamil.com and nazhiyuri@gmsil.com', () {
+      final res1 = AppValidators.validateEmail('nazhiyuri@gamil.com');
+      expect(res1, isNotNull);
+      expect(res1, contains('gmail.com'));
+
+      final res2 = AppValidators.validateEmail('nazhiyuri@gmsil.com');
+      expect(res2, isNotNull);
+      expect(res2, contains('gmail.com'));
     });
 
     test('rejects typos like nazhi@gmails.con and gmails.com', () {

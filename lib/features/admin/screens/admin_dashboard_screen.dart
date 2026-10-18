@@ -26,7 +26,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   @override
   void initState() {
     super.initState();
-    _loadData();
+    _loadData(isInitial: true);
     _subscribeToRealtimeChanges();
   }
 
@@ -60,8 +60,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     super.dispose();
   }
 
-  Future<void> _loadData() async {
-    setState(() => _isLoading = true);
+  Future<void> _loadData({bool isInitial = false}) async {
+    if (isInitial) {
+      setState(() => _isLoading = true);
+    }
     final allTeachers = await AuthRepository.instance.getTeachers();
     if (mounted) {
       setState(() {

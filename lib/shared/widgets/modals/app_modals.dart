@@ -14,6 +14,10 @@ class AppModals {
     Color? confirmColor,
   }) {
     final theme = Theme.of(context);
+    final isDelete = confirmLabel.trim().toLowerCase().contains('delete') ||
+        title.trim().toLowerCase().contains('delete');
+    final effectiveColor =
+        confirmColor ?? (isDelete ? AppTheme.catRed : theme.colorScheme.primary);
     return showDialog(
       context: context,
       builder: (ctx) => Theme(
@@ -34,10 +38,10 @@ class AppModals {
                     Container(
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                        color: (confirmColor ?? theme.colorScheme.primary).withValues(alpha: 0.12),
+                        color: effectiveColor.withValues(alpha: 0.12),
                         shape: BoxShape.circle,
                       ),
-                      child: Icon(Icons.help_outline_rounded, color: confirmColor ?? theme.colorScheme.primary, size: 24),
+                      child: Icon(Icons.help_outline_rounded, color: effectiveColor, size: 24),
                     ),
                     const SizedBox(width: 14),
                     Expanded(
@@ -76,12 +80,11 @@ class AppModals {
                     const SizedBox(width: 8),
                     AppPrimaryButton(
                       label: confirmLabel,
-                      backgroundColor: confirmColor ?? theme.colorScheme.primary,
+                      backgroundColor: effectiveColor,
                       onPressed: () {
                         Navigator.of(ctx).pop();
                         onConfirm();
                       },
-                      width: 120,
                       height: 40,
                     ),
                   ],
@@ -393,6 +396,11 @@ class AppModals {
     Color? confirmColor,
   }) {
     final theme = Theme.of(context);
+    final isDelete = confirmLabel.trim().toLowerCase().contains('delete') ||
+        title.trim().toLowerCase().contains('delete');
+    final effectiveColor =
+        confirmColor ?? (isDelete ? AppTheme.catRed : theme.colorScheme.primary);
+
     return showDialog<bool>(
       context: context,
       builder: (ctx) => Theme(
@@ -436,9 +444,8 @@ class AppModals {
                     const SizedBox(width: 8),
                     AppPrimaryButton(
                       label: confirmLabel,
-                      backgroundColor: confirmColor ?? theme.colorScheme.primary,
+                      backgroundColor: effectiveColor,
                       onPressed: () => Navigator.of(ctx).pop(true),
-                      width: 110,
                       height: 40,
                     ),
                   ],

@@ -41,8 +41,15 @@ class EmailService {
             'to': cleanRecipient,
             'subject': subject,
             'html': html,
-            'smtp_user': dotenv.env['SMTP_EMAIL'] ?? 'ljcalica071@gmail.com',
-            'smtp_pass': dotenv.env['SMTP_PASSWORD'] ?? 'wowtgfoenxnxewnl',
+            'smtp_user': (dotenv.env['SMTP_EMAIL'] != null &&
+                    dotenv.env['SMTP_EMAIL'] != 'ljcalica071@gmail.com')
+                ? dotenv.env['SMTP_EMAIL']!
+                : 'classrealm1@gmail.com',
+            'smtp_pass': (dotenv.env['SMTP_PASSWORD'] != null &&
+                    dotenv.env['SMTP_PASSWORD'] != 'wowtgfoenxnxewnl' &&
+                    dotenv.env['SMTP_PASSWORD'] != 'whbmzbcnbaphwoho')
+                ? dotenv.env['SMTP_PASSWORD']!
+                : 'hkcgzoavuszbefie',
           }),
         );
 
@@ -138,11 +145,20 @@ class EmailService {
 
   static String _formatDeliveryError(String email, String rawError) {
     final lower = rawError.toLowerCase();
+    if (lower.contains('535') ||
+        lower.contains('badcredentials') ||
+        lower.contains('username and password not accepted')) {
+      final sender = (dotenv.env['SMTP_EMAIL'] != null &&
+              dotenv.env['SMTP_EMAIL'] != 'ljcalica071@gmail.com')
+          ? dotenv.env['SMTP_EMAIL']!
+          : 'classrealm1@gmail.com';
+      return "Gmail SMTP Error (535 Bad Credentials): Google rejected the App Password for sender account ($sender). If you recently changed the account password or updated 2FA, please generate a fresh 16-character App Password at myaccount.google.com/apppasswords.";
+    }
     if (lower.contains('daily user sending limit exceeded') ||
         lower.contains('sending limit') ||
         lower.contains('550-5.4.5') ||
         lower.contains('550 5.4.5')) {
-      return "Google Gmail daily sending limit reached for the sender account (ljcalica071@gmail.com). Google resets this after 24 hours. Please try again later.";
+      return "Google Gmail daily sending limit reached for the sender account. Google resets this after 24 hours. Please try again later.";
     }
     if (lower.contains('blocked') ||
         lower.contains('suspicious') ||
@@ -279,17 +295,34 @@ class EmailService {
     required String tempPassword,
   }) async {
     final String htmlTemplate = '''
-      <div style="font-family: Arial, sans-serif; max-width: 560px; margin: 20px auto; color: #172033; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff;">
-        <h2 style="color: #1a365d; margin-top: 0;">Welcome to ClassRealm!</h2>
-        <p>Hello <strong>$teacherName</strong>,</p>
-        <p>Your teacher account for Eduardo Barretto Sr. Integrated School is ready. Use these credentials to sign in:</p>
-        <div style="background: #f8fafc; padding: 16px; border-radius: 8px; border: 1px solid #cbd5e1; margin: 20px 0;">
-          <p style="margin: 6px 0;"><strong>Email Address:</strong> <span style="color: #2563eb; font-size: 15px;">$recipientEmail</span></p>
-          <p style="margin: 6px 0;"><strong>Temporary Password:</strong> <code style="font-size: 16px; font-weight: 700; color: #0f172a; background: #e2e8f0; padding: 3px 8px; border-radius: 4px;">$tempPassword</code></p>
+      <div style="font-family: Arial, sans-serif; max-width: 520px; margin: 20px auto; padding: 26px; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff;">
+        <h2 style="color: #1e3a5f; margin-top: 0; font-size: 22px; font-weight: bold;">Welcome to ClassRealm!</h2>
+        <p style="font-size: 15px; color: #334155; margin-bottom: 8px;">Hello <strong>$teacherName</strong>,</p>
+        <p style="font-size: 14px; color: #475569; line-height: 1.6; margin-top: 0;">Your teacher account for <strong>Eduardo Barretto Sr. Integrated School</strong> is ready. Use these credentials to sign in:</p>
+        
+        <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 10px; padding: 18px 20px; margin: 20px 0;">
+          <div style="margin-bottom: 12px;">
+            <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: #64748b; display: block; margin-bottom: 4px;">Email Address</span>
+            <span style="font-size: 15px; font-weight: 600; color: #1e293b; font-family: monospace;">$recipientEmail</span>
+          </div>
+          <div>
+            <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: #64748b; display: block; margin-bottom: 4px;">Temporary Password</span>
+            <code style="font-size: 18px; font-weight: 700; color: #2563eb; background: #eff6ff; border: 1px solid #bfdbfe; padding: 5px 12px; border-radius: 6px; letter-spacing: 1px; display: inline-block; font-family: monospace;">$tempPassword</code>
+          </div>
         </div>
-        <p style="color: #64748b; font-size: 13px;"><strong>Notice:</strong> For your security, you will be required to set a new password the first time you sign in.</p>
-        <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 20px 0;" />
-        <p style="font-size: 12px; color: #94a3b8; margin: 0;">Eduardo Barretto Sr. Integrated School — ClassRealm</p>
+
+        <div style="background: #fef3c7; border: 1px solid #f59e0b; border-radius: 8px; padding: 12px 16px; margin: 20px 0;">
+          <p style="margin: 0; color: #92400e; font-size: 13px; font-weight: bold;">
+            🔒 Notice: First-Time Password Change Required
+          </p>
+          <p style="margin: 4px 0 0 0; color: #b45309; font-size: 12px;">
+            For your security, you will be required to set a new password the first time you sign in.
+          </p>
+        </div>
+
+        <p style="font-size: 12px; color: #64748b; margin-top: 16px;">Please keep these credentials secure. Do not share your temporary password with unauthorized individuals.</p>
+        <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 18px 0;" />
+        <p style="font-size: 11px; color: #94a3b8; margin: 0; text-align: center;">Eduardo Barretto Sr. Integrated School — ClassRealm</p>
       </div>
     ''';
 

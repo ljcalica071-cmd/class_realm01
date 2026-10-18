@@ -26,6 +26,7 @@ class AppButton extends StatelessWidget {
   final double? width;
   final double height;
   final bool isSmall;
+  final Color? backgroundColor;
 
   const AppButton({
     super.key,
@@ -37,6 +38,7 @@ class AppButton extends StatelessWidget {
     this.width,
     this.height = 42,
     this.isSmall = false,
+    this.backgroundColor,
   });
 
   // Convenience constructors for common semantic uses
@@ -48,6 +50,7 @@ class AppButton extends StatelessWidget {
     this.isLoading = false,
     this.width,
     this.isSmall = false,
+    this.backgroundColor,
   })  : type = AppButtonType.primary,
         height = 42;
 
@@ -59,6 +62,7 @@ class AppButton extends StatelessWidget {
     this.isLoading = false,
     this.width,
     this.isSmall = false,
+    this.backgroundColor,
   })  : type = AppButtonType.success,
         height = 42;
 
@@ -70,6 +74,7 @@ class AppButton extends StatelessWidget {
     this.isLoading = false,
     this.width,
     this.isSmall = false,
+    this.backgroundColor,
   })  : type = AppButtonType.danger,
         height = 42;
 
@@ -81,6 +86,7 @@ class AppButton extends StatelessWidget {
     this.isLoading = false,
     this.width,
     this.isSmall = false,
+    this.backgroundColor,
   })  : type = AppButtonType.outline,
         height = 42;
 
@@ -92,10 +98,12 @@ class AppButton extends StatelessWidget {
     this.isLoading = false,
     this.width,
     this.isSmall = false,
+    this.backgroundColor,
   })  : type = AppButtonType.outline,
         height = 42;
 
   Color _bgColor(BuildContext context) {
+    if (backgroundColor != null) return backgroundColor!;
     final primary = Theme.of(context).colorScheme.primary;
     switch (type) {
       case AppButtonType.primary: return primary;
@@ -108,6 +116,7 @@ class AppButton extends StatelessWidget {
   }
 
   Color _fgColor(BuildContext context) {
+    if (backgroundColor != null) return Colors.white;
     final primary = Theme.of(context).colorScheme.primary;
     final onSurface = Theme.of(context).colorScheme.onSurface;
     switch (type) {
@@ -249,6 +258,19 @@ class AppPrimaryButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    AppButtonType resolvedType = AppButtonType.primary;
+    final lower = label.trim().toLowerCase();
+    if (backgroundColor == AppTheme.catRed ||
+        lower == 'delete' ||
+        lower.startsWith('delete') ||
+        lower.contains('delete')) {
+      resolvedType = AppButtonType.danger;
+    } else if (backgroundColor == AppTheme.catOrange) {
+      resolvedType = AppButtonType.warning;
+    } else if (backgroundColor == AppTheme.catGreen) {
+      resolvedType = AppButtonType.success;
+    }
+
     return AppButton(
       label: label,
       onPressed: onPressed,
@@ -256,7 +278,8 @@ class AppPrimaryButton extends StatelessWidget {
       isLoading: isLoading,
       width: width,
       height: height,
-      type: AppButtonType.primary,
+      type: resolvedType,
+      backgroundColor: backgroundColor,
     );
   }
 }

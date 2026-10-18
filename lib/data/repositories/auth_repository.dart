@@ -787,11 +787,13 @@ class AuthRepository {
             firstName: profile['first_name'],
             lastName: profile['last_name'],
             middleName: profile['middle_name'],
+            gender: profile['gender'],
             birthday: profile['birthday'] != null
                 ? DateTime.parse(profile['birthday'].toString())
                 : null,
-            isSetupComplete: info['is_setup_complete'],
-            status: _parseStatus(info['status']),
+            isSetupComplete: info['is_setup_complete'] ?? false,
+            status: _parseStatus(info['status'] ?? 'pending_first_login'),
+            isArchived: (u['is_archived'] == true) || (info['status'] == 'archived'),
           ),
         );
       }
@@ -801,15 +803,553 @@ class AuthRepository {
     }
   }
 
-  // Admin: Update Teacher Status
+  // Admin: Update Teacher Status (with cascading archive & student/parent active check)
   Future<bool> updateTeacherStatus(String uid, String newStatus) async {
     try {
-      await _supabaseClient
-          .from('teacher_settings')
-          .update({'status': newStatus})
-          .eq('teacher_id', uid);
+      if (newStatus == 'archived') {
+        // 1. Mark as archived in users table (primary indicator)
+        await _supabaseClient
+            .from('users')
+            .update({'is_archived': true})
+            .eq('id', uid);
+
+        // 2. Set status to 'archived' in teacher_settings
+        try {
+          await _supabaseClient
+              .from('teacher_settings')
+              .update({'status': 'archived'})
+              .eq('teacher_id', uid);
+        } catch (_) {}
+
+        // Archive subject offerings taught by this teacher
+        try {
+          final offerings = await _supabaseClient
+              .from('subject_offerings')
+              .select('id')
+              .eq('teacher_id', uid);
+
+          if (offerings.isNotEmpty) {
+            await _supabaseClient
+                .from('subject_offerings')
+                .update({'is_archived': true})
+                .eq('teacher_id', uid);
+
+            // Collect all students in these offerings
+            final Set<String> affectedStudentIds = {};
+            for (var off in offerings) {
+              final enr = await _supabaseClient
+                  .from('student_enrollments')
+                  .select('student_id')
+                  .eq('subject_offering_id', off['id']);
+              for (var row in enr) {
+                if (row['student_id'] != null) {
+                  affectedStudentIds.add(row['student_id'].toString());
+                }
+              }
+            }
+
+            // Check if student is active in any other active subject offering
+            for (final sId in affectedStudentIds) {
+              final studentEnrollments = await _supabaseClient
+                  .from('student_enrollments')
+                  .select('id, subject_offering_id')
+                  .eq('student_id', sId);
+
+              bool hasActiveOffering = false;
+              for (var se in studentEnrollments) {
+                final offId = se['subject_offering_id'];
+                final offData = await _supabaseClient
+                    .from('subject_offerings')
+                    .select('is_archived')
+                    .eq('id', offId)
+                    .maybeSingle();
+                if (offData != null && offData['is_archived'] == false) {
+                  hasActiveOffering = true;
+                  break;
+                }
+              }
+
+              // If student has no other active classes, archive them
+              if (!hasActiveOffering) {
+                try {
+                  await _supabaseClient
+                      .from('student_settings')
+                      .update({'status': 'archived'})
+                      .eq('student_id', sId);
+                  await _supabaseClient
+                      .from('users')
+                      .update({'is_archived': true})
+                      .eq('id', sId);
+                } catch (_) {}
+
+                // Check parent(s)
+                try {
+                  final parentLinks = await _supabaseClient
+                      .from('parent_student_links')
+                      .select('parent_id')
+                      .eq('student_id', sId);
+
+                  for (var pl in parentLinks) {
+                    final pId = pl['parent_id'];
+                    if (pId == null) continue;
+
+                    // Check if parent has any other active students
+                    final allLinks = await _supabaseClient
+                        .from('parent_student_links')
+                        .select('student_id')
+                        .eq('parent_id', pId);
+
+                    bool hasActiveChild = false;
+                    for (var link in allLinks) {
+                      final childId = link['student_id'];
+                      final childUser = await _supabaseClient
+                          .from('users')
+                          .select('is_archived')
+                          .eq('id', childId)
+                          .maybeSingle();
+                      if (childUser != null && childUser['is_archived'] == false) {
+                        hasActiveChild = true;
+                        break;
+                      }
+                    }
+
+                    if (!hasActiveChild) {
+                      await _supabaseClient
+                          .from('parent_profiles')
+                          .update({'status': 'archived'})
+                          .eq('parent_id', pId);
+                      await _supabaseClient
+                          .from('users')
+                          .update({'is_archived': true})
+                          .eq('id', pId);
+                    }
+                  }
+                } catch (_) {}
+              }
+            }
+          }
+        } catch (e) {
+          debugPrint('Error cascading teacher archive: $e');
+        }
+      } else if (newStatus == 'active') {
+        try {
+          await _supabaseClient
+              .from('users')
+              .update({'is_archived': false})
+              .eq('id', uid);
+
+          final settings = await _supabaseClient
+              .from('teacher_settings')
+              .select('is_setup_complete')
+              .eq('teacher_id', uid)
+              .maybeSingle();
+          final isSetup = settings?['is_setup_complete'] == true;
+          final targetStatus = isSetup ? 'active' : 'pending_first_login';
+
+          await _supabaseClient
+              .from('teacher_settings')
+              .update({'status': targetStatus})
+              .eq('teacher_id', uid);
+        } catch (_) {}
+
+        // Unarchive subject offerings taught by this teacher
+        try {
+          final offerings = await _supabaseClient
+              .from('subject_offerings')
+              .select('id')
+              .eq('teacher_id', uid);
+
+          if (offerings.isNotEmpty) {
+            await _supabaseClient
+                .from('subject_offerings')
+                .update({'is_archived': false})
+                .eq('teacher_id', uid);
+
+            // Re-activate students enrolled in these offerings
+            for (var off in offerings) {
+              final enr = await _supabaseClient
+                  .from('student_enrollments')
+                  .select('student_id')
+                  .eq('subject_offering_id', off['id']);
+              for (var row in enr) {
+                final sId = row['student_id'];
+                if (sId != null) {
+                  try {
+                    await _supabaseClient
+                        .from('student_settings')
+                        .update({'status': 'active'})
+                        .eq('student_id', sId);
+                    await _supabaseClient
+                        .from('users')
+                        .update({'is_archived': false})
+                        .eq('id', sId);
+                  } catch (_) {}
+
+                  // Re-activate parent if linked
+                  try {
+                    final parentLinks = await _supabaseClient
+                        .from('parent_student_links')
+                        .select('parent_id')
+                        .eq('student_id', sId);
+                    for (var pl in parentLinks) {
+                      final pId = pl['parent_id'];
+                      if (pId != null) {
+                        await _supabaseClient
+                            .from('parent_profiles')
+                            .update({'status': 'active'})
+                            .eq('parent_id', pId);
+                        await _supabaseClient
+                            .from('users')
+                            .update({'is_archived': false})
+                            .eq('id', pId);
+                      }
+                    }
+                  } catch (_) {}
+                }
+              }
+            }
+          }
+        } catch (e) {
+          debugPrint('Error cascading teacher unarchive: $e');
+        }
+      } else {
+        await _supabaseClient
+            .from('teacher_settings')
+            .update({'status': newStatus})
+            .eq('teacher_id', uid);
+      }
       return true;
     } catch (e) {
+      debugPrint('Error updating teacher status $uid to $newStatus: $e');
+      return false;
+    }
+  }
+
+  // Admin: Delete Teacher Record Permanently
+  Future<bool> deleteTeacherRecord(String teacherId) async {
+    try {
+      // 1. Find all subject offerings taught by this teacher
+      final offerings = await _supabaseClient
+          .from('subject_offerings')
+          .select('id')
+          .eq('teacher_id', teacherId);
+
+      final Set<String> affectedStudentIds = {};
+
+      for (var off in offerings) {
+        final offId = off['id'];
+
+        // Get enrolled students
+        final enr = await _supabaseClient
+            .from('student_enrollments')
+            .select('student_id')
+            .eq('subject_offering_id', offId);
+        for (var row in enr) {
+          if (row['student_id'] != null) {
+            affectedStudentIds.add(row['student_id'].toString());
+          }
+        }
+
+        // Delete dependencies under this subject offering
+        try {
+          await _supabaseClient
+              .from('teacher_schedule')
+              .delete()
+              .eq('subject_offering_id', offId);
+        } catch (_) {}
+
+        try {
+          await _supabaseClient
+              .from('attendance_records')
+              .delete()
+              .eq('subject_offering_id', offId);
+        } catch (_) {}
+
+        try {
+          await _supabaseClient
+              .from('term_grades')
+              .delete()
+              .eq('subject_offering_id', offId);
+        } catch (_) {}
+
+        try {
+          await _supabaseClient
+              .from('gradebook_term_sheets')
+              .delete()
+              .eq('subject_offering_id', offId);
+        } catch (_) {}
+
+        // Digital assessments
+        try {
+          final assessments = await _supabaseClient
+              .from('digital_assessments')
+              .select('id')
+              .eq('subject_offering_id', offId);
+          for (var a in assessments) {
+            final aId = a['id'];
+            final attempts = await _supabaseClient
+                .from('assessment_attempts')
+                .select('id')
+                .eq('assessment_id', aId);
+            for (var att in attempts) {
+              await _supabaseClient
+                  .from('anti_cheating_logs')
+                  .delete()
+                  .eq('assessment_attempt_id', att['id']);
+              await _supabaseClient
+                  .from('assessment_responses')
+                  .delete()
+                  .eq('attempt_id', att['id']);
+            }
+            await _supabaseClient
+                .from('assessment_attempts')
+                .delete()
+                .eq('assessment_id', aId);
+
+            final questions = await _supabaseClient
+                .from('assessment_questions')
+                .select('id')
+                .eq('assessment_id', aId);
+            for (var q in questions) {
+              await _supabaseClient
+                  .from('assessment_question_options')
+                  .delete()
+                  .eq('question_id', q['id']);
+            }
+            await _supabaseClient
+                .from('assessment_questions')
+                .delete()
+                .eq('assessment_id', aId);
+            await _supabaseClient
+                .from('digital_assessment_extensions')
+                .delete()
+                .eq('assessment_id', aId);
+          }
+          await _supabaseClient
+              .from('digital_assessments')
+              .delete()
+              .eq('subject_offering_id', offId);
+        } catch (_) {}
+
+        // Classwork items
+        try {
+          final classworks = await _supabaseClient
+              .from('classwork_items')
+              .select('id')
+              .eq('subject_offering_id', offId);
+          for (var cw in classworks) {
+            final cwId = cw['id'];
+            final subs = await _supabaseClient
+                .from('student_classwork_submissions')
+                .select('id')
+                .eq('classwork_id', cwId);
+            for (var s in subs) {
+              await _supabaseClient
+                  .from('submission_attachments')
+                  .delete()
+                  .eq('submission_id', s['id']);
+            }
+            await _supabaseClient
+                .from('student_classwork_submissions')
+                .delete()
+                .eq('classwork_id', cwId);
+            await _supabaseClient
+                .from('classwork_attachments')
+                .delete()
+                .eq('classwork_id', cwId);
+            await _supabaseClient
+                .from('classwork_extensions')
+                .delete()
+                .eq('classwork_id', cwId);
+          }
+          await _supabaseClient
+              .from('classwork_items')
+              .delete()
+              .eq('subject_offering_id', offId);
+        } catch (_) {}
+
+        // Folders and materials
+        try {
+          final folders = await _supabaseClient
+              .from('folders')
+              .select('id')
+              .eq('subject_offering_id', offId);
+          for (var f in folders) {
+            await _supabaseClient
+                .from('learning_materials')
+                .delete()
+                .eq('folder_id', f['id']);
+          }
+          await _supabaseClient
+              .from('folders')
+              .delete()
+              .eq('subject_offering_id', offId);
+        } catch (_) {}
+
+        // Delete enrollments
+        try {
+          await _supabaseClient
+              .from('student_enrollments')
+              .delete()
+              .eq('subject_offering_id', offId);
+        } catch (_) {}
+
+        // Delete offering
+        try {
+          await _supabaseClient
+              .from('subject_offerings')
+              .delete()
+              .eq('id', offId);
+        } catch (_) {}
+      }
+
+      // Check affected students: if they have NO remaining enrollments in any subject, delete them
+      for (final sId in affectedStudentIds) {
+        try {
+          final remaining = await _supabaseClient
+              .from('student_enrollments')
+              .select('id')
+              .eq('student_id', sId);
+
+          if (remaining.isEmpty) {
+            // Student is no longer enrolled anywhere
+            final pLinks = await _supabaseClient
+                .from('parent_student_links')
+                .select('parent_id')
+                .eq('student_id', sId);
+
+            await _supabaseClient
+                .from('parent_student_links')
+                .delete()
+                .eq('student_id', sId);
+
+            await _supabaseClient
+                .from('student_settings')
+                .delete()
+                .eq('student_id', sId);
+
+            await _supabaseClient
+                .from('student_profiles')
+                .delete()
+                .eq('student_id', sId);
+
+            await _supabaseClient
+                .from('users')
+                .delete()
+                .eq('id', sId);
+
+            // Check parents: if parent has NO other students linked, delete parent
+            for (var pl in pLinks) {
+              final pId = pl['parent_id'];
+              if (pId != null) {
+                final otherChildren = await _supabaseClient
+                    .from('parent_student_links')
+                    .select('student_id')
+                    .eq('parent_id', pId);
+                if (otherChildren.isEmpty) {
+                  await _supabaseClient
+                      .from('parent_profiles')
+                      .delete()
+                      .eq('parent_id', pId);
+                  await _supabaseClient
+                      .from('users')
+                      .delete()
+                      .eq('id', pId);
+                }
+              }
+            }
+          }
+        } catch (e) {
+          debugPrint('Error cleaning up orphan student $sId: $e');
+        }
+      }
+
+      // 4. Delete Teacher records
+      String? teacherEmail;
+      try {
+        final u = await _supabaseClient
+            .from('users')
+            .select('email')
+            .eq('id', teacherId)
+            .maybeSingle();
+        teacherEmail = u?['email']?.toString();
+      } catch (_) {}
+
+      try {
+        await _supabaseClient
+            .from('first_login_otp_verifications')
+            .delete()
+            .eq('user_id', teacherId);
+      } catch (_) {}
+
+      if (teacherEmail != null && teacherEmail.isNotEmpty) {
+        try {
+          await _supabaseClient
+              .from('admin_teacher_email_challenges')
+              .delete()
+              .eq('email', teacherEmail);
+        } catch (_) {}
+      }
+
+      try {
+        await _supabaseClient
+            .from('admin_teacher_email_challenges')
+            .delete()
+            .eq('created_by', teacherId);
+      } catch (_) {}
+
+      try {
+        await _supabaseClient
+            .from('teacher_settings')
+            .delete()
+            .eq('teacher_id', teacherId);
+      } catch (_) {}
+
+      try {
+        await _supabaseClient
+            .from('teacher_profiles')
+            .delete()
+            .eq('teacher_id', teacherId);
+      } catch (_) {}
+
+      try {
+        await _supabaseClient
+            .from('users')
+            .delete()
+            .eq('id', teacherId);
+      } catch (_) {}
+
+      return true;
+    } catch (e) {
+      debugPrint('Error permanently deleting teacher $teacherId: $e');
+      return false;
+    }
+  }
+
+  // Admin: Update Teacher Profile Details
+  Future<bool> updateTeacherProfile({
+    required String teacherId,
+    required String firstName,
+    String? middleName,
+    required String lastName,
+    required String gender,
+    required DateTime birthday,
+  }) async {
+    try {
+      final bdayStr =
+          '${birthday.year.toString().padLeft(4, '0')}-${birthday.month.toString().padLeft(2, '0')}-${birthday.day.toString().padLeft(2, '0')}';
+      await _supabaseClient.from('teacher_profiles').update({
+        'first_name': firstName.trim(),
+        'middle_name': (middleName == null || middleName.trim().isEmpty)
+            ? null
+            : middleName.trim(),
+        'last_name': lastName.trim(),
+        'gender': gender,
+        'birthday': bdayStr,
+      }).eq('teacher_id', teacherId);
+      return true;
+    } catch (e) {
+      debugPrint('Error updating teacher profile: $e');
       return false;
     }
   }
@@ -865,13 +1405,13 @@ class AuthRepository {
       debugPrint('Supabase challenge lookup notice: $e');
     }
 
-    final now = DateTime.now();
+    final now = DateTime.now().toUtc();
 
     if (priorChallenge != null) {
       // Check lockout
       final lockedUntilStr = priorChallenge['locked_until']?.toString();
       if (lockedUntilStr != null && lockedUntilStr.isNotEmpty) {
-        final lockedUntil = DateTime.tryParse(lockedUntilStr);
+        final lockedUntil = DateTime.tryParse(lockedUntilStr)?.toUtc();
         if (lockedUntil != null && now.isBefore(lockedUntil)) {
           throw const AdminTeacherException(
             'Too many incorrect codes. Please try again after 15 minutes.',
@@ -891,22 +1431,41 @@ class AuthRepository {
         );
       }
 
-      final expiresAtStr = priorChallenge['expires_at']?.toString();
-      final expiresAt =
-          expiresAtStr != null ? DateTime.tryParse(expiresAtStr) : null;
-      final isChallengeActive = expiresAt != null && now.isBefore(expiresAt);
-
       final lastSentAtStr = priorChallenge['last_sent_at']?.toString();
       final lastSentAt =
-          lastSentAtStr != null ? DateTime.tryParse(lastSentAtStr) : null;
-      final secondsSinceLastSent =
-          lastSentAt != null ? now.difference(lastSentAt).inSeconds : 999;
+          lastSentAtStr != null ? DateTime.tryParse(lastSentAtStr)?.toUtc() : null;
 
-      // If an explicit resend, enforce 60s cooldown
-      if (isResend && secondsSinceLastSent < 58) {
-        final waitSec = (60 - secondsSinceLastSent).clamp(1, 60);
-        throw AdminTeacherException(
-            'Please wait ${waitSec}s before requesting another code.');
+      // Accurately compute seconds since last sent in UTC
+      int secondsSinceLastSent = 999;
+      if (lastSentAt != null) {
+        final diff = now.difference(lastSentAt).inSeconds;
+        if (diff >= 0 && diff <= 600) {
+          secondsSinceLastSent = diff;
+        }
+      }
+
+      // If sent less than 60 seconds ago:
+      if (secondsSinceLastSent < 60) {
+        if (isResend) {
+          final waitSec = (60 - secondsSinceLastSent).clamp(1, 60);
+          throw AdminTeacherException(
+              'Please wait ${waitSec}s before requesting another code.');
+        } else {
+          // If rapid Back and Send again within 60s cooldown, reuse active challenge
+          final remainingCooldown = (60 - secondsSinceLastSent).clamp(1, 60);
+          final remainingOtpSeconds = (600 - secondsSinceLastSent).clamp(0, 600);
+          return {
+            'sent': false,
+            'reused': true,
+            'email': cleanEmail,
+            'remainingCooldownSeconds': remainingCooldown,
+            'remainingOtpSeconds': remainingOtpSeconds,
+            'failedAttempts': priorFailedAttempts,
+            'expiresAt': (lastSentAt?.add(const Duration(minutes: 10)) ??
+                    now.add(const Duration(minutes: 10)))
+                .toIso8601String(),
+          };
+        }
       }
     }
 
@@ -961,8 +1520,8 @@ class AuthRepository {
         'gender': gender,
         'birthday': bdayStr,
         'created_by': currentUser?.id ?? 'admin',
-        'expires_at': expiresAt.toIso8601String(),
-        'last_sent_at': now.toIso8601String(),
+        'expires_at': expiresAt.toUtc().toIso8601String(),
+        'last_sent_at': now.toUtc().toIso8601String(),
         'failed_attempts': currentFailedAttempts,
         'locked_until': null,
       });
@@ -974,6 +1533,7 @@ class AuthRepository {
       'sent': true,
       'email': cleanEmail,
       'remainingCooldownSeconds': 60,
+      'remainingOtpSeconds': 600,
       'failedAttempts': currentFailedAttempts,
       'expiresAt': expiresAt.toIso8601String(),
     };
@@ -1017,7 +1577,7 @@ class AuthRepository {
         'id': teacherId,
         'email': email.trim().toLowerCase(),
         'role': 'teacher',
-        'status': 'pendingFirstLogin',
+        'is_archived': false,
       });
 
       await _supabaseClient.from('teacher_profiles').upsert({
@@ -1031,7 +1591,10 @@ class AuthRepository {
 
       await _supabaseClient.from('teacher_settings').upsert({
         'teacher_id': teacherId,
-        'status': 'pendingFirstLogin',
+        'status': 'pending_first_login',
+        'is_setup_complete': false,
+        'is_facebook_public': false,
+        'is_phone_public': false,
       });
     } catch (e) {
       debugPrint('Pure Dart create teacher notice: $e');
@@ -1064,12 +1627,12 @@ class AuthRepository {
       );
     }
 
-    final now = DateTime.now();
+    final now = DateTime.now().toUtc();
 
     // 2. Check lockout
     final lockedUntilStr = challenge['locked_until']?.toString();
     if (lockedUntilStr != null && lockedUntilStr.isNotEmpty) {
-      final lockedUntil = DateTime.tryParse(lockedUntilStr);
+      final lockedUntil = DateTime.tryParse(lockedUntilStr)?.toUtc();
       if (lockedUntil != null && now.isBefore(lockedUntil)) {
         throw const AdminTeacherException(
           'Too many incorrect codes. Please try again after 15 minutes.',
@@ -1092,7 +1655,7 @@ class AuthRepository {
     // 3. Check expiration (10 minutes)
     final expiresAtStr = challenge['expires_at']?.toString();
     final expiresAt =
-        expiresAtStr != null ? DateTime.tryParse(expiresAtStr) : null;
+        expiresAtStr != null ? DateTime.tryParse(expiresAtStr)?.toUtc() : null;
     if (expiresAt == null || now.isAfter(expiresAt)) {
       throw const AdminTeacherException(
         'The verification code has expired (valid for 10 minutes). Please click Resend.',
@@ -1104,7 +1667,7 @@ class AuthRepository {
     if (cleanCode != expectedCode) {
       final newFailedAttempts = failedAttempts + 1;
       final lockedUntil = newFailedAttempts >= 5
-          ? now.add(const Duration(minutes: 15)).toIso8601String()
+          ? now.add(const Duration(minutes: 15)).toUtc().toIso8601String()
           : null;
 
       try {
@@ -1189,8 +1752,57 @@ class AuthRepository {
       } else {
         final fbData = jsonDecode(fbRes.body);
         if (fbData is Map && fbData['error']?['message'] == 'EMAIL_EXISTS') {
-          throw const AdminTeacherException(
-              'This email is already registered in Firebase Authentication.');
+          // Check if this teacher is already in public.users
+          final existingInUsers = await _supabaseClient
+              .from('users')
+              .select('id')
+              .eq('email', cleanEmail)
+              .maybeSingle();
+          if (existingInUsers != null) {
+            throw const AdminTeacherException('This email is already registered.');
+          }
+
+          // If not in users table, this user was created in Firebase Auth during a previous attempt.
+          // Sign in to retrieve their existing UID and token.
+          try {
+            final signInRes = await http.post(
+              Uri.parse(
+                  'https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=$apiKey'),
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode({
+                'email': cleanEmail,
+                'password': tempPassword,
+                'returnSecureToken': true,
+              }),
+            );
+            if (signInRes.statusCode == 200) {
+              final signInData = jsonDecode(signInRes.body);
+              if (signInData is Map && signInData['localId'] != null) {
+                teacherId = signInData['localId'].toString();
+                final idToken = signInData['idToken']?.toString();
+                if (idToken != null) {
+                  try {
+                    await http.post(
+                      Uri.parse(
+                          'https://identitytoolkit.googleapis.com/v1/accounts:update?key=$apiKey'),
+                      headers: {'Content-Type': 'application/json'},
+                      body: jsonEncode({
+                        'idToken': idToken,
+                        'displayName': fullName,
+                      }),
+                    );
+                  } catch (_) {}
+                }
+              }
+            } else {
+              throw const AdminTeacherException(
+                  'This email is already registered in Firebase Authentication.');
+            }
+          } catch (e) {
+            if (e is AdminTeacherException) rethrow;
+            throw const AdminTeacherException(
+                'This email is already registered in Firebase Authentication.');
+          }
         }
       }
     } catch (e) {
@@ -1203,7 +1815,7 @@ class AuthRepository {
       'id': teacherId,
       'email': cleanEmail,
       'role': 'teacher',
-      'status': 'pendingFirstLogin',
+      'is_archived': false,
     });
 
     await _supabaseClient.from('teacher_profiles').upsert({
@@ -1218,7 +1830,10 @@ class AuthRepository {
 
     await _supabaseClient.from('teacher_settings').upsert({
       'teacher_id': teacherId,
-      'status': 'pendingFirstLogin',
+      'status': 'pending_first_login',
+      'is_setup_complete': false,
+      'is_facebook_public': false,
+      'is_phone_public': false,
     });
 
     // 8. Delete the challenge
@@ -1250,16 +1865,6 @@ class AuthRepository {
       'temporaryPassword': tempPassword,
       'teacherId': teacherId,
     };
-  }
-
-  // Admin: Delete Teacher Record (100% Pure Dart)
-  Future<bool> deleteTeacherRecord(String uid) async {
-    try {
-      await _supabaseClient.from('users').delete().eq('id', uid);
-      return true;
-    } catch (e) {
-      return false;
-    }
   }
 
   // Teacher: Complete Academic Setup
