@@ -265,9 +265,12 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
     final isDark = theme.brightness == Brightness.dark;
     final currentUser = AuthRepository.instance.currentUser;
     final teacherName = currentUser?.fullName ?? 'Teacher';
-    final nameTitle = currentUser?.gender?.toLowerCase() == 'female'
-        ? "Ma'am"
-        : "Sir";
+    final nameTitle = currentUser?.honorific.isNotEmpty == true
+        ? currentUser!.honorific
+        : ((currentUser?.gender?.trim().toLowerCase() == 'female' ||
+                currentUser?.gender?.trim().toLowerCase() == 'f')
+            ? "Ma'am"
+            : "Sir");
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),

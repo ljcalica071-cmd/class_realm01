@@ -83,7 +83,7 @@ class _ParentNotificationsTabState extends State<ParentNotificationsTab> {
           .from('notifications')
           .select()
           .eq('is_archived', false)
-          .inFilter('target_audience', ['all', 'students_parents'])
+          .inFilter('target_audience', ['all', 'parents', 'students_parents'])
           .order('created_at', ascending: false)
           .range(_offset, _offset + _pageSize - 1);
 

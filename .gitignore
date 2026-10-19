@@ -51,7 +51,6 @@ app.*.map.json
 .env
 .env.*
 !.env.example
-lib/firebase_options.dart
 firebase-service-account.json
 *service-account*.json
 

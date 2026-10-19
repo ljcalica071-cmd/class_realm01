@@ -76,7 +76,7 @@ class StudentDashboardRepository {
               id,
               subjects ( id, subject_name, subject_code, grade_level ),
               sections ( id, section_name, grade_level ),
-              teacher_profiles ( teacher_id, first_name, last_name )
+              teacher_profiles ( teacher_id, first_name, last_name, gender )
             )
           ''')
           .eq('student_id', uid)
@@ -89,10 +89,19 @@ class StudentDashboardRepository {
         final sec = offering['sections'] as Map<String, dynamic>? ?? {};
         final teacher =
             offering['teacher_profiles'] as Map<String, dynamic>? ?? {};
-        final teacherName = [
+        final rawTeacherName = [
           teacher['first_name'],
           teacher['last_name'],
         ].where((n) => n != null && n.toString().trim().isNotEmpty).join(' ');
+        final g = teacher['gender']?.toString().trim().toLowerCase();
+        final prefix = (g == 'female' || g == 'f')
+            ? "Ma'am "
+            : (g == 'male' || g == 'm')
+                ? "Sir "
+                : "";
+        final teacherName = rawTeacherName.isNotEmpty
+            ? '$prefix$rawTeacherName'
+            : '';
         return {
           'subject_id': row['subject_offering_id']?.toString() ?? '',
           'subject_name': sub['subject_name']?.toString() ?? '',

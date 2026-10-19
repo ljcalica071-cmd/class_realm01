@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:class_realm/core/config/env_config.dart';
 
 class EmailDeliveryException implements Exception {
   final String message;
@@ -25,9 +26,17 @@ class EmailService {
     final cleanRecipient = to.trim();
 
     // 1. Dispatch via Supabase send-email Edge Function (Nodemailer Gmail SMTP)
-    final supabaseUrl = dotenv.env['SUPABASE_URL'];
-    final supabaseAnonKey = dotenv.env['SUPABASE_ANON_KEY'];
-    if (supabaseUrl != null && supabaseUrl.isNotEmpty && supabaseAnonKey != null) {
+    final supabaseUrl = EnvConfig.supabaseUrl;
+    final supabaseAnonKey = EnvConfig.supabaseAnonKey;
+    final smtpUser = EnvConfig.smtpEmail;
+    final smtpPass = EnvConfig.smtpPassword;
+
+    if (supabaseUrl.isNotEmpty && supabaseAnonKey.isNotEmpty) {
+      if (smtpUser.isEmpty || smtpPass.isEmpty) {
+        throw const EmailDeliveryException(
+          'SMTP credentials are not configured in .env. Please set SMTP_EMAIL and SMTP_PASSWORD.',
+        );
+      }
       try {
         final url = Uri.parse('$supabaseUrl/functions/v1/send-email');
         final response = await http.post(
@@ -41,15 +50,8 @@ class EmailService {
             'to': cleanRecipient,
             'subject': subject,
             'html': html,
-            'smtp_user': (dotenv.env['SMTP_EMAIL'] != null &&
-                    dotenv.env['SMTP_EMAIL'] != 'ljcalica071@gmail.com')
-                ? dotenv.env['SMTP_EMAIL']!
-                : 'classrealm1@gmail.com',
-            'smtp_pass': (dotenv.env['SMTP_PASSWORD'] != null &&
-                    dotenv.env['SMTP_PASSWORD'] != 'wowtgfoenxnxewnl' &&
-                    dotenv.env['SMTP_PASSWORD'] != 'whbmzbcnbaphwoho')
-                ? dotenv.env['SMTP_PASSWORD']!
-                : 'hkcgzoavuszbefie',
+            'smtp_user': smtpUser,
+            'smtp_pass': smtpPass,
           }),
         );
 
@@ -123,7 +125,7 @@ class EmailService {
             'Content-Type': 'application/json',
           },
           body: jsonEncode({
-            'sender': {'name': 'ClassRealm', 'email': dotenv.env['SMTP_EMAIL'] ?? 'noreply@classrealm.edu'},
+            'sender': {'name': 'ClassRealm', 'email': EnvConfig.smtpEmail.isNotEmpty ? EnvConfig.smtpEmail : 'noreply@classrealm.edu'},
             'to': [{'email': cleanRecipient}],
             'subject': subject,
             'htmlContent': html,
@@ -148,10 +150,7 @@ class EmailService {
     if (lower.contains('535') ||
         lower.contains('badcredentials') ||
         lower.contains('username and password not accepted')) {
-      final sender = (dotenv.env['SMTP_EMAIL'] != null &&
-              dotenv.env['SMTP_EMAIL'] != 'ljcalica071@gmail.com')
-          ? dotenv.env['SMTP_EMAIL']!
-          : 'classrealm1@gmail.com';
+      final sender = EnvConfig.smtpEmail.isNotEmpty ? EnvConfig.smtpEmail : 'SMTP account';
       return "Gmail SMTP Error (535 Bad Credentials): Google rejected the App Password for sender account ($sender). If you recently changed the account password or updated 2FA, please generate a fresh 16-character App Password at myaccount.google.com/apppasswords.";
     }
     if (lower.contains('daily user sending limit exceeded') ||

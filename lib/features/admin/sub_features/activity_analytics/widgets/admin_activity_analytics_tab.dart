@@ -124,6 +124,10 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab> {
     // Filtered logs
     final displayedLogs = _sessionLogs;
 
+    if (_isLoading) {
+      return _buildSkeletonLoading(context, isDark);
+    }
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Column(
@@ -313,9 +317,7 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab> {
           ),
           const SizedBox(height: 12),
 
-          if (_isLoading)
-            const Center(child: Padding(padding: EdgeInsets.all(32), child: CircularProgressIndicator()))
-          else if (displayedLogs.isEmpty)
+          if (displayedLogs.isEmpty)
             Container(
               padding: const EdgeInsets.all(32),
               alignment: Alignment.center,
@@ -555,6 +557,298 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab> {
         ],
       ),
     );
+  }
+
+  Widget _buildSkeletonLoading(BuildContext context, bool isDark) {
+    final theme = Theme.of(context);
+    final cardBg = isDark ? theme.colorScheme.surface : Colors.white;
+    final borderColor = isDark ? Colors.white12 : Colors.grey.shade200;
+
+    return _SkeletonShimmer(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header Skeleton
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _skeletonBar(width: 320, height: 26, borderRadius: 8),
+                    const SizedBox(height: 8),
+                    _skeletonBar(width: 420, height: 14, borderRadius: 6),
+                  ],
+                ),
+                _skeletonBar(width: 260, height: 38, borderRadius: 10),
+              ],
+            ),
+            const SizedBox(height: 24),
+
+            // Overview KPI Cards Skeleton
+            Row(
+              children: [
+                Expanded(child: _buildMetricCardSkeleton(cardBg, borderColor)),
+                const SizedBox(width: 16),
+                Expanded(child: _buildMetricCardSkeleton(cardBg, borderColor)),
+                const SizedBox(width: 16),
+                Expanded(child: _buildMetricCardSkeleton(cardBg, borderColor)),
+              ],
+            ),
+            const SizedBox(height: 28),
+
+            // Workload Telemetry Cards Skeleton
+            _skeletonBar(width: 300, height: 20, borderRadius: 6),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: cardBg,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: borderColor),
+              ),
+              child: Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: List.generate(3, (_) => _buildWorkloadCardSkeleton(isDark)),
+              ),
+            ),
+            const SizedBox(height: 28),
+
+            // Live Teacher Session Logs Table Skeleton
+            _skeletonBar(width: 340, height: 20, borderRadius: 6),
+            const SizedBox(height: 12),
+            Container(
+              decoration: BoxDecoration(
+                color: cardBg,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: borderColor),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(14),
+                child: Column(
+                  children: [
+                    // Table Header Placeholder
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                      color: isDark ? Colors.white10 : Colors.grey.shade100,
+                      child: Row(
+                        children: [
+                          Expanded(flex: 2, child: _skeletonBar(width: 100, height: 14)),
+                          Expanded(flex: 1, child: _skeletonBar(width: 60, height: 14)),
+                          Expanded(flex: 1, child: _skeletonBar(width: 80, height: 14)),
+                          Expanded(flex: 1, child: _skeletonBar(width: 80, height: 14)),
+                          Expanded(flex: 2, child: _skeletonBar(width: 120, height: 14)),
+                        ],
+                      ),
+                    ),
+                    // Table Row Skeletons
+                    ...List.generate(
+                      4,
+                      (i) => Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                        decoration: BoxDecoration(
+                          border: Border(
+                            bottom: BorderSide(
+                              color: isDark ? Colors.white10 : Colors.grey.shade200,
+                            ),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              flex: 2,
+                              child: Row(
+                                children: [
+                                  _skeletonCircle(size: 10),
+                                  const SizedBox(width: 10),
+                                  _skeletonBar(width: 130, height: 14),
+                                ],
+                              ),
+                            ),
+                            Expanded(flex: 1, child: _skeletonBar(width: 80, height: 14)),
+                            Expanded(flex: 1, child: _skeletonBar(width: 90, height: 14)),
+                            Expanded(flex: 1, child: _skeletonBar(width: 90, height: 14)),
+                            Expanded(flex: 2, child: _skeletonBar(width: 110, height: 14)),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  static Widget _skeletonBar({double? width, required double height, double borderRadius = 6}) {
+    return Container(
+      width: width,
+      height: height,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(borderRadius),
+      ),
+    );
+  }
+
+  static Widget _skeletonCircle({required double size}) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        shape: BoxShape.circle,
+      ),
+    );
+  }
+
+  static Widget _buildMetricCardSkeleton(Color cardBg, Color borderColor) {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: cardBg,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: borderColor),
+      ),
+      child: Row(
+        children: [
+          _skeletonCircle(size: 48),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _skeletonBar(width: 110, height: 13),
+                const SizedBox(height: 6),
+                _skeletonBar(width: 80, height: 18),
+                const SizedBox(height: 6),
+                _skeletonBar(width: 130, height: 11),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static Widget _buildWorkloadCardSkeleton(bool isDark) {
+    return Container(
+      width: 280,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: isDark ? Colors.white10 : Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              _skeletonCircle(size: 8),
+              const SizedBox(width: 8),
+              _skeletonBar(width: 140, height: 14),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              _skeletonBar(width: 100, height: 12),
+              _skeletonBar(width: 24, height: 12),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              _skeletonBar(width: 100, height: 12),
+              _skeletonBar(width: 24, height: 12),
+            ],
+          ),
+          const SizedBox(height: 12),
+          _skeletonBar(width: double.infinity, height: 1),
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              _skeletonBar(width: 90, height: 11),
+              _skeletonBar(width: 50, height: 11),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SkeletonShimmer extends StatefulWidget {
+  final Widget child;
+  const _SkeletonShimmer({required this.child});
+
+  @override
+  State<_SkeletonShimmer> createState() => _SkeletonShimmerState();
+}
+
+class _SkeletonShimmerState extends State<_SkeletonShimmer> with SingleTickerProviderStateMixin {
+  late AnimationController _shimmerController;
+
+  @override
+  void initState() {
+    super.initState();
+    _shimmerController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1400),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _shimmerController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final baseColor = isDark ? Colors.white.withValues(alpha: 0.08) : Colors.grey.shade300;
+    final highlightColor = isDark ? Colors.white.withValues(alpha: 0.22) : Colors.grey.shade100;
+
+    return AnimatedBuilder(
+      animation: _shimmerController,
+      builder: (context, child) {
+        return ShaderMask(
+          blendMode: BlendMode.srcATop,
+          shaderCallback: (bounds) {
+            return LinearGradient(
+              begin: const Alignment(-1.5, -0.3),
+              end: const Alignment(1.5, 0.3),
+              colors: [baseColor, highlightColor, baseColor],
+              stops: const [0.1, 0.5, 0.9],
+              transform: _SlidingGradientTransform(slidePercent: _shimmerController.value),
+            ).createShader(bounds);
+          },
+          child: child,
+        );
+      },
+      child: widget.child,
+    );
+  }
+}
+
+class _SlidingGradientTransform extends GradientTransform {
+  const _SlidingGradientTransform({required this.slidePercent});
+
+  final double slidePercent;
+
+  @override
+  Matrix4? transform(Rect bounds, {TextDirection? textDirection}) {
+    return Matrix4.translationValues(bounds.width * (slidePercent * 2.5 - 1.25), 0.0, 0.0);
   }
 }
 

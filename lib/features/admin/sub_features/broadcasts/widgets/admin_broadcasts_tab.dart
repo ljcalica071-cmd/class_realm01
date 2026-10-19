@@ -27,6 +27,11 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
   String _selectedAudience = 'all'; // 'all', 'teachers', 'students_parents'
   bool _isSubmittingAnnouncement = false;
   DateTime? _lastBroadcastAt;
+  String? _titleError;
+  String? _messageError;
+
+  // Active User Counts by Role (excluding archived users)
+  Map<String, int> _userCounts = {'teachers': 0, 'students': 0, 'parents': 0, 'total': 0};
 
   // Broadcast History State
   List<AppNotificationModel> _broadcasts = [];
@@ -39,8 +44,20 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
     super.initState();
     _loadInitialData();
     _subscribeToRealtime();
-    _messageController.addListener(() => setState(() {}));
-    _titleController.addListener(() => setState(() {}));
+    _messageController.addListener(() {
+      if (_messageError != null) {
+        setState(() => _messageError = null);
+      } else {
+        setState(() {});
+      }
+    });
+    _titleController.addListener(() {
+      if (_titleError != null) {
+        setState(() => _titleError = null);
+      } else {
+        setState(() {});
+      }
+    });
   }
 
   @override
@@ -68,6 +85,12 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
           table: 'notifications',
           callback: (_) => _loadBroadcastHistory(),
         )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'users',
+          callback: (_) => _loadUserCounts(),
+        )
         .subscribe();
   }
 
@@ -75,7 +98,47 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
     await Future.wait([
       _loadMaintenanceState(),
       _loadBroadcastHistory(),
+      _loadUserCounts(),
     ]);
+  }
+
+  Future<void> _loadUserCounts() async {
+    final counts = await AdminRepository.instance.getActiveUserCountsByRole();
+    if (mounted) {
+      setState(() {
+        _userCounts = counts;
+        _adjustSelectedAudience();
+      });
+    }
+  }
+
+  void _adjustSelectedAudience() {
+    final teachers = _userCounts['teachers'] ?? 0;
+    final students = _userCounts['students'] ?? 0;
+    final parents = _userCounts['parents'] ?? 0;
+    final total = _userCounts['total'] ?? 0;
+
+    if (_selectedAudience == 'teachers' && teachers == 0) {
+      if (total > 0) _selectedAudience = 'all';
+    } else if (_selectedAudience == 'students' && students == 0) {
+      if (total > 0) _selectedAudience = 'all';
+    } else if (_selectedAudience == 'parents' && parents == 0) {
+      if (total > 0) _selectedAudience = 'all';
+    }
+  }
+
+  int get _selectedAudienceCount {
+    switch (_selectedAudience) {
+      case 'teachers':
+        return _userCounts['teachers'] ?? 0;
+      case 'students':
+        return _userCounts['students'] ?? 0;
+      case 'parents':
+        return _userCounts['parents'] ?? 0;
+      case 'all':
+      default:
+        return _userCounts['total'] ?? 0;
+    }
   }
 
   Future<void> _loadMaintenanceState() async {
@@ -217,9 +280,11 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
                 _buildBulletPoint('Any pending offline teacher queues will be preserved before logout.'),
                 _buildBulletPoint('Only System Administrators can access the portal to perform IT maintenance.'),
                 const SizedBox(height: 16),
-                const Text(
-                  'Are you sure you want to toggle Maintenance Mode now?',
-                  style: TextStyle(fontSize: 13, fontStyle: FontStyle.italic, color: Colors.grey),
+                const Center(
+                  child: Text(
+                    'Are you sure you want to toggle Maintenance Mode now?',
+                    style: TextStyle(fontSize: 13, color: Colors.grey),
+                  ),
                 ),
               ],
             ),
@@ -304,16 +369,31 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
     final title = _titleController.text.trim();
     final message = _messageController.text.trim();
 
+    bool hasValidationError = false;
     if (title.length < 3 || title.length > 100) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Title must be between 3 and 100 characters.')),
-      );
-      return;
+      setState(() {
+        _titleError = 'Title must be between 3 and 100 characters.';
+      });
+      hasValidationError = true;
+    } else {
+      if (_titleError != null) setState(() => _titleError = null);
     }
+
     if (message.length < 5 || message.length > 1000) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Message must be between 5 and 1,000 characters.')),
-      );
+      setState(() {
+        _messageError = 'Message must be between 5 and 1,000 characters.';
+      });
+      hasValidationError = true;
+    } else {
+      if (_messageError != null) setState(() => _messageError = null);
+    }
+
+    if (hasValidationError) return;
+
+    if (_selectedAudienceCount == 0) {
+      setState(() {
+        _messageError = 'Cannot send broadcast: No active non-archived recipients in selected audience.';
+      });
       return;
     }
 
@@ -321,14 +401,18 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
     final now = DateTime.now();
     if (_lastBroadcastAt != null && now.difference(_lastBroadcastAt!) < const Duration(seconds: 30)) {
       final remaining = 30 - now.difference(_lastBroadcastAt!).inSeconds;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Please wait $remaining seconds before sending another announcement.')),
-      );
+      setState(() {
+        _messageError = 'Please wait $remaining seconds before sending another announcement.';
+      });
       return;
     }
 
     // Synchronous mutex lock BEFORE any await
-    setState(() => _isSubmittingAnnouncement = true);
+    setState(() {
+      _isSubmittingAnnouncement = true;
+      _titleError = null;
+      _messageError = null;
+    });
 
     final adminUser = AuthRepository.instance.currentUser;
     final adminId = adminUser?.id ?? 'admin';
@@ -367,38 +451,7 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
     }
   }
 
-  Future<void> _handleDeleteBroadcast(AppNotificationModel broadcast) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Archive Announcement?'),
-        content: const Text(
-          'This announcement will be soft-deleted. Users currently reading it will not experience an app crash.',
-        ),
-        actions: [
-          OutlinedButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.catRed, foregroundColor: Colors.white),
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Archive'),
-          ),
-        ],
-      ),
-    );
 
-    if (confirmed == true) {
-      await AdminRepository.instance.softDeleteAnnouncement(broadcast.id);
-      setState(() {
-        _broadcasts.removeWhere((b) => b.id == broadcast.id);
-      });
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Announcement archived successfully.')),
-        );
-      }
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -570,10 +623,47 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
                     DropdownButton<String>(
                       value: _selectedAudience,
                       underline: Container(),
-                      items: const [
-                        DropdownMenuItem(value: 'all', child: Text('All Users')),
-                        DropdownMenuItem(value: 'teachers', child: Text('Teachers Only')),
-                        DropdownMenuItem(value: 'students_parents', child: Text('Students & Parents')),
+                      items: [
+                        DropdownMenuItem(
+                          value: 'all',
+                          enabled: (_userCounts['total'] ?? 0) > 0,
+                          child: Text(
+                            'All Users (${_userCounts['total'] ?? 0} active${(_userCounts['total'] ?? 0) == 0 ? ' - No users' : ''})',
+                            style: TextStyle(
+                              color: (_userCounts['total'] ?? 0) == 0 ? Colors.grey : null,
+                            ),
+                          ),
+                        ),
+                        DropdownMenuItem(
+                          value: 'teachers',
+                          enabled: (_userCounts['teachers'] ?? 0) > 0,
+                          child: Text(
+                            'Teachers (${_userCounts['teachers'] ?? 0} active${(_userCounts['teachers'] ?? 0) == 0 ? ' - No users' : ''})',
+                            style: TextStyle(
+                              color: (_userCounts['teachers'] ?? 0) == 0 ? Colors.grey : null,
+                            ),
+                          ),
+                        ),
+                        DropdownMenuItem(
+                          value: 'students',
+                          enabled: (_userCounts['students'] ?? 0) > 0,
+                          child: Text(
+                            'Students (${_userCounts['students'] ?? 0} active${(_userCounts['students'] ?? 0) == 0 ? ' - No users' : ''})',
+                            style: TextStyle(
+                              color: (_userCounts['students'] ?? 0) == 0 ? Colors.grey : null,
+                            ),
+                          ),
+                        ),
+                        DropdownMenuItem(
+                          value: 'parents',
+                          enabled: (_userCounts['parents'] ?? 0) > 0,
+                          child: Text(
+                            'Parents (${_userCounts['parents'] ?? 0} active${(_userCounts['parents'] ?? 0) == 0 ? ' - No users' : ''})',
+                            style: TextStyle(
+                              color: (_userCounts['parents'] ?? 0) == 0 ? Colors.grey : null,
+                            ),
+                          ),
+                        ),
                       ],
                       onChanged: (v) {
                         if (v != null) setState(() => _selectedAudience = v);
@@ -583,20 +673,53 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
                 ),
                 const SizedBox(height: 14),
 
-                // Title Input
+                // Title Input with Inline Error Outline
                 TextField(
                   controller: _titleController,
                   maxLength: 100,
                   decoration: InputDecoration(
                     labelText: 'Announcement Title',
                     hintText: 'e.g., Campus Schedule Advisory or System Update',
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                     counterText: '',
+                    errorText: _titleError,
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide(
+                        color: isDark ? Colors.white24 : Colors.grey.shade300,
+                      ),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide(
+                        color: theme.colorScheme.primary,
+                        width: 1.5,
+                      ),
+                    ),
+                    errorBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: const BorderSide(
+                        color: Color(0xFFDC2626),
+                        width: 1.5,
+                      ),
+                    ),
+                    focusedErrorBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: const BorderSide(
+                        color: Color(0xFFDC2626),
+                        width: 2.0,
+                      ),
+                    ),
+                    errorStyle: const TextStyle(
+                      color: Color(0xFFDC2626),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 14),
 
-                // Message Input
+                // Message Input with Inline Error Outline
                 TextField(
                   controller: _messageController,
                   maxLength: 1000,
@@ -604,8 +727,41 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
                   decoration: InputDecoration(
                     labelText: 'Message Content',
                     hintText: 'Type your message here (up to 1,000 characters)...',
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                     counterText: '',
+                    errorText: _messageError,
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide(
+                        color: isDark ? Colors.white24 : Colors.grey.shade300,
+                      ),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide(
+                        color: theme.colorScheme.primary,
+                        width: 1.5,
+                      ),
+                    ),
+                    errorBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: const BorderSide(
+                        color: Color(0xFFDC2626),
+                        width: 1.5,
+                      ),
+                    ),
+                    focusedErrorBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: const BorderSide(
+                        color: Color(0xFFDC2626),
+                        width: 2.0,
+                      ),
+                    ),
+                    errorStyle: const TextStyle(
+                      color: Color(0xFFDC2626),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 6),
@@ -626,10 +782,14 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
                       style: ElevatedButton.styleFrom(
                         backgroundColor: theme.colorScheme.primary,
                         foregroundColor: Colors.white,
+                        disabledBackgroundColor: isDark ? Colors.white12 : Colors.grey.shade300,
+                        disabledForegroundColor: Colors.grey.shade500,
                         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                       ),
-                      onPressed: _isSubmittingAnnouncement ? null : _handleSendAnnouncement,
+                      onPressed: (_isSubmittingAnnouncement || _selectedAudienceCount == 0)
+                          ? null
+                          : _handleSendAnnouncement,
                       icon: _isSubmittingAnnouncement
                           ? const SizedBox(
                               width: 16,
@@ -644,6 +804,36 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
                     ),
                   ],
                 ),
+                if (_selectedAudienceCount == 0)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 10),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.info_outline, size: 16, color: Colors.orange.shade800),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              _userCounts['total'] == 0
+                                  ? 'Broadcast disabled: There are currently no active non-archived users in the system.'
+                                  : 'Broadcast disabled: No active non-archived ${_selectedAudience} found to receive announcements.',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.orange.shade800,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),
@@ -682,8 +872,7 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
                 final b = _broadcasts[i];
                 return ExpandableNotificationCard(
                   notification: b,
-                  showDelete: true,
-                  onDelete: () => _handleDeleteBroadcast(b),
+                  showDelete: false,
                 );
               },
             ),

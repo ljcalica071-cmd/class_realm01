@@ -6,6 +6,7 @@ import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/data/mock_database.dart';
 import 'package:class_realm/core/utils/parent_credential_helper.dart';
 import 'package:class_realm/data/repositories/supabase_learning_material_repository.dart';
+import 'package:class_realm/core/services/firebase_auth_admin_service.dart';
 
 
 class SupabaseParentRepository {
@@ -825,6 +826,9 @@ class SupabaseParentRepository {
         .eq('parent_id', parentId);
     await _client.from('parent_profiles').delete().eq('parent_id', parentId);
     await _client.from('users').delete().eq('id', parentId);
+    try {
+      await FirebaseAuthAdminService.deleteUser(uid: parentId);
+    } catch (_) {}
   }
 
   /// Read-only helper: fetches learning materials for a parent's linked student,

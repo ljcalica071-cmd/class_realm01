@@ -76,7 +76,7 @@ class _StudentNotificationsTabState extends State<StudentNotificationsTab> {
           .from('notifications')
           .select()
           .eq('is_archived', false)
-          .inFilter('target_audience', ['all', 'students_parents'])
+          .inFilter('target_audience', ['all', 'students', 'students_parents'])
           .order('created_at', ascending: false)
           .range(_offset, _offset + _pageSize - 1);
 

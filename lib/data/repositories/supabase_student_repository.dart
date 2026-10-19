@@ -8,6 +8,7 @@ import 'package:class_realm/data/repositories/student_repository.dart';
 import 'package:class_realm/data/datasources/local/app_database.dart';
 import 'package:class_realm/data/mock_database.dart';
 import 'package:class_realm/core/services/email_service.dart';
+import 'package:class_realm/core/services/firebase_auth_admin_service.dart';
 
 class StudentEnrollmentResult {
   final String studentId;
@@ -410,13 +411,79 @@ class SupabaseStudentRepository implements StudentRepository {
 
   @override
   Future<void> permanentlyDeleteStudent(String id, [String? subjectId]) async {
-    if (subjectId != null) {
-      await _client.from('student_enrollments').delete().match({
-        'student_id': id,
-        'subject_id': subjectId,
-      });
-    } else {
-      await _client.from('student_enrollments').delete().eq('student_id', id);
+    try {
+      // 1. Delete enrollment from specified subject offering or all enrollments
+      if (subjectId != null) {
+        await _client.from('student_enrollments').delete().match({
+          'student_id': id,
+          'subject_offering_id': subjectId,
+        });
+
+        // Check if student still has remaining enrollments in any other subject
+        final remaining = await _client
+            .from('student_enrollments')
+            .select('id')
+            .eq('student_id', id);
+
+        if (remaining.isNotEmpty) {
+          // Student is still enrolled in other classes! Do not delete root profile or Auth account.
+          return;
+        }
+      } else {
+        await _client.from('student_enrollments').delete().eq('student_id', id);
+      }
+
+      // 2. Fetch linked parents before deleting links
+      final pLinks = await _client
+          .from('parent_student_links')
+          .select('parent_id')
+          .eq('student_id', id);
+
+      try {
+        await _client.from('parent_student_links').delete().eq('student_id', id);
+      } catch (_) {}
+
+      // 3. Delete student settings, profile, and users record
+      try {
+        await _client.from('student_settings').delete().eq('student_id', id);
+      } catch (_) {}
+      try {
+        await _client.from('student_profiles').delete().eq('student_id', id);
+      } catch (_) {}
+      try {
+        await _client.from('users').delete().eq('id', id);
+      } catch (_) {}
+
+      // 4. Delete student from Firebase Authentication
+      try {
+        await FirebaseAuthAdminService.deleteUser(uid: id);
+      } catch (fbErr) {
+        debugPrint('Firebase Auth deletion notice for student $id: $fbErr');
+      }
+
+      // 5. Clean up orphan parents if they have no other children enrolled
+      for (var pl in pLinks) {
+        final pId = pl['parent_id']?.toString();
+        if (pId != null) {
+          final otherChildren = await _client
+              .from('parent_student_links')
+              .select('student_id')
+              .eq('parent_id', pId);
+          if (otherChildren.isEmpty) {
+            try {
+              await _client.from('parent_profiles').delete().eq('parent_id', pId);
+            } catch (_) {}
+            try {
+              await _client.from('users').delete().eq('id', pId);
+            } catch (_) {}
+            try {
+              await FirebaseAuthAdminService.deleteUser(uid: pId);
+            } catch (_) {}
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('Error permanently deleting student $id: $e');
     }
   }
 }

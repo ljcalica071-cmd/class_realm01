@@ -40,6 +40,7 @@ CREATE TABLE public.teacher_settings (
   consultation_hours character varying,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  previous_status character varying DEFAULT 'pending_first_login'::character varying,
   CONSTRAINT teacher_settings_pkey PRIMARY KEY (teacher_id),
   CONSTRAINT teacher_settings_teacher_id_fkey FOREIGN KEY (teacher_id) REFERENCES public.teacher_profiles(teacher_id)
 );
@@ -390,6 +391,7 @@ CREATE TABLE public.notifications (
   created_by character varying,
   is_archived boolean NOT NULL DEFAULT false,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
+  target_audience character varying NOT NULL DEFAULT 'all'::character varying,
   CONSTRAINT notifications_pkey PRIMARY KEY (id),
   CONSTRAINT notifications_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id)
 );
@@ -462,4 +464,29 @@ CREATE TABLE public.gradebook_term_sheets (
   updated_at timestamp with time zone NOT NULL DEFAULT now(),
   CONSTRAINT gradebook_term_sheets_pkey PRIMARY KEY (id),
   CONSTRAINT gradebook_term_sheets_subject_offering_id_fkey FOREIGN KEY (subject_offering_id) REFERENCES public.subject_offerings(id)
+);
+CREATE TABLE public.system_settings (
+  id boolean NOT NULL DEFAULT true CHECK (id = true),
+  is_maintenance_mode boolean NOT NULL DEFAULT false,
+  maintenance_updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  maintenance_updated_by character varying,
+  school_year_updated_at timestamp with time zone DEFAULT now(),
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT system_settings_pkey PRIMARY KEY (id),
+  CONSTRAINT system_settings_maintenance_updated_by_fkey FOREIGN KEY (maintenance_updated_by) REFERENCES public.users(id)
+);
+CREATE TABLE public.user_session_logs (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_id character varying NOT NULL,
+  role character varying NOT NULL,
+  session_date date NOT NULL DEFAULT CURRENT_DATE,
+  login_at timestamp with time zone NOT NULL DEFAULT now(),
+  last_active_at timestamp with time zone NOT NULL DEFAULT now(),
+  logout_at timestamp with time zone,
+  logout_reason character varying CHECK (logout_reason::text = ANY (ARRAY['manual'::character varying, 'inactivity_timeout'::character varying, 'maintenance_forced'::character varying, 'session_expired'::character varying]::text[])),
+  is_active boolean NOT NULL DEFAULT true,
+  duration_seconds integer NOT NULL DEFAULT 0 CHECK (duration_seconds >= 0),
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT user_session_logs_pkey PRIMARY KEY (id),
+  CONSTRAINT user_session_logs_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id)
 );

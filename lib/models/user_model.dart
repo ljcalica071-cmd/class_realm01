@@ -141,6 +141,27 @@ class UserModel {
     );
   }
 
+  /// Dynamic honorific title based on gender ("Ma'am" for female, "Sir" for male)
+  String get honorific {
+    final g = (gender ?? '').trim().toLowerCase();
+    if (g == 'female' || g == 'f') {
+      return "Ma'am";
+    }
+    if (g == 'male' || g == 'm') {
+      return "Sir";
+    }
+    return role == UserRole.teacher ? "Teacher" : "";
+  }
+
+  /// Full name prefixed with dynamic honorific (e.g. "Sir Naruto Uzumaki" or "Ma'am Jane Doe")
+  String get honorificFullName {
+    final prefix = honorific;
+    if (prefix.isNotEmpty) {
+      return '$prefix $fullName';
+    }
+    return fullName;
+  }
+
   Map<String, dynamic> toJson() {
     return {
       'id': id,

@@ -115,5 +115,30 @@ void main() {
         equals(normalText),
       );
     });
+
+    test('6. School Year Range (2026-2027 to 2049-2050) and Calendar Year Validation', () {
+      final availableYears = [
+        for (int y = 2026; y <= 2049; y++) '$y-${y + 1}'
+      ];
+
+      expect(availableYears.first, equals('2026-2027'));
+      expect(availableYears.last, equals('2049-2050'));
+      expect(availableYears.length, equals(24));
+
+      bool isFutureYearBlocked(String sy, int currentCalendarYear) {
+        final startYear = int.parse(sy.split('-').first);
+        return startYear > currentCalendarYear;
+      }
+
+      // If current calendar year is 2026:
+      expect(isFutureYearBlocked('2026-2027', 2026), isFalse); // Current year - allowed
+      expect(isFutureYearBlocked('2027-2028', 2026), isTrue);  // Future year - blocked
+      expect(isFutureYearBlocked('2030-2031', 2026), isTrue);  // Future year - blocked
+
+      // If calendar year advances to 2027:
+      expect(isFutureYearBlocked('2026-2027', 2027), isFalse);
+      expect(isFutureYearBlocked('2027-2028', 2027), isFalse);
+      expect(isFutureYearBlocked('2028-2029', 2027), isTrue);
+    });
   });
 }

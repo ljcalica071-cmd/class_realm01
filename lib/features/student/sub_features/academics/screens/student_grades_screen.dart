@@ -56,7 +56,7 @@ class _StudentGradesScreenState extends State<StudentGradesScreen> {
                 term_block,
                 subjects ( subject_name, subject_code, grade_level ),
                 sections ( section_name, grade_level ),
-                teacher_profiles ( first_name, last_name )
+                teacher_profiles ( first_name, last_name, gender )
               )
             ''')
             .eq('student_id', student.id)
@@ -336,9 +336,16 @@ class _StudentSubjectGradeCard extends StatelessWidget {
       activeTerms: activeTerms,
       termGrades: grades,
     );
-    final teacherName = [teacher['first_name'], teacher['last_name']]
+    final rawTeacherName = [teacher['first_name'], teacher['last_name']]
         .where((part) => part != null && part.toString().trim().isNotEmpty)
         .join(' ');
+    final tg = teacher['gender']?.toString().trim().toLowerCase();
+    final tPrefix = (tg == 'female' || tg == 'f')
+        ? "Ma'am "
+        : (tg == 'male' || tg == 'm')
+            ? "Sir "
+            : "";
+    final teacherName = rawTeacherName.isNotEmpty ? '$tPrefix$rawTeacherName' : '';
     final sectionName = section['section_name']?.toString() ?? '';
     final gradeLevel = section['grade_level'] ?? subject['grade_level'];
     final schoolInfo = [

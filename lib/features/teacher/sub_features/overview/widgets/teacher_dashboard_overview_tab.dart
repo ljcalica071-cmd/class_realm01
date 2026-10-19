@@ -214,9 +214,12 @@ class _TeacherDashboardOverviewTabState
     final theme = Theme.of(context);
     final currentUser = AuthRepository.instance.currentUser;
     final displayName = currentUser?.fullName ?? 'Teacher';
-    final nameTitle = currentUser?.gender?.toLowerCase() == 'female'
-        ? "Ma'am"
-        : "Sir";
+    final nameTitle = currentUser?.honorific.isNotEmpty == true
+        ? currentUser!.honorific
+        : ((currentUser?.gender?.trim().toLowerCase() == 'female' ||
+                currentUser?.gender?.trim().toLowerCase() == 'f')
+            ? "Ma'am"
+            : "Sir");
 
     // Loading state for the top cards
     final mainValueSubjects = isLoadingStats ? '-' : '$totalSubjects';

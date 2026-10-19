@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:class_realm/core/config/env_config.dart';
 import 'package:firebase_auth/firebase_auth.dart' as firebase;
 import 'package:supabase_flutter/supabase_flutter.dart' hide User;
 import 'package:class_realm/models/user_model.dart' as custom;
@@ -13,6 +14,7 @@ import 'package:class_realm/core/services/email_service.dart';
 import 'package:class_realm/core/services/email_verification_service.dart';
 import 'package:class_realm/core/utils/parent_credential_helper.dart';
 import 'package:class_realm/core/utils/validators.dart';
+import 'package:class_realm/core/services/firebase_auth_admin_service.dart';
 import 'package:class_realm/firebase_options.dart';
 
 class FirstLoginOtpVerification {
@@ -95,32 +97,10 @@ class AuthRepository {
       return _currentUser;
     }
 
-    // Admin Credentials Authentication (classrealm600@gmail.com / Admin123)
-    if (cleanEmail == 'classrealm600@gmail.com') {
-      if (password == 'Admin123') {
-        _currentUser = custom.UserModel(
-          id: 'uiR8FjHtAWezyZ2dADnOfsHfBz32',
-          username: cleanEmail,
-          fullName: 'ClassRealm Admin',
-          email: cleanEmail,
-          role: custom.UserRole.admin,
-          status: custom.AccountStatus.active,
-        );
-        await LocalStorageService.saveUser(_currentUser!);
-        MockDatabase.instance.currentUser = _currentUser;
-        return _currentUser;
-      } else {
-        throw const LoginAttemptException(
-          'Invalid email or password. Please check your credentials.',
-          invalidCredentials: true,
-        );
-      }
-    }
-
-    // Attempt Firebase Authentication for Teacher
+    // Real Firebase Authentication for all users (Admin, Teacher, etc.)
     try {
       final userCredential = await _firebaseAuth.signInWithEmailAndPassword(
-        email: email,
+        email: email.trim(),
         password: password,
       );
       if (userCredential.user != null) {
@@ -138,7 +118,8 @@ class AuthRepository {
       if (e.code == 'user-not-found' ||
           e.code == 'invalid-credential' ||
           e.code == 'wrong-password' ||
-          e.code == 'invalid-email') {
+          e.code == 'invalid-email' ||
+          e.code == 'user-disabled') {
         throw const LoginAttemptException(
           'Invalid email or password. Please check your credentials.',
           invalidCredentials: true,
@@ -159,12 +140,10 @@ class AuthRepository {
 
   // Fast Login / Restore Session
   Future<custom.UserModel?> restoreSession() async {
-    // 0. Instant session restore for cached Admin
-    final cachedAdmin = LocalStorageService.getCachedUser();
-    if (cachedAdmin != null && cachedAdmin.role == custom.UserRole.admin) {
-      _currentUser = cachedAdmin;
-      MockDatabase.instance.currentUser = _currentUser;
-      return _currentUser;
+    // Invalidate any legacy session with the purged old admin ID
+    final cached = LocalStorageService.getCachedUser();
+    if (cached != null && cached.id == 'uiR8FjHtAWezyZ2dADnOfsHfBz32') {
+      await LocalStorageService.clearAuth();
     }
 
     final firebaseUser = _firebaseAuth.currentUser;
@@ -175,16 +154,15 @@ class AuthRepository {
         _currentUser = cachedUser;
         MockDatabase.instance.currentUser = _currentUser;
 
-        // 2. Quietly update from Supabase in the background
-        _getUserFromSupabase(firebaseUser.uid)
-            .then((updatedUser) {
-              if (updatedUser != null) {
-                _currentUser = updatedUser;
-                MockDatabase.instance.currentUser = _currentUser;
-                LocalStorageService.saveUser(updatedUser);
-              }
-            })
-            .catchError((_) {});
+        // 2. Refresh from Supabase to keep profile fields (e.g. gender, name, status) strictly synchronized
+        try {
+          final updatedUser = await _getUserFromSupabase(firebaseUser.uid);
+          if (updatedUser != null) {
+            _currentUser = updatedUser;
+            MockDatabase.instance.currentUser = _currentUser;
+            await LocalStorageService.saveUser(updatedUser);
+          }
+        } catch (_) {}
 
         return _currentUser;
       }
@@ -396,6 +374,7 @@ class AuthRepository {
   // Logout
   Future<void> logout() async {
     _currentUser = null;
+    await LocalStorageService.clearCachedUser();
     // Attempt to sign out of Firebase
     try {
       await _firebaseAuth.signOut();
@@ -886,8 +865,8 @@ class AuthRepository {
       }
 
       // 1. Invoke Supabase Edge Function to update password in Firebase Authentication
-      final supabaseUrl = dotenv.env['SUPABASE_URL'] ?? 'https://wfilyatkfgqtybujmahf.supabase.co';
-      final supabaseAnonKey = dotenv.env['SUPABASE_ANON_KEY'] ?? '';
+      final supabaseUrl = EnvConfig.supabaseUrl;
+      final supabaseAnonKey = EnvConfig.supabaseAnonKey;
 
       final resetUrl = Uri.parse('$supabaseUrl/functions/v1/reset-password');
       final resp = await http.post(
@@ -1012,18 +991,36 @@ class AuthRepository {
   Future<bool> updateTeacherStatus(String uid, String newStatus) async {
     try {
       if (newStatus == 'archived') {
-        // 1. Mark as archived in users table (primary indicator)
+        // 1. Preserve current teacher status before archiving
+        try {
+          final cur = await _supabaseClient
+              .from('teacher_settings')
+              .select('status')
+              .eq('teacher_id', uid)
+              .maybeSingle();
+          final currentStatus = cur?['status']?.toString();
+          if (currentStatus != null && currentStatus != 'archived') {
+            await _supabaseClient
+                .from('teacher_settings')
+                .update({'previous_status': currentStatus, 'status': 'archived'})
+                .eq('teacher_id', uid);
+          } else {
+            await _supabaseClient
+                .from('teacher_settings')
+                .update({'status': 'archived'})
+                .eq('teacher_id', uid);
+          }
+        } catch (_) {}
+
+        // 2. Mark as archived in users table (primary indicator)
         await _supabaseClient
             .from('users')
             .update({'is_archived': true})
             .eq('id', uid);
 
-        // 2. Set status to 'archived' in teacher_settings
+        // Disable account in Firebase Auth so they cannot log in
         try {
-          await _supabaseClient
-              .from('teacher_settings')
-              .update({'status': 'archived'})
-              .eq('teacher_id', uid);
+          await FirebaseAuthAdminService.setUserDisabled(uid: uid, disabled: true);
         } catch (_) {}
 
         // Archive subject offerings taught by this teacher
@@ -1145,16 +1142,26 @@ class AuthRepository {
 
           final settings = await _supabaseClient
               .from('teacher_settings')
-              .select('is_setup_complete')
+              .select('previous_status, is_setup_complete')
               .eq('teacher_id', uid)
               .maybeSingle();
+
+          final prev = settings?['previous_status']?.toString();
           final isSetup = settings?['is_setup_complete'] == true;
-          final targetStatus = isSetup ? 'active' : 'pending_first_login';
+          // Restore prior state: if teacher was active before archive, return to active; if pending, return to pending
+          final targetStatus = (prev != null && prev.isNotEmpty && prev != 'archived')
+              ? prev
+              : (isSetup ? 'active' : 'pending_first_login');
 
           await _supabaseClient
               .from('teacher_settings')
               .update({'status': targetStatus})
               .eq('teacher_id', uid);
+
+          // Re-enable account in Firebase Auth
+          try {
+            await FirebaseAuthAdminService.setUserDisabled(uid: uid, disabled: false);
+          } catch (_) {}
         } catch (_) {}
 
         // Unarchive subject offerings taught by this teacher
@@ -1442,6 +1449,9 @@ class AuthRepository {
                 .from('users')
                 .delete()
                 .eq('id', sId);
+            try {
+              await FirebaseAuthAdminService.deleteUser(uid: sId);
+            } catch (_) {}
 
             // Check parents: if parent has NO other students linked, delete parent
             for (var pl in pLinks) {
@@ -1460,6 +1470,9 @@ class AuthRepository {
                       .from('users')
                       .delete()
                       .eq('id', pId);
+                  try {
+                    await FirebaseAuthAdminService.deleteUser(uid: pId);
+                  } catch (_) {}
                 }
               }
             }
@@ -1523,6 +1536,16 @@ class AuthRepository {
             .delete()
             .eq('id', teacherId);
       } catch (_) {}
+
+      // Delete from Firebase Authentication
+      try {
+        await FirebaseAuthAdminService.deleteUser(
+          uid: teacherId,
+          email: teacherEmail,
+        );
+      } catch (fbErr) {
+        debugPrint('Firebase Auth deletion notice for teacher $teacherId: $fbErr');
+      }
 
       return true;
     } catch (e) {

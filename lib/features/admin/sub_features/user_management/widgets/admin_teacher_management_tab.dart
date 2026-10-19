@@ -77,10 +77,9 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
         return FadeTransition(
           opacity: animation,
           child: ScaleTransition(
-            scale: Tween<double>(begin: 0.95, end: 1.0).animate(CurvedAnimation(
-              parent: animation,
-              curve: Curves.easeOut,
-            )),
+            scale: Tween<double>(begin: 0.95, end: 1.0).animate(
+              CurvedAnimation(parent: animation, curve: Curves.easeOut),
+            ),
             child: child,
           ),
         );
@@ -117,8 +116,10 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
       confirmColor: AppTheme.catOrange,
     );
     if (confirm == true) {
-      final success =
-          await AuthRepository.instance.updateTeacherStatus(t.id, 'archived');
+      final success = await AuthRepository.instance.updateTeacherStatus(
+        t.id,
+        'archived',
+      );
       if (success) {
         if (mounted) {
           AppModals.showSuccessDialog(
@@ -145,21 +146,22 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
     final confirm = await AppModals.showConfirmDialog(
       context: context,
       title: 'Recover Teacher',
-      message:
-          'Are you sure you want to recover ${t.fullName} and set their status back to active?',
+      message: 'Are you sure you want to recover ${t.fullName} from archives?',
       confirmLabel: 'Recover',
       confirmColor: Colors.green,
     );
     if (confirm == true) {
-      final success =
-          await AuthRepository.instance.updateTeacherStatus(t.id, 'active');
+      final success = await AuthRepository.instance.updateTeacherStatus(
+        t.id,
+        'active',
+      );
       if (success) {
         if (mounted) {
           AppModals.showSuccessDialog(
             context: context,
             title: 'Teacher Recovered',
             message:
-                '${t.fullName} has been successfully recovered and is now active.',
+                '${t.fullName} has been successfully recovered from archives.',
             onConfirm: widget.onDataChanged,
           );
         }
@@ -214,14 +216,18 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    final tableHeaderColor =
-        isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9);
-    final tableHeaderTextColor =
-        isDark ? const Color(0xFFE2E8F0) : const Color(0xFF334155);
-    final alternateRowColor =
-        isDark ? const Color(0xFF141E33) : const Color(0xFFFAFAFA);
-    final tableBorderColor =
-        isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
+    final tableHeaderColor = isDark
+        ? const Color(0xFF1E293B)
+        : const Color(0xFFF1F5F9);
+    final tableHeaderTextColor = isDark
+        ? const Color(0xFFE2E8F0)
+        : const Color(0xFF334155);
+    final alternateRowColor = isDark
+        ? const Color(0xFF141E33)
+        : const Color(0xFFFAFAFA);
+    final tableBorderColor = isDark
+        ? const Color(0xFF334155)
+        : const Color(0xFFE2E8F0);
 
     // Split archived and active teachers
     final archivedTeachers = widget.teachers.where((t) {
@@ -232,13 +238,15 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
       return !t.isArchived && t.status != AccountStatus.archived;
     }).toList();
 
-    final sourceList =
-        _showArchivedTeachers ? archivedTeachers : activeTeachers;
+    final sourceList = _showArchivedTeachers
+        ? archivedTeachers
+        : activeTeachers;
 
     // Filter by search
     final filtered = sourceList.where((t) {
       final q = _searchQuery.trim().toLowerCase();
-      final matchesSearch = q.isEmpty ||
+      final matchesSearch =
+          q.isEmpty ||
           t.fullName.toLowerCase().contains(q) ||
           t.email.toLowerCase().contains(q);
 
@@ -250,20 +258,24 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
       int cmp = 0;
       switch (_sortColumn) {
         case 'lastName':
-          final aLast = a.lastName ??
+          final aLast =
+              a.lastName ??
               (a.fullName.contains(' ')
                   ? a.fullName.split(' ').last
                   : a.fullName);
-          final bLast = b.lastName ??
+          final bLast =
+              b.lastName ??
               (b.fullName.contains(' ')
                   ? b.fullName.split(' ').last
                   : b.fullName);
           cmp = aLast.toLowerCase().compareTo(bLast.toLowerCase());
           break;
         case 'firstName':
-          final aFirst = a.firstName ??
+          final aFirst =
+              a.firstName ??
               (a.fullName.contains(' ') ? a.fullName.split(' ').first : '');
-          final bFirst = b.firstName ??
+          final bFirst =
+              b.firstName ??
               (b.fullName.contains(' ') ? b.fullName.split(' ').first : '');
           cmp = aFirst.toLowerCase().compareTo(bFirst.toLowerCase());
           break;
@@ -306,7 +318,8 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
     const colStatusWidth = 180.0;
     const colActionsWidth = 150.0;
 
-    const totalTableWidth = colNumWidth +
+    const totalTableWidth =
+        colNumWidth +
         colLastNameWidth +
         colFirstNameWidth +
         colGenderWidth +
@@ -404,12 +417,15 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
                       style: OutlinedButton.styleFrom(
                         foregroundColor: _showArchivedTeachers
                             ? theme.colorScheme.primary
-                            : theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                            : theme.colorScheme.onSurface.withValues(
+                                alpha: 0.7,
+                              ),
                         side: BorderSide(
                           color: _showArchivedTeachers
                               ? theme.colorScheme.primary
-                              : theme.colorScheme.onSurface
-                                  .withValues(alpha: 0.2),
+                              : theme.colorScheme.onSurface.withValues(
+                                  alpha: 0.2,
+                                ),
                         ),
                         padding: const EdgeInsets.symmetric(horizontal: 14),
                         shape: RoundedRectangleBorder(
@@ -491,9 +507,7 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
                         // Table Header Row
                         Container(
                           height: 48,
-                          decoration: BoxDecoration(
-                            color: tableHeaderColor,
-                          ),
+                          decoration: BoxDecoration(color: tableHeaderColor),
                           child: Row(
                             children: [
                               _buildHeaderCell(
@@ -608,11 +622,13 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
                                   itemCount: paginatedItems.length,
                                   itemBuilder: (ctx, i) {
                                     final t = paginatedItems[i];
-                                    final lastName = t.lastName ??
+                                    final lastName =
+                                        t.lastName ??
                                         (t.fullName.contains(' ')
                                             ? t.fullName.split(' ').last
                                             : t.fullName);
-                                    final firstName = t.firstName ??
+                                    final firstName =
+                                        t.firstName ??
                                         (t.fullName.contains(' ')
                                             ? t.fullName.split(' ').first
                                             : '');
@@ -622,7 +638,8 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
                                         : '${t.birthday!.year}-${t.birthday!.month.toString().padLeft(2, '0')}-${t.birthday!.day.toString().padLeft(2, '0')} (${_calculateAge(t.birthday!)})';
 
                                     final isPendingFirstLogin =
-                                        t.status == AccountStatus.pendingFirstLogin;
+                                        t.status ==
+                                        AccountStatus.pendingFirstLogin;
 
                                     return Container(
                                       height: 52,
@@ -647,7 +664,8 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
                                                 style: TextStyle(
                                                   fontSize: 13,
                                                   color: theme
-                                                      .colorScheme.onSurface,
+                                                      .colorScheme
+                                                      .onSurface,
                                                 ),
                                               ),
                                             ),
@@ -661,8 +679,8 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
                                               style: TextStyle(
                                                 fontSize: 13,
                                                 fontWeight: FontWeight.w600,
-                                                color: theme
-                                                    .colorScheme.onSurface,
+                                                color:
+                                                    theme.colorScheme.onSurface,
                                               ),
                                               overflow: TextOverflow.ellipsis,
                                             ),
@@ -675,8 +693,8 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
                                               firstName,
                                               style: TextStyle(
                                                 fontSize: 13,
-                                                color: theme
-                                                    .colorScheme.onSurface,
+                                                color:
+                                                    theme.colorScheme.onSurface,
                                               ),
                                               overflow: TextOverflow.ellipsis,
                                             ),
@@ -689,8 +707,8 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
                                               gender,
                                               style: TextStyle(
                                                 fontSize: 13,
-                                                color: theme
-                                                    .colorScheme.onSurface,
+                                                color:
+                                                    theme.colorScheme.onSurface,
                                               ),
                                             ),
                                           ),
@@ -702,8 +720,8 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
                                               birthdayLabel,
                                               style: TextStyle(
                                                 fontSize: 13,
-                                                color: theme
-                                                    .colorScheme.onSurface,
+                                                color:
+                                                    theme.colorScheme.onSurface,
                                               ),
                                             ),
                                           ),
@@ -715,8 +733,8 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
                                               t.email,
                                               style: TextStyle(
                                                 fontSize: 13,
-                                                color: theme
-                                                    .colorScheme.onSurface,
+                                                color:
+                                                    theme.colorScheme.onSurface,
                                               ),
                                               overflow: TextOverflow.ellipsis,
                                             ),
@@ -725,9 +743,10 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
                                           // 7. Status
                                           _buildDataCell(
                                             width: colStatusWidth,
-                                            child: StatusBadge.fromAccountStatus(
-                                              t.status,
-                                            ),
+                                            child:
+                                                StatusBadge.fromAccountStatus(
+                                                  t.status,
+                                                ),
                                           ),
 
                                           // 8. Actions (Edit & Archive / Recover & Permanent Delete)
@@ -735,7 +754,9 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
                                             width: colActionsWidth,
                                             hasRightBorder: false,
                                             child: Row(
-                                              mainAxisSize: MainAxisSize.min,
+                                              mainAxisSize: MainAxisSize.max,
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment.spaceEvenly,
                                               children: [
                                                 if (!_showArchivedTeachers) ...[
                                                   IconButton(
@@ -745,21 +766,33 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
                                                     icon: Icon(
                                                       Icons.edit_outlined,
                                                       color: isPendingFirstLogin
-                                                          ? theme.colorScheme.onSurface.withValues(alpha: 0.25)
-                                                          : const Color(0xFF64748B),
+                                                          ? theme
+                                                                .colorScheme
+                                                                .onSurface
+                                                                .withValues(
+                                                                  alpha: 0.25,
+                                                                )
+                                                          : const Color(
+                                                              0xFF64748B,
+                                                            ),
                                                       size: 18,
                                                     ),
                                                     padding: EdgeInsets.zero,
-                                                    constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                                                    visualDensity: VisualDensity.compact,
+                                                    constraints:
+                                                        const BoxConstraints(
+                                                          minWidth: 32,
+                                                          minHeight: 32,
+                                                        ),
+                                                    visualDensity:
+                                                        VisualDensity.compact,
                                                     splashRadius: 18,
-                                                    onPressed: isPendingFirstLogin
+                                                    onPressed:
+                                                        isPendingFirstLogin
                                                         ? () {
                                                             AppModals.showErrorDialog(
                                                               context: context,
                                                               title: 'Cannot Edit Teacher',
-                                                              message:
-                                                                  'This teacher account has not completed their first login yet. Profiles can only be edited once the teacher has logged in and set up their account.',
+                                                              message: 'This teacher account has not completed their first login yet. Profiles can only be edited once the teacher has logged in and set up their account.',
                                                             );
                                                           }
                                                         : () => _handleEdit(t),
@@ -768,31 +801,41 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
                                                     tooltip: 'Archive Teacher',
                                                     icon: const Icon(
                                                       Icons.archive_outlined,
-                                                      color:
-                                                          AppTheme.catOrange,
+                                                      color: AppTheme.catOrange,
                                                       size: 18,
                                                     ),
                                                     padding: EdgeInsets.zero,
-                                                    constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                                                    visualDensity: VisualDensity.compact,
+                                                    constraints:
+                                                        const BoxConstraints(
+                                                          minWidth: 32,
+                                                          minHeight: 32,
+                                                        ),
+                                                    visualDensity:
+                                                        VisualDensity.compact,
                                                     splashRadius: 18,
                                                     onPressed: () =>
                                                         _handleArchive(t),
                                                   ),
                                                   IconButton(
-                                                    tooltip:
-                                                        'Delete Teacher',
+                                                    tooltip: 'Delete Teacher',
                                                     icon: const Icon(
                                                       Icons.delete_outline,
                                                       color: AppTheme.catRed,
                                                       size: 18,
                                                     ),
                                                     padding: EdgeInsets.zero,
-                                                    constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                                                    visualDensity: VisualDensity.compact,
+                                                    constraints:
+                                                        const BoxConstraints(
+                                                          minWidth: 32,
+                                                          minHeight: 32,
+                                                        ),
+                                                    visualDensity:
+                                                        VisualDensity.compact,
                                                     splashRadius: 18,
                                                     onPressed: () =>
-                                                        _handlePermanentDelete(t),
+                                                        _handlePermanentDelete(
+                                                          t,
+                                                        ),
                                                   ),
                                                 ] else ...[
                                                   IconButton(
@@ -803,15 +846,19 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
                                                       size: 18,
                                                     ),
                                                     padding: EdgeInsets.zero,
-                                                    constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                                                    visualDensity: VisualDensity.compact,
+                                                    constraints:
+                                                        const BoxConstraints(
+                                                          minWidth: 32,
+                                                          minHeight: 32,
+                                                        ),
+                                                    visualDensity:
+                                                        VisualDensity.compact,
                                                     splashRadius: 18,
                                                     onPressed: () =>
                                                         _handleRecover(t),
                                                   ),
                                                   IconButton(
-                                                    tooltip:
-                                                        'Delete Teacher',
+                                                    tooltip: 'Delete Teacher',
                                                     icon: const Icon(
                                                       Icons
                                                           .delete_forever_outlined,
@@ -819,12 +866,18 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
                                                       size: 18,
                                                     ),
                                                     padding: EdgeInsets.zero,
-                                                    constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                                                    visualDensity: VisualDensity.compact,
+                                                    constraints:
+                                                        const BoxConstraints(
+                                                          minWidth: 32,
+                                                          minHeight: 32,
+                                                        ),
+                                                    visualDensity:
+                                                        VisualDensity.compact,
                                                     splashRadius: 18,
                                                     onPressed: () =>
                                                         _handlePermanentDelete(
-                                                            t),
+                                                          t,
+                                                        ),
                                                   ),
                                                 ],
                                               ],
@@ -880,8 +933,8 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
                                           p <= _currentPage + 2)
                                         _buildPageButton(
                                           p.toString(),
-                                          () => setState(
-                                              () => _currentPage = p),
+                                          () =>
+                                              setState(() => _currentPage = p),
                                           true,
                                           isActive: p == _currentPage,
                                         ),
@@ -893,7 +946,8 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
                                     _buildPageButton(
                                       'Last',
                                       () => setState(
-                                          () => _currentPage = totalPages),
+                                        () => _currentPage = totalPages,
+                                      ),
                                       _currentPage < totalPages,
                                     ),
                                   ],
@@ -1011,8 +1065,8 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
             color: isActive
                 ? theme.colorScheme.onPrimary
                 : enabled
-                    ? theme.colorScheme.onSurface
-                    : theme.colorScheme.onSurface.withValues(alpha: 0.3),
+                ? theme.colorScheme.onSurface
+                : theme.colorScheme.onSurface.withValues(alpha: 0.3),
           ),
         ),
       ),

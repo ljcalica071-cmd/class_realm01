@@ -266,6 +266,33 @@ class AdminRepository {
   // 4. GLOBAL ANNOUNCEMENTS & BROADCASTS (REAL SUPABASE)
   // =========================================================================
 
+  /// Returns real counts of active (non-archived) users grouped by role
+  Future<Map<String, int>> getActiveUserCountsByRole() async {
+    try {
+      final res = await _client
+          .from('users')
+          .select('role')
+          .eq('is_archived', false);
+
+      final counts = <String, int>{
+        'teacher': 0,
+        'student': 0,
+        'parent': 0,
+      };
+
+      for (var row in (res as List)) {
+        final role = row['role']?.toString();
+        if (role != null && counts.containsKey(role)) {
+          counts[role] = (counts[role] ?? 0) + 1;
+        }
+      }
+      return counts;
+    } catch (e) {
+      debugPrint('AdminRepository getActiveUserCountsByRole error: $e');
+      return {'teacher': 0, 'student': 0, 'parent': 0};
+    }
+  }
+
   Future<List<AppNotificationModel>> getBroadcastAnnouncements({
     int limit = 20,
     int offset = 0,
@@ -337,19 +364,7 @@ class AdminRepository {
     try {
       var filterQuery = _client
           .from('user_session_logs')
-          .select('''
-            id,
-            user_id,
-            role,
-            session_date,
-            login_at,
-            last_active_at,
-            logout_at,
-            logout_reason,
-            is_active,
-            duration_seconds,
-            users ( full_name, email )
-          ''')
+          .select()
           .eq('role', 'teacher');
 
       if (startDate != null) {
@@ -360,9 +375,38 @@ class AdminRepository {
       }
 
       final res = await filterQuery.order('login_at', ascending: false).limit(200);
-      return (res as List).map((r) {
-        final u = r['users'] as Map<String, dynamic>?;
-        final teacherName = u?['full_name']?.toString() ?? 'Teacher';
+      final rawLogs = res as List;
+      if (rawLogs.isEmpty) return [];
+
+      final teacherIds = rawLogs
+          .map((r) => r['user_id']?.toString())
+          .whereType<String>()
+          .toSet()
+          .toList();
+
+      final profilesRes = await _client
+          .from('teacher_profiles')
+          .select('teacher_id, first_name, last_name, gender')
+          .inFilter('teacher_id', teacherIds);
+
+      final nameMap = <String, String>{};
+      for (final p in (profilesRes as List)) {
+        final id = p['teacher_id'].toString();
+        final fn = p['first_name']?.toString() ?? '';
+        final ln = p['last_name']?.toString() ?? '';
+        final g = p['gender']?.toString().trim().toLowerCase();
+        final prefix = (g == 'female' || g == 'f')
+            ? "Ma'am "
+            : (g == 'male' || g == 'm')
+                ? "Sir "
+                : "";
+        final raw = [fn, ln].where((s) => s.isNotEmpty).join(' ');
+        nameMap[id] = raw.isNotEmpty ? '$prefix$raw' : 'Teacher';
+      }
+
+      return rawLogs.map((r) {
+        final uId = r['user_id']?.toString() ?? '';
+        final teacherName = nameMap[uId] ?? 'Teacher';
         return UserSessionLog.fromJson(r as Map<String, dynamic>, teacherName: teacherName);
       }).toList();
     } catch (e) {
@@ -374,12 +418,17 @@ class AdminRepository {
   /// Privacy-compliant teacher workload summary: integer counts only!
   Future<List<TeacherWorkloadSummary>> getTeacherWorkloadSummaries(String schoolYearId) async {
     try {
-      // 1. Get teachers
+      // 1. Get active teachers from teacher_profiles joined with users
       final teachersRes = await _client
-          .from('users')
-          .select('id, full_name')
-          .eq('role', 'teacher')
-          .eq('is_archived', false);
+          .from('teacher_profiles')
+          .select('''
+            teacher_id,
+            first_name,
+            last_name,
+            gender,
+            users!inner ( is_archived )
+          ''')
+          .eq('users.is_archived', false);
 
       final teachers = (teachersRes as List);
 
@@ -409,8 +458,17 @@ class AdminRepository {
       final summaries = <TeacherWorkloadSummary>[];
 
       for (final t in teachers) {
-        final tId = t['id'].toString();
-        final tName = t['full_name']?.toString() ?? 'Teacher';
+        final tId = t['teacher_id'].toString();
+        final fn = t['first_name']?.toString() ?? '';
+        final ln = t['last_name']?.toString() ?? '';
+        final g = t['gender']?.toString().trim().toLowerCase();
+        final prefix = (g == 'female' || g == 'f')
+            ? "Ma'am "
+            : (g == 'male' || g == 'm')
+                ? "Sir "
+                : "";
+        final raw = [fn, ln].where((s) => s.isNotEmpty).join(' ');
+        final tName = raw.isNotEmpty ? '$prefix$raw' : 'Teacher';
 
         final teacherOfferings = offerings.where((o) => o['teacher_id'] == tId).toList();
         final uniqueSubjects = teacherOfferings.map((o) => o['subject_id']).toSet().length;
@@ -452,62 +510,87 @@ class AdminRepository {
   /// Dashboard Aggregate KPI metrics (Real Supabase queries)
   Future<Map<String, dynamic>> getDashboardKpiMetrics() async {
     try {
-      // 1. Teachers: active / total
-      final allTeachers = await _client
+      // 1. Fetch all users from users table
+      final usersResponse = await _client
           .from('users')
-          .select('id, is_archived, teacher_settings(status)')
-          .eq('role', 'teacher');
+          .select('id, role, is_archived');
+      final userList = List<Map<String, dynamic>>.from(usersResponse as List);
 
-      final totalTeachers = (allTeachers as List).length;
-      final activeTeachers = (allTeachers as List).where((t) {
+      final teacherUsers = userList.where((u) => u['role'] == 'teacher').toList();
+      final studentUsers = userList.where((u) => u['role'] == 'student').toList();
+      final parentUsers = userList.where((u) => u['role'] == 'parent').toList();
+
+      // Fetch teacher settings for status
+      List<dynamic> teacherSettingsResp = [];
+      try {
+        teacherSettingsResp = (await _client.from('teacher_settings').select('teacher_id, status')) as List;
+      } catch (_) {}
+      final teacherSettingsMap = {
+        for (var ts in teacherSettingsResp)
+          ts['teacher_id']?.toString(): ts['status']?.toString()
+      };
+
+      // Fetch student settings for status
+      List<dynamic> studentSettingsResp = [];
+      try {
+        studentSettingsResp = (await _client.from('student_settings').select('student_id, status')) as List;
+      } catch (_) {}
+      final studentSettingsMap = {
+        for (var ss in studentSettingsResp)
+          ss['student_id']?.toString(): ss['status']?.toString()
+      };
+
+      // Fetch parent profiles for status
+      List<dynamic> parentProfilesResp = [];
+      try {
+        parentProfilesResp = (await _client.from('parent_profiles').select('parent_id, status')) as List;
+      } catch (_) {}
+      final parentStatusMap = {
+        for (var pp in parentProfilesResp)
+          pp['parent_id']?.toString(): pp['status']?.toString()
+      };
+
+      // 1. Teachers: active / total
+      final totalTeachers = teacherUsers.length;
+      final activeTeachers = teacherUsers.where((t) {
+        final id = t['id']?.toString();
         final isArchived = t['is_archived'] == true;
-        final ts = t['teacher_settings'] as Map<String, dynamic>?;
-        final status = ts?['status']?.toString();
+        final status = teacherSettingsMap[id] ?? 'active';
         return !isArchived && status == 'active';
       }).length;
 
       // 2. Students: active / total
-      final allStudents = await _client
-          .from('users')
-          .select('id, is_archived, student_settings(status)')
-          .eq('role', 'student');
-
-      final totalStudents = (allStudents as List).length;
-      final activeStudents = (allStudents as List).where((s) {
+      final totalStudents = studentUsers.length;
+      final activeStudents = studentUsers.where((s) {
+        final id = s['id']?.toString();
         final isArchived = s['is_archived'] == true;
-        final ss = s['student_settings'] as Map<String, dynamic>?;
-        final status = ss?['status']?.toString();
+        final status = studentSettingsMap[id] ?? 'active';
         return !isArchived && status == 'active';
       }).length;
 
       // 3. Parents: active / total
-      final allParents = await _client
-          .from('users')
-          .select('id, is_archived, parent_profiles(status)')
-          .eq('role', 'parent');
-
-      final totalParents = (allParents as List).length;
-      final activeParents = (allParents as List).where((p) {
+      final totalParents = parentUsers.length;
+      final activeParents = parentUsers.where((p) {
+        final id = p['id']?.toString();
         final isArchived = p['is_archived'] == true;
-        final pp = p['parent_profiles'] as Map<String, dynamic>?;
-        final status = pp?['status']?.toString();
+        final status = parentStatusMap[id] ?? 'active';
         return !isArchived && status == 'active';
       }).length;
 
       // 4. Pending first login breakdown
-      final pendingTeachers = (allTeachers as List).where((t) {
-        final ts = t['teacher_settings'] as Map<String, dynamic>?;
-        return ts?['status']?.toString() == 'pending_first_login';
+      final pendingTeachers = teacherUsers.where((t) {
+        final id = t['id']?.toString();
+        return teacherSettingsMap[id] == 'pending_first_login';
       }).length;
 
-      final pendingStudents = (allStudents as List).where((s) {
-        final ss = s['student_settings'] as Map<String, dynamic>?;
-        return ss?['status']?.toString() == 'pending_first_login';
+      final pendingStudents = studentUsers.where((s) {
+        final id = s['id']?.toString();
+        return studentSettingsMap[id] == 'pending_first_login';
       }).length;
 
-      final pendingParents = (allParents as List).where((p) {
-        final pp = p['parent_profiles'] as Map<String, dynamic>?;
-        return pp?['status']?.toString() == 'pending_first_login';
+      final pendingParents = parentUsers.where((p) {
+        final id = p['id']?.toString();
+        return parentStatusMap[id] == 'pending_first_login';
       }).length;
 
       final totalPendingFirstLogin = pendingTeachers + pendingStudents + pendingParents;

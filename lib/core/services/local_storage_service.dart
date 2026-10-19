@@ -89,6 +89,11 @@ class LocalStorageService {
 
   static String? get savedPassword => _preferences?.getString(keySavedPassword);
 
+  static Future<void> clearCachedUser() async {
+    final prefs = await _prefs;
+    await _ensureSaved(await prefs.remove(keyCachedUser));
+  }
+
   static Future<void> clearAuth() async {
     final prefs = await _prefs;
     await prefs.remove(keyCachedUser);
