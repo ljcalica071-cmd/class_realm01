@@ -374,17 +374,54 @@ class SupabaseStudentRepository implements StudentRepository {
   }
 
   @override
-  Future<void> archiveStudent(String id, [String? subjectId]) async {
+  Future<void> archiveStudent(String id, [String? subjectId, String? currentStatusHint]) async {
     if (subjectId != null) {
       await _client
           .from('student_enrollments')
           .update({'status': 'Archived'})
-          .match({'student_id': id, 'subject_id': subjectId});
+          .match({'student_id': id, 'subject_offering_id': subjectId});
     } else {
       await _client
           .from('student_enrollments')
           .update({'status': 'Archived'})
           .eq('student_id', id);
+    }
+
+    // Check if student has any other active enrollments across all subjects
+    try {
+      final active = await _client
+          .from('student_enrollments')
+          .select('id')
+          .eq('student_id', id)
+          .ilike('status', 'enrolled');
+
+      if (active.isEmpty) {
+        // No active classes remaining: disable root account in Supabase and Firebase Auth
+        await _client.from('users').update({'is_archived': true}).eq('id', id);
+        try {
+          final cur = await _client
+              .from('student_settings')
+              .select('status')
+              .eq('student_id', id)
+              .maybeSingle();
+          final currentStatus = cur?['status']?.toString();
+          final statusToSave = (currentStatus != null &&
+                  currentStatus.isNotEmpty &&
+                  currentStatus != 'archived')
+              ? currentStatus
+              : (currentStatusHint ?? 'active');
+
+          await _client.from('student_settings').update({
+            'previous_status': statusToSave,
+            'status': 'archived',
+          }).eq('student_id', id);
+        } catch (_) {}
+        try {
+          await FirebaseAuthAdminService.setUserDisabled(uid: id, disabled: true);
+        } catch (_) {}
+      }
+    } catch (e) {
+      debugPrint('Error evaluating student active enrollments on archive: $e');
     }
   }
 
@@ -394,12 +431,39 @@ class SupabaseStudentRepository implements StudentRepository {
       await _client
           .from('student_enrollments')
           .update({'status': 'Enrolled'})
-          .match({'student_id': id, 'subject_id': subjectId});
+          .match({'student_id': id, 'subject_offering_id': subjectId});
     } else {
       await _client
           .from('student_enrollments')
           .update({'status': 'Enrolled'})
           .eq('student_id', id);
+    }
+
+    // Always re-enable root user and Firebase Auth on restore
+    try {
+      await _client.from('users').update({'is_archived': false}).eq('id', id);
+      try {
+        final cur = await _client
+            .from('student_settings')
+            .select('previous_status')
+            .eq('student_id', id)
+            .maybeSingle();
+        final prev = cur?['previous_status']?.toString();
+        // Restore exact status before archive, default to active, NEVER pending_first_login unless it was genuinely pending
+        final targetStatus = (prev != null && prev.isNotEmpty && prev != 'archived')
+            ? prev
+            : 'active';
+
+        await _client.from('student_settings').update({
+          'status': targetStatus,
+          'previous_status': null,
+        }).eq('student_id', id);
+      } catch (_) {}
+      try {
+        await FirebaseAuthAdminService.setUserDisabled(uid: id, disabled: false);
+      } catch (_) {}
+    } catch (e) {
+      debugPrint('Error restoring student account: $e');
     }
   }
 

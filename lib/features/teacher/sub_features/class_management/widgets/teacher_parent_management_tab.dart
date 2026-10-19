@@ -965,9 +965,7 @@ class _TeacherParentManagementTabState
                                                       width: colActionsWidth,
                                                       hasRightBorder: false,
                                                       child: Row(
-                                                        mainAxisAlignment:
-                                                            MainAxisAlignment
-                                                                .center,
+                                                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                                                         children: [
                                                           // View / Copy Credentials Slip
                                                           IconButton(
@@ -1654,8 +1652,8 @@ Instructions:
       context: context,
       title: isArchiving ? 'Archive Parent Account' : 'Restore Parent Account',
       message: isArchiving
-          ? 'Are you sure you want to archive the account for ${parent.fullName}? They will not appear in the active parent directory.'
-          : 'Are you sure you want to restore ${parent.fullName} to the active directory?',
+          ? 'Are you sure you want to archive the account for ${parent.fullName}? Their login will be disabled and they will be moved to Archives. Their profile and student links remain preserved.'
+          : 'Are you sure you want to restore ${parent.fullName}? This will restore their active status and re-enable their account login.',
       confirmLabel: isArchiving ? 'Archive' : 'Restore',
       confirmColor: isArchiving ? AppTheme.catOrange : AppTheme.catGreen,
     );
@@ -1663,7 +1661,14 @@ Instructions:
     if (confirm == true) {
       try {
         final repo = SupabaseParentRepository();
-        await repo.setArchived(parent.id, isArchiving);
+        final currentHint = (parent.status == AccountStatus.pendingFirstLogin)
+            ? 'pending_first_login'
+            : 'active';
+        await repo.setArchived(
+          parent.id,
+          isArchiving,
+          currentStatusHint: currentHint,
+        );
       } catch (_) {}
 
       final idx = MockDatabase.instance.users.indexWhere((u) => u.id == parent.id);
@@ -1673,6 +1678,15 @@ Instructions:
       }
 
       _loadData();
+      if (mounted) {
+        AppModals.showSuccessDialog(
+          context: context,
+          title: isArchiving ? 'Parent Archived' : 'Parent Restored',
+          message: isArchiving
+              ? '${parent.fullName} has been moved to archives.'
+              : '${parent.fullName} has been restored to active status.',
+        );
+      }
     }
   }
 
@@ -1681,7 +1695,7 @@ Instructions:
       context: context,
       title: 'Permanently Delete Parent',
       message:
-          'This will permanently delete the parent account for ${parent.fullName}. This action cannot be undone.',
+          'Are you sure you want to permanently delete ${parent.fullName}? This will erase their profile and credentials from both Supabase and Firebase Auth. This action is irreversible and cannot be undone.',
       confirmLabel: 'Permanent Delete',
       confirmColor: AppTheme.catRed,
     );
@@ -1694,6 +1708,13 @@ Instructions:
 
       MockDatabase.instance.users.removeWhere((u) => u.id == parent.id);
       _loadData();
+      if (mounted) {
+        AppModals.showSuccessDialog(
+          context: context,
+          title: 'Parent Deleted',
+          message: '${parent.fullName} has been permanently deleted.',
+        );
+      }
     }
   }
 }

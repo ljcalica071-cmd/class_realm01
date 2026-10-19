@@ -12,6 +12,9 @@ class AssetPaths {
   /// School campus background image for landing / authentication screens.
   static const String landingBackground = 'assets/images/auth/school.jpg';
 
+  /// 3D Book asset for authentication screens.
+  static const String openBook = 'assets/images/auth/book.png';
+
   /// Alias kept for backward-compatibility with older widget references.
   static const String schoolBackground = landingBackground;
 }

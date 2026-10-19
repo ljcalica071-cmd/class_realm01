@@ -108,17 +108,33 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
   }
 
   void _handleArchive(UserModel t) async {
+    final currentUserId = AuthRepository.instance.currentUser?.id;
+    if (currentUserId != null && currentUserId == t.id) {
+      if (mounted) {
+        AppModals.showErrorDialog(
+          context: context,
+          title: 'Action Not Allowed',
+          message: 'You cannot archive your own account.',
+        );
+      }
+      return;
+    }
+
     final confirm = await AppModals.showConfirmDialog(
       context: context,
       title: 'Archive Teacher',
-      message: 'Are you sure you want to archive ${t.fullName}?',
+      message: 'Are you sure you want to archive ${t.fullName}? Their login will be disabled and classes moved to archives.',
       confirmLabel: 'Archive',
       confirmColor: AppTheme.catOrange,
     );
     if (confirm == true) {
+      final currentHint = (t.status == AccountStatus.pendingFirstLogin)
+          ? 'pending_first_login'
+          : 'active';
       final success = await AuthRepository.instance.updateTeacherStatus(
         t.id,
         'archived',
+        currentStatusHint: currentHint,
       );
       if (success) {
         if (mounted) {
@@ -146,7 +162,7 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
     final confirm = await AppModals.showConfirmDialog(
       context: context,
       title: 'Recover Teacher',
-      message: 'Are you sure you want to recover ${t.fullName} from archives?',
+      message: 'Are you sure you want to recover ${t.fullName}? This will restore their previous status and re-enable login.',
       confirmLabel: 'Recover',
       confirmColor: Colors.green,
     );
@@ -179,11 +195,23 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
   }
 
   void _handlePermanentDelete(UserModel t) async {
+    final currentUserId = AuthRepository.instance.currentUser?.id;
+    if (currentUserId != null && currentUserId == t.id) {
+      if (mounted) {
+        AppModals.showErrorDialog(
+          context: context,
+          title: 'Action Not Allowed',
+          message: 'You cannot delete your own account.',
+        );
+      }
+      return;
+    }
+
     final confirm = await AppModals.showConfirmDialog(
       context: context,
       title: 'Permanent Delete',
       message:
-          'Are you sure you want to permanently delete ${t.fullName}? This action cannot be undone and will remove them completely from the database.',
+          'Are you sure you want to permanently delete ${t.fullName}? This will erase their profile and credentials from both Supabase and Firebase Auth. This action cannot be undone.',
       confirmLabel: 'Delete',
       confirmColor: AppTheme.catRed,
     );
@@ -754,9 +782,7 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
                                             width: colActionsWidth,
                                             hasRightBorder: false,
                                             child: Row(
-                                              mainAxisSize: MainAxisSize.max,
-                                              mainAxisAlignment:
-                                                  MainAxisAlignment.spaceEvenly,
+                                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                                               children: [
                                                 if (!_showArchivedTeachers) ...[
                                                   IconButton(
@@ -797,6 +823,7 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
                                                           }
                                                         : () => _handleEdit(t),
                                                   ),
+                                                  const SizedBox(width: 8),
                                                   IconButton(
                                                     tooltip: 'Archive Teacher',
                                                     icon: const Icon(
@@ -816,6 +843,7 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
                                                     onPressed: () =>
                                                         _handleArchive(t),
                                                   ),
+                                                  const SizedBox(width: 8),
                                                   IconButton(
                                                     tooltip: 'Delete Teacher',
                                                     icon: const Icon(
@@ -857,6 +885,7 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
                                                     onPressed: () =>
                                                         _handleRecover(t),
                                                   ),
+                                                  const SizedBox(width: 8),
                                                   IconButton(
                                                     tooltip: 'Delete Teacher',
                                                     icon: const Icon(

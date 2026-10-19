@@ -259,65 +259,12 @@ class ClosedBook3DWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Transform.rotate(
-      angle: -0.35,
-      child: Container(
-        width: size * 0.82,
-        height: size,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(10),
-          gradient: const LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              Color(0xFF3B82F6),
-              Color(0xFF1D4ED8),
-              Color(0xFF1E3A8A),
-            ],
-          ),
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0x40000000),
-              blurRadius: 18,
-              offset: Offset(4, 8),
-            ),
-          ],
-          border: Border.all(
-            color: Colors.white.withValues(alpha: 0.3),
-            width: 1.2,
-          ),
-        ),
-        child: Stack(
-          children: [
-            // Spine highlight
-            Positioned(
-              left: 0,
-              top: 0,
-              bottom: 0,
-              width: 8,
-              child: Container(
-                decoration: BoxDecoration(
-                  borderRadius: const BorderRadius.horizontal(left: Radius.circular(8)),
-                  color: Colors.black.withValues(alpha: 0.25),
-                ),
-              ),
-            ),
-            // Golden orange bookmark ribbon
-            Positioned(
-              top: 0,
-              left: size * 0.28,
-              width: 10,
-              height: size * 0.75,
-              child: Container(
-                decoration: const BoxDecoration(
-                  color: Color(0xFFF59E0B),
-                  boxShadow: [
-                    BoxShadow(color: Colors.black26, blurRadius: 4, offset: Offset(1, 2)),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
+      angle: -0.15,
+      child: Image.asset(
+        'assets/images/auth/book.png',
+        width: size * 1.5,
+        height: size * 1.5,
+        fit: BoxFit.contain,
       ),
     );
   }

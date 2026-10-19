@@ -33,7 +33,7 @@ abstract class StudentRepository {
     required DateTime birthday,
     required String subjectId,
   });
-  Future<void> archiveStudent(String id, [String? subjectId]);
+  Future<void> archiveStudent(String id, [String? subjectId, String? currentStatusHint]);
   Future<void> restoreStudent(String id, [String? subjectId]);
   Future<void> deactivateStudent(String id);
   Future<void> reactivateStudent(String id);

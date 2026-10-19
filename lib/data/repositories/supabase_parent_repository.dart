@@ -812,11 +812,62 @@ class SupabaseParentRepository {
         .eq('parent_id', parentId);
   }
 
-  Future<void> setArchived(String parentId, bool archived) async {
+  Future<void> setArchived(String parentId, bool archived, {String? currentStatusHint}) async {
     await _client
         .from('users')
         .update({'is_archived': archived})
         .eq('id', parentId);
+
+    try {
+      if (archived) {
+        final cur = await _client
+            .from('parent_profiles')
+            .select('status')
+            .eq('parent_id', parentId)
+            .maybeSingle();
+        final currentStatus = cur?['status']?.toString();
+        final statusToSave = (currentStatus != null &&
+                currentStatus.isNotEmpty &&
+                currentStatus != 'archived')
+            ? currentStatus
+            : (currentStatusHint ?? 'active');
+
+        await _client
+            .from('parent_profiles')
+            .update({
+              'previous_status': statusToSave,
+              'status': 'archived',
+            })
+            .eq('parent_id', parentId);
+      } else {
+        final cur = await _client
+            .from('parent_profiles')
+            .select('previous_status')
+            .eq('parent_id', parentId)
+            .maybeSingle();
+        final prev = cur?['previous_status']?.toString();
+        final targetStatus = (prev != null && prev.isNotEmpty && prev != 'archived')
+            ? prev
+            : 'active';
+
+        await _client
+            .from('parent_profiles')
+            .update({
+              'status': targetStatus,
+              'previous_status': null,
+            })
+            .eq('parent_id', parentId);
+      }
+    } catch (e) {
+      debugPrint('Error updating parent archive profile status: $e');
+    }
+
+    try {
+      await FirebaseAuthAdminService.setUserDisabled(
+        uid: parentId,
+        disabled: archived,
+      );
+    } catch (_) {}
   }
 
   Future<void> permanentlyDelete(String parentId) async {

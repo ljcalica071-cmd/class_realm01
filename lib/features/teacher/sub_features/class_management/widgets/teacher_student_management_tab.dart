@@ -909,8 +909,7 @@ class _TeacherStudentManagementTabState
                                                       width: colActionsWidth,
                                                       hasRightBorder: false,
                                                       child: Row(
-                                                        mainAxisSize:
-                                                            MainAxisSize.min,
+                                                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                                                         children: [
                                                           if (!_showArchivedStudents) ...[
                                                             IconButton(
@@ -953,7 +952,7 @@ class _TeacherStudentManagementTabState
                                                                       context,
                                                                   title: 'Archive Student',
                                                                   message:
-                                                                      'Are you sure you want to move ${s.fullName} to the archive?',
+                                                                      'Are you sure you want to archive ${s.fullName}? Their enrollment in this class will be archived. All grades and classwork submissions are preserved and can be restored anytime.',
                                                                   confirmLabel:
                                                                       'Archive',
                                                                   confirmColor:
@@ -966,15 +965,18 @@ class _TeacherStudentManagementTabState
                                                                       .archiveStudent(
                                                                         s.id,
                                                                         s.enrolledSubjectId,
+                                                                        (s.status == AccountStatus.pendingFirstLogin)
+                                                                            ? 'pending_first_login'
+                                                                            : 'active',
                                                                       );
                                                                   _loadData();
-                                                                  messenger.showSnackBar(
-                                                                    SnackBar(
-                                                                      content: Text(
-                                                                        '${s.fullName} moved to archive.',
-                                                                      ),
-                                                                    ),
-                                                                  );
+                                                                  if (context.mounted) {
+                                                                    AppModals.showSuccessDialog(
+                                                                      context: context,
+                                                                      title: 'Student Archived',
+                                                                      message: '${s.fullName} has been moved to archives.',
+                                                                    );
+                                                                  }
                                                                 }
                                                               },
                                                             ),
@@ -989,19 +991,30 @@ class _TeacherStudentManagementTabState
                                                               ),
                                                               splashRadius: 18,
                                                               onPressed: () async {
-                                                                await SupabaseStudentRepository()
-                                                                    .restoreStudent(
-                                                                      s.id,
-                                                                      s.enrolledSubjectId,
-                                                                    );
-                                                                _loadData();
-                                                                AppModals.showSuccessDialog(
-                                                                  context:
-                                                                      context,
-                                                                  title: 'Recovered',
-                                                                  message:
-                                                                      '${s.fullName} recovered.',
+                                                                final confirm = await AppModals.showConfirmDialog(
+                                                                  context: context,
+                                                                  title: 'Recover Student',
+                                                                  message: 'Are you sure you want to restore ${s.fullName} to active enrollment in this class?',
+                                                                  confirmLabel: 'Recover',
+                                                                  confirmColor: Colors.green,
                                                                 );
+                                                                if (confirm == true) {
+                                                                  await SupabaseStudentRepository()
+                                                                      .restoreStudent(
+                                                                        s.id,
+                                                                        s.enrolledSubjectId,
+                                                                      );
+                                                                  _loadData();
+                                                                  if (context.mounted) {
+                                                                    AppModals.showSuccessDialog(
+                                                                      context:
+                                                                          context,
+                                                                      title: 'Recovered',
+                                                                      message:
+                                                                          '${s.fullName} has been restored to active enrollment.',
+                                                                    );
+                                                                  }
+                                                                }
                                                               },
                                                             ),
                                                             IconButton(
@@ -1020,7 +1033,7 @@ class _TeacherStudentManagementTabState
                                                                       context,
                                                                   title: 'Permanently Delete Student',
                                                                   message:
-                                                                      'This will permanently delete ${s.fullName}. This action cannot be undone.',
+                                                                      'Are you sure you want to permanently delete ${s.fullName}? If they have no other enrolled classes, their account and Firebase Auth login will be permanently erased. This action cannot be undone.',
                                                                   confirmLabel: 'Permanent Delete',
                                                                   confirmColor:
                                                                       AppTheme
@@ -1034,6 +1047,13 @@ class _TeacherStudentManagementTabState
                                                                         s.enrolledSubjectId,
                                                                       );
                                                                   _loadData();
+                                                                  if (context.mounted) {
+                                                                    AppModals.showSuccessDialog(
+                                                                      context: context,
+                                                                      title: 'Student Deleted',
+                                                                      message: '${s.fullName} has been permanently deleted.',
+                                                                    );
+                                                                  }
                                                                 }
                                                               },
                                                             ),
@@ -1190,24 +1210,33 @@ class _TeacherStudentManagementTabState
                                       onPressed: () async {
                                         final selectedCount =
                                             _selectedStudentIds.length;
-                                        for (final id
-                                            in _selectedStudentIds) {
-                                          await SupabaseStudentRepository()
-                                              .restoreStudent(id);
+                                        final confirm =
+                                            await AppModals.showConfirmDialog(
+                                              context: context,
+                                              title: 'Recover Selected Students',
+                                              message:
+                                                  'Are you sure you want to restore $selectedCount selected student(s) to active enrollment?',
+                                              confirmLabel: 'Recover Selected',
+                                              confirmColor: Colors.green,
+                                            );
+                                        if (confirm == true) {
+                                          for (final id in _selectedStudentIds) {
+                                            await SupabaseStudentRepository()
+                                                .restoreStudent(id);
+                                          }
+                                          setState(() {
+                                            _selectedStudentIds.clear();
+                                            _loadData();
+                                          });
+                                          if (context.mounted) {
+                                            AppModals.showSuccessDialog(
+                                              context: context,
+                                              title: 'Students Recovered',
+                                              message:
+                                                  '$selectedCount student(s) restored to active enrollment.',
+                                            );
+                                          }
                                         }
-                                        setState(() {
-                                          _selectedStudentIds.clear();
-                                          _loadData();
-                                        });
-                                        ScaffoldMessenger.of(
-                                          context,
-                                        ).showSnackBar(
-                                          SnackBar(
-                                            content: Text(
-                                              '$selectedCount student(s) recovered.',
-                                            ),
-                                          ),
-                                        );
                                       },
                                     ),
                                     const SizedBox(width: 8),
@@ -1242,10 +1271,11 @@ class _TeacherStudentManagementTabState
                                         final confirm =
                                             await AppModals.showConfirmDialog(
                                               context: context,
-                                              title: 'Permanent delete',
+                                              title:
+                                                  'Permanently Delete Selected',
                                               message:
-                                                  'Permanently delete $selectedCount selected student(s)? This action cannot be undone.',
-                                              confirmLabel: 'Permanent delete',
+                                                  'Permanently delete $selectedCount selected student(s)? If any student has no other enrolled classes, their account and Firebase Auth login will be permanently erased. This action cannot be undone.',
+                                              confirmLabel: 'Permanent Delete',
                                               confirmColor: AppTheme.catRed,
                                             );
                                         if (confirm == true) {
@@ -1263,6 +1293,14 @@ class _TeacherStudentManagementTabState
                                           }
                                           _selectedStudentIds.clear();
                                           _loadData();
+                                          if (context.mounted) {
+                                            AppModals.showSuccessDialog(
+                                              context: context,
+                                              title: 'Students Deleted',
+                                              message:
+                                                  '$selectedCount student(s) permanently deleted.',
+                                            );
+                                          }
                                         }
                                       },
                                     ),
@@ -1329,20 +1367,17 @@ class _TeacherStudentManagementTabState
                                         ),
                                       ),
                                       onPressed: () async {
-                                        final messenger = ScaffoldMessenger.of(
-                                          context,
-                                        );
                                         final selectedCount =
                                             _selectedStudentIds.length;
                                         final confirm =
                                             await AppModals.showConfirmDialog(
                                               context: context,
                                               title:
-                                                  'Archive selected students',
+                                                  'Archive Selected Students',
                                               message:
-                                                  'Are you sure you want to archive $selectedCount selected student(s)?',
-                                              confirmLabel: 'Archive selected',
-                                              confirmColor: AppTheme.catRed,
+                                                  'Are you sure you want to archive $selectedCount selected student(s)? Their enrollment will be moved to archives, and all class records remain preserved.',
+                                              confirmLabel: 'Archive Selected',
+                                              confirmColor: AppTheme.catOrange,
                                             );
                                         if (confirm == true) {
                                           for (final id
@@ -1355,17 +1390,21 @@ class _TeacherStudentManagementTabState
                                                 .archiveStudent(
                                                   id,
                                                   student.enrolledSubjectId,
+                                                  (student.status == AccountStatus.pendingFirstLogin)
+                                                      ? 'pending_first_login'
+                                                      : 'active',
                                                 );
                                           }
                                           _selectedStudentIds.clear();
                                           _loadData();
-                                          messenger.showSnackBar(
-                                            SnackBar(
-                                              content: Text(
-                                                '$selectedCount student(s) moved to archive.',
-                                              ),
-                                            ),
-                                          );
+                                          if (context.mounted) {
+                                            AppModals.showSuccessDialog(
+                                              context: context,
+                                              title: 'Students Archived',
+                                              message:
+                                                  '$selectedCount student(s) moved to archives.',
+                                            );
+                                          }
                                         }
                                       },
                                     ),

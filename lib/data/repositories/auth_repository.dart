@@ -110,16 +110,30 @@ class AuthRepository {
             "Firebase login succeeded, but user data was not found in Supabase Database. Please contact administrator.",
           );
         }
+        if (_currentUser!.isArchived || _currentUser!.status == custom.AccountStatus.archived) {
+          await _firebaseAuth.signOut();
+          await LocalStorageService.clearAuth();
+          _currentUser = null;
+          throw const LoginAttemptException(
+            'This account has been archived. Please contact your school administrator.',
+            invalidCredentials: true,
+          );
+        }
         await LocalStorageService.saveUser(_currentUser!);
         MockDatabase.instance.currentUser = _currentUser;
         return _currentUser;
       }
     } on firebase.FirebaseAuthException catch (e) {
+      if (e.code == 'user-disabled') {
+        throw const LoginAttemptException(
+          'This account has been disabled or archived. Please contact your school administrator.',
+          invalidCredentials: true,
+        );
+      }
       if (e.code == 'user-not-found' ||
           e.code == 'invalid-credential' ||
           e.code == 'wrong-password' ||
-          e.code == 'invalid-email' ||
-          e.code == 'user-disabled') {
+          e.code == 'invalid-email') {
         throw const LoginAttemptException(
           'Invalid email or password. Please check your credentials.',
           invalidCredentials: true,
@@ -164,6 +178,15 @@ class AuthRepository {
           }
         } catch (_) {}
 
+        if (_currentUser != null &&
+            (_currentUser!.isArchived ||
+                _currentUser!.status == custom.AccountStatus.archived)) {
+          await _firebaseAuth.signOut();
+          await LocalStorageService.clearAuth();
+          _currentUser = null;
+          return null;
+        }
+
         return _currentUser;
       }
 
@@ -171,6 +194,13 @@ class AuthRepository {
       try {
         _currentUser = await _getUserFromSupabase(firebaseUser.uid);
         if (_currentUser != null) {
+          if (_currentUser!.isArchived ||
+              _currentUser!.status == custom.AccountStatus.archived) {
+            await _firebaseAuth.signOut();
+            await LocalStorageService.clearAuth();
+            _currentUser = null;
+            return null;
+          }
           await LocalStorageService.saveUser(_currentUser!);
           MockDatabase.instance.currentUser = _currentUser;
           return _currentUser;
@@ -195,6 +225,7 @@ class AuthRepository {
           .single();
 
       final role = userResp['role'] as String;
+      final bool isArchived = userResp['is_archived'] == true;
 
       if (role == 'teacher') {
         final infoResp = await _supabaseClient
@@ -230,6 +261,7 @@ class AuthRepository {
           consultationHours: infoResp['consultation_hours'],
           isSetupComplete: infoResp['is_setup_complete'],
           status: _parseStatus(infoResp['status']),
+          isArchived: isArchived,
         );
       } else if (role == 'admin') {
         final email = userResp['email'] as String;
@@ -252,6 +284,7 @@ class AuthRepository {
           email: email,
           role: custom.UserRole.admin,
           status: custom.AccountStatus.active,
+          isArchived: isArchived,
         );
       } else if (role == 'student') {
         final infoResp = await _supabaseClient
@@ -309,6 +342,7 @@ class AuthRepository {
               ? section['grade_level']?.toString()
               : null,
           status: _parseStatus(infoResp['status']?.toString() ?? 'active'),
+          isArchived: isArchived,
         );
       } else if (role == 'parent') {
         final profileResp = await _supabaseClient
@@ -362,6 +396,7 @@ class AuthRepository {
           parentGuardianRelationship: relationship,
           linkedStudentId: linkedStudentId,
           status: _parseStatus(statusStr),
+          isArchived: isArchived,
         );
       }
       return null;
@@ -988,7 +1023,11 @@ class AuthRepository {
   }
 
   // Admin: Update Teacher Status (with cascading archive & student/parent active check)
-  Future<bool> updateTeacherStatus(String uid, String newStatus) async {
+  Future<bool> updateTeacherStatus(
+    String uid,
+    String newStatus, {
+    String? currentStatusHint,
+  }) async {
     try {
       if (newStatus == 'archived') {
         // 1. Preserve current teacher status before archiving
@@ -999,17 +1038,16 @@ class AuthRepository {
               .eq('teacher_id', uid)
               .maybeSingle();
           final currentStatus = cur?['status']?.toString();
-          if (currentStatus != null && currentStatus != 'archived') {
-            await _supabaseClient
-                .from('teacher_settings')
-                .update({'previous_status': currentStatus, 'status': 'archived'})
-                .eq('teacher_id', uid);
-          } else {
-            await _supabaseClient
-                .from('teacher_settings')
-                .update({'status': 'archived'})
-                .eq('teacher_id', uid);
-          }
+          final statusToSave = (currentStatus != null &&
+                  currentStatus.isNotEmpty &&
+                  currentStatus != 'archived')
+              ? currentStatus
+              : (currentStatusHint ?? 'active');
+
+          await _supabaseClient
+              .from('teacher_settings')
+              .update({'previous_status': statusToSave, 'status': 'archived'})
+              .eq('teacher_id', uid);
         } catch (_) {}
 
         // 2. Mark as archived in users table (primary indicator)
@@ -1074,9 +1112,24 @@ class AuthRepository {
               // If student has no other active classes, archive them
               if (!hasActiveOffering) {
                 try {
+                  final curSt = await _supabaseClient
+                      .from('student_settings')
+                      .select('status')
+                      .eq('student_id', sId)
+                      .maybeSingle();
+                  final stStatus = curSt?['status']?.toString();
+                  final stStatusToSave = (stStatus != null &&
+                          stStatus.isNotEmpty &&
+                          stStatus != 'archived')
+                      ? stStatus
+                      : 'active';
+
                   await _supabaseClient
                       .from('student_settings')
-                      .update({'status': 'archived'})
+                      .update({
+                        'previous_status': stStatusToSave,
+                        'status': 'archived',
+                      })
                       .eq('student_id', sId);
                   await _supabaseClient
                       .from('users')
@@ -1116,9 +1169,24 @@ class AuthRepository {
                     }
 
                     if (!hasActiveChild) {
+                      final curPr = await _supabaseClient
+                          .from('parent_profiles')
+                          .select('status')
+                          .eq('parent_id', pId)
+                          .maybeSingle();
+                      final prStatus = curPr?['status']?.toString();
+                      final prStatusToSave = (prStatus != null &&
+                              prStatus.isNotEmpty &&
+                              prStatus != 'archived')
+                          ? prStatus
+                          : 'active';
+
                       await _supabaseClient
                           .from('parent_profiles')
-                          .update({'status': 'archived'})
+                          .update({
+                            'previous_status': prStatusToSave,
+                            'status': 'archived',
+                          })
                           .eq('parent_id', pId);
                       await _supabaseClient
                           .from('users')
@@ -1142,20 +1210,20 @@ class AuthRepository {
 
           final settings = await _supabaseClient
               .from('teacher_settings')
-              .select('previous_status, is_setup_complete')
+              .select('previous_status')
               .eq('teacher_id', uid)
               .maybeSingle();
 
           final prev = settings?['previous_status']?.toString();
-          final isSetup = settings?['is_setup_complete'] == true;
-          // Restore prior state: if teacher was active before archive, return to active; if pending, return to pending
+          // STRICT RULE: Restore the exact previous status (e.g. active).
+          // Default to 'active'. NEVER revert to pending_first_login unless it was genuinely pending_first_login!
           final targetStatus = (prev != null && prev.isNotEmpty && prev != 'archived')
               ? prev
-              : (isSetup ? 'active' : 'pending_first_login');
+              : 'active';
 
           await _supabaseClient
               .from('teacher_settings')
-              .update({'status': targetStatus})
+              .update({'status': targetStatus, 'previous_status': null})
               .eq('teacher_id', uid);
 
           // Re-enable account in Firebase Auth
@@ -1187,9 +1255,19 @@ class AuthRepository {
                 final sId = row['student_id'];
                 if (sId != null) {
                   try {
+                    final curSt = await _supabaseClient
+                        .from('student_settings')
+                        .select('previous_status')
+                        .eq('student_id', sId)
+                        .maybeSingle();
+                    final stPrev = curSt?['previous_status']?.toString();
+                    final stTarget = (stPrev != null && stPrev.isNotEmpty && stPrev != 'archived')
+                        ? stPrev
+                        : 'active';
+
                     await _supabaseClient
                         .from('student_settings')
-                        .update({'status': 'active'})
+                        .update({'status': stTarget, 'previous_status': null})
                         .eq('student_id', sId);
                     await _supabaseClient
                         .from('users')
@@ -1206,9 +1284,19 @@ class AuthRepository {
                     for (var pl in parentLinks) {
                       final pId = pl['parent_id'];
                       if (pId != null) {
+                        final curPr = await _supabaseClient
+                            .from('parent_profiles')
+                            .select('previous_status')
+                            .eq('parent_id', pId)
+                            .maybeSingle();
+                        final prPrev = curPr?['previous_status']?.toString();
+                        final prTarget = (prPrev != null && prPrev.isNotEmpty && prPrev != 'archived')
+                            ? prPrev
+                            : 'active';
+
                         await _supabaseClient
                             .from('parent_profiles')
-                            .update({'status': 'active'})
+                            .update({'status': prTarget, 'previous_status': null})
                             .eq('parent_id', pId);
                         await _supabaseClient
                             .from('users')
