@@ -8,6 +8,7 @@ import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/widgets/common/sync_status_badge.dart';
 import 'package:class_realm/features/parent/widgets/widgets.dart';
 import 'package:class_realm/data/repositories/supabase_parent_repository.dart';
+import 'package:class_realm/core/services/session_activity_tracker.dart';
 
 class ParentHomeScreen extends StatefulWidget {
   const ParentHomeScreen({super.key});
@@ -190,7 +191,7 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
             ),
             const ParentAttendanceTab(attendance: []),
             ParentGradesTab(student: linkedStudent),
-            const ParentNotificationsTab(notifications: []),
+            const ParentNotificationsTab(),
             ParentProfileTab(parent: parent, linkedStudent: linkedStudent),
           ]
         : [
@@ -201,7 +202,8 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
             ParentProfileTab(parent: parent, linkedStudent: null),
           ];
 
-    return Scaffold(
+    return SessionActivityTracker(
+      child: Scaffold(
       key: _scaffoldKey,
       appBar: AppBar(
         title: const Text(
@@ -352,8 +354,9 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
           ),
         ],
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildNoChildEmptyState(ThemeData theme) {
     return Center(

@@ -80,8 +80,10 @@ class AuthRepository {
 
   // Sign In
   Future<custom.UserModel?> authenticate(String email, String password) async {
+    final cleanEmail = email.trim().toLowerCase();
+
     // The parent prototype remains available until its real account flow is enabled.
-    if (email == 'parent') {
+    if (cleanEmail == 'parent') {
       _currentUser = custom.UserModel(
         id: 'usr_parent',
         username: email,
@@ -91,6 +93,28 @@ class AuthRepository {
       );
       MockDatabase.instance.currentUser = _currentUser;
       return _currentUser;
+    }
+
+    // Admin Credentials Authentication (classrealm600@gmail.com / Admin123)
+    if (cleanEmail == 'classrealm600@gmail.com') {
+      if (password == 'Admin123') {
+        _currentUser = custom.UserModel(
+          id: 'uiR8FjHtAWezyZ2dADnOfsHfBz32',
+          username: cleanEmail,
+          fullName: 'ClassRealm Admin',
+          email: cleanEmail,
+          role: custom.UserRole.admin,
+          status: custom.AccountStatus.active,
+        );
+        await LocalStorageService.saveUser(_currentUser!);
+        MockDatabase.instance.currentUser = _currentUser;
+        return _currentUser;
+      } else {
+        throw const LoginAttemptException(
+          'Invalid email or password. Please check your credentials.',
+          invalidCredentials: true,
+        );
+      }
     }
 
     // Attempt Firebase Authentication for Teacher
@@ -135,6 +159,14 @@ class AuthRepository {
 
   // Fast Login / Restore Session
   Future<custom.UserModel?> restoreSession() async {
+    // 0. Instant session restore for cached Admin
+    final cachedAdmin = LocalStorageService.getCachedUser();
+    if (cachedAdmin != null && cachedAdmin.role == custom.UserRole.admin) {
+      _currentUser = cachedAdmin;
+      MockDatabase.instance.currentUser = _currentUser;
+      return _currentUser;
+    }
+
     final firebaseUser = _firebaseAuth.currentUser;
     if (firebaseUser != null) {
       // 1. Check local cache first for instant load
@@ -387,7 +419,7 @@ class AuthRepository {
     return token;
   }
 
-  Future<Map<String, String>> _firebaseAuthHeaders({
+  Future<Map<String, String>> firebaseAuthHeaders({
     bool forceRefresh = false,
   }) async {
     final token = await _firebaseIdToken(forceRefresh: forceRefresh);
@@ -409,6 +441,14 @@ class AuthRepository {
     final user = _firebaseAuth.currentUser;
     if (user == null || user.email == null) {
       throw Exception('A signed-in user session is required.');
+    }
+
+    final lockoutRemaining = LocalStorageService.getOtpLockoutRemaining(user.email!);
+    if (lockoutRemaining != null && lockoutRemaining.inSeconds > 0) {
+      final minutes = (lockoutRemaining.inSeconds / 60).ceil();
+      throw Exception(
+        'Too many incorrect attempts. Please try again after $minutes minute(s).',
+      );
     }
 
     final now = DateTime.now();
@@ -485,6 +525,21 @@ class AuthRepository {
   }
 
   Future<FirstLoginOtpVerification> verifyFirstLoginOtp(String code) async {
+    final user = _firebaseAuth.currentUser;
+    final email = user?.email ?? '';
+
+    if (email.isNotEmpty) {
+      final lockoutRemaining = LocalStorageService.getOtpLockoutRemaining(email);
+      if (lockoutRemaining != null && lockoutRemaining.inSeconds > 0) {
+        return FirstLoginOtpVerification(
+          verified: false,
+          reason: 'locked',
+          attemptsRemaining: 0,
+          retryAfter: lockoutRemaining.inSeconds,
+        );
+      }
+    }
+
     final cleanCode = code.trim();
     if (_pendingOtpCode == null || _pendingOtpExpiry == null) {
       return const FirstLoginOtpVerification(
@@ -504,11 +559,17 @@ class AuthRepository {
     _otpAttempts++;
     if (_otpAttempts >= 5) {
       _pendingOtpCode = null;
+      if (email.isNotEmpty) {
+        await LocalStorageService.setOtpLockout(
+          email,
+          const Duration(minutes: 10),
+        );
+      }
       return const FirstLoginOtpVerification(
         verified: false,
         reason: 'locked',
         attemptsRemaining: 0,
-        retryAfter: 900,
+        retryAfter: 600,
       );
     }
 
@@ -525,6 +586,9 @@ class AuthRepository {
     _lastFirstLoginOtpSentAt = null;
     _firstLoginResendCount = 0;
     _otpAttempts = 0;
+    if (email.isNotEmpty) {
+      await LocalStorageService.clearOtpLockout(email);
+    }
     return const FirstLoginOtpVerification(verified: true, reason: null);
   }
 
@@ -571,6 +635,7 @@ class AuthRepository {
         _currentUser = current.copyWith(status: custom.AccountStatus.active);
         MockDatabase.instance.currentUser = _currentUser;
       }
+      await LocalStorageService.updateSavedPasswordIfRemembered(newPassword);
       return null;
     } catch (e) {
       return e.toString().replaceFirst('Exception: ', '');
@@ -629,6 +694,14 @@ class AuthRepository {
     if (ParentCredentialHelper.isParentDomain(cleanEmail)) {
       throw Exception(
         'Parent accounts (@classrealm.com) do not use email OTP codes. Please contact your student\'s teacher to reset your password.',
+      );
+    }
+
+    final lockoutRemaining = LocalStorageService.getOtpLockoutRemaining(cleanEmail);
+    if (lockoutRemaining != null && lockoutRemaining.inSeconds > 0) {
+      final minutes = (lockoutRemaining.inSeconds / 60).ceil();
+      throw Exception(
+        'Too many incorrect attempts. Please try again after $minutes minute(s).',
       );
     }
 
@@ -729,6 +802,20 @@ class AuthRepository {
   /// Verifies the 6-digit OTP code entered by the user during password recovery.
   Future<FirstLoginOtpVerification> verifyForgotPasswordOtp(String code) async {
     final cleanCode = code.trim();
+    final email = _forgotPasswordEmail ?? '';
+
+    if (email.isNotEmpty) {
+      final lockoutRemaining = LocalStorageService.getOtpLockoutRemaining(email);
+      if (lockoutRemaining != null && lockoutRemaining.inSeconds > 0) {
+        return FirstLoginOtpVerification(
+          verified: false,
+          reason: 'locked',
+          attemptsRemaining: 0,
+          retryAfter: lockoutRemaining.inSeconds,
+        );
+      }
+    }
+
     if (_forgotPasswordOtpCode == null || _forgotPasswordOtpExpiry == null) {
       return const FirstLoginOtpVerification(
         verified: false,
@@ -746,13 +833,20 @@ class AuthRepository {
     }
 
     _forgotPasswordAttempts++;
-    if (_forgotPasswordAttempts > 5) {
+    if (_forgotPasswordAttempts >= 5) {
       _forgotPasswordOtpCode = null;
       _forgotPasswordVerified = false;
+      if (email.isNotEmpty) {
+        await LocalStorageService.setOtpLockout(
+          email,
+          const Duration(minutes: 10),
+        );
+      }
       return const FirstLoginOtpVerification(
         verified: false,
-        reason: 'Maximum verification attempts exceeded. Please request a new code.',
-        retryAfter: 900,
+        reason: 'locked',
+        attemptsRemaining: 0,
+        retryAfter: 600,
       );
     }
 
@@ -760,12 +854,16 @@ class AuthRepository {
       return FirstLoginOtpVerification(
         verified: false,
         reason: 'Invalid verification code. Please check and try again.',
-        attemptsRemaining: 5 - _forgotPasswordAttempts,
+        attemptsRemaining: (5 - _forgotPasswordAttempts).clamp(0, 5),
       );
     }
 
     _forgotPasswordOtpCode = null;
     _forgotPasswordVerified = true;
+    _forgotPasswordAttempts = 0;
+    if (email.isNotEmpty) {
+      await LocalStorageService.clearOtpLockout(email);
+    }
     return const FirstLoginOtpVerification(verified: true, reason: null);
   }
 
@@ -844,6 +942,11 @@ class AuthRepository {
           status: custom.AccountStatus.active,
         );
       }
+
+      await LocalStorageService.updateSavedPasswordIfRemembered(
+        newPassword,
+        forEmail: cleanEmail,
+      );
 
       // Reset OTP security state
       _forgotPasswordVerified = false;

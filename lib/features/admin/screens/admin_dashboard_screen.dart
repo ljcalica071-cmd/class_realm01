@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:loading_animation_widget/loading_animation_widget.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/widgets/common/app_modals.dart';
@@ -8,6 +7,7 @@ import 'package:class_realm/core/theme/app_theme.dart';
 import 'package:class_realm/core/utils/logout_helper.dart';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:class_realm/core/services/session_activity_tracker.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
@@ -78,13 +78,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       case 0:
         return 'Admin Dashboard Overview';
       case 1:
-        return 'Teacher Management';
+        return 'Broadcasts & Maintenance Control';
       case 2:
-        return 'System Statistics & Analytics';
+        return 'Teacher Management';
       case 3:
-        return 'Administrator Profile';
+        return 'Teacher Activity & Analytics Hub';
       case 4:
-        return 'System Settings';
+        return 'Administrator Profile';
       default:
         return 'Admin Portal';
     }
@@ -101,24 +101,21 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           teachers: teachers,
           students: students,
           parents: parents,
+          onNavigateToBroadcasts: () => setState(() => _selectedIndex = 1),
         );
       case 1:
+        return const AdminBroadcastsTab();
+      case 2:
         return AdminTeacherManagementTab(
           teachers: teachers,
           onDataChanged: _loadData,
         );
-      case 2:
-        return AdminStatisticsTab(
-          teachers: teachers,
-          students: students,
-          parents: parents,
-        );
       case 3:
+        return const AdminActivityAnalyticsTab();
+      case 4:
         return AdminProfileTab(
           adminUser: AuthRepository.instance.currentUser,
         );
-      case 4:
-        return const AdminSettingsTab();
       default:
         return const Center(child: Text('Coming Soon'));
     }
@@ -126,17 +123,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
-      return Scaffold(
-        body: Center(
-          child: LoadingAnimationWidget.staggeredDotsWave(
-            color: Theme.of(context).colorScheme.primary,
-            size: 40,
-          ),
-        ),
-      );
-    }
-
     // Pass loaded teachers; students/parents to be populated later
     final teachers = _teachers;
     final students = <UserModel>[];
@@ -193,16 +179,18 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               ],
             );
 
-    return Scaffold(
-      drawer: isMobile ? sidebar : null,
-      body: isMobile
-          ? mainContent
-          : Row(
-              children: [
-                sidebar,
-                Expanded(child: mainContent),
-              ],
-            ),
+    return SessionActivityTracker(
+      child: Scaffold(
+        drawer: isMobile ? sidebar : null,
+        body: isMobile
+            ? mainContent
+            : Row(
+                children: [
+                  sidebar,
+                  Expanded(child: mainContent),
+                ],
+              ),
+      ),
     );
   }
 }

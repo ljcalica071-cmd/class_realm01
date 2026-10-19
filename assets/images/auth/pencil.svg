@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100" fill="none">
+  <defs>
+    <filter id="pencilShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="2" dy="6" stdDeviation="4" flood-color="#000000" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+  <g transform="rotate(45 50 50)" filter="url(#pencilShadow)">
+    <!-- Eraser (Pink) -->
+    <path d="M 44 8 L 56 8 L 56 16 L 44 16 Z" fill="#F472B6"/>
+    <!-- Metal Ferrule (Silver) -->
+    <path d="M 43 16 L 57 16 L 57 24 L 43 24 Z" fill="#94A3B8"/>
+    <!-- Pencil Body (Yellow/Amber 3 facets) -->
+    <path d="M 44 24 L 48 24 L 48 76 L 44 76 Z" fill="#D97706"/>
+    <path d="M 48 24 L 52 24 L 52 76 L 48 76 Z" fill="#F59E0B"/>
+    <path d="M 52 24 L 56 24 L 56 76 L 52 76 Z" fill="#FBBF24"/>
+    <!-- Sharpened Wood Tip -->
+    <polygon points="44,76 56,76 50,90" fill="#FED7AA"/>
+    <!-- Graphite Lead Tip -->
+    <polygon points="48,85 52,85 50,90" fill="#1E293B"/>
+  </g>
+</svg>

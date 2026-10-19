@@ -108,11 +108,11 @@ class AdminSidebar extends StatelessWidget {
           const SizedBox(height: 12),
 
           // Nav Items
-          _buildNavItem(context, 0, 'Dashboard', Icons.dashboard_outlined),
-          _buildNavItem(context, 1, 'Teacher Management', Icons.people_outline),
-          _buildNavItem(context, 2, 'System Statistics', Icons.bar_chart),
-          _buildNavItem(context, 3, 'Admin Profile', Icons.person_outline),
-          _buildNavItem(context, 4, 'Settings', Icons.settings_outlined),
+          _buildNavItem(context, 0, 'Dashboard', Icons.grid_view_rounded),
+          _buildNavItem(context, 1, 'Broadcasts', Icons.campaign_rounded),
+          _buildNavItem(context, 2, 'Teacher Management', Icons.people_outline_rounded),
+          _buildNavItem(context, 3, 'Activity Analytics', Icons.analytics_outlined),
+          _buildNavItem(context, 4, 'Admin Profile', Icons.person_outline_rounded),
 
           const Spacer(),
           const Divider(color: Colors.white12, height: 1),

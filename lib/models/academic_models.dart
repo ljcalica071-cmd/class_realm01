@@ -819,7 +819,10 @@ class AppNotificationModel {
   final String message;
   final DateTime timestamp;
   final bool isRead;
-  final String type; // 'attendance', 'grade', 'activity', 'announcement'
+  final String type; // 'attendance', 'grade', 'activity', 'announcement', 'general'
+  final String targetAudience; // 'all', 'teachers', 'students_parents'
+  final bool isArchived;
+  final String? createdBy;
 
   AppNotificationModel({
     required this.id,
@@ -828,5 +831,62 @@ class AppNotificationModel {
     required this.timestamp,
     this.isRead = false,
     required this.type,
+    this.targetAudience = 'all',
+    this.isArchived = false,
+    this.createdBy,
   });
+
+  AppNotificationModel copyWith({
+    String? id,
+    String? title,
+    String? message,
+    DateTime? timestamp,
+    bool? isRead,
+    String? type,
+    String? targetAudience,
+    bool? isArchived,
+    String? createdBy,
+  }) {
+    return AppNotificationModel(
+      id: id ?? this.id,
+      title: title ?? this.title,
+      message: message ?? this.message,
+      timestamp: timestamp ?? this.timestamp,
+      isRead: isRead ?? this.isRead,
+      type: type ?? this.type,
+      targetAudience: targetAudience ?? this.targetAudience,
+      isArchived: isArchived ?? this.isArchived,
+      createdBy: createdBy ?? this.createdBy,
+    );
+  }
+
+  factory AppNotificationModel.fromJson(Map<String, dynamic> json, {bool isRead = false}) {
+    return AppNotificationModel(
+      id: json['id']?.toString() ?? '',
+      title: json['title']?.toString() ?? '',
+      message: json['message']?.toString() ?? '',
+      timestamp: json['created_at'] != null
+          ? DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now()
+          : DateTime.now(),
+      isRead: isRead || (json['is_read'] == true) || (json['read_at'] != null),
+      type: json['notification_type']?.toString() ?? 'announcement',
+      targetAudience: json['target_audience']?.toString() ?? 'all',
+      isArchived: json['is_archived'] == true,
+      createdBy: json['created_by']?.toString(),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'title': title,
+      'message': message,
+      'notification_type': type,
+      'target_audience': targetAudience,
+      'is_archived': isArchived,
+      'created_by': createdBy,
+      'created_at': timestamp.toIso8601String(),
+    };
+  }
 }
+

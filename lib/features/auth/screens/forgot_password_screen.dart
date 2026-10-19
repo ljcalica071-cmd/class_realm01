@@ -1,14 +1,15 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:class_realm/core/theme/app_theme.dart';
+import 'package:class_realm/core/services/local_storage_service.dart';
 import 'package:class_realm/core/utils/parent_credential_helper.dart';
 import 'package:class_realm/core/utils/validators.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/routes/app_routes.dart';
 import 'package:class_realm/shared/widgets/shared_widgets.dart';
+import 'package:class_realm/features/auth/widgets/auth_responsive_scaffold.dart';
 
 class ForgotPasswordScreen extends StatefulWidget {
   const ForgotPasswordScreen({super.key});
@@ -159,6 +160,17 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       return;
     }
 
+    final lockout = LocalStorageService.getOtpLockoutRemaining(email);
+    if (lockout != null && lockout.inSeconds > 0) {
+      final mins = (lockout.inSeconds / 60).ceil();
+      AppModals.showErrorDialog(
+        context: context,
+        title: 'Account Temporarily Locked',
+        message: 'Too many incorrect attempts. Please try again after $mins minute(s).',
+      );
+      return;
+    }
+
     setState(() => _isLoading = true);
 
     try {
@@ -254,424 +266,188 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     }
   }
 
-  // --- REUSABLE CARD MATCHING LOGIN SCREEN ---
-  Widget _buildFormCard(ThemeData theme, bool isMobile) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(24),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-        child: Container(
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.94),
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(
-              color: Colors.white.withValues(alpha: 0.8),
-              width: 1.5,
-            ),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x140F172A),
-                blurRadius: 28,
-                offset: Offset(0, 10),
-              ),
-            ],
-          ),
-          padding: EdgeInsets.all(isMobile ? 24 : 36),
-          child: Form(
-            key: _formKey,
-            child: AutofillGroup(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text(
-                    'Reset Password',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w800,
-                      fontSize: 26,
-                      color: Color(0xFF0F172A),
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  const Text(
-                    'Eduardo Barretto Senior Integrated School',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Color(0xFF475569),
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-
-                  // Email input
-                  TextFormField(
-                    controller: _emailController,
-                    focusNode: _emailFocusNode,
-                    keyboardType: TextInputType.emailAddress,
-                    autofillHints: const [AutofillHints.email],
-                    textInputAction: TextInputAction.next,
-                    onFieldSubmitted: (_) {
-                      FocusScope.of(context).requestFocus(_newPassFocusNode);
-                    },
-                    validator: AppValidators.validateEmail,
-                    style: const TextStyle(color: Color(0xFF0F172A), fontSize: 14),
-                    decoration: InputDecoration(
-                      filled: true,
-                      fillColor: const Color(0xFFF8FAFC),
-                      prefixIcon: Icon(
-                        LucideIcons.mail,
-                        color: theme.colorScheme.primary,
-                      ),
-                      hintText: 'Email address',
-                      hintStyle: const TextStyle(color: Color(0xFF94A3B8)),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(
-                          color: theme.colorScheme.primary,
-                          width: 1.5,
-                        ),
-                      ),
-                      errorBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(color: Color(0xFFDC2626)),
-                      ),
-                      focusedErrorBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(color: Color(0xFFDC2626), width: 1.5),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-
-                  // New Password input
-                  TextFormField(
-                    controller: _newPassController,
-                    focusNode: _newPassFocusNode,
-                    obscureText: _obscureNew,
-                    maxLength: 30,
-                    textInputAction: TextInputAction.next,
-                    onFieldSubmitted: (_) {
-                      FocusScope.of(context).requestFocus(_confirmPassFocusNode);
-                    },
-                    inputFormatters: [
-                      FilteringTextInputFormatter.deny(RegExp(r' {2,}')),
-                      FilteringTextInputFormatter.deny(RegExp(r'(.)\1{3,}')),
-                    ],
-                    buildCounter: (context, {required currentLength, required isFocused, maxLength}) => null,
-                    style: const TextStyle(color: Color(0xFF0F172A), fontSize: 14),
-                    decoration: InputDecoration(
-                      filled: true,
-                      fillColor: const Color(0xFFF8FAFC),
-                      prefixIcon: Icon(
-                        LucideIcons.lock,
-                        color: theme.colorScheme.primary,
-                      ),
-                      suffixIcon: IconButton(
-                        icon: Icon(
-                          _obscureNew ? LucideIcons.eye : LucideIcons.eyeOff,
-                          color: const Color(0xFF64748B),
-                          size: 20,
-                        ),
-                        onPressed: () => setState(() => _obscureNew = !_obscureNew),
-                      ),
-                      hintText: 'New password',
-                      hintStyle: const TextStyle(color: Color(0xFF94A3B8)),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(
-                          color: theme.colorScheme.primary,
-                          width: 1.5,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-
-                  // Shared Password Requirements Checklist
-                  PasswordRequirementsChecklist(
-                    hasMinLength: _hasMinLength,
-                    hasUpper: _hasUpper,
-                    hasLower: _hasLower,
-                    hasNumber: _hasNumber,
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Confirm Password input
-                  TextFormField(
-                    controller: _confirmPassController,
-                    focusNode: _confirmPassFocusNode,
-                    obscureText: _obscureConfirm,
-                    maxLength: 30,
-                    textInputAction: TextInputAction.done,
-                    onFieldSubmitted: (_) {
-                      if (_isFormValid && !_isLoading) {
-                        _handleResetFlow();
-                      }
-                    },
-                    inputFormatters: [
-                      FilteringTextInputFormatter.deny(RegExp(r' {2,}')),
-                      FilteringTextInputFormatter.deny(RegExp(r'(.)\1{3,}')),
-                    ],
-                    buildCounter: (context, {required currentLength, required isFocused, maxLength}) => null,
-                    style: const TextStyle(color: Color(0xFF0F172A), fontSize: 14),
-                    decoration: InputDecoration(
-                      filled: true,
-                      fillColor: const Color(0xFFF8FAFC),
-                      prefixIcon: Icon(
-                        LucideIcons.lockKeyhole,
-                        color: theme.colorScheme.primary,
-                      ),
-                      suffixIcon: IconButton(
-                        icon: Icon(
-                          _obscureConfirm ? LucideIcons.eye : LucideIcons.eyeOff,
-                          color: const Color(0xFF64748B),
-                          size: 20,
-                        ),
-                        onPressed: () => setState(() => _obscureConfirm = !_obscureConfirm),
-                      ),
-                      hintText: 'Confirm new password',
-                      hintStyle: const TextStyle(color: Color(0xFF94A3B8)),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(
-                          color: _confirmPassController.text.isEmpty
-                              ? theme.colorScheme.primary
-                              : (_passwordsMatch ? const Color(0xFF16A34A) : const Color(0xFFDC2626)),
-                          width: 1.5,
-                        ),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(
-                          color: _confirmPassController.text.isEmpty
-                              ? const Color(0xFFCBD5E1)
-                              : (_passwordsMatch ? const Color(0xFF16A34A) : const Color(0xFFDC2626)),
-                        ),
-                      ),
-                    ),
-                  ),
-                  if (_confirmPassController.text.isNotEmpty && !_passwordsMatch)
-                    const Padding(
-                      padding: EdgeInsets.only(top: 8, left: 4),
-                      child: Text(
-                        'Passwords do not match',
-                        style: TextStyle(color: Color(0xFFDC2626), fontSize: 12),
-                      ),
-                    ),
-
-                  const SizedBox(height: 24),
-
-                  // Reset Button — full width matching Login CTA
-                  AppPrimaryButton(
-                    onPressed: _isFormValid && !_isLoading ? _handleResetFlow : null,
-                    isLoading: _isLoading,
-                    label: _isLoading ? 'VERIFYING...' : 'RESET PASSWORD',
-                    width: double.infinity,
-                    height: 48,
-                  ),
-
-                  const SizedBox(height: 16),
-
-                  // Back to Sign In Link
-                  Center(
-                    child: TextButton.icon(
-                      onPressed: () {
-                        Navigator.pushReplacementNamed(context, AppRoutes.login);
-                      },
-                      icon: Icon(
-                        LucideIcons.arrowLeft,
-                        size: 16,
-                        color: theme.colorScheme.primary,
-                      ),
-                      label: Text(
-                        'Back to Sign In',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.bold,
-                          color: theme.colorScheme.primary,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  // --- DESKTOP SPLIT LAYOUT MATCHING LOGIN SCREEN ---
-  Widget _buildDesktopLayout(ThemeData theme) {
-    return Row(
-      children: [
-        // Left Branding Column
-        Expanded(
-          flex: 5,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 64, vertical: 32),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Row(
-                  children: [
-                    Image.asset(
-                      'assets/branding/school_logo.png',
-                      width: 64,
-                      height: 64,
-                    ),
-                    const SizedBox(width: 16),
-                    const Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'CLASSREALM',
-                          style: TextStyle(
-                            fontSize: 32,
-                            fontWeight: FontWeight.w900,
-                            color: Colors.white,
-                            letterSpacing: 2,
-                          ),
-                        ),
-                        Text(
-                          'CALAMBA CITY, LAGUNA',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white70,
-                            letterSpacing: 1.2,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 40),
-                const Text(
-                  'One Realm for Every Learning Journey.',
-                  style: TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                    height: 1.3,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                const Text(
-                  'Integrated Senior High School Attendance, Activity and Requirement Tracking, Teacher Lesson Planning, and Learning Materials Management System.',
-                  style: TextStyle(
-                    fontSize: 15,
-                    color: Colors.white70,
-                    height: 1.6,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-
-        // Right Form Card Column
-        Expanded(
-          flex: 4,
-          child: Center(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(32),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 420),
-                child: _buildFormCard(theme, false),
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  // --- MOBILE LAYOUT MATCHING LOGIN SCREEN ---
-  Widget _buildMobileLayout(ThemeData theme) {
-    return SafeArea(
-      child: CustomScrollView(
-        slivers: [
-          SliverToBoxAdapter(
-            child: Container(
-              padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 24),
-              child: Column(
-                children: [
-                  Image.asset(
-                    'assets/branding/school_logo.png',
-                    width: 72,
-                    height: 72,
-                  ),
-                  const SizedBox(height: 14),
-                  const Text(
-                    'CLASSREALM',
-                    style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.w900,
-                      color: Colors.white,
-                      letterSpacing: 2,
-                    ),
-                  ),
-                  const Text(
-                    'One Realm for Every Learning Journey.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.white70, fontSize: 11),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: _buildFormCard(theme, true),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
-    return Theme(
-      data: AppTheme.lightTheme,
-      child: Builder(
-        builder: (context) {
-          final isDesktop = MediaQuery.of(context).size.width >= 900;
-          final theme = Theme.of(context);
+    return AuthResponsiveScaffold(
+      cardTitle: 'Reset Password',
+      cardSubtitle: 'Eduardo Barretto Senior Integrated School',
+      formChild: _buildFormContent(context),
+    );
+  }
 
-          return Scaffold(
-            body: Stack(
-              children: [
-                Container(
-                  decoration: const BoxDecoration(
-                    image: DecorationImage(
-                      image: AssetImage('assets/images/auth/school.jpg'),
-                      fit: BoxFit.cover,
-                      colorFilter: ColorFilter.mode(
-                        Colors.black45,
-                        BlendMode.darken,
-                      ),
-                    ),
-                  ),
-                  child: isDesktop
-                      ? _buildDesktopLayout(theme)
-                      : _buildMobileLayout(theme),
+  Widget _buildFormContent(BuildContext context) {
+    return Form(
+      key: _formKey,
+      child: AutofillGroup(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Email input
+            TextFormField(
+              controller: _emailController,
+              focusNode: _emailFocusNode,
+              keyboardType: TextInputType.emailAddress,
+              autofillHints: const [AutofillHints.email],
+              textInputAction: TextInputAction.next,
+              onFieldSubmitted: (_) {
+                FocusScope.of(context).requestFocus(_newPassFocusNode);
+              },
+              validator: AppValidators.validateEmail,
+              style: const TextStyle(
+                color: Color(0xFF0F172A),
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
+              decoration: AuthResponsiveScaffold.inputDecoration(
+                hintText: 'Email address',
+                prefixIcon: const Icon(
+                  LucideIcons.mail,
+                  color: Color(0xFF475569),
+                  size: 20,
                 ),
-              ],
+              ),
             ),
-          );
-        },
+            const SizedBox(height: 16),
+
+            // New Password input
+            TextFormField(
+              controller: _newPassController,
+              focusNode: _newPassFocusNode,
+              obscureText: _obscureNew,
+              maxLength: 30,
+              textInputAction: TextInputAction.next,
+              onFieldSubmitted: (_) {
+                FocusScope.of(context).requestFocus(_confirmPassFocusNode);
+              },
+              inputFormatters: [
+                FilteringTextInputFormatter.deny(RegExp(r' {2,}')),
+                FilteringTextInputFormatter.deny(RegExp(r'(.)\1{3,}')),
+              ],
+              buildCounter: (context, {required currentLength, required isFocused, maxLength}) => null,
+              style: const TextStyle(
+                color: Color(0xFF0F172A),
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
+              decoration: AuthResponsiveScaffold.inputDecoration(
+                hintText: 'New password',
+                prefixIcon: const Icon(
+                  LucideIcons.lock,
+                  color: Color(0xFF475569),
+                  size: 20,
+                ),
+                suffixIcon: IconButton(
+                  icon: Icon(
+                    _obscureNew ? LucideIcons.eyeOff : LucideIcons.eye,
+                    color: const Color(0xFF64748B),
+                    size: 20,
+                  ),
+                  onPressed: () => setState(() => _obscureNew = !_obscureNew),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+
+            // Shared Password Requirements Checklist in Frosted Section
+            AuthResponsiveScaffold.frostedSection(
+              child: PasswordRequirementsChecklist(
+                hasMinLength: _hasMinLength,
+                hasUpper: _hasUpper,
+                hasLower: _hasLower,
+                hasNumber: _hasNumber,
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // Confirm Password input
+            TextFormField(
+              controller: _confirmPassController,
+              focusNode: _confirmPassFocusNode,
+              obscureText: _obscureConfirm,
+              maxLength: 30,
+              textInputAction: TextInputAction.done,
+              onFieldSubmitted: (_) {
+                if (_isFormValid && !_isLoading) {
+                  _handleResetFlow();
+                }
+              },
+              inputFormatters: [
+                FilteringTextInputFormatter.deny(RegExp(r' {2,}')),
+                FilteringTextInputFormatter.deny(RegExp(r'(.)\1{3,}')),
+              ],
+              buildCounter: (context, {required currentLength, required isFocused, maxLength}) => null,
+              style: const TextStyle(
+                color: Color(0xFF0F172A),
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
+              decoration: AuthResponsiveScaffold.inputDecoration(
+                hintText: 'Confirm new password',
+                prefixIcon: const Icon(
+                  LucideIcons.lockKeyhole,
+                  color: Color(0xFF475569),
+                  size: 20,
+                ),
+                suffixIcon: IconButton(
+                  icon: Icon(
+                    _obscureConfirm ? LucideIcons.eyeOff : LucideIcons.eye,
+                    color: const Color(0xFF64748B),
+                    size: 20,
+                  ),
+                  onPressed: () => setState(() => _obscureConfirm = !_obscureConfirm),
+                ),
+                focusedBorderColor: _confirmPassController.text.isEmpty
+                    ? null
+                    : (_passwordsMatch ? const Color(0xFF16A34A) : const Color(0xFFDC2626)),
+                enabledBorderColor: _confirmPassController.text.isEmpty
+                    ? null
+                    : (_passwordsMatch ? const Color(0xFF16A34A) : const Color(0xFFDC2626)),
+              ),
+            ),
+            if (_confirmPassController.text.isNotEmpty && !_passwordsMatch)
+              const Padding(
+                padding: EdgeInsets.only(top: 8, left: 4),
+                child: Text(
+                  'Passwords do not match',
+                  style: TextStyle(color: Color(0xFFDC2626), fontSize: 12),
+                ),
+              ),
+
+            const SizedBox(height: 24),
+
+            // Reset Button
+            AuthResponsiveScaffold.primaryButton(
+              onPressed: _isFormValid && !_isLoading ? _handleResetFlow : null,
+              isLoading: _isLoading,
+              label: _isLoading ? 'VERIFYING...' : 'RESET PASSWORD',
+            ),
+
+            const SizedBox(height: 16),
+
+            // Back to Sign In Link
+            Center(
+              child: TextButton.icon(
+                onPressed: () {
+                  Navigator.pushReplacementNamed(context, AppRoutes.login);
+                },
+                icon: const Icon(
+                  LucideIcons.arrowLeft,
+                  size: 16,
+                  color: Color(0xFF487898),
+                ),
+                label: const Text(
+                  'Back to Sign In',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF487898),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -11,10 +11,12 @@ import 'package:class_realm/features/auth/services/login_attempt_limiter.dart';
 import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/routes/app_routes.dart';
 import 'package:class_realm/widgets/common/app_modals.dart';
-import 'package:class_realm/widgets/common/app_buttons.dart';
 import 'package:class_realm/core/theme/app_theme.dart';
 import 'package:class_realm/core/services/local_storage_service.dart';
 import 'package:class_realm/core/services/sync_coordinator.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:class_realm/data/repositories/admin_repository.dart';
+import 'package:class_realm/features/auth/widgets/auth_responsive_scaffold.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -66,6 +68,7 @@ class _LoginScreenState extends State<LoginScreen> {
     _rememberMe = LocalStorageService.isRememberMe;
     if (_rememberMe) {
       _emailController.text = LocalStorageService.savedEmail ?? '';
+      _passwordController.text = LocalStorageService.savedPassword ?? '';
     }
 
     // Fast Login / Cache Check & Route User
@@ -137,6 +140,32 @@ class _LoginScreenState extends State<LoginScreen> {
     if (_isRateLimited || _isLoading) return;
     if (!_formKey.currentState!.validate()) return;
 
+    final emailInput = _emailController.text.trim().toLowerCase();
+
+    // System Maintenance Gatekeeping (Edge Cases #1 & #5)
+    try {
+      final settings = await AdminRepository.instance.getSystemSettings();
+      if (settings.isMaintenanceMode) {
+        bool isAdmin = false;
+        try {
+          final userCheck = await Supabase.instance.client
+              .from('users')
+              .select('role')
+              .eq('email', emailInput)
+              .maybeSingle();
+          if (userCheck != null && userCheck['role'] == 'admin') {
+            isAdmin = true;
+          }
+        } catch (_) {}
+
+        if (!isAdmin) {
+          if (!mounted) return;
+          _showMaintenanceDialog();
+          return;
+        }
+      }
+    } catch (_) {}
+
     if (_isMockLoginEmail) {
       setState(() => _isLoading = true);
       final email = _emailController.text.trim().toLowerCase();
@@ -180,7 +209,11 @@ class _LoginScreenState extends State<LoginScreen> {
       // Save Remember Me state upon successful login
       if (user != null) {
         TextInput.finishAutofillContext();
-        await LocalStorageService.saveRememberMe(_rememberMe, _emailController.text.trim());
+        await LocalStorageService.saveRememberMe(
+          _rememberMe,
+          _emailController.text.trim(),
+          password: _rememberMe ? _passwordController.text : null,
+        );
         if (!mounted) return;
       }
 
@@ -249,6 +282,38 @@ class _LoginScreenState extends State<LoginScreen> {
         },
       );
     }
+  }
+
+  void _showMaintenanceDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.build_circle_outlined, color: AppTheme.catRed, size: 28),
+            SizedBox(width: 12),
+            Text('System Maintenance', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+          ],
+        ),
+        content: const Text(
+          'The system is currently under maintenance. You cannot log into your account at this time. Please try again later.',
+          style: TextStyle(fontSize: 14, height: 1.4),
+        ),
+        actions: [
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.catRed,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _routeUser(UserModel user) {
@@ -322,542 +387,304 @@ class _LoginScreenState extends State<LoginScreen> {
   // Developer Quick Login removed based on user request.
   @override
   Widget build(BuildContext context) {
-    return Theme(
-      data: AppTheme.lightTheme,
-      child: Builder(
-        builder: (context) {
-          final size = MediaQuery.of(context).size;
-          final isDesktop = size.width >= 900;
-          final theme = Theme.of(context);
-
-          return Scaffold(
-            body: Stack(
-              children: [
-                Container(
-                  decoration: const BoxDecoration(
-                    image: DecorationImage(
-                      image: AssetImage('assets/images/auth/school.jpg'),
-                      fit: BoxFit.cover,
-                      colorFilter: ColorFilter.mode(
-                        Colors.black45,
-                        BlendMode.darken,
-                      ),
-                    ),
-                  ),
-                  child: isDesktop
-                      ? _buildDesktopLayout(theme)
-                      : _buildMobileLayout(theme),
-                ),
-              ],
-            ),
-          );
-        },
-      ),
+    return AuthResponsiveScaffold(
+      cardTitle: 'Welcome to ClassRealm',
+      cardSubtitle: 'Eduardo Barretto Senior Integrated School',
+      formChild: _buildLoginForm(context),
     );
   }
 
-  // --- DESKTOP SPLIT LAYOUT ---
-  Widget _buildDesktopLayout(ThemeData theme) {
-    return Row(
-      children: [
-        // Left Branding Column
-        Expanded(
-          flex: 5,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 64, vertical: 32),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
+  Widget _buildLoginForm(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Form(
+      key: _formKey,
+      child: AutofillGroup(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Email input
+            TextFormField(
+              controller: _emailController,
+              focusNode: _emailFocusNode,
+              autofillHints: const [AutofillHints.email],
+              textInputAction: TextInputAction.next,
+              onFieldSubmitted: (_) {
+                FocusScope.of(context).requestFocus(_passwordFocusNode);
+              },
+              validator: (v) =>
+                  v == null || v.isEmpty ? 'Email is required' : null,
+              style: const TextStyle(
+                color: Color(0xFF0F172A),
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
+              decoration: AuthResponsiveScaffold.inputDecoration(
+                hintText: 'Email',
+                prefixIcon: const Icon(
+                  LucideIcons.mail,
+                  color: Color(0xFF475569),
+                  size: 20,
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // Password input with Backspace fix
+            Focus(
+              onKeyEvent: (node, event) {
+                if (event is KeyDownEvent &&
+                    event.logicalKey == LogicalKeyboardKey.backspace) {
+                  final text = _passwordController.text;
+                  final sel = _passwordController.selection;
+                  if (text.isNotEmpty) {
+                    if (!sel.isValid || sel.start == -1) {
+                      final newText = text.substring(0, text.length - 1);
+                      _passwordController.value = TextEditingValue(
+                        text: newText,
+                        selection: TextSelection.collapsed(offset: newText.length),
+                      );
+                      return KeyEventResult.handled;
+                    } else if (sel.isCollapsed && sel.start > 0) {
+                      final start = sel.start;
+                      final newText =
+                          text.substring(0, start - 1) + text.substring(start);
+                      _passwordController.value = TextEditingValue(
+                        text: newText,
+                        selection: TextSelection.collapsed(offset: start - 1),
+                      );
+                      return KeyEventResult.handled;
+                    } else if (!sel.isCollapsed && sel.start != sel.end) {
+                      final start = sel.start < sel.end ? sel.start : sel.end;
+                      final end = sel.start < sel.end ? sel.end : sel.start;
+                      final newText =
+                          text.substring(0, start) + text.substring(end);
+                      _passwordController.value = TextEditingValue(
+                        text: newText,
+                        selection: TextSelection.collapsed(offset: start),
+                      );
+                      return KeyEventResult.handled;
+                    }
+                  }
+                }
+                return KeyEventResult.ignored;
+              },
+              child: TextFormField(
+                controller: _passwordController,
+                focusNode: _passwordFocusNode,
+                autofillHints: kIsWeb ? null : const [AutofillHints.password],
+                textInputAction: TextInputAction.done,
+                enableSuggestions: false,
+                autocorrect: false,
+                onTap: () {
+                  final text = _passwordController.text;
+                  if (!_passwordController.selection.isValid ||
+                      _passwordController.selection.start == -1) {
+                    _passwordController.selection =
+                        TextSelection.collapsed(offset: text.length);
+                  }
+                },
+                onFieldSubmitted: (_) {
+                  if (!_isLoading && !_isRateLimited) {
+                    _handleLogin();
+                  }
+                },
+                obscureText: _obscurePassword,
+                style: const TextStyle(
+                  color: Color(0xFF0F172A),
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
+                validator: (v) =>
+                    v == null || v.isEmpty ? 'Password is required' : null,
+                decoration: AuthResponsiveScaffold.inputDecoration(
+                  hintText: 'Password',
+                  prefixIcon: const Icon(
+                    LucideIcons.lock,
+                    color: Color(0xFF475569),
+                    size: 20,
+                  ),
+                  suffixIcon: IconButton(
+                    tooltip: _obscurePassword
+                        ? 'Show password'
+                        : 'Hide password',
+                    icon: Icon(
+                      _obscurePassword
+                          ? LucideIcons.eyeOff
+                          : LucideIcons.eye,
+                      color: const Color(0xFF64748B),
+                      size: 20,
+                    ),
+                    onPressed: () => setState(() {
+                      _obscurePassword = !_obscurePassword;
+                      final text = _passwordController.text;
+                      _passwordController.selection =
+                          TextSelection.collapsed(offset: text.length);
+                    }),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // Remember Me & Forgot Password
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Row(
                   children: [
-                    Image.asset(
-                      'assets/branding/school_logo.png',
-                      width: 64,
-                      height: 64,
+                    SizedBox(
+                      height: 22,
+                      width: 22,
+                      child: Checkbox(
+                        value: _rememberMe,
+                        onChanged: (val) =>
+                            setState(() => _rememberMe = val ?? false),
+                        activeColor: const Color(0xFF487898),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        side: const BorderSide(
+                          color: Color(0xFF334155),
+                          width: 1.5,
+                        ),
+                      ),
                     ),
-                    const SizedBox(width: 16),
-                    const Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'CLASSREALM',
-                          style: TextStyle(
-                            fontSize: 32,
-                            fontWeight: FontWeight.w900,
-                            color: Colors.white,
-                            letterSpacing: 2,
-                          ),
-                        ),
-                        Text(
-                          'CALAMBA CITY, LAGUNA',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white70,
-                            letterSpacing: 1.2,
-                          ),
-                        ),
-                      ],
+                    const SizedBox(width: 8),
+                    const Text(
+                      'Remember me',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Color(0xFF1E293B),
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 40),
-                const Text(
-                  'One Realm for Every Learning Journey.',
-                  style: TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                    height: 1.3,
+                TextButton(
+                  onPressed: () {
+                    Navigator.pushNamed(context, AppRoutes.forgotPassword);
+                  },
+                  style: TextButton.styleFrom(
+                    padding: EdgeInsets.zero,
+                    minimumSize: const Size(0, 0),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   ),
-                ),
-                const SizedBox(height: 16),
-                const Text(
-                  'Integrated Senior High School Attendance, Activity and Requirement Tracking, Teacher Lesson Planning, and Learning Materials Management System.',
-                  style: TextStyle(
-                    fontSize: 15,
-                    color: Colors.white70,
-                    height: 1.6,
+                  child: const Text(
+                    'Forgot password?',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF487898),
+                    ),
                   ),
                 ),
               ],
             ),
-          ),
-        ),
+            const SizedBox(height: 22),
 
-        // Right Form Card Column
-        Expanded(
-          flex: 4,
-          child: Center(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(32),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 420),
-                child: _buildLoginCard(theme, false),
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  // --- MOBILE LAYOUT ---
-  Widget _buildMobileLayout(ThemeData theme) {
-    return SafeArea(
-      child: CustomScrollView(
-        slivers: [
-          SliverToBoxAdapter(
-            child: Container(
-              padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 24),
-              child: Column(
-                children: [
-                  Image.asset(
-                    'assets/branding/school_logo.png',
-                    width: 72,
-                    height: 72,
-                  ),
-                  const SizedBox(height: 14),
-                  const Text(
-                    'CLASSREALM',
-                    style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.w900,
-                      color: Colors.white,
-                      letterSpacing: 2,
-                    ),
-                  ),
-                  const Text(
-                    'One Realm for Every Learning Journey.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.white70, fontSize: 11),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: _buildLoginCard(theme, true),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // --- REUSABLE LOGIN FORM CARD ---
-  Widget _buildLoginCard(ThemeData theme, bool isMobile) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(24),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-        child: Container(
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.94),
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(
-              color: Colors.white.withValues(alpha: 0.8),
-              width: 1.5,
-            ),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x140F172A),
-                blurRadius: 28,
-                offset: Offset(0, 10),
-              ),
-            ],
-          ),
-          padding: EdgeInsets.all(isMobile ? 24 : 36),
-          child: Form(
-          key: _formKey,
-          child: AutofillGroup(
-            child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                'Welcome to ClassRealm',
-                style: TextStyle(
-                  fontWeight: FontWeight.w800,
-                  fontSize: 26,
-                  color: Color(0xFF0F172A),
-                ),
-              ),
-              const SizedBox(height: 4),
-              const Text(
-                'Eduardo Barretto Senior Integrated School',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Color(0xFF475569),
-                ),
-              ),
-              const SizedBox(height: 24),
-
-              // Email input
-              TextFormField(
-                controller: _emailController,
-                focusNode: _emailFocusNode,
-                autofillHints: const [AutofillHints.email],
-                textInputAction: TextInputAction.next,
-                onFieldSubmitted: (_) {
-                  FocusScope.of(context).requestFocus(_passwordFocusNode);
-                },
-                validator: (v) =>
-                    v == null || v.isEmpty ? 'Email is required' : null,
-                style: const TextStyle(color: Color(0xFF0F172A), fontSize: 14),
-                decoration: InputDecoration(
-                  filled: true,
-                  fillColor: const Color(0xFFF8FAFC),
-                  prefixIcon: Icon(
-                    LucideIcons.mail,
-                    color: theme.colorScheme.primary,
-                  ),
-                  hintText: 'Email',
-                  hintStyle: const TextStyle(
-                    color: Color(0xFF94A3B8),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(
-                      color: theme.colorScheme.primary,
-                      width: 1.5,
-                    ),
+            if (_isRateLimited && _lockoutRemaining != null) ...[
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.errorContainer,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: theme.colorScheme.error.withValues(alpha: 0.35),
                   ),
                 ),
-              ),
-              const SizedBox(height: 16),
-
-              // Password input
-              Focus(
-                onKeyEvent: (node, event) {
-                  if (event is KeyDownEvent &&
-                      event.logicalKey == LogicalKeyboardKey.backspace) {
-                    final text = _passwordController.text;
-                    final sel = _passwordController.selection;
-                    if (text.isNotEmpty) {
-                      if (!sel.isValid || sel.start == -1) {
-                        final newText = text.substring(0, text.length - 1);
-                        _passwordController.value = TextEditingValue(
-                          text: newText,
-                          selection: TextSelection.collapsed(offset: newText.length),
-                        );
-                        return KeyEventResult.handled;
-                      } else if (sel.isCollapsed && sel.start > 0) {
-                        final start = sel.start;
-                        final newText =
-                            text.substring(0, start - 1) + text.substring(start);
-                        _passwordController.value = TextEditingValue(
-                          text: newText,
-                          selection: TextSelection.collapsed(offset: start - 1),
-                        );
-                        return KeyEventResult.handled;
-                      } else if (!sel.isCollapsed && sel.start != sel.end) {
-                        final start = sel.start < sel.end ? sel.start : sel.end;
-                        final end = sel.start < sel.end ? sel.end : sel.start;
-                        final newText =
-                            text.substring(0, start) + text.substring(end);
-                        _passwordController.value = TextEditingValue(
-                          text: newText,
-                          selection: TextSelection.collapsed(offset: start),
-                        );
-                        return KeyEventResult.handled;
-                      }
-                    }
-                  }
-                  return KeyEventResult.ignored;
-                },
-                child: TextFormField(
-                  controller: _passwordController,
-                  focusNode: _passwordFocusNode,
-                  autofillHints: kIsWeb ? null : const [AutofillHints.password],
-                  textInputAction: TextInputAction.done,
-                  enableSuggestions: false,
-                  autocorrect: false,
-                  onTap: () {
-                    final text = _passwordController.text;
-                    if (!_passwordController.selection.isValid ||
-                        _passwordController.selection.start == -1) {
-                      _passwordController.selection =
-                          TextSelection.collapsed(offset: text.length);
-                    }
-                  },
-                  onFieldSubmitted: (_) {
-                    if (!_isLoading && !_isRateLimited) {
-                      _handleLogin();
-                    }
-                  },
-                  obscureText: _obscurePassword,
-                  style: const TextStyle(color: Color(0xFF0F172A), fontSize: 14),
-                  validator: (v) =>
-                      v == null || v.isEmpty ? 'Password is required' : null,
-                  decoration: InputDecoration(
-                    filled: true,
-                    fillColor: const Color(0xFFF8FAFC),
-                    prefixIcon: Icon(
-                      LucideIcons.lock,
-                      color: theme.colorScheme.primary,
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      Icons.lock_clock_outlined,
+                      size: 20,
+                      color: theme.colorScheme.onErrorContainer,
                     ),
-                    suffixIcon: IconButton(
-                      tooltip:
-                          _obscurePassword ? 'Show password' : 'Hide password',
-                      icon: Icon(
-                        _obscurePassword ? LucideIcons.eye : LucideIcons.eyeOff,
-                        color: const Color(0xFF64748B),
-                        size: 20,
-                      ),
-                      onPressed: () => setState(() {
-                        _obscurePassword = !_obscurePassword;
-                        final text = _passwordController.text;
-                        _passwordController.selection =
-                            TextSelection.collapsed(offset: text.length);
-                      }),
-                    ),
-                    hintText: 'Password',
-                    hintStyle: const TextStyle(
-                      color: Color(0xFF94A3B8),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(
-                        color: theme.colorScheme.primary,
-                        width: 1.5,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              // Remember Me & Forgot Password
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Row(
-                    children: [
-                      SizedBox(
-                        height: 24,
-                        width: 24,
-                        child: Checkbox(
-                          value: _rememberMe,
-                          onChanged: (val) =>
-                              setState(() => _rememberMe = val ?? false),
-                          activeColor: theme.colorScheme.primary,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Remember me',
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Too many failed attempts. Try again after 15 minutes.',
                         style: TextStyle(
+                          color: theme.colorScheme.onErrorContainer,
                           fontSize: 13,
-                          color: theme.colorScheme.onSurface.withValues(
-                            alpha: 0.7,
-                          ),
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
-                    ],
-                  ),
-                  TextButton(
-                    onPressed: () {
-                      Navigator.pushNamed(context, AppRoutes.forgotPassword);
-                    },
-                    style: TextButton.styleFrom(
-                      padding: EdgeInsets.zero,
-                      minimumSize: const Size(0, 0),
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
-                    child: Text(
-                      'Forgot password?',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.bold,
-                        color: theme.colorScheme.primary,
-                      ),
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 16),
+            ],
 
-              if (_isRateLimited && _lockoutRemaining != null) ...[
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.errorContainer,
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(
-                      color: theme.colorScheme.error.withValues(alpha: 0.35),
-                    ),
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(
-                        Icons.lock_clock_outlined,
-                        size: 20,
-                        color: theme.colorScheme.onErrorContainer,
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Too many failed attempts. Try again after 15 minutes.',
-                              style: TextStyle(
-                                color: theme.colorScheme.onErrorContainer,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
+            // Login Button
+            AuthResponsiveScaffold.primaryButton(
+              label: _isRateLimited && _lockoutRemaining != null
+                  ? 'TRY AGAIN IN ${_formatLockoutRemaining(_lockoutRemaining!)}'
+                  : 'LOGIN',
+              onPressed: _isLoading || _isRateLimited ? null : _handleLogin,
+              isLoading: _isLoading,
+            ),
+
+            const SizedBox(height: 16),
+
+            // Terms and Conditions / Privacy Policy footer
+            Wrap(
+              alignment: WrapAlignment.center,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                const Text(
+                  'By logging in, you agree to our ',
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    color: Color(0xFF475569),
                   ),
                 ),
-                const SizedBox(height: 16),
+                InkWell(
+                  onTap: _showTermsDialog,
+                  child: const Text(
+                    'Terms and Conditions',
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF487898),
+                    ),
+                  ),
+                ),
+                const Text(
+                  ' and ',
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    color: Color(0xFF475569),
+                  ),
+                ),
+                InkWell(
+                  onTap: _showPrivacyDialog,
+                  child: const Text(
+                    'Privacy Policy',
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF487898),
+                    ),
+                  ),
+                ),
+                const Text(
+                  '.',
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    color: Color(0xFF475569),
+                  ),
+                ),
               ],
-
-              // Login Button — full width within the card
-              AppPrimaryButton(
-                onPressed: _isLoading || _isRateLimited ? null : _handleLogin,
-                isLoading: _isLoading,
-                label: _isLoading
-                    ? 'Authenticating...'
-                    : (_isRateLimited && _lockoutRemaining != null
-                          ? 'TRY AGAIN IN ${_formatLockoutRemaining(_lockoutRemaining!)}'
-                          : 'LOGIN'),
-                width: double.infinity,
-                height: 48,
-              ),
-
-              const SizedBox.shrink(),
-
-              const SizedBox(height: 16),
-              Wrap(
-                alignment: WrapAlignment.center,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  Text(
-                    'By logging in, you agree to our ',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: theme.colorScheme.onSurface.withValues(
-                        alpha: 0.65,
-                      ),
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: _showTermsDialog,
-                    style: TextButton.styleFrom(
-                      padding: EdgeInsets.zero,
-                      minimumSize: const Size(0, 0),
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
-                    child: Text(
-                      'Terms and Conditions',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: theme.colorScheme.primary,
-                      ),
-                    ),
-                  ),
-                  Text(
-                    ' and ',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: theme.colorScheme.onSurface.withValues(
-                        alpha: 0.65,
-                      ),
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: _showPrivacyDialog,
-                    style: TextButton.styleFrom(
-                      padding: EdgeInsets.zero,
-                      minimumSize: const Size(0, 0),
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
-                    child: Text(
-                      'Privacy Policy',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: theme.colorScheme.primary,
-                      ),
-                    ),
-                  ),
-                  Text(
-                    '.',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: theme.colorScheme.onSurface.withValues(
-                        alpha: 0.65,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
-    ),
-    ),
-  );
-}
+    );
+  }
 
   Future<void> _showTermsDialog() {
     return _showConsentDocumentDialog(
@@ -950,7 +777,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
         return Center(
           child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+            filter: ImageFilter.blur(sigmaX: 4, sigmaY: 4),
             child: Material(
               color: Colors.transparent,
               child: Container(

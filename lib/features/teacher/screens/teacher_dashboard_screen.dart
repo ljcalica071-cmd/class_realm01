@@ -13,9 +13,11 @@ import 'package:class_realm/features/teacher/sub_features/assessments/screens/cr
 import 'package:class_realm/features/teacher/sub_features/assessments/screens/create_requirement_flow.dart';
 import 'package:class_realm/features/teacher/widgets/tabs/tabs.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
+import 'package:class_realm/data/repositories/subject_repository.dart';
 import 'package:class_realm/data/repositories/supabase_teacher_classwork_repository.dart';
 import 'package:class_realm/widgets/common/app_modals.dart';
 import 'package:class_realm/core/services/local_storage_service.dart';
+import 'package:class_realm/core/services/session_activity_tracker.dart';
 
 class TeacherDashboardScreen extends StatefulWidget {
   const TeacherDashboardScreen({
@@ -39,11 +41,41 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   bool _isLoading = true;
   List<ActivityModel>? _persistedActivities;
 
+  bool _isGradebookLocked = true;
+  DateTime? _lastGradebookCheck;
+
   @override
   void initState() {
     super.initState();
     _loadData();
     _loadActivities();
+    _checkGradebookLockStatus();
+  }
+
+  Future<void> _checkGradebookLockStatus() async {
+    final user = widget.teacher ?? AuthRepository.instance.currentUser;
+    if (user == null) return;
+    
+    // Debounce to prevent spamming the database
+    if (_lastGradebookCheck != null && 
+        DateTime.now().difference(_lastGradebookCheck!).inSeconds < 3) {
+      return;
+    }
+    _lastGradebookCheck = DateTime.now();
+
+    try {
+      final subjects = await SubjectRepository.instance.getTeacherSubjects(
+        user.id,
+        onlyWithEnrolledStudents: true,
+      );
+      if (mounted) {
+        setState(() {
+          _isGradebookLocked = subjects.isEmpty;
+        });
+      }
+    } catch (e) {
+      // Ignore errors silently for background checks
+    }
   }
 
   Future<void> _loadActivities() async {
@@ -415,17 +447,19 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
       ],
     );
 
-    return Scaffold(
-      backgroundColor: theme.scaffoldBackgroundColor,
-      drawer: isMobile ? sidebar : null,
-      body: isMobile
-          ? mainContent
-          : Row(
-              children: [
-                sidebar,
-                Expanded(child: mainContent),
-              ],
-            ),
+    return SessionActivityTracker(
+      child: Scaffold(
+        backgroundColor: theme.scaffoldBackgroundColor,
+        drawer: isMobile ? sidebar : null,
+        body: isMobile
+            ? mainContent
+            : Row(
+                children: [
+                  sidebar,
+                  Expanded(child: mainContent),
+                ],
+              ),
+      ),
     );
   }
 
@@ -499,8 +533,10 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     ThemeData theme,
   ) {
     final isSelected = _selectedIndex == index;
+    final isGradebook = index == 18;
+    final isLocked = isGradebook && _isGradebookLocked;
 
-    return Container(
+    final item = Container(
       margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
       child: Material(
         color: isSelected
@@ -509,7 +545,14 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         borderRadius: BorderRadius.circular(8),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
-          onTap: () => setState(() => _selectedIndex = index),
+          onTap: isLocked 
+              ? null 
+              : () {
+                  setState(() => _selectedIndex = index);
+                  if (!isGradebook) {
+                    _checkGradebookLockStatus();
+                  }
+                },
           hoverColor: theme.colorScheme.onSurface.withValues(alpha: 0.05),
           splashColor: theme.colorScheme.primary.withValues(alpha: 0.1),
           child: Padding(
@@ -517,10 +560,12 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
             child: Row(
               children: [
                 Icon(
-                  icon,
-                  color: isSelected
-                      ? theme.colorScheme.primary
-                      : theme.colorScheme.onSurface.withValues(alpha: 0.75),
+                  isLocked ? LucideIcons.lock : icon,
+                  color: isLocked
+                      ? theme.colorScheme.onSurface.withValues(alpha: 0.4)
+                      : (isSelected
+                          ? theme.colorScheme.primary
+                          : theme.colorScheme.onSurface.withValues(alpha: 0.75)),
                   size: 18,
                 ),
                 if (_isSidebarExpanded) ...[
@@ -529,11 +574,13 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                     child: Text(
                       label,
                       style: TextStyle(
-                        color: isSelected
-                            ? theme.colorScheme.primary
-                            : theme.colorScheme.onSurface.withValues(
-                                alpha: 0.9,
-                              ),
+                        color: isLocked
+                            ? theme.colorScheme.onSurface.withValues(alpha: 0.4)
+                            : (isSelected
+                                ? theme.colorScheme.primary
+                                : theme.colorScheme.onSurface.withValues(
+                                    alpha: 0.9,
+                                  )),
                         fontWeight: isSelected
                             ? FontWeight.w700
                             : FontWeight.w500,
@@ -549,6 +596,25 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         ),
       ),
     );
+
+    if (isGradebook) {
+      return MouseRegion(
+        onEnter: (_) {
+          if (_isGradebookLocked) {
+             _checkGradebookLockStatus();
+          }
+        },
+        child: isLocked 
+            ? Tooltip(
+                message: 'Gradebook feature is not yet available. Please add subjects and enroll students in Classroom Setup first.',
+                waitDuration: const Duration(milliseconds: 300),
+                child: item,
+              )
+            : item,
+      );
+    }
+
+    return item;
   }
 
   Widget _buildTeacherBodyContent(

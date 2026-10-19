@@ -6,7 +6,6 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:class_realm/core/services/local_storage_service.dart';
 import 'package:class_realm/data/datasources/local/app_database.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
-import 'package:class_realm/models/user_model.dart';
 
 class SubjectRepository {
   final SupabaseClient _client;

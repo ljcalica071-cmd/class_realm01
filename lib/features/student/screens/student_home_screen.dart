@@ -15,6 +15,8 @@ import 'package:class_realm/models/student_dashboard_models.dart';
 import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/widgets/common/app_modals.dart';
 import 'package:loading_animation_widget/loading_animation_widget.dart';
+import 'package:class_realm/features/student/sub_features/profile/widgets/student_notifications_tab.dart';
+import 'package:class_realm/core/services/session_activity_tracker.dart';
 
 class StudentHomeScreen extends StatefulWidget {
   const StudentHomeScreen({super.key});
@@ -133,16 +135,12 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
         title: 'No quizzes or exams yet',
         message: 'Quizzes and exams will appear here when your teacher publishes them.',
       ),
-      _buildEmptyFeature(
-        context,
-        icon: Icons.notifications_none_outlined,
-        title: 'You are all caught up',
-        message: 'There are no student notifications yet.',
-      ),
+      const StudentNotificationsTab(),
       _buildProfileTab(context, student),
     ];
 
-    return Scaffold(
+    return SessionActivityTracker(
+      child: Scaffold(
       key: _scaffoldKey,
       appBar: AppBar(
         title: const Text(
@@ -228,8 +226,9 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
           ),
         ],
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _mobileFrame(BuildContext context, Widget child) {
     return LayoutBuilder(

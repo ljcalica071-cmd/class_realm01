@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:class_realm/core/constants/asset_paths.dart';
 import 'package:class_realm/core/services/local_storage_service.dart';
 import 'package:class_realm/core/theme/app_theme.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
@@ -10,6 +9,7 @@ import 'package:class_realm/core/utils/validators.dart';
 import 'package:class_realm/shared/widgets/shared_widgets.dart';
 import 'package:class_realm/core/utils/parent_credential_helper.dart';
 import 'package:class_realm/data/repositories/supabase_parent_repository.dart';
+import 'package:class_realm/features/auth/widgets/auth_responsive_scaffold.dart';
 
 class FirstLoginScreen extends StatefulWidget {
   const FirstLoginScreen({super.key});
@@ -155,6 +155,18 @@ class _FirstLoginScreenState extends State<FirstLoginScreen> with SingleTickerPr
         return;
       }
     } else {
+      final lockout = LocalStorageService.getOtpLockoutRemaining(user.email);
+      if (lockout != null && lockout.inSeconds > 0) {
+        final minutes = (lockout.inSeconds / 60).ceil();
+        setState(() => _isLoading = false);
+        AppModals.showErrorDialog(
+          context: context,
+          title: 'Account Temporarily Locked',
+          message: 'Too many incorrect attempts. Please try again after $minutes minute(s).',
+        );
+        return;
+      }
+
       late Map<String, dynamic> otpResponse;
       try {
         otpResponse = await AuthRepository.instance.sendFirstLoginOtp();
@@ -222,15 +234,8 @@ class _FirstLoginScreenState extends State<FirstLoginScreen> with SingleTickerPr
   }
 
   Widget _buildParentIdentityVerificationSection(ThemeData theme) {
-    return Container(
+    return AuthResponsiveScaffold.frostedSection(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.primary.withValues(alpha: 0.05),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: theme.colorScheme.primary.withValues(alpha: 0.2),
-        ),
-      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -239,17 +244,17 @@ class _FirstLoginScreenState extends State<FirstLoginScreen> with SingleTickerPr
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: theme.colorScheme.primary.withValues(alpha: 0.1),
+                  color: const Color(0xFF1E3A8A).withValues(alpha: 0.12),
                   shape: BoxShape.circle,
                 ),
-                child: Icon(
+                child: const Icon(
                   Icons.shield_outlined,
                   size: 20,
-                  color: theme.colorScheme.primary,
+                  color: Color(0xFF1E3A8A),
                 ),
               ),
               const SizedBox(width: 10),
-              Expanded(
+              const Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -258,15 +263,15 @@ class _FirstLoginScreenState extends State<FirstLoginScreen> with SingleTickerPr
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.bold,
-                        color: theme.colorScheme.onSurface,
+                        color: Color(0xFF0F172A),
                       ),
                     ),
-                    const SizedBox(height: 2),
+                    SizedBox(height: 2),
                     Text(
                       'Confirm your registered details to verify and activate your account.',
                       style: TextStyle(
                         fontSize: 12,
-                        color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
+                        color: Color(0xFF475569),
                       ),
                     ),
                   ],
@@ -284,26 +289,14 @@ class _FirstLoginScreenState extends State<FirstLoginScreen> with SingleTickerPr
               LengthLimitingTextInputFormatter(11),
             ],
             buildCounter: (context, {required currentLength, required isFocused, maxLength}) => null,
-            decoration: InputDecoration(
+            style: const TextStyle(color: Color(0xFF0F172A), fontSize: 14),
+            decoration: AuthResponsiveScaffold.inputDecoration(
               labelText: 'Registered 11-Digit Phone Number *',
               hintText: '09XXXXXXXXX',
-              hintStyle: const TextStyle(color: Color(0xFF94A3B8)),
-              filled: true,
-              fillColor: Colors.white,
-              prefixIcon: Icon(
+              prefixIcon: const Icon(
                 Icons.phone_android_outlined,
                 size: 20,
-                color: theme.colorScheme.primary,
-              ),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: BorderSide(color: theme.colorScheme.outline.withValues(alpha: 0.3)),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: BorderSide(color: theme.colorScheme.primary, width: 1.5),
+                color: Color(0xFF475569),
               ),
             ),
           ),
@@ -317,26 +310,14 @@ class _FirstLoginScreenState extends State<FirstLoginScreen> with SingleTickerPr
               LengthLimitingTextInputFormatter(4),
             ],
             buildCounter: (context, {required currentLength, required isFocused, maxLength}) => null,
-            decoration: InputDecoration(
+            style: const TextStyle(color: Color(0xFF0F172A), fontSize: 14),
+            decoration: AuthResponsiveScaffold.inputDecoration(
               labelText: 'Last 4 Digits of Child\'s LRN *',
               hintText: 'e.g. 1234',
-              hintStyle: const TextStyle(color: Color(0xFF94A3B8)),
-              filled: true,
-              fillColor: Colors.white,
-              prefixIcon: Icon(
+              prefixIcon: const Icon(
                 Icons.badge_outlined,
                 size: 20,
-                color: theme.colorScheme.primary,
-              ),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: BorderSide(color: theme.colorScheme.outline.withValues(alpha: 0.3)),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: BorderSide(color: theme.colorScheme.primary, width: 1.5),
+                color: Color(0xFF475569),
               ),
             ),
           ),
@@ -347,249 +328,153 @@ class _FirstLoginScreenState extends State<FirstLoginScreen> with SingleTickerPr
 
   @override
   Widget build(BuildContext context) {
-    return Theme(
-      data: AppTheme.lightTheme,
-      child: Builder(
-        builder: (context) {
-          final user = AuthRepository.instance.currentUser;
-          final size = MediaQuery.of(context).size;
-          final isDesktop = size.width >= 900;
-          final theme = Theme.of(context);
+    final user = AuthRepository.instance.currentUser;
+    final displayName = user == null
+        ? 'Faculty'
+        : user.role == UserRole.teacher
+            ? 'Teacher ${user.lastName ?? user.fullName}'
+            : (user.firstName ?? user.fullName);
 
-          final displayName = user == null
-              ? 'Faculty'
-              : user.role == UserRole.teacher
-              ? 'Teacher ${user.lastName ?? user.fullName}'
-              : (user.firstName ?? user.fullName);
+    return PopScope(
+      canPop: !_isLoading,
+      child: AuthResponsiveScaffold(
+        cardTitle: 'Set New Password',
+        cardSubtitle:
+            'Welcome, $displayName! For security compliance, please set up your new personalized password.',
+        formChild: _buildFormContent(context, user),
+      ),
+    );
+  }
 
-          return PopScope(
-            canPop: !_isLoading,
-            child: Scaffold(
-            body: Stack(
-              children: [
-                Positioned.fill(
-                  child: Image.asset(AssetPaths.landingBackground, fit: BoxFit.cover),
-                ),
-                Positioned.fill(
-                  child: Container(color: Colors.black45),
-                ),
-                Center(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 36),
-                    child: Container(
-                      width: double.infinity,
-                      constraints: BoxConstraints(maxWidth: isDesktop ? 520 : 460),
-                      padding: const EdgeInsets.all(36),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(24),
-                        border: Border.all(color: const Color(0xFFE2E8F0), width: 1.5),
-                        boxShadow: const [
-                          BoxShadow(
-                            color: Color(0x1F0F172A),
-                            blurRadius: 35,
-                            offset: Offset(0, 15),
-                          ),
-                        ],
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Center(
-                            child: Column(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.all(4),
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    color: Colors.white,
-                                    boxShadow: [
-                                      BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 10),
-                                    ],
-                                  ),
-                                  child: Image.asset(AssetPaths.schoolLogo, height: 64, width: 64, fit: BoxFit.contain),
-                                ),
-                                const SizedBox(height: 14),
-                                const Text(
-                                  'Set New Password',
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                    fontSize: 22,
-                                    fontWeight: FontWeight.bold,
-                                    color: Color(0xFF0F172A),
-                                  ),
-                                ),
-                                const SizedBox(height: 6),
-                                Text(
-                                  'Welcome, $displayName! For security compliance, please set up your new personalized password.',
-                                  textAlign: TextAlign.center,
-                                  style: const TextStyle(
-                                    fontSize: 13,
-                                    color: Color(0xFF475569),
-                                    height: 1.4,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 32),
+  Widget _buildFormContent(BuildContext context, UserModel? user) {
+    final theme = Theme.of(context);
 
-                          if (user?.role == UserRole.parent) ...[
-                            _buildParentIdentityVerificationSection(theme),
-                            const SizedBox(height: 20),
-                          ],
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (user?.role == UserRole.parent) ...[
+          _buildParentIdentityVerificationSection(theme),
+          const SizedBox(height: 20),
+        ],
 
-                          // New Password
-                          TextField(
-                            controller: _newPassCtrl,
-                            enabled: !_isLoading,
-                            obscureText: _obscureNew,
-                            maxLength: 30,
-                            style: const TextStyle(color: Color(0xFF0F172A), fontSize: 14),
-                            inputFormatters: [
-                              FilteringTextInputFormatter.deny(RegExp(r' {2,}')),
-                              FilteringTextInputFormatter.deny(RegExp(r'(.)\1{3,}')),
-                            ],
-                            buildCounter: (context, {required currentLength, required isFocused, maxLength}) => null,
-                            decoration: InputDecoration(
-                              labelText: 'New Password',
-                              labelStyle: const TextStyle(color: Color(0xFF64748B)),
-                              hintText: '--------',
-                              hintStyle: const TextStyle(color: Color(0xFF94A3B8)),
-                              filled: true,
-                              fillColor: const Color(0xFFF8FAFC),
-                              prefixIcon: Icon(Icons.lock_outline, size: 20, color: theme.colorScheme.primary),
-                              suffixIcon: IconButton(
-                                icon: Icon(_obscureNew ? Icons.visibility_outlined : Icons.visibility_off_outlined, size: 20, color: const Color(0xFF64748B)),
-                                onPressed: () => setState(() => _obscureNew = !_obscureNew),
-                              ),
-                              enabledBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
-                              ),
-                              focusedBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                borderSide: BorderSide(color: theme.colorScheme.primary, width: 1.5),
-                              ),
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                            ),
-                          ),
-                          
-                          const SizedBox(height: 12),
-                          
-                          // Real-time Validation Rules
-                          PasswordRequirementsChecklist(
-                            hasMinLength: _hasMinLength,
-                            hasUpper: _hasUpper,
-                            hasLower: _hasLower,
-                            hasNumber: _hasNumber,
-                          ),
-
-                          const SizedBox(height: 24),
-
-                          // Confirm Password
-                          TextField(
-                            controller: _confirmPassCtrl,
-                            enabled: !_isLoading,
-                            obscureText: _obscureConfirm,
-                            maxLength: 30,
-                            style: const TextStyle(color: Color(0xFF0F172A), fontSize: 14),
-                            inputFormatters: [
-                              FilteringTextInputFormatter.deny(RegExp(r' {2,}')),
-                              FilteringTextInputFormatter.deny(RegExp(r'(.)\1{3,}')),
-                            ],
-                            buildCounter: (context, {required currentLength, required isFocused, maxLength}) => null,
-                            decoration: InputDecoration(
-                              labelText: 'Confirm New Password',
-                              labelStyle: const TextStyle(color: Color(0xFF64748B)),
-                              hintText: '--------',
-                              hintStyle: const TextStyle(color: Color(0xFF94A3B8)),
-                              filled: true,
-                              fillColor: const Color(0xFFF8FAFC),
-                              prefixIcon: Icon(Icons.lock_reset_outlined, size: 20, color: theme.colorScheme.primary),
-                              suffixIcon: IconButton(
-                                icon: Icon(_obscureConfirm ? Icons.visibility_outlined : Icons.visibility_off_outlined, size: 20, color: const Color(0xFF64748B)),
-                                onPressed: () => setState(() => _obscureConfirm = !_obscureConfirm),
-                              ),
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                              focusedBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                borderSide: BorderSide(
-                                  color: _confirmPassCtrl.text.isEmpty
-                                      ? theme.colorScheme.primary
-                                      : (_passwordsMatch ? const Color(0xFF16A34A) : const Color(0xFFDC2626)),
-                                  width: 2,
-                                ),
-                              ),
-                              enabledBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                borderSide: BorderSide(
-                                  color: _confirmPassCtrl.text.isEmpty
-                                      ? const Color(0xFFCBD5E1)
-                                      : (_passwordsMatch ? const Color(0xFF16A34A) : const Color(0xFFDC2626)),
-                                ),
-                              ),
-                            ),
-                          ),
-                          if (_confirmPassCtrl.text.isNotEmpty && !_passwordsMatch)
-                            const Padding(
-                              padding: EdgeInsets.only(top: 8, left: 12),
-                              child: Text(
-                                'Passwords do not match',
-                                style: TextStyle(color: Color(0xFFDC2626), fontSize: 12),
-                              ),
-                            ),
-                            
-                          const SizedBox(height: 32),
-
-                          // Submit Button
-                          AppPrimaryButton(
-                            label: 'Set New Password',
-                            isLoading: _isLoading,
-                            onPressed: _isValid ? _submit : null,
-                          ),
-                          const SizedBox(height: 14),
-
-                          // Back to Login Link
-                          Center(
-                            child: TextButton.icon(
-                              onPressed: _isLoading
-                                  ? null
-                                  : () {
-                                      AuthRepository.instance.logout();
-                                      AppTheme.themeModeNotifier.value = ThemeMode.light;
-                                      Navigator.pushReplacementNamed(context, AppRoutes.login);
-                                    },
-                              style: TextButton.styleFrom(
-                                foregroundColor: const Color(0xFF2563EB),
-                                disabledForegroundColor: const Color(0xFF94A3B8),
-                              ),
-                              icon: Icon(
-                                Icons.arrow_back,
-                                size: 16,
-                                color: _isLoading ? const Color(0xFF94A3B8) : const Color(0xFF2563EB),
-                              ),
-                              label: Text(
-                                'Back to Login',
-                                style: TextStyle(
-                                  color: _isLoading ? const Color(0xFF94A3B8) : const Color(0xFF2563EB),
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ],
+        // New Password
+        TextField(
+          controller: _newPassCtrl,
+          enabled: !_isLoading,
+          obscureText: _obscureNew,
+          maxLength: 30,
+          style: const TextStyle(color: Color(0xFF0F172A), fontSize: 14, fontWeight: FontWeight.w600),
+          inputFormatters: [
+            FilteringTextInputFormatter.deny(RegExp(r' {2,}')),
+            FilteringTextInputFormatter.deny(RegExp(r'(.)\1{3,}')),
+          ],
+          buildCounter: (context, {required currentLength, required isFocused, maxLength}) => null,
+          decoration: AuthResponsiveScaffold.inputDecoration(
+            labelText: 'New Password',
+            hintText: '--------',
+            prefixIcon: const Icon(Icons.lock_outline, size: 20, color: Color(0xFF475569)),
+            suffixIcon: IconButton(
+              icon: Icon(
+                _obscureNew ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                size: 20,
+                color: const Color(0xFF64748B),
+              ),
+              onPressed: () => setState(() => _obscureNew = !_obscureNew),
             ),
           ),
-        );
-        },
-      ),
+        ),
+
+        const SizedBox(height: 12),
+
+        // Real-time Validation Rules in Frosted Section
+        AuthResponsiveScaffold.frostedSection(
+          child: PasswordRequirementsChecklist(
+            hasMinLength: _hasMinLength,
+            hasUpper: _hasUpper,
+            hasLower: _hasLower,
+            hasNumber: _hasNumber,
+          ),
+        ),
+
+        const SizedBox(height: 20),
+
+        // Confirm Password
+        TextField(
+          controller: _confirmPassCtrl,
+          enabled: !_isLoading,
+          obscureText: _obscureConfirm,
+          maxLength: 30,
+          style: const TextStyle(color: Color(0xFF0F172A), fontSize: 14, fontWeight: FontWeight.w600),
+          inputFormatters: [
+            FilteringTextInputFormatter.deny(RegExp(r' {2,}')),
+            FilteringTextInputFormatter.deny(RegExp(r'(.)\1{3,}')),
+          ],
+          buildCounter: (context, {required currentLength, required isFocused, maxLength}) => null,
+          decoration: AuthResponsiveScaffold.inputDecoration(
+            labelText: 'Confirm New Password',
+            hintText: '--------',
+            prefixIcon: const Icon(Icons.lock_reset_outlined, size: 20, color: Color(0xFF475569)),
+            suffixIcon: IconButton(
+              icon: Icon(
+                _obscureConfirm ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                size: 20,
+                color: const Color(0xFF64748B),
+              ),
+              onPressed: () => setState(() => _obscureConfirm = !_obscureConfirm),
+            ),
+            focusedBorderColor: _confirmPassCtrl.text.isEmpty
+                ? null
+                : (_passwordsMatch ? const Color(0xFF16A34A) : const Color(0xFFDC2626)),
+            enabledBorderColor: _confirmPassCtrl.text.isEmpty
+                ? null
+                : (_passwordsMatch ? const Color(0xFF16A34A) : const Color(0xFFDC2626)),
+          ),
+        ),
+        if (_confirmPassCtrl.text.isNotEmpty && !_passwordsMatch)
+          const Padding(
+            padding: EdgeInsets.only(top: 8, left: 4),
+            child: Text(
+              'Passwords do not match',
+              style: TextStyle(color: Color(0xFFDC2626), fontSize: 12),
+            ),
+          ),
+
+        const SizedBox(height: 28),
+
+        // Submit Button
+        AuthResponsiveScaffold.primaryButton(
+          label: 'SET NEW PASSWORD',
+          isLoading: _isLoading,
+          onPressed: _isValid ? _submit : null,
+        ),
+        const SizedBox(height: 14),
+
+        // Back to Login Link
+        Center(
+          child: TextButton.icon(
+            onPressed: _isLoading
+                ? null
+                : () {
+                    AuthRepository.instance.logout();
+                    AppTheme.themeModeNotifier.value = ThemeMode.light;
+                    Navigator.pushReplacementNamed(context, AppRoutes.login);
+                  },
+            icon: Icon(
+              Icons.arrow_back,
+              size: 16,
+              color: _isLoading ? const Color(0xFF94A3B8) : const Color(0xFF487898),
+            ),
+            label: Text(
+              'Back to Login',
+              style: TextStyle(
+                color: _isLoading ? const Color(0xFF94A3B8) : const Color(0xFF487898),
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

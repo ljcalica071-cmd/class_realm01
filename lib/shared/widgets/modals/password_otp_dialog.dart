@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:loading_animation_widget/loading_animation_widget.dart';
+import 'package:class_realm/core/services/local_storage_service.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
 
 /// Reusable modal dialog for verifying a 6-digit OTP code dispatched via email.
@@ -61,9 +62,18 @@ class _PasswordOtpDialogState extends State<PasswordOtpDialog>
   @override
   void initState() {
     super.initState();
-    _resendCooldown = widget.initialResendCooldown;
-    _inputCountdown = widget.initialInputCountdown;
-    _resendAttempts = widget.initialResendCount;
+    final lockout = LocalStorageService.getOtpLockoutRemaining(widget.email);
+    if (lockout != null && lockout.inSeconds > 0) {
+      _isLockedOut = true;
+      _inputCountdown = lockout.inSeconds;
+      _resendCooldown = 60;
+      _resendAttempts = 4;
+      _error = 'Too many incorrect attempts. Please try again after 10 minutes.';
+    } else {
+      _resendCooldown = widget.initialResendCooldown;
+      _inputCountdown = widget.initialInputCountdown;
+      _resendAttempts = widget.initialResendCount;
+    }
 
     _cursorBlinkController = AnimationController(
       vsync: this,
@@ -129,6 +139,7 @@ class _PasswordOtpDialogState extends State<PasswordOtpDialog>
       if (_inputCountdown > 0) {
         setState(() => _inputCountdown--);
       } else if (_isLockedOut) {
+        LocalStorageService.clearOtpLockout(widget.email);
         setState(() {
           _isLockedOut = false;
           _failedAttempts = 0;
@@ -291,6 +302,13 @@ class _PasswordOtpDialogState extends State<PasswordOtpDialog>
   }
 
   Future<void> _handleResend() async {
+    final lockout = LocalStorageService.getOtpLockoutRemaining(widget.email);
+    if (lockout != null && lockout.inSeconds > 0) {
+      final mins = (lockout.inSeconds / 60).ceil();
+      setState(() => _error = 'Too many incorrect attempts. Please try again after $mins minute(s).');
+      return;
+    }
+
     if (_resendAttempts >= 4 ||
         _resendCooldown > 0 ||
         _isLockedOut ||
@@ -362,6 +380,7 @@ class _PasswordOtpDialogState extends State<PasswordOtpDialog>
 
       if (!mounted) return;
       if (result.verified) {
+        await LocalStorageService.clearOtpLockout(widget.email);
         Navigator.pop(context, true);
         return;
       }
@@ -369,11 +388,17 @@ class _PasswordOtpDialogState extends State<PasswordOtpDialog>
       _failedAttempts++;
       final reason = result.reason;
       if (reason == 'locked' || _failedAttempts >= 5) {
+        await LocalStorageService.setOtpLockout(
+          widget.email,
+          const Duration(minutes: 10),
+        );
         setState(() {
           _isLockedOut = true;
-          _inputCountdown = result.retryAfter > 0 ? result.retryAfter : 900;
+          _inputCountdown = result.retryAfter > 0 ? result.retryAfter : 600;
           _error =
-              'Too many incorrect attempts. Please try again after 15 minutes.';
+              'Too many incorrect attempts. Please try again after 10 minutes.';
+          _otpController.clear();
+          _selectedIndex = 0;
         });
         _startTimers(reset: false);
       } else {
@@ -383,10 +408,10 @@ class _PasswordOtpDialogState extends State<PasswordOtpDialog>
           _error = reason == 'expired'
               ? 'This code has expired. Request a new code.'
               : 'Incorrect or expired code. $remaining attempt${remaining == 1 ? '' : 's'} remaining.';
+          // Clear field so user can enter the correct 6-digit code on next attempt
+          _otpController.clear();
+          _selectedIndex = 0;
         });
-        _selectedIndex = (_otpController.text.length - 1).clamp(0, 5);
-        _otpController.selection =
-            TextSelection.collapsed(offset: _otpController.text.length);
         Future.delayed(const Duration(milliseconds: 50), () {
           if (mounted) _focusNode.requestFocus();
         });
@@ -395,17 +420,28 @@ class _PasswordOtpDialogState extends State<PasswordOtpDialog>
       if (!mounted) return;
       _failedAttempts++;
       if (_failedAttempts >= 5) {
+        await LocalStorageService.setOtpLockout(
+          widget.email,
+          const Duration(minutes: 10),
+        );
         setState(() {
           _isLockedOut = true;
-          _inputCountdown = 900;
+          _inputCountdown = 600;
           _error =
-              'Too many incorrect attempts. Please try again after 15 minutes.';
+              'Too many incorrect attempts. Please try again after 10 minutes.';
+          _otpController.clear();
+          _selectedIndex = 0;
         });
         _startTimers(reset: false);
       } else {
         setState(() {
           _error =
               'Unable to verify code: ${error.toString().replaceFirst('Exception: ', '')}';
+          _otpController.clear();
+          _selectedIndex = 0;
+        });
+        Future.delayed(const Duration(milliseconds: 50), () {
+          if (mounted) _focusNode.requestFocus();
         });
       }
     } finally {

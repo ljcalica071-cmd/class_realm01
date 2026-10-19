@@ -8,12 +8,14 @@ class LocalStorageService {
   static const String _settingsPrefix = 'settings.';
   static const String _rememberMeKey = '${_authPrefix}remember_me';
   static const String _savedEmailKey = '${_authPrefix}saved_email';
+  static const String _savedPasswordKey = '${_authPrefix}saved_password';
   static const String _cachedUserKey = '${_authPrefix}cached_user';
   static const String _darkModeKey = '${_settingsPrefix}is_dark_mode';
 
   // Key Constants
   static const String keyRememberMe = _rememberMeKey;
   static const String keySavedEmail = _savedEmailKey;
+  static const String keySavedPassword = _savedPasswordKey;
   static const String keyCachedUser = _cachedUserKey;
   static const String keyIsDarkMode = _darkModeKey;
 
@@ -21,6 +23,8 @@ class LocalStorageService {
 
   static Future<void> init() async {
     _preferences = await SharedPreferences.getInstance();
+    // Clear legacy global keyIsDarkMode so all users strictly default to light mode
+    await _preferences?.remove(keyIsDarkMode);
   }
 
   static Future<SharedPreferences> get _prefs async {
@@ -30,15 +34,37 @@ class LocalStorageService {
     return _preferences!;
   }
 
-  static Future<void> saveRememberMe(bool value, String email) async {
+  static Future<void> saveRememberMe(
+    bool value,
+    String email, {
+    String? password,
+  }) async {
     final prefs = await _prefs;
     if (value) {
       await _ensureSaved(await prefs.setString(keySavedEmail, email));
+      if (password != null && password.isNotEmpty) {
+        await _ensureSaved(await prefs.setString(keySavedPassword, password));
+      }
       await _ensureSaved(await prefs.setBool(keyRememberMe, true));
     } else {
       await _ensureSaved(await prefs.remove(keySavedEmail));
+      await _ensureSaved(await prefs.remove(keySavedPassword));
       await _ensureSaved(await prefs.setBool(keyRememberMe, false));
     }
+  }
+
+  static Future<void> updateSavedPasswordIfRemembered(
+    String newPassword, {
+    String? forEmail,
+  }) async {
+    if (!isRememberMe) return;
+    if (forEmail != null &&
+        savedEmail != null &&
+        savedEmail!.trim().toLowerCase() != forEmail.trim().toLowerCase()) {
+      return;
+    }
+    final prefs = await _prefs;
+    await _ensureSaved(await prefs.setString(keySavedPassword, newPassword));
   }
 
   static Future<void> saveUser(UserModel user) async {
@@ -61,11 +87,14 @@ class LocalStorageService {
 
   static String? get savedEmail => _preferences?.getString(keySavedEmail);
 
+  static String? get savedPassword => _preferences?.getString(keySavedPassword);
+
   static Future<void> clearAuth() async {
     final prefs = await _prefs;
     await prefs.remove(keyCachedUser);
     await _ensureSaved(await prefs.remove(keyRememberMe));
     await _ensureSaved(await prefs.remove(keySavedEmail));
+    await _ensureSaved(await prefs.remove(keySavedPassword));
   }
 
   static Future<void> saveThemeMode(bool isDark) async {
@@ -98,7 +127,6 @@ class LocalStorageService {
         ),
       );
     }
-    await _ensureSaved(await prefs.setBool(keyIsDarkMode, isDark));
   }
 
   static bool isUserDarkMode(String uid, {String? email}) {
@@ -116,14 +144,34 @@ class LocalStorageService {
       );
       if (byEmail != null) return byEmail;
     }
-    if (uid.contains('admin') ||
-        (email != null && email.toLowerCase().contains('admin'))) {
-      final byAdmin = _preferences?.getBool(
-        '${_settingsPrefix}dark_mode_admin_1',
-      );
-      if (byAdmin != null) return byAdmin;
+    // Default is strictly Light Mode (false) for every individual user
+    return false;
+  }
+
+  // OTP Rate Limiting & Cooldown Lockout (10 minutes)
+  static Future<void> setOtpLockout(String email, Duration duration) async {
+    final cleanEmail = email.trim().toLowerCase().replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_');
+    final unlockAt = DateTime.now().add(duration).millisecondsSinceEpoch;
+    final prefs = await _prefs;
+    await _ensureSaved(await prefs.setInt('${_authPrefix}otp_lockout_$cleanEmail', unlockAt));
+  }
+
+  static Duration? getOtpLockoutRemaining(String email) {
+    final cleanEmail = email.trim().toLowerCase().replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_');
+    final unlockAt = _preferences?.getInt('${_authPrefix}otp_lockout_$cleanEmail');
+    if (unlockAt == null) return null;
+    final remainingMs = unlockAt - DateTime.now().millisecondsSinceEpoch;
+    if (remainingMs <= 0) {
+      _preferences?.remove('${_authPrefix}otp_lockout_$cleanEmail');
+      return null;
     }
-    return _preferences?.getBool(keyIsDarkMode) ?? false;
+    return Duration(milliseconds: remainingMs);
+  }
+
+  static Future<void> clearOtpLockout(String email) async {
+    final cleanEmail = email.trim().toLowerCase().replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_');
+    final prefs = await _prefs;
+    await _ensureSaved(await prefs.remove('${_authPrefix}otp_lockout_$cleanEmail'));
   }
 
   static Future<void> saveString(String key, String value) async {
@@ -300,9 +348,41 @@ class LocalStorageService {
     await saveJson('offline_attendance_queue', queue);
   }
 
+  static Future<void> saveLastInteraction(DateTime dt) async {
+    final prefs = await _prefs;
+    await prefs.setString('session.last_interaction', dt.toIso8601String());
+  }
+
+  static DateTime? getLastInteraction() {
+    final str = _preferences?.getString('session.last_interaction');
+    if (str == null) return null;
+    return DateTime.tryParse(str);
+  }
+
+  static Future<void> saveActiveSessionId(String sessionId) async {
+    final prefs = await _prefs;
+    await prefs.setString('session.active_id', sessionId);
+  }
+
+  static String? getActiveSessionId() {
+    return _preferences?.getString('session.active_id');
+  }
+
+  static Future<void> clearActiveSessionId() async {
+    final prefs = await _prefs;
+    await prefs.remove('session.active_id');
+    await prefs.remove('session.last_interaction');
+  }
+
+  static Future<void> savePendingHeartbeat(String sessionId, DateTime dt) async {
+    final prefs = await _prefs;
+    await prefs.setString('session.pending_heartbeat_$sessionId', dt.toIso8601String());
+  }
+
   static Future<void> _ensureSaved(bool saved) async {
     if (!saved) {
       throw StateError('Failed to persist local preference.');
     }
   }
 }
+

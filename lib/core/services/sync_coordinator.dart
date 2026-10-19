@@ -125,7 +125,7 @@ class SyncCoordinator {
           .eq('subject_offerings.teacher_id', teacherId)
           .ilike('status', 'enrolled');
 
-      if (enrollmentResponse != null && (enrollmentResponse as List).isNotEmpty) {
+      if ((enrollmentResponse as List).isNotEmpty) {
         final studentCompanions = <LocalStudentsCompanion>[];
         final enrollCompanions = <LocalEnrollmentsCompanion>[];
 
@@ -196,7 +196,7 @@ class SyncCoordinator {
           .eq('student_id', studentId)
           .ilike('status', 'enrolled');
 
-      if (enrollments != null && (enrollments as List).isNotEmpty) {
+      if ((enrollments as List).isNotEmpty) {
         final offerings = <LocalSubjectOfferingsCompanion>[];
         for (final row in enrollments as List) {
           final off = row['subject_offerings'] as Map<String, dynamic>? ?? {};
@@ -248,7 +248,7 @@ class SyncCoordinator {
           ''')
           .eq('parent_id', parentId);
 
-      if (links != null && (links as List).isNotEmpty) {
+      if ((links as List).isNotEmpty) {
         final studentCompanions = <LocalStudentsCompanion>[];
         final linkCompanions = <LocalParentStudentLinksCompanion>[];
 
