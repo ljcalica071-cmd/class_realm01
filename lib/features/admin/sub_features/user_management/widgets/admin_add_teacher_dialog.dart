@@ -180,10 +180,8 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog>
 
     final email = _emailController.text.trim().toLowerCase();
 
-    // Anti-spam: Only reuse active session if sent within the last 60s cooldown in this current session
+    // Anti-spam: Reuse active challenge if still valid within its 10-minute expiry window
     if (_activeChallengeEmail == email &&
-        _lastSentAt != null &&
-        DateTime.now().difference(_lastSentAt!).inSeconds < 60 &&
         _activeChallengeExpiresAt != null &&
         DateTime.now().isBefore(_activeChallengeExpiresAt!)) {
       final remainingOtp = _activeChallengeExpiresAt!
@@ -191,8 +189,9 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog>
           .inSeconds
           .clamp(0, 600);
       _startOtpExpiryTimer(remainingOtp);
-      final remainingCooldown =
-          (60 - DateTime.now().difference(_lastSentAt!).inSeconds).clamp(0, 60);
+      final remainingCooldown = _lastSentAt != null
+          ? (60 - DateTime.now().difference(_lastSentAt!).inSeconds).clamp(0, 60)
+          : 0;
       _startResendTimer(remainingCooldown);
       setState(() {
         _step = TeacherCreationStep.otpVerification;

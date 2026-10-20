@@ -72,6 +72,120 @@ class FirebaseAuthAdminService {
     return false;
   }
 
+  /// Creates a new user in Firebase Authentication via Service Account Admin API.
+  /// Returns the Firebase UID (`localId`) on success.
+  static Future<String?> createUser({
+    required String email,
+    required String password,
+    String? displayName,
+  }) async {
+    final cleanEmail = email.trim().toLowerCase();
+    try {
+      // 1. Primary: Use Google Service Account OAuth2 token (Admin API)
+      final token = await _getAccessToken();
+      if (token != null && token.isNotEmpty) {
+        final projectId = EnvConfig.firebaseProjectId;
+        final res = await http.post(
+          Uri.parse('https://identitytoolkit.googleapis.com/v1/projects/$projectId/accounts'),
+          headers: {
+            'Authorization': 'Bearer $token',
+            'Content-Type': 'application/json',
+          },
+          body: jsonEncode({
+            'email': cleanEmail,
+            'password': password,
+            if (displayName != null && displayName.isNotEmpty) 'displayName': displayName,
+            'emailVerified': false,
+            'disabled': false,
+          }),
+        );
+        if (res.statusCode == 200) {
+          final data = jsonDecode(res.body);
+          final uid = data['localId']?.toString();
+          if (uid != null) {
+            debugPrint('FirebaseAuthAdminService: Successfully created user $uid ($cleanEmail) via Service Account.');
+            return uid;
+          }
+        } else {
+          final body = jsonDecode(res.body);
+          final errMsg = body['error']?['message']?.toString();
+          if (errMsg == 'EMAIL_EXISTS') {
+            // Retrieve existing user UID via lookup
+            final lookupRes = await http.post(
+              Uri.parse('https://identitytoolkit.googleapis.com/v1/projects/$projectId/accounts:lookup'),
+              headers: {
+                'Authorization': 'Bearer $token',
+                'Content-Type': 'application/json',
+              },
+              body: jsonEncode({
+                'email': [cleanEmail],
+              }),
+            );
+            if (lookupRes.statusCode == 200) {
+              final lookupData = jsonDecode(lookupRes.body);
+              final users = lookupData['users'] as List?;
+              if (users != null && users.isNotEmpty) {
+                final existingUid = users.first['localId']?.toString();
+                if (existingUid != null) {
+                  // Update password so they can log in with new temp password
+                  await http.post(
+                    Uri.parse('https://identitytoolkit.googleapis.com/v1/projects/$projectId/accounts:update'),
+                    headers: {
+                      'Authorization': 'Bearer $token',
+                      'Content-Type': 'application/json',
+                    },
+                    body: jsonEncode({
+                      'localId': existingUid,
+                      'password': password,
+                      if (displayName != null) 'displayName': displayName,
+                    }),
+                  );
+                  return existingUid;
+                }
+              }
+            }
+          }
+          debugPrint('FirebaseAuthAdminService createUser returned ${res.statusCode}: ${res.body}');
+        }
+      }
+
+      // 2. Fallback via Identity Toolkit signUp using Web API Key
+      final apiKey = EnvConfig.firebaseWebApiKey;
+      if (apiKey.isNotEmpty) {
+        final fbRes = await http.post(
+          Uri.parse('https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=$apiKey'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({
+            'email': cleanEmail,
+            'password': password,
+            'returnSecureToken': true,
+          }),
+        );
+        if (fbRes.statusCode == 200) {
+          final fbData = jsonDecode(fbRes.body);
+          final uid = fbData['localId']?.toString();
+          final idToken = fbData['idToken']?.toString();
+          if (displayName != null && idToken != null) {
+            try {
+              await http.post(
+                Uri.parse('https://identitytoolkit.googleapis.com/v1/accounts:update?key=$apiKey'),
+                headers: {'Content-Type': 'application/json'},
+                body: jsonEncode({
+                  'idToken': idToken,
+                  'displayName': displayName,
+                }),
+              );
+            } catch (_) {}
+          }
+          return uid;
+        }
+      }
+    } catch (e) {
+      debugPrint('FirebaseAuthAdminService createUser error: $e');
+    }
+    return null;
+  }
+
   /// Sets user disabled status in Firebase Auth (for Archive / Unarchive)
   static Future<bool> setUserDisabled({
     required String uid,

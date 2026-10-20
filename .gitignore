@@ -54,5 +54,4 @@ app.*.map.json
 firebase-service-account.json
 *service-account*.json
 
-# Reference Projects (Ignore)
-AMS_Project - 002/
+

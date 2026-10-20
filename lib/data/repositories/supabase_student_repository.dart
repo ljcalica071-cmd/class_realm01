@@ -235,14 +235,30 @@ class SupabaseStudentRepository implements StudentRepository {
         lastName.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
     final tempPassword =
         '$cleanLastName${birthday.year}${birthday.month.toString().padLeft(2, '0')}${birthday.day.toString().padLeft(2, '0')}';
-    final studentId = 'std_${DateTime.now().millisecondsSinceEpoch}';
+    final studentFullName = [firstName, middleName, lastName]
+        .where((s) => s.isNotEmpty)
+        .join(' ');
+
+    String? fbUid;
+    try {
+      fbUid = await FirebaseAuthAdminService.createUser(
+        email: email,
+        password: tempPassword,
+        displayName: studentFullName,
+      );
+    } catch (e) {
+      debugPrint('Firebase student creation error: $e');
+    }
+
+    final studentId = fbUid ?? 'std_${DateTime.now().millisecondsSinceEpoch}';
 
     try {
-      // 1. Direct Pure Dart insert into Supabase users and profiles
+      // 1. Direct Pure Dart insert into Supabase users, profiles, and settings
       await _client.from('users').upsert({
         'id': studentId,
         'email': email,
         'role': 'student',
+        'is_archived': false,
       });
 
       await _client.from('student_profiles').upsert({
@@ -253,6 +269,11 @@ class SupabaseStudentRepository implements StudentRepository {
         'last_name': lastName,
         'gender': gender,
         'birthday': bdayStr,
+      });
+
+      await _client.from('student_settings').upsert({
+        'student_id': studentId,
+        'status': 'pending_first_login',
       });
 
       await _client.from('student_enrollments').upsert({
@@ -387,16 +408,9 @@ class SupabaseStudentRepository implements StudentRepository {
           .eq('student_id', id);
     }
 
-    // Check if student has any other active enrollments across all subjects
-    try {
-      final active = await _client
-          .from('student_enrollments')
-          .select('id')
-          .eq('student_id', id)
-          .ilike('status', 'enrolled');
-
-      if (active.isEmpty) {
-        // No active classes remaining: disable root account in Supabase and Firebase Auth
+    // Only perform global user account archival if this is a school-wide archive (subjectId == null)
+    if (subjectId == null) {
+      try {
         await _client.from('users').update({'is_archived': true}).eq('id', id);
         try {
           final cur = await _client
@@ -419,9 +433,9 @@ class SupabaseStudentRepository implements StudentRepository {
         try {
           await FirebaseAuthAdminService.setUserDisabled(uid: id, disabled: true);
         } catch (_) {}
+      } catch (e) {
+        debugPrint('Error archiving global student account: $e');
       }
-    } catch (e) {
-      debugPrint('Error evaluating student active enrollments on archive: $e');
     }
   }
 

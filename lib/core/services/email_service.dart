@@ -151,7 +151,7 @@ class EmailService {
         lower.contains('badcredentials') ||
         lower.contains('username and password not accepted')) {
       final sender = EnvConfig.smtpEmail.isNotEmpty ? EnvConfig.smtpEmail : 'SMTP account';
-      return "Gmail SMTP Error (535 Bad Credentials): Google rejected the App Password for sender account ($sender). If you recently changed the account password or updated 2FA, please generate a fresh 16-character App Password at myaccount.google.com/apppasswords.";
+      return "App Password Expired: The system rejected the email credentials for ($sender). Please contact ClassRealm Admin to generate a fresh App Password at myaccount.google.com/apppasswords.";
     }
     if (lower.contains('daily user sending limit exceeded') ||
         lower.contains('sending limit') ||

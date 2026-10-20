@@ -182,7 +182,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         AppModals.showErrorDialog(
           context: context,
           title: 'Account Not Found',
-          message: 'No registered account found with email: $email.\nPlease verify your email address or contact school administration.',
+          message: 'It looks like there\'s no account associated with $email.\nPlease double-check your spelling or contact the ClassRealm Admin for assistance.',
         );
         return;
       }

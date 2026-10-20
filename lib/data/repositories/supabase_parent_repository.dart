@@ -337,57 +337,39 @@ class SupabaseParentRepository {
     String finalEmail = ParentCredentialHelper.generateEmail(baseLastName, collisionIndex: collisionIndex);
     final finalTempPassword = tempPassword ?? ParentCredentialHelper.generateTempPassword(baseLastName, birthday);
 
+    final parentFullName = [firstName, middleName, lastName]
+        .where((s) => s != null && s.isNotEmpty)
+        .join(' ');
+
     String parentId = 'prnt_${DateTime.now().millisecondsSinceEpoch}';
 
-    // Create user in Firebase Auth using a secondary app instance without interrupting active teacher session
-    final secondaryAppName =
-        'CreateParent_${DateTime.now().millisecondsSinceEpoch}';
-    FirebaseApp? secondaryApp;
     try {
-      secondaryApp = await Firebase.initializeApp(
-        name: secondaryAppName,
-        options: Firebase.app().options,
-      );
-      final auth = FirebaseAuth.instanceFor(app: secondaryApp);
-
       bool created = false;
       for (int attempt = 0; attempt < 20; attempt++) {
         final candidateEmail = ParentCredentialHelper.generateEmail(
           baseLastName,
           collisionIndex: collisionIndex,
         );
-        try {
-          final cred = await auth.createUserWithEmailAndPassword(
-            email: candidateEmail,
-            password: finalTempPassword,
-          );
-          if (cred.user != null) {
-            parentId = cred.user!.uid;
-            finalEmail = candidateEmail;
-            created = true;
-            break;
-          }
-        } on FirebaseAuthException catch (fae) {
-          if (fae.code == 'email-already-in-use') {
-            collisionIndex++;
-            continue;
-          } else {
-            rethrow;
-          }
+        final fbUid = await FirebaseAuthAdminService.createUser(
+          email: candidateEmail,
+          password: finalTempPassword,
+          displayName: parentFullName.isNotEmpty ? parentFullName : 'Parent/Guardian',
+        );
+        if (fbUid != null && fbUid.isNotEmpty) {
+          parentId = fbUid;
+          finalEmail = candidateEmail;
+          created = true;
+          break;
+        } else {
+          collisionIndex++;
         }
       }
       if (!created) {
-        throw Exception('Failed to create parent account after multiple email collision attempts.');
+        throw Exception('Failed to provision parent account in Firebase Authentication.');
       }
     } catch (e) {
       debugPrint('Firebase parent auth creation error: $e');
       rethrow;
-    } finally {
-      if (secondaryApp != null) {
-        try {
-          await secondaryApp.delete();
-        } catch (_) {}
-      }
     }
 
     final bdayIso =
@@ -582,50 +564,33 @@ class SupabaseParentRepository {
       String newUid = 'prnt_${DateTime.now().millisecondsSinceEpoch}';
       String newEmail = ParentCredentialHelper.generateEmail(baseLastName, collisionIndex: collisionIndex);
 
-      final resetAppName = 'ResetParent_${DateTime.now().millisecondsSinceEpoch}';
-      FirebaseApp? resetApp;
       try {
-        resetApp = await Firebase.initializeApp(
-          name: resetAppName,
-          options: Firebase.app().options,
-        );
-        final resetAuth = FirebaseAuth.instanceFor(app: resetApp);
-
         bool created = false;
         for (int i = 0; i < 20; i++) {
           final candidate = ParentCredentialHelper.generateEmail(
             baseLastName,
             collisionIndex: collisionIndex,
           );
-          try {
-            final cred = await resetAuth.createUserWithEmailAndPassword(
-              email: candidate,
-              password: tempPassword,
-            );
-            if (cred.user != null) {
-              newUid = cred.user!.uid;
-              newEmail = candidate;
-              created = true;
-              break;
-            }
-          } on FirebaseAuthException catch (fae) {
-            if (fae.code == 'email-already-in-use') {
-              collisionIndex++;
-              continue;
-            } else {
-              rethrow;
-            }
+          final fbUid = await FirebaseAuthAdminService.createUser(
+            email: candidate,
+            password: tempPassword,
+            displayName: parent.fullName.isNotEmpty ? parent.fullName : 'Parent/Guardian',
+          );
+          if (fbUid != null && fbUid.isNotEmpty) {
+            newUid = fbUid;
+            newEmail = candidate;
+            created = true;
+            break;
+          } else {
+            collisionIndex++;
           }
         }
         if (!created) {
-          throw Exception('Failed to provision reset credentials after multiple attempts.');
+          throw Exception('Failed to provision reset credentials in Firebase Authentication.');
         }
-      } finally {
-        if (resetApp != null) {
-          try {
-            await resetApp.delete();
-          } catch (_) {}
-        }
+      } catch (e) {
+        debugPrint('Firebase resetParentCredentials error: $e');
+        rethrow;
       }
 
       // Fetch existing profile and linked students

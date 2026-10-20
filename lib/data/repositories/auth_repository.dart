@@ -1061,145 +1061,14 @@ class AuthRepository {
           await FirebaseAuthAdminService.setUserDisabled(uid: uid, disabled: true);
         } catch (_) {}
 
-        // Archive subject offerings taught by this teacher
+        // Soft-archive subject offerings taught by this teacher (without touching students or parents)
         try {
-          final offerings = await _supabaseClient
+          await _supabaseClient
               .from('subject_offerings')
-              .select('id')
+              .update({'is_archived': true})
               .eq('teacher_id', uid);
-
-          if (offerings.isNotEmpty) {
-            await _supabaseClient
-                .from('subject_offerings')
-                .update({'is_archived': true})
-                .eq('teacher_id', uid);
-
-            // Collect all students in these offerings
-            final Set<String> affectedStudentIds = {};
-            for (var off in offerings) {
-              final enr = await _supabaseClient
-                  .from('student_enrollments')
-                  .select('student_id')
-                  .eq('subject_offering_id', off['id']);
-              for (var row in enr) {
-                if (row['student_id'] != null) {
-                  affectedStudentIds.add(row['student_id'].toString());
-                }
-              }
-            }
-
-            // Check if student is active in any other active subject offering
-            for (final sId in affectedStudentIds) {
-              final studentEnrollments = await _supabaseClient
-                  .from('student_enrollments')
-                  .select('id, subject_offering_id')
-                  .eq('student_id', sId);
-
-              bool hasActiveOffering = false;
-              for (var se in studentEnrollments) {
-                final offId = se['subject_offering_id'];
-                final offData = await _supabaseClient
-                    .from('subject_offerings')
-                    .select('is_archived')
-                    .eq('id', offId)
-                    .maybeSingle();
-                if (offData != null && offData['is_archived'] == false) {
-                  hasActiveOffering = true;
-                  break;
-                }
-              }
-
-              // If student has no other active classes, archive them
-              if (!hasActiveOffering) {
-                try {
-                  final curSt = await _supabaseClient
-                      .from('student_settings')
-                      .select('status')
-                      .eq('student_id', sId)
-                      .maybeSingle();
-                  final stStatus = curSt?['status']?.toString();
-                  final stStatusToSave = (stStatus != null &&
-                          stStatus.isNotEmpty &&
-                          stStatus != 'archived')
-                      ? stStatus
-                      : 'active';
-
-                  await _supabaseClient
-                      .from('student_settings')
-                      .update({
-                        'previous_status': stStatusToSave,
-                        'status': 'archived',
-                      })
-                      .eq('student_id', sId);
-                  await _supabaseClient
-                      .from('users')
-                      .update({'is_archived': true})
-                      .eq('id', sId);
-                } catch (_) {}
-
-                // Check parent(s)
-                try {
-                  final parentLinks = await _supabaseClient
-                      .from('parent_student_links')
-                      .select('parent_id')
-                      .eq('student_id', sId);
-
-                  for (var pl in parentLinks) {
-                    final pId = pl['parent_id'];
-                    if (pId == null) continue;
-
-                    // Check if parent has any other active students
-                    final allLinks = await _supabaseClient
-                        .from('parent_student_links')
-                        .select('student_id')
-                        .eq('parent_id', pId);
-
-                    bool hasActiveChild = false;
-                    for (var link in allLinks) {
-                      final childId = link['student_id'];
-                      final childUser = await _supabaseClient
-                          .from('users')
-                          .select('is_archived')
-                          .eq('id', childId)
-                          .maybeSingle();
-                      if (childUser != null && childUser['is_archived'] == false) {
-                        hasActiveChild = true;
-                        break;
-                      }
-                    }
-
-                    if (!hasActiveChild) {
-                      final curPr = await _supabaseClient
-                          .from('parent_profiles')
-                          .select('status')
-                          .eq('parent_id', pId)
-                          .maybeSingle();
-                      final prStatus = curPr?['status']?.toString();
-                      final prStatusToSave = (prStatus != null &&
-                              prStatus.isNotEmpty &&
-                              prStatus != 'archived')
-                          ? prStatus
-                          : 'active';
-
-                      await _supabaseClient
-                          .from('parent_profiles')
-                          .update({
-                            'previous_status': prStatusToSave,
-                            'status': 'archived',
-                          })
-                          .eq('parent_id', pId);
-                      await _supabaseClient
-                          .from('users')
-                          .update({'is_archived': true})
-                          .eq('id', pId);
-                    }
-                  }
-                } catch (_) {}
-              }
-            }
-          }
         } catch (e) {
-          debugPrint('Error cascading teacher archive: $e');
+          debugPrint('Error soft-archiving teacher subject offerings: $e');
         }
       } else if (newStatus == 'active') {
         try {
@@ -1232,85 +1101,14 @@ class AuthRepository {
           } catch (_) {}
         } catch (_) {}
 
-        // Unarchive subject offerings taught by this teacher
+        // Restore subject offerings taught by this teacher (without touching students or parents)
         try {
-          final offerings = await _supabaseClient
+          await _supabaseClient
               .from('subject_offerings')
-              .select('id')
+              .update({'is_archived': false})
               .eq('teacher_id', uid);
-
-          if (offerings.isNotEmpty) {
-            await _supabaseClient
-                .from('subject_offerings')
-                .update({'is_archived': false})
-                .eq('teacher_id', uid);
-
-            // Re-activate students enrolled in these offerings
-            for (var off in offerings) {
-              final enr = await _supabaseClient
-                  .from('student_enrollments')
-                  .select('student_id')
-                  .eq('subject_offering_id', off['id']);
-              for (var row in enr) {
-                final sId = row['student_id'];
-                if (sId != null) {
-                  try {
-                    final curSt = await _supabaseClient
-                        .from('student_settings')
-                        .select('previous_status')
-                        .eq('student_id', sId)
-                        .maybeSingle();
-                    final stPrev = curSt?['previous_status']?.toString();
-                    final stTarget = (stPrev != null && stPrev.isNotEmpty && stPrev != 'archived')
-                        ? stPrev
-                        : 'active';
-
-                    await _supabaseClient
-                        .from('student_settings')
-                        .update({'status': stTarget, 'previous_status': null})
-                        .eq('student_id', sId);
-                    await _supabaseClient
-                        .from('users')
-                        .update({'is_archived': false})
-                        .eq('id', sId);
-                  } catch (_) {}
-
-                  // Re-activate parent if linked
-                  try {
-                    final parentLinks = await _supabaseClient
-                        .from('parent_student_links')
-                        .select('parent_id')
-                        .eq('student_id', sId);
-                    for (var pl in parentLinks) {
-                      final pId = pl['parent_id'];
-                      if (pId != null) {
-                        final curPr = await _supabaseClient
-                            .from('parent_profiles')
-                            .select('previous_status')
-                            .eq('parent_id', pId)
-                            .maybeSingle();
-                        final prPrev = curPr?['previous_status']?.toString();
-                        final prTarget = (prPrev != null && prPrev.isNotEmpty && prPrev != 'archived')
-                            ? prPrev
-                            : 'active';
-
-                        await _supabaseClient
-                            .from('parent_profiles')
-                            .update({'status': prTarget, 'previous_status': null})
-                            .eq('parent_id', pId);
-                        await _supabaseClient
-                            .from('users')
-                            .update({'is_archived': false})
-                            .eq('id', pId);
-                      }
-                    }
-                  } catch (_) {}
-                }
-              }
-            }
-          }
         } catch (e) {
-          debugPrint('Error cascading teacher unarchive: $e');
+          debugPrint('Error restoring teacher subject offerings: $e');
         }
       } else {
         await _supabaseClient
@@ -1503,72 +1301,7 @@ class AuthRepository {
         } catch (_) {}
       }
 
-      // Check affected students: if they have NO remaining enrollments in any subject, delete them
-      for (final sId in affectedStudentIds) {
-        try {
-          final remaining = await _supabaseClient
-              .from('student_enrollments')
-              .select('id')
-              .eq('student_id', sId);
-
-          if (remaining.isEmpty) {
-            // Student is no longer enrolled anywhere
-            final pLinks = await _supabaseClient
-                .from('parent_student_links')
-                .select('parent_id')
-                .eq('student_id', sId);
-
-            await _supabaseClient
-                .from('parent_student_links')
-                .delete()
-                .eq('student_id', sId);
-
-            await _supabaseClient
-                .from('student_settings')
-                .delete()
-                .eq('student_id', sId);
-
-            await _supabaseClient
-                .from('student_profiles')
-                .delete()
-                .eq('student_id', sId);
-
-            await _supabaseClient
-                .from('users')
-                .delete()
-                .eq('id', sId);
-            try {
-              await FirebaseAuthAdminService.deleteUser(uid: sId);
-            } catch (_) {}
-
-            // Check parents: if parent has NO other students linked, delete parent
-            for (var pl in pLinks) {
-              final pId = pl['parent_id'];
-              if (pId != null) {
-                final otherChildren = await _supabaseClient
-                    .from('parent_student_links')
-                    .select('student_id')
-                    .eq('parent_id', pId);
-                if (otherChildren.isEmpty) {
-                  await _supabaseClient
-                      .from('parent_profiles')
-                      .delete()
-                      .eq('parent_id', pId);
-                  await _supabaseClient
-                      .from('users')
-                      .delete()
-                      .eq('id', pId);
-                  try {
-                    await FirebaseAuthAdminService.deleteUser(uid: pId);
-                  } catch (_) {}
-                }
-              }
-            }
-          }
-        } catch (e) {
-          debugPrint('Error cleaning up orphan student $sId: $e');
-        }
-      }
+      // Note: Students and parents are preserved in the school directory even if a teacher is permanently deleted.
 
       // 4. Delete Teacher records
       String? teacherEmail;
@@ -1760,16 +1493,24 @@ class AuthRepository {
         }
       }
 
-      // If sent less than 60 seconds ago:
-      if (secondsSinceLastSent < 60) {
-        if (isResend) {
+      final expiresAtStr = priorChallenge['expires_at']?.toString();
+      final priorExpiresAt =
+          expiresAtStr != null ? DateTime.tryParse(expiresAtStr)?.toUtc() : null;
+      final isChallengeStillValid =
+          priorExpiresAt != null && now.isBefore(priorExpiresAt);
+
+      if (isResend) {
+        if (secondsSinceLastSent < 60) {
           final waitSec = (60 - secondsSinceLastSent).clamp(1, 60);
           throw AdminTeacherException(
               'Please wait ${waitSec}s before requesting another code.');
-        } else {
-          // If rapid Back and Send again within 60s cooldown, reuse active challenge
-          final remainingCooldown = (60 - secondsSinceLastSent).clamp(1, 60);
-          final remainingOtpSeconds = (600 - secondsSinceLastSent).clamp(0, 600);
+        }
+      } else {
+        // If user navigates Back and clicks Send again while an active code is still valid within 10 minutes:
+        if (isChallengeStillValid) {
+          final remainingCooldown = (60 - secondsSinceLastSent).clamp(0, 60);
+          final remainingOtpSeconds =
+              priorExpiresAt.difference(now).inSeconds.clamp(0, 600);
           return {
             'sent': false,
             'reused': true,
@@ -1777,9 +1518,7 @@ class AuthRepository {
             'remainingCooldownSeconds': remainingCooldown,
             'remainingOtpSeconds': remainingOtpSeconds,
             'failedAttempts': priorFailedAttempts,
-            'expiresAt': (lastSentAt?.add(const Duration(minutes: 10)) ??
-                    now.add(const Duration(minutes: 10)))
-                .toIso8601String(),
+            'expiresAt': priorExpiresAt.toIso8601String(),
           };
         }
       }
@@ -1789,9 +1528,8 @@ class AuthRepository {
     final random = Random.secure();
     final code = (100000 + random.nextInt(900000)).toString();
     final expiresAt = now.add(const Duration(minutes: 10));
-    final currentFailedAttempts = isResend
-        ? ((priorChallenge?['failed_attempts'] as num?)?.toInt() ?? 0)
-        : 0;
+    final currentFailedAttempts =
+        (priorChallenge?['failed_attempts'] as num?)?.toInt() ?? 0;
 
     debugPrint('========================================================');
     debugPrint(
@@ -2031,100 +1769,26 @@ class AuthRepository {
     final tempPassword =
         '${lastName.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '')}$bdayDigits';
 
-    String teacherId = 'tch_${DateTime.now().millisecondsSinceEpoch}';
-
-    // 6. Attempt Firebase Auth creation via Identity Toolkit REST API
+    // 6. Attempt Firebase Auth creation via Service Account Admin API (100% reliable)
+    String? fbUid;
     try {
-      final apiKey = DefaultFirebaseOptions.web.apiKey;
-      final fbRes = await http.post(
-        Uri.parse(
-            'https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=$apiKey'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'email': cleanEmail,
-          'password': tempPassword,
-          'returnSecureToken': true,
-        }),
+      fbUid = await FirebaseAuthAdminService.createUser(
+        email: cleanEmail,
+        password: tempPassword,
+        displayName: fullName,
       );
-      if (fbRes.statusCode == 200) {
-        final fbData = jsonDecode(fbRes.body);
-        if (fbData is Map && fbData['localId'] != null) {
-          teacherId = fbData['localId'].toString();
-          final idToken = fbData['idToken']?.toString();
-          if (idToken != null) {
-            try {
-              await http.post(
-                Uri.parse(
-                    'https://identitytoolkit.googleapis.com/v1/accounts:update?key=$apiKey'),
-                headers: {'Content-Type': 'application/json'},
-                body: jsonEncode({
-                  'idToken': idToken,
-                  'displayName': fullName,
-                }),
-              );
-            } catch (_) {}
-          }
-        }
-      } else {
-        final fbData = jsonDecode(fbRes.body);
-        if (fbData is Map && fbData['error']?['message'] == 'EMAIL_EXISTS') {
-          // Check if this teacher is already in public.users
-          final existingInUsers = await _supabaseClient
-              .from('users')
-              .select('id')
-              .eq('email', cleanEmail)
-              .maybeSingle();
-          if (existingInUsers != null) {
-            throw const AdminTeacherException('This email is already registered.');
-          }
-
-          // If not in users table, this user was created in Firebase Auth during a previous attempt.
-          // Sign in to retrieve their existing UID and token.
-          try {
-            final signInRes = await http.post(
-              Uri.parse(
-                  'https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=$apiKey'),
-              headers: {'Content-Type': 'application/json'},
-              body: jsonEncode({
-                'email': cleanEmail,
-                'password': tempPassword,
-                'returnSecureToken': true,
-              }),
-            );
-            if (signInRes.statusCode == 200) {
-              final signInData = jsonDecode(signInRes.body);
-              if (signInData is Map && signInData['localId'] != null) {
-                teacherId = signInData['localId'].toString();
-                final idToken = signInData['idToken']?.toString();
-                if (idToken != null) {
-                  try {
-                    await http.post(
-                      Uri.parse(
-                          'https://identitytoolkit.googleapis.com/v1/accounts:update?key=$apiKey'),
-                      headers: {'Content-Type': 'application/json'},
-                      body: jsonEncode({
-                        'idToken': idToken,
-                        'displayName': fullName,
-                      }),
-                    );
-                  } catch (_) {}
-                }
-              }
-            } else {
-              throw const AdminTeacherException(
-                  'This email is already registered in Firebase Authentication.');
-            }
-          } catch (e) {
-            if (e is AdminTeacherException) rethrow;
-            throw const AdminTeacherException(
-                'This email is already registered in Firebase Authentication.');
-          }
-        }
-      }
     } catch (e) {
       if (e is AdminTeacherException) rethrow;
-      debugPrint('Firebase Identity Toolkit notice: $e');
+      debugPrint('Firebase Admin createUser notice: $e');
     }
+
+    if (fbUid == null || fbUid.isEmpty) {
+      throw const AdminTeacherException(
+        'Failed to provision teacher in Firebase Authentication. Please check internet connection/credentials and try again.',
+      );
+    }
+
+    final teacherId = fbUid;
 
     // 7. Insert/Upsert into Supabase tables
     await _supabaseClient.from('users').upsert({
