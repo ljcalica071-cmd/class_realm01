@@ -60,7 +60,7 @@ class SupabaseParentRepository {
       }
 
       final enrollments = await enrollmentQuery;
-      if (enrollments == null || (enrollments as List).isEmpty) {
+      if ((enrollments as List).isEmpty) {
         return [];
       }
 
@@ -115,7 +115,7 @@ class SupabaseParentRepository {
           ''')
           .filter('student_id', 'in', studentIds);
 
-      if (linksResponse == null || (linksResponse as List).isEmpty) {
+      if ((linksResponse as List).isEmpty) {
         return [];
       }
 
@@ -132,13 +132,11 @@ class SupabaseParentRepository {
           .filter('id', 'in', parentIds);
 
       final userStatusMap = <String, Map<String, dynamic>>{};
-      if (usersResponse != null) {
-        for (final u in usersResponse as List) {
-          userStatusMap[u['id'].toString()] = {
-            'is_archived': u['is_archived'] == true,
-            'email': u['email']?.toString(),
-          };
-        }
+      for (final u in usersResponse as List) {
+        userStatusMap[u['id'].toString()] = {
+          'is_archived': u['is_archived'] == true,
+          'email': u['email']?.toString(),
+        };
       }
 
       final parentGroupMap = <String, Map<String, dynamic>>{};
@@ -263,8 +261,8 @@ class SupabaseParentRepository {
         .ilike('last_name', lastName.trim())
         .eq('contact_number', contactNumber.trim());
 
-    if (existingParents != null && (existingParents as List).isNotEmpty) {
-      final existingProfile = existingParents.first as Map<String, dynamic>;
+    if ((existingParents as List).isNotEmpty) {
+      final existingProfile = existingParents.first;
       final existingParentId = existingProfile['parent_id'].toString();
 
       // Upsert all selected studentIds into public.parent_student_links (onConflict: 'parent_id,student_id')
@@ -320,11 +318,9 @@ class SupabaseParentRepository {
         .ilike('email', '$baseLastName%@${ParentCredentialHelper.domain}');
 
     final takenEmails = <String>{};
-    if (existingUsers != null) {
-      for (final u in existingUsers as List) {
-        final em = u['email']?.toString().toLowerCase().trim();
-        if (em != null) takenEmails.add(em);
-      }
+    for (final u in existingUsers as List) {
+      final em = u['email']?.toString().toLowerCase().trim();
+      if (em != null) takenEmails.add(em);
     }
 
     int collisionIndex = 1;
@@ -464,7 +460,7 @@ class SupabaseParentRepository {
           ''')
           .eq('parent_id', parentId);
 
-      if (linksResp == null || (linksResp as List).isEmpty) {
+      if ((linksResp as List).isEmpty) {
         return false;
       }
 
@@ -547,11 +543,9 @@ class SupabaseParentRepository {
           .ilike('email', '$baseLastName%@${ParentCredentialHelper.domain}');
 
       final takenEmails = <String>{};
-      if (existingUsers != null) {
-        for (final u in existingUsers as List) {
-          final em = u['email']?.toString().toLowerCase().trim();
-          if (em != null) takenEmails.add(em);
-        }
+      for (final u in existingUsers as List) {
+        final em = u['email']?.toString().toLowerCase().trim();
+        if (em != null) takenEmails.add(em);
       }
 
       int collisionIndex = 1;
@@ -629,7 +623,7 @@ class SupabaseParentRepository {
       });
 
       // Insert into public.parent_student_links for all previously linked students
-      if (oldLinks != null && (oldLinks as List).isNotEmpty) {
+      if ((oldLinks as List).isNotEmpty) {
         for (final link in oldLinks as List) {
           await _client.from('parent_student_links').insert({
             'parent_id': newUid,
@@ -676,7 +670,7 @@ class SupabaseParentRepository {
           ''')
           .eq('parent_id', parentId);
 
-      if (linksResp == null || (linksResp as List).isEmpty) {
+      if ((linksResp as List).isEmpty) {
         return [];
       }
 
@@ -871,7 +865,7 @@ class SupabaseParentRepository {
           .eq('student_id', studentId)
           .eq('status', 'enrolled');
 
-      if (enrollments == null || (enrollments as List).isEmpty) return [];
+      if ((enrollments as List).isEmpty) return [];
 
       final offeringIds = (enrollments as List)
           .map((e) => e['subject_offering_id']?.toString())

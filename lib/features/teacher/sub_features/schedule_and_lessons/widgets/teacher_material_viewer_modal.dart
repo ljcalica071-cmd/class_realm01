@@ -424,8 +424,8 @@ class _TeacherMaterialViewerModalState extends State<TeacherMaterialViewerModal>
       builder: (ctx) => AlertDialog(
         title: const Text('Permanently Delete Material?'),
         content: Text(
-          'Are you sure you want to permanently delete "${_currentMaterial.displayName}" from the Supabase database?\n\n'
-          'This will completely erase the record and purge the cloud file. This action CANNOT be undone.',
+          'Are you sure you want to permanently delete "${_currentMaterial.displayName}" from the school system?\n\n'
+          'This will completely erase the material and purge the file. This action cannot be undone.',
         ),
         actions: [
           TextButton(
@@ -803,7 +803,7 @@ class _TeacherMaterialViewerModalState extends State<TeacherMaterialViewerModal>
             // Target Folder Selector
             Expanded(
               child: DropdownButtonFormField<ClassRealmFolder>(
-                value: _selectedFolder,
+                initialValue: _selectedFolder,
                 isExpanded: true,
                 decoration: const InputDecoration(
                   labelText: 'Folder Location',
@@ -837,7 +837,7 @@ class _TeacherMaterialViewerModalState extends State<TeacherMaterialViewerModal>
                   const SizedBox(width: 6),
                   Switch(
                     value: _isVisibleToStudents,
-                    activeColor: Colors.green,
+                    activeThumbColor: Colors.green,
                     onChanged: (v) => setState(() => _isVisibleToStudents = v),
                   ),
                 ],
@@ -914,7 +914,7 @@ class _TeacherMaterialViewerModalState extends State<TeacherMaterialViewerModal>
         const SizedBox(width: 8),
         IconButton.filledTonal(
           icon: const Icon(Icons.delete_forever, color: Colors.redAccent, size: 20),
-          tooltip: 'Permanently Delete Material from Database',
+          tooltip: 'Permanently Delete Material',
           onPressed: _confirmDelete,
         ),
         const Spacer(),

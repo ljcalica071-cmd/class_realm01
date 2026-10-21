@@ -947,7 +947,7 @@ class _TeacherStudentManagementTabState
                                                                     ScaffoldMessenger.of(
                                                                       context,
                                                                     );
-                                                                final confirm = await AppModals.showConfirmDialog(
+                                                                final confirm = await AppModals.showArchiveCooldownDialog(
                                                                   context:
                                                                       context,
                                                                   title: 'Archive Student',
@@ -1028,16 +1028,12 @@ class _TeacherStudentManagementTabState
                                                               ),
                                                               splashRadius: 18,
                                                               onPressed: () async {
-                                                                final confirm = await AppModals.showConfirmDialog(
+                                                                final confirm = await AppModals.showTypeToConfirmDeleteDialog(
                                                                   context:
                                                                       context,
                                                                   title: 'Permanently Delete Student',
                                                                   message:
-                                                                      'Are you sure you want to permanently delete ${s.fullName}? If they have no other enrolled classes, their account and Firebase Auth login will be permanently erased. This action cannot be undone.',
-                                                                  confirmLabel: 'Permanent Delete',
-                                                                  confirmColor:
-                                                                      AppTheme
-                                                                          .catRed,
+                                                                      'Are you sure you want to permanently delete ${s.fullName}? If they have no other enrolled classes, their student account will be permanently removed. This action is irreversible and cannot be undone.',
                                                                 );
                                                                 if (confirm ==
                                                                     true) {

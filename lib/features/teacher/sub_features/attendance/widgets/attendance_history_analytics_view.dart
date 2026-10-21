@@ -2,7 +2,6 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:class_realm/core/theme/app_theme.dart';
-import 'package:class_realm/models/academic_models.dart';
 import 'package:class_realm/models/attendance_workspace_models.dart';
 import 'package:class_realm/data/repositories/attendance_repository.dart';
 import 'package:class_realm/data/repositories/supabase_attendance_repository.dart';

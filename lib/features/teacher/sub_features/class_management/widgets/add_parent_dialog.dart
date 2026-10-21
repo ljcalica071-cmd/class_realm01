@@ -110,7 +110,7 @@ class _AddParentDialogState extends State<AddParentDialog> {
     final firstName = _firstNameCtrl.text.trim();
     final middleName = _middleNameCtrl.text.trim().isNotEmpty ? _middleNameCtrl.text.trim() : null;
     final lastName = _lastNameCtrl.text.trim();
-    final fullName = [firstName, if (middleName != null) middleName, lastName].join(' ');
+    final fullName = [firstName, ?middleName, lastName].join(' ');
 
     final contactNumber = _contactCtrl.text.trim();
     final relationship = _relationship == 'Other' 

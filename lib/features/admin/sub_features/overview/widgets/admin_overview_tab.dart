@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:class_realm/core/theme/app_theme.dart';
 import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/models/admin_portal_models.dart';
@@ -226,7 +225,7 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
                           child: ListView.separated(
                             shrinkWrap: true,
                             itemCount: availableYears.length,
-                            separatorBuilder: (_, __) => Divider(
+                            separatorBuilder: (_, _) => Divider(
                               height: 1,
                               color: isDark ? Colors.white10 : Colors.grey.shade200,
                             ),

@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -1238,7 +1237,7 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
                 child: _buildSelectorField(
                   label: 'Grade Level',
                   child: DropdownButtonFormField<String>(
-                    value: _selectedGradeLevel,
+                    initialValue: _selectedGradeLevel,
                     isExpanded: true,
                     decoration: _inputDecoration(theme),
                     hint: const Text('Grade', style: TextStyle(fontSize: 12)),
@@ -1274,7 +1273,7 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
                 child: _buildSelectorField(
                   label: 'Subject',
                   child: DropdownButtonFormField<String>(
-                    value: _selectedSubjectName,
+                    initialValue: _selectedSubjectName,
                     isExpanded: true,
                     decoration: _inputDecoration(theme),
                     hint: const Text('Select Subject', style: TextStyle(fontSize: 12)),
@@ -1311,7 +1310,7 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
                 child: _buildSelectorField(
                   label: 'Section',
                   child: DropdownButtonFormField<String>(
-                    value: _selectedOfferingId,
+                    initialValue: _selectedOfferingId,
                     isExpanded: true,
                     decoration: _inputDecoration(theme),
                     hint: const Text('Select Section', style: TextStyle(fontSize: 12)),
@@ -1545,7 +1544,7 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
         ),
         const SizedBox(height: 6),
         DropdownButtonFormField<String>(
-          value: _gender,
+          initialValue: _gender,
           decoration: InputDecoration(
             filled: true,
             fillColor: theme.colorScheme.surface,

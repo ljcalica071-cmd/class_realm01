@@ -8,6 +8,10 @@ class AppRoutes {
   // Dashboards & Wizards
   static const String academicSetup = '/teacher/academic-setup';
   static const String adminDashboard = '/admin/dashboard';
+  static const String adminBroadcasts = '/admin/broadcasts';
+  static const String adminTeacherManagement = '/admin/teacher-management';
+  static const String adminActivityAnalytics = '/admin/activity-analytics';
+  static const String adminProfile = '/admin/profile';
   static const String teacherDashboard = '/teacher/dashboard';
   static const String studentHome = '/student/home';
   static const String parentHome = '/parent/home';

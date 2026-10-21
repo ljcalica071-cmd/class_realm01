@@ -1,4 +1,3 @@
-import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:class_realm/core/services/supabase_service.dart';
@@ -104,9 +103,9 @@ class SupabaseTeacherClassworkRepository implements TeacherClassworkRepository {
         'deadline': activity.deadline.toIso8601String(),
         'is_published': true,
         'is_archived': false,
-        if (storagePath != null) 'storage_path': storagePath,
-        if (fileName != null) 'file_name': fileName,
-        if (mimeType != null) 'mime_type': mimeType,
+        'storage_path': ?storagePath,
+        'file_name': ?fileName,
+        'mime_type': ?mimeType,
         if (fileBytes != null) 'file_size_bytes': fileBytes.lengthInBytes,
       };
 
@@ -127,9 +126,9 @@ class SupabaseTeacherClassworkRepository implements TeacherClassworkRepository {
         'instructions': activity.instructions,
         'max_score': activity.maxScore.round(),
         'deadline': activity.deadline.toIso8601String(),
-        if (storagePath != null) 'storage_path': storagePath,
-        if (fileName != null) 'file_name': fileName,
-        if (mimeType != null) 'mime_type': mimeType,
+        'storage_path': ?storagePath,
+        'file_name': ?fileName,
+        'mime_type': ?mimeType,
         if (fileBytes != null) 'file_size_bytes': fileBytes.lengthInBytes,
         if (removeExistingAttachment) 'storage_path': null,
       };

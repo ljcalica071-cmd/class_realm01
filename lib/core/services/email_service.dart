@@ -331,4 +331,149 @@ class EmailService {
       html: htmlTemplate,
     );
   }
+
+  /// Send system maintenance alerts
+  Future<void> sendSystemMaintenanceAlertEmail({
+    required List<String> recipientEmails,
+    required bool isEnabled,
+  }) async {
+    final currentYear = DateTime.now().year;
+    final String subject = isEnabled 
+        ? '⚠️ ClassRealm Alert: System Maintenance in Progress'
+        : '✅ ClassRealm Alert: System Successfully Restored';
+    
+    final String htmlTemplate = isEnabled ? '''
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>System Maintenance Enabled</title>
+      </head>
+      <body style="margin: 0; padding: 0; background-color: #F3F4F6; font-family: Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased;">
+        <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #F3F4F6; padding: 40px 20px;">
+          <tr>
+            <td align="center">
+              <table width="100%" max-width="600" border="0" cellspacing="0" cellpadding="0" style="max-width: 600px; background-color: #FFFFFF; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
+                <tr>
+                  <td align="center" style="background-color: #1E3A8A; padding: 30px 20px;">
+                    <h1 style="color: #FFFFFF; margin: 0; font-size: 24px; font-weight: bold; letter-spacing: 1px;">ClassRealm</h1>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="background-color: #F59E0B; height: 4px; line-height: 4px; font-size: 4px;">&nbsp;</td>
+                </tr>
+                <tr>
+                  <td style="padding: 40px 30px; color: #374151;">
+                    <h2 style="margin-top: 0; color: #111827; font-size: 20px;">System Maintenance Notice</h2>
+                    <p style="font-size: 16px; line-height: 1.5; margin-bottom: 20px;">Hello ClassRealm User,</p>
+                    <p style="font-size: 16px; line-height: 1.5; margin-bottom: 20px;">
+                      To ensure the continued reliability and security of our platform, ClassRealm is currently undergoing urgent system maintenance.
+                    </p>
+                    <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #FEF3C7; border-left: 4px solid #F59E0B; border-radius: 4px; margin-bottom: 20px;">
+                      <tr>
+                        <td style="padding: 15px; font-size: 15px; color: #92400E; line-height: 1.5;">
+                          <strong>Status:</strong> 🔒 System Locked / Offline<br>
+                        </td>
+                      </tr>
+                    </table>
+                    <p style="font-size: 16px; line-height: 1.5; margin-bottom: 20px;">
+                      During this time, the platform will be temporarily inaccessible. You will be forcefully logged out of your account, and any pending offline data you have will be securely preserved.
+                    </p>
+                    <p style="font-size: 16px; line-height: 1.5; margin-bottom: 0;">
+                      We apologize for any inconvenience this may cause to your classes and schedule. We will send you another update as soon as the system is fully restored and back online.
+                    </p>
+                  </td>
+                </tr>
+                <tr>
+                  <td align="center" style="background-color: #F9FAFB; padding: 20px; border-top: 1px solid #E5E7EB;">
+                    <p style="margin: 0; font-size: 12px; color: #6B7280; line-height: 1.5;">
+                      &copy; $currentYear ClassRealm Systems. All rights reserved.<br>
+                      Eduardo Barretto Sr. Integrated School
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+      </body>
+      </html>
+    ''' : '''
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>System Maintenance Complete</title>
+      </head>
+      <body style="margin: 0; padding: 0; background-color: #F3F4F6; font-family: Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased;">
+        <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #F3F4F6; padding: 40px 20px;">
+          <tr>
+            <td align="center">
+              <table width="100%" max-width="600" border="0" cellspacing="0" cellpadding="0" style="max-width: 600px; background-color: #FFFFFF; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
+                <tr>
+                  <td align="center" style="background-color: #1E3A8A; padding: 30px 20px;">
+                    <h1 style="color: #FFFFFF; margin: 0; font-size: 24px; font-weight: bold; letter-spacing: 1px;">ClassRealm</h1>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="background-color: #10B981; height: 4px; line-height: 4px; font-size: 4px;">&nbsp;</td>
+                </tr>
+                <tr>
+                  <td style="padding: 40px 30px; color: #374151;">
+                    <h2 style="margin-top: 0; color: #111827; font-size: 20px;">We're Back Online!</h2>
+                    <p style="font-size: 16px; line-height: 1.5; margin-bottom: 20px;">Hello ClassRealm User,</p>
+                    <p style="font-size: 16px; line-height: 1.5; margin-bottom: 25px;">
+                      Great news! The system maintenance has been successfully completed, and ClassRealm is now fully operational once again.
+                    </p>
+                    <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #D1FAE5; border-left: 4px solid #10B981; border-radius: 4px; margin-bottom: 20px;">
+                      <tr>
+                        <td style="padding: 15px; font-size: 15px; color: #065F46; line-height: 1.5;">
+                          <strong>Status:</strong> 🌐 System Online<br>
+                        </td>
+                      </tr>
+                    </table>
+                    <p style="font-size: 16px; line-height: 1.5; margin-bottom: 20px;">
+                      Thank you for your patience and understanding while our technical team worked to implement these upgrades. You can now log in to the portal and continue your work without interruption.
+                    </p>
+                    <p style="font-size: 16px; line-height: 1.5; margin-bottom: 0;">
+                      Best regards,<br>
+                      <strong>The ClassRealm Technical Team</strong>
+                    </p>
+                  </td>
+                </tr>
+                <tr>
+                  <td align="center" style="background-color: #F9FAFB; padding: 20px; border-top: 1px solid #E5E7EB;">
+                    <p style="margin: 0; font-size: 12px; color: #6B7280; line-height: 1.5;">
+                      &copy; $currentYear ClassRealm Systems. All rights reserved.<br>
+                      Eduardo Barretto Sr. Integrated School
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+      </body>
+      </html>
+    ''';
+
+    // Dispatch emails silently
+    for (final email in recipientEmails) {
+      if (email.trim().isNotEmpty && email.trim().toLowerCase() != 'parent' && email.trim().toLowerCase() != 'teacher' && email.trim().toLowerCase() != 'student') {
+        try {
+          await sendEmail(
+            to: email,
+            subject: subject,
+            html: htmlTemplate,
+          );
+          // Slight delay to prevent rate limit spikes
+          await Future.delayed(const Duration(milliseconds: 50));
+        } catch (e) {
+          debugPrint('[MaintenanceEmail] Failed to send to $email: $e');
+        }
+      }
+    }
+  }
 }

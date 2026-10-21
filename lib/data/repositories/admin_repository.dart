@@ -142,6 +142,28 @@ class AdminRepository {
     });
   }
 
+  Future<List<String>> getActiveUserEmails() async {
+    try {
+      // Exclude archived and purely mock accounts. Include active and pending_first_login
+      final res = await _client
+          .from('users')
+          .select('email')
+          .eq('is_archived', false)
+          .not('email', 'in', '("parent","student","teacher")');
+          
+      final List<String> emails = [];
+      for (final row in res as List) {
+        if (row['email'] != null && row['email'].toString().isNotEmpty) {
+          emails.add(row['email'].toString());
+        }
+      }
+      return emails;
+    } catch (e) {
+      debugPrint('AdminRepository getActiveUserEmails error: $e');
+      return [];
+    }
+  }
+
   // =========================================================================
   // 3. SCHOOL YEAR MANAGEMENT & ARCHIVING (REAL SUPABASE)
   // =========================================================================

@@ -1,4 +1,3 @@
-import 'dart:typed_data';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -41,7 +40,7 @@ class _TeacherLearningMaterialsTabState
   List<ClassRealmFolder> _archivedFolders = [];
   List<ClassRealmMaterial> _archivedMaterials = [];
   int get _archivedCount =>
-      (_archivedFolders?.length ?? 0) + (_archivedMaterials?.length ?? 0);
+      (_archivedFolders.length ?? 0) + (_archivedMaterials.length ?? 0);
 
   // Active Drive Navigation & Folder hierarchy
   ClassRealmFolder? _currentFolder;
@@ -97,24 +96,22 @@ class _TeacherLearningMaterialsTabState
 
   // --- Cascading Dropdown Selectors (Only with enrolled students) ---
   List<int> get _availableGrades {
-    if (_offerings == null || _offerings.isEmpty) return [];
+    if (_offerings.isEmpty) return [];
     final set = <int>{};
     for (final o in _offerings) {
-      if (o != null) {
-        set.add(_parseGrade(o['grade_level']));
-      }
+      set.add(_parseGrade(o['grade_level']));
     }
     final list = set.toList()..sort();
     return list;
   }
 
   List<String> get _availableSubjects {
-    if (_selectedGrade == null || _offerings == null || _offerings.isEmpty) {
+    if (_selectedGrade == null || _offerings.isEmpty) {
       return [];
     }
     final set = <String>{};
     for (final o in _offerings) {
-      if (o != null && _parseGrade(o['grade_level']) == _selectedGrade) {
+      if (_parseGrade(o['grade_level']) == _selectedGrade) {
         final name = o['subject_name']?.toString();
         if (name != null && name.trim().isNotEmpty) {
           set.add(name.trim());
@@ -128,12 +125,10 @@ class _TeacherLearningMaterialsTabState
   List<Map<String, dynamic>> get _availableSections {
     if (_selectedGrade == null ||
         _selectedSubject == null ||
-        _offerings == null ||
         _offerings.isEmpty) {
       return [];
     }
     final list = _offerings.where((o) {
-      if (o == null) return false;
       return _parseGrade(o['grade_level']) == _selectedGrade &&
           (o['subject_name']?.toString() ?? '').trim() == _selectedSubject;
     }).toList();
@@ -281,9 +276,8 @@ class _TeacherLearningMaterialsTabState
 
   // --- Material & Folder Filtering ---
   List<ClassRealmMaterial> get _filteredMaterials {
-    if (_materials == null || _materials.isEmpty) return [];
+    if (_materials.isEmpty) return [];
     return _materials.where((m) {
-      if (m == null) return false;
       final matchesSearch = _searchQuery.isEmpty ||
           m.fileName.toLowerCase().contains(_searchQuery.toLowerCase()) ||
           (m.title?.toLowerCase().contains(_searchQuery.toLowerCase()) ?? false);
@@ -299,30 +293,27 @@ class _TeacherLearningMaterialsTabState
   }
 
   List<ClassRealmFolder> get _filteredFolders {
-    if (_folders == null || _folders.isEmpty) return [];
+    if (_folders.isEmpty) return [];
     if (_searchQuery.isEmpty) return _folders;
     return _folders
         .where((f) =>
-            f != null &&
             f.folderName.toLowerCase().contains(_searchQuery.toLowerCase()))
         .toList();
   }
 
   List<ClassRealmMaterial> get _filteredArchivedMaterials {
-    if (_archivedMaterials == null || _archivedMaterials.isEmpty) return [];
+    if (_archivedMaterials.isEmpty) return [];
     if (_searchQuery.isEmpty) return _archivedMaterials;
     return _archivedMaterials.where((m) {
-      if (m == null) return false;
       return m.fileName.toLowerCase().contains(_searchQuery.toLowerCase()) ||
           (m.title?.toLowerCase().contains(_searchQuery.toLowerCase()) ?? false);
     }).toList();
   }
 
   List<ClassRealmFolder> get _filteredArchivedFolders {
-    if (_archivedFolders == null || _archivedFolders.isEmpty) return [];
+    if (_archivedFolders.isEmpty) return [];
     if (_searchQuery.isEmpty) return _archivedFolders;
     return _archivedFolders.where((f) {
-      if (f == null) return false;
       return f.folderName.toLowerCase().contains(_searchQuery.toLowerCase());
     }).toList();
   }
@@ -594,7 +585,7 @@ class _TeacherLearningMaterialsTabState
                       ),
                       const SizedBox(height: 6),
                       DropdownButtonFormField<ClassRealmFolder>(
-                        value: targetFolder,
+                        initialValue: targetFolder,
                         isExpanded: true,
                         autovalidateMode: AutovalidateMode.onUserInteraction,
                         validator: (v) {
@@ -671,7 +662,7 @@ class _TeacherLearningMaterialsTabState
                           ),
                         ),
                         value: isVisibleToStudents,
-                        activeColor: Colors.green,
+                        activeThumbColor: Colors.green,
                         onChanged: isUploading
                             ? null
                             : (val) => setModalState(() => isVisibleToStudents = val),
@@ -820,7 +811,7 @@ class _TeacherLearningMaterialsTabState
                       title: const Text('Visible to Students', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
                       subtitle: const Text('Students can browse contents of this folder', style: TextStyle(fontSize: 11)),
                       value: isVisible,
-                      activeColor: Colors.green,
+                      activeThumbColor: Colors.green,
                       onChanged: (v) => setModalState(() => isVisible = v),
                     ),
                   ],
@@ -915,8 +906,8 @@ class _TeacherLearningMaterialsTabState
           ],
         ),
         content: Text(
-          'Are you sure you want to permanently delete "${folder.folderName}" from the Supabase database?\n\n'
-          'This will completely remove the folder and all its child documents from Supabase. This action CANNOT be undone.',
+          'Are you sure you want to permanently delete "${folder.folderName}" from the school system?\n\n'
+          'This will completely remove the folder and all its child documents. This action cannot be undone.',
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
@@ -993,8 +984,8 @@ class _TeacherLearningMaterialsTabState
           ],
         ),
         content: Text(
-          'Are you sure you want to permanently delete "${material.displayName}" from the Supabase database?\n\n'
-          'This will completely erase the material record and purge any unreferenced cloud storage file. This action CANNOT be undone.',
+          'Are you sure you want to permanently delete "${material.displayName}" from the school system?\n\n'
+          'This will completely erase the material record and cloud file. This action cannot be undone.',
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
@@ -1175,11 +1166,11 @@ class _TeacherLearningMaterialsTabState
       );
     }
 
-    if (_isLoading && (_offerings == null || _offerings.isEmpty)) {
+    if (_isLoading && (_offerings.isEmpty)) {
       return const Center(child: CircularProgressIndicator());
     }
 
-    if (_offerings == null || _offerings.isEmpty) {
+    if (_offerings.isEmpty) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(32),
@@ -1768,7 +1759,7 @@ class _TeacherLearningMaterialsTabState
               ),
               const SizedBox(height: 8),
               Text(
-                'Folders and materials you archive will be stored here safely.\nYou can restore them to active status anytime or delete them permanently from the Supabase database.',
+                'Folders and materials you archive will be stored here safely.\nYou can restore them to active status anytime or delete them permanently from the school system.',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: theme.colorScheme.onSurface.withValues(alpha: 0.6)),
               ),
@@ -1820,7 +1811,7 @@ class _TeacherLearningMaterialsTabState
                       const SizedBox(width: 8),
                       // Permanent delete button
                       Tooltip(
-                        message: 'Permanently Delete from Supabase Database',
+                        message: 'Permanently Delete Folder',
                         child: IconButton(
                           icon: const Icon(Icons.delete_forever, color: Colors.red, size: 20),
                           onPressed: () => _deleteFolderPermanentlyConfirm(folder),
@@ -1876,7 +1867,7 @@ class _TeacherLearningMaterialsTabState
                       const SizedBox(width: 8),
                       // Permanent delete button
                       Tooltip(
-                        message: 'Permanently Delete from Supabase Database',
+                        message: 'Permanently Delete Material',
                         child: IconButton(
                           icon: const Icon(Icons.delete_forever, color: Colors.red, size: 20),
                           onPressed: () => _deleteMaterialPermanentlyConfirm(mat),

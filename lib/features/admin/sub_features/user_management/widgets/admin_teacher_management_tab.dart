@@ -5,8 +5,6 @@ import 'package:class_realm/core/theme/app_theme.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/shared/widgets/shared_widgets.dart';
-import 'package:class_realm/widgets/common/app_buttons.dart';
-import 'package:class_realm/widgets/common/app_modals.dart';
 import 'package:class_realm/features/admin/sub_features/user_management/widgets/admin_add_teacher_dialog.dart';
 import 'package:class_realm/features/admin/sub_features/user_management/widgets/admin_edit_teacher_dialog.dart';
 
@@ -120,12 +118,14 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
       return;
     }
 
-    final confirm = await AppModals.showConfirmDialog(
+    final confirm = await AppModals.showArchiveCooldownDialog(
       context: context,
       title: 'Archive Teacher',
-      message: 'Are you sure you want to archive ${t.fullName}? Their login will be disabled and classes moved to archives.',
+      message:
+          'Are you sure you want to archive ${t.fullName}? Their login will be disabled and active teaching assignments moved to archives.',
       confirmLabel: 'Archive',
       confirmColor: AppTheme.catOrange,
+      cooldownSeconds: 5,
     );
     if (confirm == true) {
       final currentHint = (t.status == AccountStatus.pendingFirstLogin)
@@ -207,13 +207,11 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
       return;
     }
 
-    final confirm = await AppModals.showConfirmDialog(
+    final confirm = await AppModals.showTypeToConfirmDeleteDialog(
       context: context,
-      title: 'Permanent Delete',
+      title: 'Permanently Delete Teacher',
       message:
-          'Are you sure you want to permanently delete ${t.fullName}? This will erase their profile and credentials from both Supabase and Firebase Auth. This action cannot be undone.',
-      confirmLabel: 'Delete',
-      confirmColor: AppTheme.catRed,
+          'Are you sure you want to permanently delete ${t.fullName}? This will erase their teacher profile and login access from the school system. This action is irreversible and cannot be undone.',
     );
     if (confirm == true) {
       final success = await AuthRepository.instance.deleteTeacherRecord(t.id);
@@ -402,7 +400,7 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
                 children: [
                   // Search field
                   SizedBox(
-                    width: 280,
+                    width: 320,
                     child: TextField(
                       controller: _searchController,
                       onChanged: (v) {
@@ -842,28 +840,6 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
                                                     splashRadius: 18,
                                                     onPressed: () =>
                                                         _handleArchive(t),
-                                                  ),
-                                                  const SizedBox(width: 8),
-                                                  IconButton(
-                                                    tooltip: 'Delete Teacher',
-                                                    icon: const Icon(
-                                                      Icons.delete_outline,
-                                                      color: AppTheme.catRed,
-                                                      size: 18,
-                                                    ),
-                                                    padding: EdgeInsets.zero,
-                                                    constraints:
-                                                        const BoxConstraints(
-                                                          minWidth: 32,
-                                                          minHeight: 32,
-                                                        ),
-                                                    visualDensity:
-                                                        VisualDensity.compact,
-                                                    splashRadius: 18,
-                                                    onPressed: () =>
-                                                        _handlePermanentDelete(
-                                                          t,
-                                                        ),
                                                   ),
                                                 ] else ...[
                                                   IconButton(

@@ -3,7 +3,6 @@ import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:class_realm/core/config/env_config.dart';
 import 'package:firebase_auth/firebase_auth.dart' as firebase;
 import 'package:supabase_flutter/supabase_flutter.dart' hide User;
@@ -15,7 +14,6 @@ import 'package:class_realm/core/services/email_verification_service.dart';
 import 'package:class_realm/core/utils/parent_credential_helper.dart';
 import 'package:class_realm/core/utils/validators.dart';
 import 'package:class_realm/core/services/firebase_auth_admin_service.dart';
-import 'package:class_realm/firebase_options.dart';
 
 class FirstLoginOtpVerification {
   const FirstLoginOtpVerification({
@@ -72,7 +70,7 @@ class AuthRepository {
 
   custom.UserModel? _currentUser;
   custom.UserModel? get currentUser =>
-      _currentUser ?? MockDatabase.instance.currentUser;
+      _currentUser ?? MockDatabase.instance.currentUser ?? LocalStorageService.getCachedUser();
 
   void setCurrentUser(custom.UserModel user) {
     _currentUser = user;
@@ -528,6 +526,22 @@ class AuthRepository {
       );
     } catch (_) {}
 
+    // Persist OTP challenge in Supabase first_login_otp_verifications table
+    try {
+      await _supabaseClient.from('first_login_otp_verifications').upsert({
+        'user_id': user.uid,
+        'code_hash': code,
+        'expires_at': _pendingOtpExpiry!.toUtc().toIso8601String(),
+        'last_sent_at': now.toUtc().toIso8601String(),
+        'resend_count': _firstLoginResendCount,
+        'failed_attempts': _otpAttempts,
+        'is_verified': false,
+        'updated_at': now.toUtc().toIso8601String(),
+      });
+    } catch (e) {
+      debugPrint('[FirstLoginOTP] Supabase storage notice: $e');
+    }
+
     return {
       'sent': true,
       'reused': false,
@@ -579,6 +593,16 @@ class AuthRepository {
           const Duration(minutes: 10),
         );
       }
+      try {
+        await _supabaseClient
+            .from('first_login_otp_verifications')
+            .update({
+              'failed_attempts': _otpAttempts,
+              'updated_at': DateTime.now().toUtc().toIso8601String(),
+            })
+            .eq('user_id', user?.uid ?? '');
+      } catch (_) {}
+
       return const FirstLoginOtpVerification(
         verified: false,
         reason: 'locked',
@@ -588,12 +612,32 @@ class AuthRepository {
     }
 
     if (cleanCode != _pendingOtpCode) {
+      try {
+        await _supabaseClient
+            .from('first_login_otp_verifications')
+            .update({
+              'failed_attempts': _otpAttempts,
+              'updated_at': DateTime.now().toUtc().toIso8601String(),
+            })
+            .eq('user_id', user?.uid ?? '');
+      } catch (_) {}
+
       return FirstLoginOtpVerification(
         verified: false,
         reason: 'Invalid verification code. Please check and try again.',
         attemptsRemaining: (5 - _otpAttempts).clamp(0, 5),
       );
     }
+
+    try {
+      await _supabaseClient
+          .from('first_login_otp_verifications')
+          .update({
+            'is_verified': true,
+            'updated_at': DateTime.now().toUtc().toIso8601String(),
+          })
+          .eq('user_id', user?.uid ?? '');
+    } catch (_) {}
 
     _pendingOtpCode = null;
     _pendingOtpExpiry = null;
@@ -642,6 +686,14 @@ class AuthRepository {
             .from('parent_profiles')
             .update({'status': 'active'})
             .eq('parent_id', userId);
+      } catch (_) {}
+
+      // Clean up single-use OTP verification record from Supabase after successful completion
+      try {
+        await _supabaseClient
+            .from('first_login_otp_verifications')
+            .delete()
+            .eq('user_id', userId);
       } catch (_) {}
 
       final current = _currentUser;

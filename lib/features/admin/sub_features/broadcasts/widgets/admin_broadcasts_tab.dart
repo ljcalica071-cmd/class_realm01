@@ -3,10 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:class_realm/data/repositories/admin_repository.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
-import 'package:class_realm/models/admin_portal_models.dart';
 import 'package:class_realm/models/academic_models.dart';
 import 'package:class_realm/core/theme/app_theme.dart';
 import 'package:class_realm/widgets/common/expandable_notification_card.dart';
+import 'package:class_realm/core/services/email_service.dart';
 
 class AdminBroadcastsTab extends StatefulWidget {
   const AdminBroadcastsTab({super.key});
@@ -193,6 +193,17 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
 
     try {
       await AdminRepository.instance.setMaintenanceMode(targetState, adminId);
+      
+      // DISPATCH EMAILS IN BACKGROUND (Fire and forget)
+      AdminRepository.instance.getActiveUserEmails().then((emails) {
+        if (emails.isNotEmpty) {
+          EmailService.instance.sendSystemMaintenanceAlertEmail(
+            recipientEmails: emails,
+            isEnabled: targetState,
+          );
+        }
+      });
+
       if (mounted) {
         setState(() {
           _isMaintenanceMode = targetState;
@@ -568,7 +579,7 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
                 else
                   Switch(
                     value: _isMaintenanceMode,
-                    activeColor: AppTheme.catRed,
+                    activeThumbColor: AppTheme.catRed,
                     onChanged: (val) => _handleMaintenanceToggle(val),
                   ),
               ],
@@ -822,7 +833,7 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
                             child: Text(
                               _userCounts['total'] == 0
                                   ? 'Broadcast disabled: There are currently no active non-archived users in the system.'
-                                  : 'Broadcast disabled: No active non-archived ${_selectedAudience} found to receive announcements.',
+                                  : 'Broadcast disabled: No active non-archived $_selectedAudience found to receive announcements.',
                               style: TextStyle(
                                 fontSize: 12,
                                 color: Colors.orange.shade800,

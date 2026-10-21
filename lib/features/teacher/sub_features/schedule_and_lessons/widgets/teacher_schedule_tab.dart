@@ -826,7 +826,7 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
                       children: [
                         Expanded(
                           child: DropdownButtonFormField<int>(
-                            value: selectedGrade,
+                            initialValue: selectedGrade,
                             decoration: const InputDecoration(
                               labelText: 'GRADE LEVEL',
                               border: OutlineInputBorder(),
@@ -861,7 +861,7 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
                         // Section Selector
                         Expanded(
                           child: DropdownButtonFormField<String>(
-                            value: selectedOfferingId.isNotEmpty
+                            initialValue: selectedOfferingId.isNotEmpty
                                 ? selectedOfferingId
                                 : (currentSections.isNotEmpty ? currentSections.first['id'].toString() : null),
                             decoration: const InputDecoration(
@@ -901,7 +901,7 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
 
                     // Subject Selector
                     DropdownButtonFormField<String>(
-                      value: selectedSubjectName.isNotEmpty
+                      initialValue: selectedSubjectName.isNotEmpty
                           ? selectedSubjectName
                           : (currentSubjects.isNotEmpty ? currentSubjects.first : null),
                       decoration: const InputDecoration(

@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:class_realm/core/theme/app_theme.dart';
 import 'package:class_realm/shared/widgets/buttons/app_buttons.dart';
@@ -457,4 +459,460 @@ class AppModals {
       ),
     );
   }
+
+  /// Archive dialog with 5-second cooldown on the confirm button
+  static Future<bool?> showArchiveCooldownDialog({
+    required BuildContext context,
+    required String title,
+    required String message,
+    String confirmLabel = 'Archive',
+    String cancelLabel = 'Cancel',
+    Color? confirmColor,
+    int cooldownSeconds = 5,
+  }) {
+    final theme = Theme.of(context);
+    final effectiveColor = confirmColor ?? AppTheme.catOrange;
+
+    return showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => Theme(
+        data: theme,
+        child: _ArchiveCooldownDialog(
+          title: title,
+          message: message,
+          confirmLabel: confirmLabel,
+          cancelLabel: cancelLabel,
+          confirmColor: effectiveColor,
+          cooldownSeconds: cooldownSeconds,
+        ),
+      ),
+    );
+  }
+
+  /// Permanent delete dialog requiring user to type 'I confirm'.
+  /// Once 'I confirm' is typed, it automatically agrees and executes deletion (no delete button needed).
+  /// Max 10 chars, inline validation with red border and message underneath.
+  static Future<bool?> showTypeToConfirmDeleteDialog({
+    required BuildContext context,
+    required String title,
+    required String message,
+    String requiredText = 'I confirm',
+    String cancelLabel = 'Cancel',
+  }) {
+    final theme = Theme.of(context);
+
+    return showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => Theme(
+        data: theme,
+        child: _TypeToConfirmDeleteDialog(
+          title: title,
+          message: message,
+          requiredText: requiredText,
+          cancelLabel: cancelLabel,
+        ),
+      ),
+    );
+  }
 }
+
+class _ArchiveCooldownDialog extends StatefulWidget {
+  final String title;
+  final String message;
+  final String confirmLabel;
+  final String cancelLabel;
+  final Color confirmColor;
+  final int cooldownSeconds;
+
+  const _ArchiveCooldownDialog({
+    required this.title,
+    required this.message,
+    required this.confirmLabel,
+    required this.cancelLabel,
+    required this.confirmColor,
+    required this.cooldownSeconds,
+  });
+
+  @override
+  State<_ArchiveCooldownDialog> createState() => _ArchiveCooldownDialogState();
+}
+
+class _ArchiveCooldownDialogState extends State<_ArchiveCooldownDialog> {
+  late int _remainingSeconds;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _remainingSeconds = widget.cooldownSeconds;
+    if (_remainingSeconds > 0) {
+      _timer = Timer.periodic(const Duration(seconds: 1), (t) {
+        if (!mounted) {
+          t.cancel();
+          return;
+        }
+        setState(() {
+          if (_remainingSeconds > 1) {
+            _remainingSeconds--;
+          } else {
+            _remainingSeconds = 0;
+            t.cancel();
+          }
+        });
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isCoolingDown = _remainingSeconds > 0;
+
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      elevation: 16,
+      backgroundColor: theme.colorScheme.surface,
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 440),
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: widget.confirmColor.withValues(alpha: 0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.archive_outlined,
+                    color: widget.confirmColor,
+                    size: 24,
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Text(
+                    widget.title,
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: theme.colorScheme.onSurface,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Text(
+              widget.message,
+              style: TextStyle(
+                fontSize: 14,
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.75),
+                height: 1.5,
+              ),
+            ),
+            const SizedBox(height: 24),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(false),
+                  child: Text(
+                    widget.cancelLabel,
+                    style: TextStyle(
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                ElevatedButton(
+                  onPressed: isCoolingDown
+                      ? null
+                      : () => Navigator.of(context).pop(true),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: widget.confirmColor,
+                    foregroundColor: Colors.white,
+                    disabledBackgroundColor: widget.confirmColor.withValues(alpha: 0.35),
+                    disabledForegroundColor: Colors.white70,
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    elevation: isCoolingDown ? 0 : 2,
+                  ),
+                  child: Text(
+                    isCoolingDown
+                        ? '${widget.confirmLabel} (${_remainingSeconds}s)'
+                        : widget.confirmLabel,
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TypeToConfirmDeleteDialog extends StatefulWidget {
+  final String title;
+  final String message;
+  final String requiredText;
+  final String cancelLabel;
+
+  const _TypeToConfirmDeleteDialog({
+    required this.title,
+    required this.message,
+    required this.requiredText,
+    required this.cancelLabel,
+  });
+
+  @override
+  State<_TypeToConfirmDeleteDialog> createState() =>
+      _TypeToConfirmDeleteDialogState();
+}
+
+class _TypeToConfirmDeleteDialogState extends State<_TypeToConfirmDeleteDialog> {
+  final TextEditingController _controller = TextEditingController();
+  final FocusNode _focusNode = FocusNode();
+  String? _inlineError;
+  bool _hasTriggered = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _focusNode.requestFocus();
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  void _onTextChanged(String value) {
+    if (_hasTriggered) return;
+
+    final trimmed = value.trim();
+    final target = widget.requiredText.trim();
+
+    // Automatic confirmation trigger when exact phrase is typed
+    if (trimmed.toLowerCase() == target.toLowerCase()) {
+      _hasTriggered = true;
+      setState(() {
+        _inlineError = null;
+      });
+      // Auto-submit immediately once "I confirm" is typed
+      Future.microtask(() {
+        if (mounted) {
+          Navigator.of(context).pop(true);
+        }
+      });
+      return;
+    }
+
+    setState(() {
+      if (value.isNotEmpty &&
+          !target.toLowerCase().startsWith(value.trimLeft().toLowerCase())) {
+        _inlineError = "Please type '${widget.requiredText}' exactly.";
+      } else {
+        _inlineError = null;
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      elevation: 16,
+      backgroundColor: theme.colorScheme.surface,
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 440),
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: AppTheme.catRed.withValues(alpha: 0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.delete_forever_rounded,
+                    color: AppTheme.catRed,
+                    size: 26,
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Text(
+                    widget.title,
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: theme.colorScheme.onSurface,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Text(
+              widget.message,
+              style: TextStyle(
+                fontSize: 14,
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
+                height: 1.5,
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            // Instructional instruction
+            RichText(
+              text: TextSpan(
+                style: TextStyle(
+                  fontSize: 13,
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.9),
+                  height: 1.4,
+                ),
+                children: [
+                  const TextSpan(text: 'To confirm deletion, please type '),
+                  TextSpan(
+                    text: widget.requiredText,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.catRed,
+                    ),
+                  ),
+                  const TextSpan(
+                    text: ' below. It will delete automatically once entered:',
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 10),
+
+            // Max 10 chars input field with real-time inline validation
+            TextField(
+              controller: _controller,
+              focusNode: _focusNode,
+              maxLength: 10,
+              inputFormatters: [
+                LengthLimitingTextInputFormatter(10),
+              ],
+              onChanged: _onTextChanged,
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                color: theme.colorScheme.onSurface,
+              ),
+              decoration: InputDecoration(
+                hintText: widget.requiredText,
+                hintStyle: TextStyle(
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.35),
+                  fontWeight: FontWeight.normal,
+                ),
+                counterText: '',
+                filled: true,
+                fillColor: isDark
+                    ? const Color(0xFF1E293B)
+                    : const Color(0xFFF8FAFC),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 12,
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide(
+                    color: _inlineError != null
+                        ? AppTheme.catRed
+                        : theme.colorScheme.outline.withValues(alpha: 0.25),
+                    width: _inlineError != null ? 1.5 : 1.0,
+                  ),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide(
+                    color: _inlineError != null
+                        ? AppTheme.catRed
+                        : theme.colorScheme.primary,
+                    width: 2.0,
+                  ),
+                ),
+              ),
+            ),
+
+            // Strictly inline error underneath the input field (no bottom SnackBars)
+            if (_inlineError != null) ...[
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  const Icon(
+                    Icons.error_outline,
+                    color: AppTheme.catRed,
+                    size: 14,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      _inlineError!,
+                      style: const TextStyle(
+                        color: AppTheme.catRed,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+
+            const SizedBox(height: 22),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(false),
+                  child: Text(
+                    widget.cancelLabel,
+                    style: TextStyle(
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+

@@ -265,7 +265,7 @@ class AttendanceRosterStudent {
     final parts = [
       if (ln.isNotEmpty) '$ln,',
       if (fn.isNotEmpty) fn,
-      if (mi != null) mi,
+      ?mi,
     ];
     if (parts.isEmpty) return studentId;
     return parts.join(' ');

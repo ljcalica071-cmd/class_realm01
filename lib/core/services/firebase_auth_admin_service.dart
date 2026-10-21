@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:class_realm/core/config/env_config.dart';
@@ -137,7 +136,7 @@ class FirebaseAuthAdminService {
                     body: jsonEncode({
                       'localId': existingUid,
                       'password': password,
-                      if (displayName != null) 'displayName': displayName,
+                      'displayName': ?displayName,
                     }),
                   );
                   return existingUid;

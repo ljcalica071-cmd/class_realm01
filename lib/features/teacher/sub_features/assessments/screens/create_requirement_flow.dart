@@ -1,4 +1,3 @@
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
@@ -507,7 +506,7 @@ class _CreateRequirementFlowDialogState
                                 children: [
                                   DropdownButtonFormField<String>(
                                     isExpanded: true,
-                                    value: _selectedOfferingId,
+                                    initialValue: _selectedOfferingId,
                                     decoration: InputDecoration(
                                       contentPadding:
                                           const EdgeInsets.symmetric(

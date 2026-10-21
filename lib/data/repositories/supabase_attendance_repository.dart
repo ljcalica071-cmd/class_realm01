@@ -240,8 +240,9 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
       for (final r in records) {
         final status = r['status']?.toString().toLowerCase();
         final sId = r['student_id']?.toString() ?? '';
-        if (status == 'present') present++;
-        else if (status == 'late') late++;
+        if (status == 'present') {
+          present++;
+        } else if (status == 'late') late++;
         else if (status == 'absent') {
           absent++;
           studentAbsenceCounts[sId] = (studentAbsenceCounts[sId] ?? 0) + 1;
@@ -354,8 +355,9 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
       int present = 0, absent = 0, late = 0, excused = 0;
       for (final r in rows as List? ?? []) {
         final s = r['status']?.toString().toLowerCase();
-        if (s == 'present') present++;
-        else if (s == 'absent') absent++;
+        if (s == 'present') {
+          present++;
+        } else if (s == 'absent') absent++;
         else if (s == 'late') late++;
         else if (s == 'excused') excused++;
       }

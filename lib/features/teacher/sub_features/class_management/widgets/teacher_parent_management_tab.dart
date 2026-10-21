@@ -1561,7 +1561,7 @@ Instructions:
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
-                    value: relationship,
+                    initialValue: relationship,
                     decoration: const InputDecoration(
                       labelText: 'Relationship to Student *',
                     ),
@@ -1579,7 +1579,7 @@ Instructions:
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
-                    value: linkedStudentId,
+                    initialValue: linkedStudentId,
                     decoration: const InputDecoration(
                       labelText: 'Linked Student *',
                     ),
@@ -1648,15 +1648,24 @@ Instructions:
 
   Future<void> _toggleArchiveParent(UserModel parent) async {
     final isArchiving = !_showArchivedParents;
-    final confirm = await AppModals.showConfirmDialog(
-      context: context,
-      title: isArchiving ? 'Archive Parent Account' : 'Restore Parent Account',
-      message: isArchiving
-          ? 'Are you sure you want to archive the account for ${parent.fullName}? Their login will be disabled and they will be moved to Archives. Their profile and student links remain preserved.'
-          : 'Are you sure you want to restore ${parent.fullName}? This will restore their active status and re-enable their account login.',
-      confirmLabel: isArchiving ? 'Archive' : 'Restore',
-      confirmColor: isArchiving ? AppTheme.catOrange : AppTheme.catGreen,
-    );
+    final confirm = isArchiving
+        ? await AppModals.showArchiveCooldownDialog(
+            context: context,
+            title: 'Archive Parent Account',
+            message:
+                'Are you sure you want to archive the account for ${parent.fullName}? Their login will be disabled and they will be moved to Archives. Their profile and student links remain preserved.',
+            confirmLabel: 'Archive',
+            confirmColor: AppTheme.catOrange,
+            cooldownSeconds: 5,
+          )
+        : await AppModals.showConfirmDialog(
+            context: context,
+            title: 'Restore Parent Account',
+            message:
+                'Are you sure you want to restore ${parent.fullName}? This will restore their active status and re-enable their account login.',
+            confirmLabel: 'Restore',
+            confirmColor: AppTheme.catGreen,
+          );
 
     if (confirm == true) {
       try {
@@ -1691,13 +1700,11 @@ Instructions:
   }
 
   Future<void> _permanentlyDeleteParent(UserModel parent) async {
-    final confirm = await AppModals.showConfirmDialog(
+    final confirm = await AppModals.showTypeToConfirmDeleteDialog(
       context: context,
       title: 'Permanently Delete Parent',
       message:
-          'Are you sure you want to permanently delete ${parent.fullName}? This will erase their profile and credentials from both Supabase and Firebase Auth. This action is irreversible and cannot be undone.',
-      confirmLabel: 'Permanent Delete',
-      confirmColor: AppTheme.catRed,
+          'Are you sure you want to permanently delete ${parent.fullName}? This will erase their parent profile and account records from the school system. This action is irreversible and cannot be undone.',
     );
 
     if (confirm == true) {

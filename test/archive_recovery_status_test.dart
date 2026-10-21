@@ -1,6 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:class_realm/models/user_model.dart';
-import 'package:class_realm/data/datasources/mock/mock_database.dart';
 
 void main() {
   group('Archive and Recovery Status Preservation Logic', () {

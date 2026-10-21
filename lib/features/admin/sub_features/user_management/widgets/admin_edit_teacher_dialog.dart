@@ -246,7 +246,7 @@ class _AdminEditTeacherDialogState extends State<AdminEditTeacherDialog> {
                             ),
                             const SizedBox(height: 6),
                             DropdownButtonFormField<String>(
-                              value: _gender,
+                              initialValue: _gender,
                               isExpanded: true,
                               decoration: InputDecoration(
                                 isDense: true,

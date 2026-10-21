@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 import 'package:drift/drift.dart' show Value;
 import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/data/repositories/student_repository.dart';
@@ -122,7 +121,7 @@ class SupabaseStudentRepository implements StudentRepository {
       }
 
       final response = await query;
-      if (response == null || (response as List).isEmpty) {
+      if ((response as List).isEmpty) {
         return [];
       }
 
@@ -539,27 +538,7 @@ class SupabaseStudentRepository implements StudentRepository {
         debugPrint('Firebase Auth deletion notice for student $id: $fbErr');
       }
 
-      // 5. Clean up orphan parents if they have no other children enrolled
-      for (var pl in pLinks) {
-        final pId = pl['parent_id']?.toString();
-        if (pId != null) {
-          final otherChildren = await _client
-              .from('parent_student_links')
-              .select('student_id')
-              .eq('parent_id', pId);
-          if (otherChildren.isEmpty) {
-            try {
-              await _client.from('parent_profiles').delete().eq('parent_id', pId);
-            } catch (_) {}
-            try {
-              await _client.from('users').delete().eq('id', pId);
-            } catch (_) {}
-            try {
-              await FirebaseAuthAdminService.deleteUser(uid: pId);
-            } catch (_) {}
-          }
-        }
-      }
+      // Note: Linked parents are unlinked from this student above, but their parent accounts are preserved.
     } catch (e) {
       debugPrint('Error permanently deleting student $id: $e');
     }

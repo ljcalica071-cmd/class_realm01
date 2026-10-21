@@ -9,15 +9,18 @@ import 'package:class_realm/core/utils/logout_helper.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:class_realm/core/services/session_activity_tracker.dart';
 
+import 'package:class_realm/routes/app_routes.dart';
+
 class AdminDashboardScreen extends StatefulWidget {
-  const AdminDashboardScreen({super.key});
+  final int initialIndex;
+  const AdminDashboardScreen({super.key, this.initialIndex = 0});
 
   @override
   State<AdminDashboardScreen> createState() => _AdminDashboardScreenState();
 }
 
 class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
-  int _selectedIndex = 0;
+  late int _selectedIndex;
   bool _isSidebarExpanded = true;
   List<UserModel> _teachers = [];
   bool _isLoading = true;
@@ -26,8 +29,44 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   @override
   void initState() {
     super.initState();
+    _selectedIndex = widget.initialIndex;
+
+    // Direct URL entry security guard: only authenticated Admins allowed
+    final user = AuthRepository.instance.currentUser;
+    if (user == null || user.role != UserRole.admin) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          Navigator.pushReplacementNamed(context, AppRoutes.login);
+        }
+      });
+      return;
+    }
+
     _loadData(isInitial: true);
     _subscribeToRealtimeChanges();
+  }
+
+  void _navigateToTab(int index) {
+    if (_selectedIndex == index) return;
+    String route = AppRoutes.adminDashboard;
+    switch (index) {
+      case 0:
+        route = AppRoutes.adminDashboard;
+        break;
+      case 1:
+        route = AppRoutes.adminBroadcasts;
+        break;
+      case 2:
+        route = AppRoutes.adminTeacherManagement;
+        break;
+      case 3:
+        route = AppRoutes.adminActivityAnalytics;
+        break;
+      case 4:
+        route = AppRoutes.adminProfile;
+        break;
+    }
+    Navigator.pushReplacementNamed(context, route);
   }
 
   void _subscribeToRealtimeChanges() {
@@ -134,10 +173,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       selectedIndex: _selectedIndex,
             isExpanded: isMobile ? true : _isSidebarExpanded,
             onSelect: (index) {
-              setState(() => _selectedIndex = index);
               if (isMobile && Scaffold.of(context).isDrawerOpen) {
                 Navigator.pop(context);
               }
+              _navigateToTab(index);
             },
             onLogout: () {
               AppModals.showConfirmationDialog(

@@ -113,7 +113,23 @@ class ClassRealmApp extends StatelessWidget {
             ),
             AppRoutes.adminDashboard: (context) => const AuthGuard(
               allowedRoles: [UserRole.admin],
-              child: AdminDashboardScreen(),
+              child: AdminDashboardScreen(initialIndex: 0),
+            ),
+            AppRoutes.adminBroadcasts: (context) => const AuthGuard(
+              allowedRoles: [UserRole.admin],
+              child: AdminDashboardScreen(initialIndex: 1),
+            ),
+            AppRoutes.adminTeacherManagement: (context) => const AuthGuard(
+              allowedRoles: [UserRole.admin],
+              child: AdminDashboardScreen(initialIndex: 2),
+            ),
+            AppRoutes.adminActivityAnalytics: (context) => const AuthGuard(
+              allowedRoles: [UserRole.admin],
+              child: AdminDashboardScreen(initialIndex: 3),
+            ),
+            AppRoutes.adminProfile: (context) => const AuthGuard(
+              allowedRoles: [UserRole.admin],
+              child: AdminDashboardScreen(initialIndex: 4),
             ),
             AppRoutes.teacherDashboard: (context) => const AuthGuard(
               allowedRoles: [UserRole.teacher],

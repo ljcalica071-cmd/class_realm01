@@ -408,9 +408,8 @@ class _PasswordOtpDialogState extends State<PasswordOtpDialog>
           _error = reason == 'expired'
               ? 'This code has expired. Request a new code.'
               : 'Incorrect or expired code. $remaining attempt${remaining == 1 ? '' : 's'} remaining.';
-          // Clear field so user can enter the correct 6-digit code on next attempt
-          _otpController.clear();
-          _selectedIndex = 0;
+          // Preserve entered OTP code on incorrect attempt so user can inspect and adjust digits
+          _selectedIndex = _otpController.text.length.clamp(0, 5);
         });
         Future.delayed(const Duration(milliseconds: 50), () {
           if (mounted) _focusNode.requestFocus();
@@ -437,8 +436,7 @@ class _PasswordOtpDialogState extends State<PasswordOtpDialog>
         setState(() {
           _error =
               'Unable to verify code: ${error.toString().replaceFirst('Exception: ', '')}';
-          _otpController.clear();
-          _selectedIndex = 0;
+          _selectedIndex = _otpController.text.length.clamp(0, 5);
         });
         Future.delayed(const Duration(milliseconds: 50), () {
           if (mounted) _focusNode.requestFocus();

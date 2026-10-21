@@ -58,6 +58,9 @@ dependencies:
 
   # Local preferences (to be retired in later phase)
   shared_preferences: ^2.5.5
+  lottie: ^3.6.1
+  flutter_web_plugins:
+    sdk: flutter
 dev_dependencies:
   flutter_test:
     sdk: flutter

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:lottie/lottie.dart';
 import 'package:class_realm/core/constants/asset_paths.dart';
 import 'package:class_realm/core/utils/validators.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
@@ -31,12 +32,10 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog>
   int _selectedIndex = 0;
 
   AnimationController get _effectiveCursorBlinkController {
-    if (_cursorBlinkController == null) {
-      _cursorBlinkController = AnimationController(
+    _cursorBlinkController ??= AnimationController(
         vsync: this,
         duration: const Duration(milliseconds: 500),
       )..repeat(reverse: true);
-    }
     return _cursorBlinkController!;
   }
 
@@ -899,7 +898,7 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog>
                         AssetPaths.schoolLogo,
                         height: 52,
                         width: 52,
-                        errorBuilder: (_, __, ___) => const Icon(
+                        errorBuilder: (_, _, _) => const Icon(
                           LucideIcons.graduationCap,
                           size: 40,
                           color: Color(0xFF1A365D),
@@ -1249,26 +1248,25 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog>
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     const SizedBox(height: 12),
-                    Container(
-                      width: 68,
-                      height: 68,
-                      decoration: BoxDecoration(
-                        color: Colors.green.withValues(alpha: 0.12),
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: Colors.green.shade400,
-                          width: 2.5,
-                        ),
-                      ),
-                      child: Center(
-                        child: Icon(
-                          LucideIcons.check,
-                          color: Colors.green.shade600,
-                          size: 38,
-                        ),
+                    SizedBox(
+                      width: 140,
+                      height: 140,
+                      child: TweenAnimationBuilder<double>(
+                        duration: const Duration(milliseconds: 600),
+                        curve: Curves.easeOutBack,
+                        tween: Tween<double>(begin: 0.0, end: 1.0),
+                        builder: (context, scale, child) {
+                          return Transform.scale(
+                            scale: scale,
+                            child: Lottie.asset(
+                              'assets/animations/success_check.json',
+                              repeat: false,
+                            ),
+                          );
+                        },
                       ),
                     ),
-                    const SizedBox(height: 18),
+                    const SizedBox(height: 4),
                     Text(
                       'Teacher Account Created Successfully!',
                       textAlign: TextAlign.center,
@@ -1539,14 +1537,19 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog>
                 )
               else
                 // Step 3: Done Button
-                FilledButton.icon(
-                  onPressed: () => Navigator.pop(context, true),
-                  icon: const Icon(LucideIcons.check, size: 18),
-                  label: const Text('Done'),
-                  style: FilledButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                Center(
+                  child: SizedBox(
+                    width: 180,
+                    child: FilledButton.icon(
+                      onPressed: () => Navigator.pop(context, true),
+                      icon: const Icon(LucideIcons.check, size: 18),
+                      label: const Text('Done'),
+                      style: FilledButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
                     ),
                   ),
                 ),
@@ -1557,5 +1560,5 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog>
     ),
   ),
 );
-}
+  }
 }

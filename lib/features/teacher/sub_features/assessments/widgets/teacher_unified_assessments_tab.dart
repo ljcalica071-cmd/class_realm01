@@ -186,10 +186,10 @@ class _TeacherUnifiedAssessmentsTabState
                         fontWeight: FontWeight.w600,
                         color: theme.colorScheme.onSurface,
                       ),
-                      items: [
+                      items: {
                         'All Sections',
                         ..._teacherSections,
-                      ].toSet().map((sec) => DropdownMenuItem(value: sec, child: Text(sec))).toList(),
+                      }.map((sec) => DropdownMenuItem(value: sec, child: Text(sec))).toList(),
                       onChanged: (val) {
                         if (val != null) {
                           setState(() => _selectedClassSection = val);
