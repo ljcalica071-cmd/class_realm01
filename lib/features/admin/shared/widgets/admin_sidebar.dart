@@ -18,8 +18,9 @@ class AdminSidebar extends StatelessWidget {
   Widget _buildNavItem(BuildContext context, int index, String label, IconData icon, {int badgeCount = 0}) {
     final theme = Theme.of(context);
     final isSelected = selectedIndex == index;
-    return InkWell(
+    return GestureDetector(
       onTap: () => onSelect(index),
+      behavior: HitTestBehavior.opaque,
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -68,8 +69,7 @@ class AdminSidebar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 200),
+    return Container(
       width: isExpanded ? 260 : 80,
       color: theme.colorScheme.surface,
       child: Column(
@@ -118,14 +118,20 @@ class AdminSidebar extends StatelessWidget {
           const Divider(color: Colors.white12, height: 1),
 
           // Logout
-          Material(
-            color: Colors.transparent,
-            child: ListTile(
-              leading: const Icon(Icons.logout, color: AppTheme.catRed),
-              title: isExpanded
-                  ? const Text('Logout', style: TextStyle(color: AppTheme.catRed))
-                  : null,
-              onTap: onLogout,
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: onLogout,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 16),
+              child: Row(
+                children: [
+                  const Icon(Icons.logout, color: AppTheme.catRed, size: 24),
+                  if (isExpanded) ...[
+                    const SizedBox(width: 16),
+                    const Text('Logout', style: TextStyle(color: AppTheme.catRed, fontSize: 16)),
+                  ]
+                ],
+              ),
             ),
           ),
           const SizedBox(height: 16),
