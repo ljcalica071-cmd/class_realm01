@@ -29,8 +29,29 @@ class _AuthGuardState extends State<AuthGuard> {
     _checkAuth();
   }
 
+  @override
+  void didUpdateWidget(covariant AuthGuard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _checkAuth();
+  }
+
+  bool get _isAuthorized {
+    final user = AuthRepository.instance.currentUser;
+    if (user == null) return false;
+    if (!widget.allowedRoles.contains(user.role)) return false;
+    if (user.status == AccountStatus.deactivated || user.status == AccountStatus.rejected) {
+      return false;
+    }
+    if ((user.status == AccountStatus.pendingFirstLogin || user.status == AccountStatus.pending) &&
+        widget.child.runtimeType.toString() != 'FirstLoginScreen') {
+      return false;
+    }
+    return true;
+  }
+
   void _checkAuth() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       final user = AuthRepository.instance.currentUser;
       
       // 1. Not logged in
@@ -46,7 +67,8 @@ class _AuthGuardState extends State<AuthGuard> {
       }
 
       // 3. Status checks
-      if ((user.status == AccountStatus.pendingFirstLogin || user.status == AccountStatus.pending) && widget.child.runtimeType.toString() != 'FirstLoginScreen') {
+      if ((user.status == AccountStatus.pendingFirstLogin || user.status == AccountStatus.pending) &&
+          widget.child.runtimeType.toString() != 'FirstLoginScreen') {
         _redirect(user.role == UserRole.teacher ? AppRoutes.teacherFirstLogin : AppRoutes.studentFirstLogin);
         return;
       }
@@ -56,12 +78,14 @@ class _AuthGuardState extends State<AuthGuard> {
         _redirect(AppRoutes.login);
         return;
       }
-      
     });
   }
 
   void _redirect(String route) {
-    if (ModalRoute.of(context)?.settings.name != route) {
+    if (!mounted) return;
+    if (route == AppRoutes.login) {
+      Navigator.pushNamedAndRemoveUntil(context, AppRoutes.login, (r) => false);
+    } else if (ModalRoute.of(context)?.settings.name != route) {
       Navigator.pushReplacementNamed(context, route);
     }
   }
@@ -95,7 +119,20 @@ class _AuthGuardState extends State<AuthGuard> {
 
   @override
   Widget build(BuildContext context) {
-    // Wrap with a GestureDetector to detect ANY interaction and reset the timer
+    if (!_isAuthorized) {
+      // Direct URL entry security guard: Never render protected child content
+      // to unauthenticated or unauthorized users. Return a blank loader while redirecting.
+      return const Scaffold(
+        backgroundColor: Colors.white,
+        body: Center(
+          child: CircularProgressIndicator(
+            valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF487898)),
+          ),
+        ),
+      );
+    }
+
+    // Wrap with a Listener to detect ANY interaction and reset the inactivity timer
     return Listener(
       onPointerDown: (_) => _resetInactivityTimer(),
       onPointerMove: (_) => _resetInactivityTimer(),

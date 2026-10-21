@@ -28,7 +28,7 @@ class PasswordOtpDialog extends StatefulWidget {
     this.subtitle,
     this.submitButtonLabel = 'Verify Account',
     this.initialResendCooldown = 60,
-    this.initialInputCountdown = 600,
+    this.initialInputCountdown = 300,
     this.initialResendCount = 0,
     this.onVerify,
     this.onResend,
@@ -68,7 +68,9 @@ class _PasswordOtpDialogState extends State<PasswordOtpDialog>
       _inputCountdown = lockout.inSeconds;
       _resendCooldown = 60;
       _resendAttempts = 4;
-      _error = 'Too many incorrect attempts. Please try again after 10 minutes.';
+      final m = (lockout.inSeconds ~/ 60).toString().padLeft(2, '0');
+      final s = (lockout.inSeconds % 60).toString().padLeft(2, '0');
+      _error = 'Too many incorrect attempts. Please try again after $m:$s.';
     } else {
       _resendCooldown = widget.initialResendCooldown;
       _inputCountdown = widget.initialInputCountdown;
@@ -117,7 +119,7 @@ class _PasswordOtpDialogState extends State<PasswordOtpDialog>
     if (reset) {
       setState(() {
         _resendCooldown = 60;
-        _inputCountdown = 600;
+        _inputCountdown = 300;
         _isLockedOut = false;
       });
     }
@@ -342,7 +344,7 @@ class _PasswordOtpDialogState extends State<PasswordOtpDialog>
         _resendAttempts =
             (result['resendCount'] as num?)?.toInt() ?? _resendAttempts + 1;
         _resendCooldown = (result['resendAfter'] as num?)?.toInt() ?? 60;
-        _inputCountdown = (result['expiresIn'] as num?)?.toInt() ?? 600;
+        _inputCountdown = (result['expiresIn'] as num?)?.toInt() ?? 300;
         _error = null;
       });
       _startTimers(reset: false);
@@ -381,6 +383,7 @@ class _PasswordOtpDialogState extends State<PasswordOtpDialog>
       if (!mounted) return;
       if (result.verified) {
         await LocalStorageService.clearOtpLockout(widget.email);
+        if (!mounted) return;
         Navigator.pop(context, true);
         return;
       }
@@ -388,15 +391,17 @@ class _PasswordOtpDialogState extends State<PasswordOtpDialog>
       _failedAttempts++;
       final reason = result.reason;
       if (reason == 'locked' || _failedAttempts >= 5) {
+        final retrySeconds = result.retryAfter > 0 ? result.retryAfter : 300;
         await LocalStorageService.setOtpLockout(
           widget.email,
-          const Duration(minutes: 10),
+          Duration(seconds: retrySeconds),
         );
+        final formattedCountdown = _formatOtpTimer(retrySeconds);
         setState(() {
           _isLockedOut = true;
-          _inputCountdown = result.retryAfter > 0 ? result.retryAfter : 600;
+          _inputCountdown = retrySeconds;
           _error =
-              'Too many incorrect attempts. Please try again after 10 minutes.';
+              'Too many incorrect attempts. Please try again after $formattedCountdown.';
           _otpController.clear();
           _selectedIndex = 0;
         });
@@ -419,15 +424,17 @@ class _PasswordOtpDialogState extends State<PasswordOtpDialog>
       if (!mounted) return;
       _failedAttempts++;
       if (_failedAttempts >= 5) {
+        const retrySeconds = 300;
         await LocalStorageService.setOtpLockout(
           widget.email,
-          const Duration(minutes: 10),
+          const Duration(seconds: retrySeconds),
         );
+        final formattedCountdown = _formatOtpTimer(retrySeconds);
         setState(() {
           _isLockedOut = true;
-          _inputCountdown = 600;
+          _inputCountdown = retrySeconds;
           _error =
-              'Too many incorrect attempts. Please try again after 10 minutes.';
+              'Too many incorrect attempts. Please try again after $formattedCountdown.';
           _otpController.clear();
           _selectedIndex = 0;
         });

@@ -5,6 +5,7 @@ import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/models/admin_portal_models.dart';
 import 'package:class_realm/data/repositories/admin_repository.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
+import 'package:class_realm/core/services/rate_limit_service.dart';
 
 class AdminOverviewTab extends StatefulWidget {
   final List<UserModel> teachers;
@@ -40,8 +41,6 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
     }
     return _activeSchoolYear;
   }
-
-  DateTime? _lastSyTransitionAt;
 
   @override
   void initState() {
@@ -429,12 +428,17 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
   }
 
   Future<void> _handleNewSchoolYearDialog() async {
-    final now = DateTime.now();
-    if (_lastSyTransitionAt != null && now.difference(_lastSyTransitionAt!) < const Duration(seconds: 60)) {
-      final remaining = 60 - now.difference(_lastSyTransitionAt!).inSeconds;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Please wait $remaining seconds before transitioning School Years again.')),
-      );
+    // 30-second cooldown via RateLimitService
+    final cooldownRemaining = await RateLimitService.instance.checkAdminCooldown(
+      actionKey: 'admin_sy_switch',
+      cooldownSeconds: 30,
+    );
+    if (cooldownRemaining > 0) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Please wait $cooldownRemaining seconds before transitioning School Years again.')),
+        );
+      }
       return;
     }
 
@@ -523,7 +527,10 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
     try {
       final adminId = AuthRepository.instance.currentUser?.id ?? 'admin';
       await AdminRepository.instance.transitionToNewSchoolYear(syInput, adminId);
-      _lastSyTransitionAt = DateTime.now();
+      await RateLimitService.instance.recordAdminCooldown(
+        actionKey: 'admin_sy_switch',
+        cooldownSeconds: 30,
+      );
 
       await _loadSchoolYears();
       if (mounted) {

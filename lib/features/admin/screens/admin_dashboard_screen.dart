@@ -36,7 +36,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     if (user == null || user.role != UserRole.admin) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
-          Navigator.pushReplacementNamed(context, AppRoutes.login);
+          Navigator.pushNamedAndRemoveUntil(
+            context,
+            AppRoutes.login,
+            (route) => false,
+          );
         }
       });
       return;
@@ -162,6 +166,18 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final user = AuthRepository.instance.currentUser;
+    if (user == null || user.role != UserRole.admin || _isLoading) {
+      return const Scaffold(
+        backgroundColor: Colors.white,
+        body: Center(
+          child: CircularProgressIndicator(
+            valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF487898)),
+          ),
+        ),
+      );
+    }
+
     // Pass loaded teachers; students/parents to be populated later
     final teachers = _teachers;
     final students = <UserModel>[];

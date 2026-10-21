@@ -211,7 +211,7 @@ class EmailService {
           <span style="font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 32px; font-weight: 800; letter-spacing: 8px; color: #2563eb;">$otpCode</span>
         </div>
         
-        <p style="font-size: 13px; color: #94a3b8; text-align: center; margin: 0;">This code will expire in 10 minutes. If you did not request this, please contact the administrator immediately.</p>
+        <p style="font-size: 13px; color: #94a3b8; text-align: center; margin: 0;">This code will expire in 5 minutes. If you did not request this, please contact the administrator immediately.</p>
       </div>
     ''';
 
@@ -268,7 +268,7 @@ class EmailService {
         </div>
         <div style="background: #fef3c7; border: 1px solid #f59e0b; border-radius: 8px; padding: 12px 16px; margin: 20px 0;">
           <p style="margin: 0; color: #92400e; font-size: 13px; font-weight: bold;">
-            ⏳ Notice: This verification OTP code is valid for 10 minutes only.
+            ⏳ Notice: This verification OTP code is valid for 5 minutes only.
           </p>
           <p style="margin: 4px 0 0 0; color: #b45309; font-size: 12px;">
             The cooldown for resending is 1 minute.
@@ -282,7 +282,7 @@ class EmailService {
 
     return await sendEmail(
       to: recipientEmail,
-      subject: 'ClassRealm - Teacher Verification Code (Valid for 10 minutes)',
+      subject: 'ClassRealm - Teacher Verification Code (Valid for 5 minutes)',
       html: htmlTemplate,
     );
   }

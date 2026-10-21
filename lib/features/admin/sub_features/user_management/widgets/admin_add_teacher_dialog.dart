@@ -58,7 +58,7 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog>
   int _resendSecondsRemaining = 0;
   DateTime? _lastSentAt;
   Timer? _otpExpiryTimer;
-  int _otpSecondsRemaining = 600;
+  int _otpSecondsRemaining = 300;
   int _failedAttempts = 0;
   String? _activeChallengeEmail;
   DateTime? _activeChallengeExpiresAt;
@@ -126,7 +126,7 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog>
     return '$m:$s';
   }
 
-  void _startOtpExpiryTimer([int seconds = 600]) {
+  void _startOtpExpiryTimer([int seconds = 300]) {
     _otpExpiryTimer?.cancel();
     setState(() => _otpSecondsRemaining = seconds);
     if (seconds <= 0) return;
@@ -140,7 +140,7 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog>
         setState(() {
           _otpSecondsRemaining = 0;
           _error =
-              'The verification code has expired (10 minutes passed). Please click Resend.';
+              'The verification code has expired (5 minutes passed). Please click Resend.';
         });
       } else {
         setState(() => _otpSecondsRemaining--);
@@ -179,14 +179,14 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog>
 
     final email = _emailController.text.trim().toLowerCase();
 
-    // Anti-spam: Reuse active challenge if still valid within its 10-minute expiry window
+    // Anti-spam: Reuse active challenge if still valid within its 5-minute expiry window
     if (_activeChallengeEmail == email &&
         _activeChallengeExpiresAt != null &&
         DateTime.now().isBefore(_activeChallengeExpiresAt!)) {
       final remainingOtp = _activeChallengeExpiresAt!
           .difference(DateTime.now())
           .inSeconds
-          .clamp(0, 600);
+          .clamp(0, 300);
       _startOtpExpiryTimer(remainingOtp);
       final remainingCooldown = _lastSentAt != null
           ? (60 - DateTime.now().difference(_lastSentAt!).inSeconds).clamp(0, 60)
@@ -230,7 +230,7 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog>
         _activeChallengeExpiresAt = DateTime.tryParse(expiresAtStr);
       } else {
         _activeChallengeExpiresAt =
-            DateTime.now().add(const Duration(minutes: 10));
+            DateTime.now().add(const Duration(minutes: 5));
       }
 
       final remainingCooldown = res['reused'] == true
@@ -240,7 +240,7 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog>
       _startResendTimer(remainingCooldown);
 
       final remainingOtp =
-          (res['remainingOtpSeconds'] as num?)?.toInt() ?? 600;
+          (res['remainingOtpSeconds'] as num?)?.toInt() ?? 300;
       _startOtpExpiryTimer(remainingOtp);
 
       if (res['failedAttempts'] != null) {
@@ -299,12 +299,12 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog>
           _activeChallengeExpiresAt = DateTime.tryParse(expiresAtStr);
         } else {
           _activeChallengeExpiresAt =
-              DateTime.now().add(const Duration(minutes: 10));
+              DateTime.now().add(const Duration(minutes: 5));
         }
 
         _lastSentAt = DateTime.now();
         _startResendTimer(60);
-        _startOtpExpiryTimer(600);
+        _startOtpExpiryTimer(300);
         if (res['failedAttempts'] != null) {
           _failedAttempts = (res['failedAttempts'] as num).toInt();
         }
@@ -340,7 +340,7 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog>
 
     if (_otpSecondsRemaining <= 0) {
       setState(() => _error =
-          'The verification code has expired (10 minutes passed). Please click Resend.');
+          'The verification code has expired (5 minutes passed). Please click Resend.');
       return;
     }
 
@@ -1156,7 +1156,7 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog>
                                 ),
                                 const SizedBox(height: 3),
                                 Text(
-                                  'Check the 6-digit code sent to ${_emailController.text.trim()}. (Valid for 10 minutes)',
+                                  'Check the 6-digit code sent to ${_emailController.text.trim()}. (Valid for 5 minutes)',
                                   style: TextStyle(
                                     fontSize: 12,
                                     color: theme.colorScheme.onSurface
@@ -1204,7 +1204,7 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog>
                           Text(
                             _otpSecondsRemaining > 0
                                 ? 'Code expires in ${_formatOtpTimer(_otpSecondsRemaining)}'
-                                : 'Code expired (10 minutes passed)',
+                                : 'Code expired (5 minutes passed)',
                             style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w600,

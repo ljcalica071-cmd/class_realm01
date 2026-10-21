@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:class_realm/models/user_model.dart';
@@ -11,6 +12,7 @@ class LocalStorageService {
   static const String _savedPasswordKey = '${_authPrefix}saved_password';
   static const String _cachedUserKey = '${_authPrefix}cached_user';
   static const String _darkModeKey = '${_settingsPrefix}is_dark_mode';
+  static const String _deviceIdKey = 'classrealm_device_id';
 
   // Key Constants
   static const String keyRememberMe = _rememberMeKey;
@@ -18,6 +20,7 @@ class LocalStorageService {
   static const String keySavedPassword = _savedPasswordKey;
   static const String keyCachedUser = _cachedUserKey;
   static const String keyIsDarkMode = _darkModeKey;
+  static const String keyDeviceId = _deviceIdKey;
 
   static SharedPreferences? _preferences;
 
@@ -32,6 +35,36 @@ class LocalStorageService {
       await init();
     }
     return _preferences!;
+  }
+
+  /// Permanent Device ID: Generated once as UUID v4 and persisted in local storage.
+  /// Never removed on logout or clearAuth.
+  static Future<String> getDeviceId() async {
+    final prefs = await _prefs;
+    String? deviceId = prefs.getString(_deviceIdKey);
+    if (deviceId == null || deviceId.trim().isEmpty) {
+      deviceId = _generateUuidV4();
+      await _ensureSaved(await prefs.setString(_deviceIdKey, deviceId));
+    }
+    return deviceId;
+  }
+
+  static String getSyncDeviceId() {
+    String? deviceId = _preferences?.getString(_deviceIdKey);
+    if (deviceId == null || deviceId.trim().isEmpty) {
+      deviceId = _generateUuidV4();
+      _preferences?.setString(_deviceIdKey, deviceId);
+    }
+    return deviceId;
+  }
+
+  static String _generateUuidV4() {
+    final random = Random.secure();
+    final bytes = List<int>.generate(16, (_) => random.nextInt(256));
+    bytes[6] = (bytes[6] & 0x0f) | 0x40; // Version 4
+    bytes[8] = (bytes[8] & 0x3f) | 0x80; // Variant 10
+    final hex = bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+    return '${hex.substring(0, 8)}-${hex.substring(8, 12)}-${hex.substring(12, 16)}-${hex.substring(16, 20)}-${hex.substring(20, 32)}';
   }
 
   static Future<void> saveRememberMe(

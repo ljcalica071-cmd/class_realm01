@@ -36,6 +36,8 @@ class AuthResponsiveScaffold extends StatelessWidget {
   static InputDecoration inputDecoration({
     required String hintText,
     String? labelText,
+    String? errorText,
+    TextStyle? errorStyle,
     Widget? prefixIcon,
     Widget? suffixIcon,
     Color? focusedBorderColor,
@@ -48,6 +50,13 @@ class AuthResponsiveScaffold extends StatelessWidget {
       suffixIcon: suffixIcon,
       hintText: hintText,
       labelText: labelText,
+      errorText: errorText,
+      errorStyle: errorStyle ??
+          const TextStyle(
+            color: Color(0xFFDC2626),
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+          ),
       hintStyle: const TextStyle(
         color: Color(0xFF94A3B8),
         fontSize: 14,

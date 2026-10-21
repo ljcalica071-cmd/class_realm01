@@ -7,6 +7,7 @@ import 'package:class_realm/models/academic_models.dart';
 import 'package:class_realm/core/theme/app_theme.dart';
 import 'package:class_realm/widgets/common/expandable_notification_card.dart';
 import 'package:class_realm/core/services/email_service.dart';
+import 'package:class_realm/core/services/rate_limit_service.dart';
 
 class AdminBroadcastsTab extends StatefulWidget {
   const AdminBroadcastsTab({super.key});
@@ -19,14 +20,12 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
   // Maintenance State
   bool _isMaintenanceMode = false;
   bool _isTogglingMaintenance = false;
-  DateTime? _lastMaintenanceToggleAt;
 
   // Announcement Composer State
   final _titleController = TextEditingController();
   final _messageController = TextEditingController();
   String _selectedAudience = 'all'; // 'all', 'teachers', 'students_parents'
   bool _isSubmittingAnnouncement = false;
-  DateTime? _lastBroadcastAt;
   String? _titleError;
   String? _messageError;
 
@@ -165,13 +164,19 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
   // =========================================================================
 
   Future<void> _handleMaintenanceToggle(bool targetState) async {
-    // 5-second cooldown
-    final now = DateTime.now();
-    if (_lastMaintenanceToggleAt != null &&
-        now.difference(_lastMaintenanceToggleAt!) < const Duration(seconds: 5)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please wait 5 seconds before changing maintenance mode again.')),
-      );
+    // 5-second persistent cooldown via RateLimitService
+    final cooldownRemaining = await RateLimitService.instance.checkAdminCooldown(
+      actionKey: 'admin_maintenance_toggle',
+      cooldownSeconds: 5,
+    );
+    if (cooldownRemaining > 0) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Please wait $cooldownRemaining seconds before changing maintenance mode again.'),
+          ),
+        );
+      }
       return;
     }
 
@@ -186,13 +191,16 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
     }
 
     setState(() => _isTogglingMaintenance = true);
-    _lastMaintenanceToggleAt = DateTime.now();
 
     final adminUser = AuthRepository.instance.currentUser;
     final adminId = adminUser?.id ?? 'admin';
 
     try {
       await AdminRepository.instance.setMaintenanceMode(targetState, adminId);
+      await RateLimitService.instance.recordAdminCooldown(
+        actionKey: 'admin_maintenance_toggle',
+        cooldownSeconds: 5,
+      );
       
       // DISPATCH EMAILS IN BACKGROUND (Fire and forget)
       AdminRepository.instance.getActiveUserEmails().then((emails) {
@@ -408,12 +416,14 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
       return;
     }
 
-    // Rate Limiting & Cooldown Check (Edge Case #7)
-    final now = DateTime.now();
-    if (_lastBroadcastAt != null && now.difference(_lastBroadcastAt!) < const Duration(seconds: 30)) {
-      final remaining = 30 - now.difference(_lastBroadcastAt!).inSeconds;
+    // Rate Limiting & Cooldown Check (30 seconds via RateLimitService)
+    final cooldownRemaining = await RateLimitService.instance.checkAdminCooldown(
+      actionKey: 'admin_broadcast',
+      cooldownSeconds: 30,
+    );
+    if (cooldownRemaining > 0) {
       setState(() {
-        _messageError = 'Please wait $remaining seconds before sending another announcement.';
+        _messageError = 'Please wait $cooldownRemaining seconds before sending another announcement.';
       });
       return;
     }
@@ -436,7 +446,10 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
         adminId: adminId,
       );
 
-      _lastBroadcastAt = DateTime.now();
+      await RateLimitService.instance.recordAdminCooldown(
+        actionKey: 'admin_broadcast',
+        cooldownSeconds: 30,
+      );
       _titleController.clear();
       _messageController.clear();
 

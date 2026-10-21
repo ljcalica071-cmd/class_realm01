@@ -93,6 +93,14 @@ class ClassRealmApp extends StatelessWidget {
           themeAnimationCurve: Curves.easeInOut,
           initialRoute: AppRoutes.login,
           routes: {
+            '/': (context) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (ModalRoute.of(context)?.settings.name == '/') {
+                  Navigator.pushReplacementNamed(context, AppRoutes.login);
+                }
+              });
+              return const LoginScreen();
+            },
             AppRoutes.login: (context) => const LoginScreen(),
             AppRoutes.adminAddTeacher: (context) => const AuthGuard(
               allowedRoles: [UserRole.admin],

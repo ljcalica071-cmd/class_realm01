@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 
@@ -14,6 +15,7 @@ import 'package:class_realm/core/services/email_verification_service.dart';
 import 'package:class_realm/core/utils/parent_credential_helper.dart';
 import 'package:class_realm/core/utils/validators.dart';
 import 'package:class_realm/core/services/firebase_auth_admin_service.dart';
+import 'package:class_realm/core/services/rate_limit_service.dart';
 
 class FirstLoginOtpVerification {
   const FirstLoginOtpVerification({
@@ -34,11 +36,13 @@ class LoginAttemptException implements Exception {
     this.message, {
     this.invalidCredentials = false,
     this.providerRateLimited = false,
+    this.retryAfterSeconds,
   });
 
   final String message;
   final bool invalidCredentials;
   final bool providerRateLimited;
+  final int? retryAfterSeconds;
 
   @override
   String toString() => message;
@@ -95,6 +99,34 @@ class AuthRepository {
       return _currentUser;
     }
 
+    // 1. Check Device-Wide Lockout (10 failed attempts within 5 minutes)
+    final deviceLimit = await RateLimitService.instance.checkStatus(
+      feature: 'login_device',
+      targetIdentifier: 'device_only',
+      maxAttempts: 10,
+    );
+    if (deviceLimit.isLocked) {
+      throw LoginAttemptException(
+        'Device locked due to multiple failed login attempts. Try again in ${deviceLimit.formattedCountdown}.',
+        providerRateLimited: true,
+        retryAfterSeconds: deviceLimit.remainingSeconds,
+      );
+    }
+
+    // 2. Check Account-Specific Lockout on this Device (5 failed attempts within 5 minutes)
+    final accountLimit = await RateLimitService.instance.checkStatus(
+      feature: 'login_account',
+      targetIdentifier: cleanEmail,
+      maxAttempts: 5,
+    );
+    if (accountLimit.isLocked) {
+      throw LoginAttemptException(
+        'Account locked on this device due to multiple failed attempts. Try again in ${accountLimit.formattedCountdown}.',
+        providerRateLimited: true,
+        retryAfterSeconds: accountLimit.remainingSeconds,
+      );
+    }
+
     // Real Firebase Authentication for all users (Admin, Teacher, etc.)
     try {
       final userCredential = await _firebaseAuth.signInWithEmailAndPassword(
@@ -117,11 +149,49 @@ class AuthRepository {
             invalidCredentials: true,
           );
         }
+
+        // Authentication succeeded! Reset failed attempt counters on this device
+        unawaited(RateLimitService.instance.clearRateLimit(
+          feature: 'login_account',
+          targetIdentifier: cleanEmail,
+        ));
+        unawaited(RateLimitService.instance.clearRateLimit(
+          feature: 'login_device',
+          targetIdentifier: 'device_only',
+        ));
+
         await LocalStorageService.saveUser(_currentUser!);
         MockDatabase.instance.currentUser = _currentUser;
         return _currentUser;
       }
     } on firebase.FirebaseAuthException catch (e) {
+      // Record failure on both account-level and device-level progressive trackers
+      final accFail = await RateLimitService.instance.recordFailure(
+        feature: 'login_account',
+        targetIdentifier: cleanEmail,
+        maxAttempts: 5,
+      );
+      final devFail = await RateLimitService.instance.recordFailure(
+        feature: 'login_device',
+        targetIdentifier: 'device_only',
+        maxAttempts: 10,
+      );
+
+      if (accFail.isLocked) {
+        throw LoginAttemptException(
+          'Too many failed attempts. Account locked on this device for ${accFail.formattedCountdown}.',
+          providerRateLimited: true,
+          retryAfterSeconds: accFail.remainingSeconds,
+        );
+      }
+      if (devFail.isLocked) {
+        throw LoginAttemptException(
+          'Too many failed attempts across accounts. Device locked for ${devFail.formattedCountdown}.',
+          providerRateLimited: true,
+          retryAfterSeconds: devFail.remainingSeconds,
+        );
+      }
+
       if (e.code == 'user-disabled') {
         throw const LoginAttemptException(
           'This account has been disabled or archived. Please contact your school administrator.',
@@ -132,19 +202,21 @@ class AuthRepository {
           e.code == 'invalid-credential' ||
           e.code == 'wrong-password' ||
           e.code == 'invalid-email') {
-        throw const LoginAttemptException(
-          'Invalid email or password. Please check your credentials.',
+        final remaining = accFail.attemptsRemaining;
+        throw LoginAttemptException(
+          'Invalid email or password. $remaining attempt${remaining == 1 ? '' : 's'} remaining before lockout.',
           invalidCredentials: true,
         );
       }
       if (e.code == 'too-many-requests') {
         throw const LoginAttemptException(
-          'Too many failed attempts. Try again after 15 minutes.',
+          'Too many failed attempts. Try again after 5 minutes.',
           providerRateLimited: true,
         );
       }
       throw LoginAttemptException('Authentication Error: ${e.message}');
     } catch (e) {
+      if (e is LoginAttemptException) rethrow;
       throw Exception(e.toString());
     }
     return null;
@@ -204,7 +276,7 @@ class AuthRepository {
           return _currentUser;
         }
       } catch (e) {
-        print('Failed to restore session: $e');
+        debugPrint('Failed to restore session: $e');
         // Token might be expired or user deleted in Supabase
         await _firebaseAuth.signOut();
         await LocalStorageService.clearAuth();
@@ -455,39 +527,86 @@ class AuthRepository {
       throw Exception('A signed-in user session is required.');
     }
 
-    final lockoutRemaining = LocalStorageService.getOtpLockoutRemaining(user.email!);
-    if (lockoutRemaining != null && lockoutRemaining.inSeconds > 0) {
-      final minutes = (lockoutRemaining.inSeconds / 60).ceil();
+    final cleanEmail = user.email!.trim().toLowerCase();
+
+    // 1. Check Progressive 4-Tier Lockout for First Login OTP
+    final lockStatus = await RateLimitService.instance.checkStatus(
+      feature: 'first_login_otp',
+      targetIdentifier: cleanEmail,
+      maxAttempts: 5,
+    );
+    if (lockStatus.isLocked) {
       throw Exception(
-        'Too many incorrect attempts. Please try again after $minutes minute(s).',
+        'Too many failed attempts. Locked out for ${lockStatus.formattedCountdown}.',
       );
     }
 
-    final now = DateTime.now();
+    final now = DateTime.now().toUtc();
 
-    // 1. Anti-spam: If not an explicit resend, and an active code is still valid within 10 minutes,
-    // reuse existing OTP session! Prevents spamming emails when clicking 'X' and reopening.
-    if (!isResend &&
-        _pendingOtpCode != null &&
-        _pendingOtpExpiry != null &&
-        now.isBefore(_pendingOtpExpiry!)) {
-      final remainingExpiresIn =
-          _pendingOtpExpiry!.difference(now).inSeconds.clamp(0, 600);
-      final remainingCooldown = _lastFirstLoginOtpSentAt != null
-          ? (60 - now.difference(_lastFirstLoginOtpSentAt!).inSeconds).clamp(0, 60)
-          : 0;
+    // 2. Anti-spam & Persistence on F5/Back Navigation:
+    // If not an explicit resend, check Supabase for active non-expired challenge within 5 minutes.
+    if (!isResend) {
+      // Check in-memory first
+      if (_pendingOtpCode != null &&
+          _pendingOtpExpiry != null &&
+          now.isBefore(_pendingOtpExpiry!)) {
+        final remainingExpiresIn =
+            _pendingOtpExpiry!.difference(now).inSeconds.clamp(0, 300);
+        final remainingCooldown = _lastFirstLoginOtpSentAt != null
+            ? (60 - now.difference(_lastFirstLoginOtpSentAt!).inSeconds).clamp(0, 60)
+            : 0;
 
-      return {
-        'sent': true,
-        'reused': true,
-        'email': user.email,
-        'expiresIn': remainingExpiresIn,
-        'resendAfter': remainingCooldown,
-        'resendCount': _firstLoginResendCount,
-      };
+        return {
+          'sent': true,
+          'reused': true,
+          'email': cleanEmail,
+          'expiresIn': remainingExpiresIn,
+          'resendAfter': remainingCooldown,
+          'resendCount': _firstLoginResendCount,
+        };
+      }
+
+      // Check Supabase first_login_otp_verifications
+      try {
+        final existing = await _supabaseClient
+            .from('first_login_otp_verifications')
+            .select()
+            .eq('user_id', user.uid)
+            .maybeSingle();
+
+        if (existing != null && existing['is_verified'] != true) {
+          final expStr = existing['expires_at']?.toString();
+          final expiresAt = expStr != null ? DateTime.tryParse(expStr)?.toUtc() : null;
+          if (expiresAt != null && now.isBefore(expiresAt)) {
+            final sentStr = existing['last_sent_at']?.toString();
+            final lastSentAt = sentStr != null ? DateTime.tryParse(sentStr)?.toUtc() : null;
+
+            _pendingOtpCode = existing['code_hash']?.toString();
+            _pendingOtpExpiry = expiresAt;
+            _lastFirstLoginOtpSentAt = lastSentAt ?? now;
+            _firstLoginResendCount = (existing['resend_count'] as num?)?.toInt() ?? 0;
+
+            final remainingExpiresIn = expiresAt.difference(now).inSeconds.clamp(0, 300);
+            final remainingCooldown = lastSentAt != null
+                ? (60 - now.difference(lastSentAt).inSeconds).clamp(0, 60)
+                : 0;
+
+            return {
+              'sent': true,
+              'reused': true,
+              'email': cleanEmail,
+              'expiresIn': remainingExpiresIn,
+              'resendAfter': remainingCooldown,
+              'resendCount': _firstLoginResendCount,
+            };
+          }
+        }
+      } catch (e) {
+        debugPrint('[FirstLoginOTP] Supabase active session lookup notice: $e');
+      }
     }
 
-    // 2. If explicit resend, enforce 60s cooldown and max 4 resend attempts
+    // 3. If explicit resend, enforce 60s cooldown and max 4 resend attempts
     if (isResend) {
       if (_lastFirstLoginOtpSentAt != null &&
           now.difference(_lastFirstLoginOtpSentAt!).inSeconds < 60) {
@@ -496,10 +615,20 @@ class AuthRepository {
         throw Exception(
             'Please wait $remaining seconds before requesting another code.');
       }
-      if (_firstLoginResendCount >= 4) {
-        throw Exception('Maximum resend attempts reached. Try again later.');
+
+      final resendStatus = await RateLimitService.instance.recordResend(
+        feature: 'first_login_otp',
+        targetIdentifier: cleanEmail,
+        maxResends: 4,
+        userId: user.uid,
+      );
+
+      if (resendStatus.isLocked) {
+        throw Exception(
+          'Maximum resend attempts reached (4/4). Locked out for ${resendStatus.formattedCountdown}.',
+        );
       }
-      _firstLoginResendCount++;
+      _firstLoginResendCount = resendStatus.resendCount;
     } else {
       _firstLoginResendCount = 0;
       _otpAttempts = 0;
@@ -509,18 +638,18 @@ class AuthRepository {
     final random = Random.secure();
     final code = (100000 + random.nextInt(900000)).toString();
     _pendingOtpCode = code;
-    _pendingOtpExpiry = now.add(const Duration(minutes: 10)); // Exactly 10 minutes
+    _pendingOtpExpiry = now.add(const Duration(minutes: 5)); // Exactly 5 minutes
     _lastFirstLoginOtpSentAt = now;
 
     debugPrint('========================================================');
     debugPrint(
-      '[ClassRealm Pure Dart OTP] Verification code for ${user.email}: $code',
+      '[ClassRealm Pure Dart OTP] Verification code for $cleanEmail: $code (Valid for 5 mins)',
     );
     debugPrint('========================================================');
 
     try {
       await EmailService.instance.sendPasswordChangeOtpEmail(
-        recipientEmail: user.email!,
+        recipientEmail: cleanEmail,
         recipientName: user.displayName ?? 'ClassRealm User',
         otpCode: code,
       );
@@ -530,6 +659,7 @@ class AuthRepository {
     try {
       await _supabaseClient.from('first_login_otp_verifications').upsert({
         'user_id': user.uid,
+        'email': cleanEmail,
         'code_hash': code,
         'expires_at': _pendingOtpExpiry!.toUtc().toIso8601String(),
         'last_sent_at': now.toUtc().toIso8601String(),
@@ -545,8 +675,8 @@ class AuthRepository {
     return {
       'sent': true,
       'reused': false,
-      'email': user.email,
-      'expiresIn': 600, // 10 minutes
+      'email': cleanEmail,
+      'expiresIn': 300, // Exactly 5 minutes
       'resendAfter': 60, // 60 seconds
       'resendCount': _firstLoginResendCount,
     };
@@ -554,18 +684,42 @@ class AuthRepository {
 
   Future<FirstLoginOtpVerification> verifyFirstLoginOtp(String code) async {
     final user = _firebaseAuth.currentUser;
-    final email = user?.email ?? '';
+    final email = user?.email?.trim().toLowerCase() ?? '';
 
     if (email.isNotEmpty) {
-      final lockoutRemaining = LocalStorageService.getOtpLockoutRemaining(email);
-      if (lockoutRemaining != null && lockoutRemaining.inSeconds > 0) {
+      final lockStatus = await RateLimitService.instance.checkStatus(
+        feature: 'first_login_otp',
+        targetIdentifier: email,
+        maxAttempts: 5,
+      );
+      if (lockStatus.isLocked) {
         return FirstLoginOtpVerification(
           verified: false,
           reason: 'locked',
           attemptsRemaining: 0,
-          retryAfter: lockoutRemaining.inSeconds,
+          retryAfter: lockStatus.remainingSeconds,
         );
       }
+    }
+
+    // Fallback: recover active OTP from Supabase if in-memory cleared (e.g. on F5)
+    final now = DateTime.now().toUtc();
+    if (_pendingOtpCode == null && user != null) {
+      try {
+        final existing = await _supabaseClient
+            .from('first_login_otp_verifications')
+            .select()
+            .eq('user_id', user.uid)
+            .maybeSingle();
+        if (existing != null) {
+          final expStr = existing['expires_at']?.toString();
+          final expiresAt = expStr != null ? DateTime.tryParse(expStr)?.toUtc() : null;
+          if (expiresAt != null && now.isBefore(expiresAt)) {
+            _pendingOtpCode = existing['code_hash']?.toString();
+            _pendingOtpExpiry = expiresAt;
+          }
+        }
+      } catch (_) {}
     }
 
     final cleanCode = code.trim();
@@ -576,7 +730,7 @@ class AuthRepository {
       );
     }
 
-    if (DateTime.now().isAfter(_pendingOtpExpiry!)) {
+    if (now.isAfter(_pendingOtpExpiry!)) {
       _pendingOtpCode = null;
       return const FirstLoginOtpVerification(
         verified: false,
@@ -584,57 +738,50 @@ class AuthRepository {
       );
     }
 
-    _otpAttempts++;
-    if (_otpAttempts >= 5) {
-      _pendingOtpCode = null;
-      if (email.isNotEmpty) {
-        await LocalStorageService.setOtpLockout(
-          email,
-          const Duration(minutes: 10),
+    if (cleanCode != _pendingOtpCode) {
+      final failStatus = await RateLimitService.instance.recordFailure(
+        feature: 'first_login_otp',
+        targetIdentifier: email,
+        maxAttempts: 5,
+        userId: user?.uid,
+      );
+
+      _otpAttempts = failStatus.failedAttempts;
+
+      try {
+        await _supabaseClient
+            .from('first_login_otp_verifications')
+            .update({
+              'failed_attempts': _otpAttempts,
+              'updated_at': now.toIso8601String(),
+            })
+            .eq('user_id', user?.uid ?? '');
+      } catch (_) {}
+
+      if (failStatus.isLocked) {
+        _pendingOtpCode = null;
+        return FirstLoginOtpVerification(
+          verified: false,
+          reason: 'locked',
+          attemptsRemaining: 0,
+          retryAfter: failStatus.remainingSeconds,
         );
       }
-      try {
-        await _supabaseClient
-            .from('first_login_otp_verifications')
-            .update({
-              'failed_attempts': _otpAttempts,
-              'updated_at': DateTime.now().toUtc().toIso8601String(),
-            })
-            .eq('user_id', user?.uid ?? '');
-      } catch (_) {}
-
-      return const FirstLoginOtpVerification(
-        verified: false,
-        reason: 'locked',
-        attemptsRemaining: 0,
-        retryAfter: 600,
-      );
-    }
-
-    if (cleanCode != _pendingOtpCode) {
-      try {
-        await _supabaseClient
-            .from('first_login_otp_verifications')
-            .update({
-              'failed_attempts': _otpAttempts,
-              'updated_at': DateTime.now().toUtc().toIso8601String(),
-            })
-            .eq('user_id', user?.uid ?? '');
-      } catch (_) {}
 
       return FirstLoginOtpVerification(
         verified: false,
         reason: 'Invalid verification code. Please check and try again.',
-        attemptsRemaining: (5 - _otpAttempts).clamp(0, 5),
+        attemptsRemaining: failStatus.attemptsRemaining,
       );
     }
 
+    // Code matched!
     try {
       await _supabaseClient
           .from('first_login_otp_verifications')
           .update({
             'is_verified': true,
-            'updated_at': DateTime.now().toUtc().toIso8601String(),
+            'updated_at': now.toIso8601String(),
           })
           .eq('user_id', user?.uid ?? '');
     } catch (_) {}
@@ -644,8 +791,12 @@ class AuthRepository {
     _lastFirstLoginOtpSentAt = null;
     _firstLoginResendCount = 0;
     _otpAttempts = 0;
+
     if (email.isNotEmpty) {
-      await LocalStorageService.clearOtpLockout(email);
+      await RateLimitService.instance.clearRateLimit(
+        feature: 'first_login_otp',
+        targetIdentifier: email,
+      );
     }
     return const FirstLoginOtpVerification(verified: true, reason: null);
   }
@@ -763,11 +914,15 @@ class AuthRepository {
       );
     }
 
-    final lockoutRemaining = LocalStorageService.getOtpLockoutRemaining(cleanEmail);
-    if (lockoutRemaining != null && lockoutRemaining.inSeconds > 0) {
-      final minutes = (lockoutRemaining.inSeconds / 60).ceil();
+    // 1. Check 4-Tier Progressive Lockout for Forgot Password
+    final lockStatus = await RateLimitService.instance.checkStatus(
+      feature: 'forgot_password',
+      targetIdentifier: cleanEmail,
+      maxAttempts: 5,
+    );
+    if (lockStatus.isLocked) {
       throw Exception(
-        'Too many incorrect attempts. Please try again after $minutes minute(s).',
+        'Too many failed attempts. Locked out for ${lockStatus.formattedCountdown}.',
       );
     }
 
@@ -789,28 +944,71 @@ class AuthRepository {
       );
     }
 
-    final now = DateTime.now();
+    final now = DateTime.now().toUtc();
 
-    // Anti-spam: Reuse active OTP challenge if already sent and not expired
-    if (!isResend &&
-        _forgotPasswordOtpCode != null &&
-        _forgotPasswordEmail == cleanEmail &&
-        _forgotPasswordOtpExpiry != null &&
-        now.isBefore(_forgotPasswordOtpExpiry!)) {
-      final remainingExpiresIn =
-          _forgotPasswordOtpExpiry!.difference(now).inSeconds.clamp(0, 600);
-      final remainingCooldown = _lastForgotPasswordOtpSentAt != null
-          ? (60 - now.difference(_lastForgotPasswordOtpSentAt!).inSeconds).clamp(0, 60)
-          : 0;
+    // 2. Anti-spam & Persistence on F5/Back Navigation:
+    // Check Supabase password_reset_otps for active non-expired challenge within 5 minutes.
+    if (!isResend) {
+      // In-memory check first
+      if (_forgotPasswordOtpCode != null &&
+          _forgotPasswordEmail == cleanEmail &&
+          _forgotPasswordOtpExpiry != null &&
+          now.isBefore(_forgotPasswordOtpExpiry!)) {
+        final remainingExpiresIn =
+            _forgotPasswordOtpExpiry!.difference(now).inSeconds.clamp(0, 300);
+        final remainingCooldown = _lastForgotPasswordOtpSentAt != null
+            ? (60 - now.difference(_lastForgotPasswordOtpSentAt!).inSeconds).clamp(0, 60)
+            : 0;
 
-      return {
-        'sent': true,
-        'reused': true,
-        'email': cleanEmail,
-        'expiresIn': remainingExpiresIn,
-        'resendAfter': remainingCooldown,
-        'resendCount': _forgotPasswordResendCount,
-      };
+        return {
+          'sent': true,
+          'reused': true,
+          'email': cleanEmail,
+          'expiresIn': remainingExpiresIn,
+          'resendAfter': remainingCooldown,
+          'resendCount': _forgotPasswordResendCount,
+        };
+      }
+
+      // Check Supabase password_reset_otps table
+      try {
+        final existing = await _supabaseClient
+            .from('password_reset_otps')
+            .select()
+            .eq('email', cleanEmail)
+            .maybeSingle();
+
+        if (existing != null && existing['is_verified'] != true) {
+          final expStr = existing['expires_at']?.toString();
+          final expiresAt = expStr != null ? DateTime.tryParse(expStr)?.toUtc() : null;
+          if (expiresAt != null && now.isBefore(expiresAt)) {
+            final sentStr = existing['last_sent_at']?.toString();
+            final lastSentAt = sentStr != null ? DateTime.tryParse(sentStr)?.toUtc() : null;
+
+            _forgotPasswordOtpCode = existing['code_hash']?.toString();
+            _forgotPasswordOtpExpiry = expiresAt;
+            _lastForgotPasswordOtpSentAt = lastSentAt ?? now;
+            _forgotPasswordEmail = cleanEmail;
+            _forgotPasswordResendCount = (existing['resend_count'] as num?)?.toInt() ?? 0;
+
+            final remainingExpiresIn = expiresAt.difference(now).inSeconds.clamp(0, 300);
+            final remainingCooldown = lastSentAt != null
+                ? (60 - now.difference(lastSentAt).inSeconds).clamp(0, 60)
+                : 0;
+
+            return {
+              'sent': true,
+              'reused': true,
+              'email': cleanEmail,
+              'expiresIn': remainingExpiresIn,
+              'resendAfter': remainingCooldown,
+              'resendCount': _forgotPasswordResendCount,
+            };
+          }
+        }
+      } catch (e) {
+        debugPrint('[ForgotPasswordOTP] Supabase active session lookup notice: $e');
+      }
     }
 
     if (isResend) {
@@ -821,10 +1019,20 @@ class AuthRepository {
         throw Exception(
             'Please wait $remaining seconds before requesting another code.');
       }
-      if (_forgotPasswordResendCount >= 4) {
-        throw Exception('Maximum resend attempts reached. Try again later.');
+
+      final resendStatus = await RateLimitService.instance.recordResend(
+        feature: 'forgot_password',
+        targetIdentifier: cleanEmail,
+        maxResends: 4,
+        userId: user.id,
+      );
+
+      if (resendStatus.isLocked) {
+        throw Exception(
+          'Maximum resend attempts reached (4/4). Locked out for ${resendStatus.formattedCountdown}.',
+        );
       }
-      _forgotPasswordResendCount++;
+      _forgotPasswordResendCount = resendStatus.resendCount;
     } else {
       _forgotPasswordResendCount = 0;
       _forgotPasswordAttempts = 0;
@@ -834,14 +1042,14 @@ class AuthRepository {
     final random = Random.secure();
     final code = (100000 + random.nextInt(900000)).toString();
     _forgotPasswordOtpCode = code;
-    _forgotPasswordOtpExpiry = now.add(const Duration(minutes: 10)); // Exactly 10 minutes
+    _forgotPasswordOtpExpiry = now.add(const Duration(minutes: 5)); // Exactly 5 minutes
     _lastForgotPasswordOtpSentAt = now;
     _forgotPasswordEmail = cleanEmail;
     _forgotPasswordVerified = false;
 
     debugPrint('========================================================');
     debugPrint(
-      '[ClassRealm Pure Dart Forgot Password OTP] Verification code for $cleanEmail: $code',
+      '[ClassRealm Pure Dart Forgot Password OTP] Verification code for $cleanEmail: $code (Valid for 5 mins)',
     );
     debugPrint('========================================================');
 
@@ -855,12 +1063,28 @@ class AuthRepository {
       debugPrint('[AuthRepository] EmailService send error: $e');
     }
 
+    // Persist OTP challenge in Supabase password_reset_otps table
+    try {
+      await _supabaseClient.from('password_reset_otps').upsert({
+        'email': cleanEmail,
+        'code_hash': code,
+        'expires_at': _forgotPasswordOtpExpiry!.toUtc().toIso8601String(),
+        'last_sent_at': now.toUtc().toIso8601String(),
+        'resend_count': _forgotPasswordResendCount,
+        'failed_attempts': _forgotPasswordAttempts,
+        'is_verified': false,
+        'updated_at': now.toUtc().toIso8601String(),
+      });
+    } catch (e) {
+      debugPrint('[ForgotPasswordOTP] Supabase storage notice: $e');
+    }
+
     return {
       'sent': true,
       'reused': false,
       'email': cleanEmail,
-      'expiresIn': 600,
-      'resendAfter': 60,
+      'expiresIn': 300, // Exactly 5 minutes
+      'resendAfter': 60, // 60 seconds
       'resendCount': _forgotPasswordResendCount,
     };
   }
@@ -871,15 +1095,40 @@ class AuthRepository {
     final email = _forgotPasswordEmail ?? '';
 
     if (email.isNotEmpty) {
-      final lockoutRemaining = LocalStorageService.getOtpLockoutRemaining(email);
-      if (lockoutRemaining != null && lockoutRemaining.inSeconds > 0) {
+      final lockStatus = await RateLimitService.instance.checkStatus(
+        feature: 'forgot_password',
+        targetIdentifier: email,
+        maxAttempts: 5,
+      );
+      if (lockStatus.isLocked) {
         return FirstLoginOtpVerification(
           verified: false,
           reason: 'locked',
           attemptsRemaining: 0,
-          retryAfter: lockoutRemaining.inSeconds,
+          retryAfter: lockStatus.remainingSeconds,
         );
       }
+    }
+
+    final now = DateTime.now().toUtc();
+
+    // Fallback: recover active OTP from Supabase if in-memory cleared (e.g. on F5)
+    if (_forgotPasswordOtpCode == null && email.isNotEmpty) {
+      try {
+        final existing = await _supabaseClient
+            .from('password_reset_otps')
+            .select()
+            .eq('email', email)
+            .maybeSingle();
+        if (existing != null) {
+          final expStr = existing['expires_at']?.toString();
+          final expiresAt = expStr != null ? DateTime.tryParse(expStr)?.toUtc() : null;
+          if (expiresAt != null && now.isBefore(expiresAt)) {
+            _forgotPasswordOtpCode = existing['code_hash']?.toString();
+            _forgotPasswordOtpExpiry = expiresAt;
+          }
+        }
+      } catch (_) {}
     }
 
     if (_forgotPasswordOtpCode == null || _forgotPasswordOtpExpiry == null) {
@@ -889,46 +1138,72 @@ class AuthRepository {
       );
     }
 
-    if (DateTime.now().isAfter(_forgotPasswordOtpExpiry!)) {
+    if (now.isAfter(_forgotPasswordOtpExpiry!)) {
       _forgotPasswordOtpCode = null;
       _forgotPasswordVerified = false;
       return const FirstLoginOtpVerification(
         verified: false,
-        reason: 'Verification code has expired. Please request a new code.',
-      );
-    }
-
-    _forgotPasswordAttempts++;
-    if (_forgotPasswordAttempts >= 5) {
-      _forgotPasswordOtpCode = null;
-      _forgotPasswordVerified = false;
-      if (email.isNotEmpty) {
-        await LocalStorageService.setOtpLockout(
-          email,
-          const Duration(minutes: 10),
-        );
-      }
-      return const FirstLoginOtpVerification(
-        verified: false,
-        reason: 'locked',
-        attemptsRemaining: 0,
-        retryAfter: 600,
+        reason: 'expired',
       );
     }
 
     if (cleanCode != _forgotPasswordOtpCode) {
+      final failStatus = await RateLimitService.instance.recordFailure(
+        feature: 'forgot_password',
+        targetIdentifier: email,
+        maxAttempts: 5,
+      );
+
+      _forgotPasswordAttempts = failStatus.failedAttempts;
+
+      try {
+        await _supabaseClient
+            .from('password_reset_otps')
+            .update({
+              'failed_attempts': _forgotPasswordAttempts,
+              'updated_at': now.toIso8601String(),
+            })
+            .eq('email', email);
+      } catch (_) {}
+
+      if (failStatus.isLocked) {
+        _forgotPasswordOtpCode = null;
+        _forgotPasswordVerified = false;
+        return FirstLoginOtpVerification(
+          verified: false,
+          reason: 'locked',
+          attemptsRemaining: 0,
+          retryAfter: failStatus.remainingSeconds,
+        );
+      }
+
       return FirstLoginOtpVerification(
         verified: false,
         reason: 'Invalid verification code. Please check and try again.',
-        attemptsRemaining: (5 - _forgotPasswordAttempts).clamp(0, 5),
+        attemptsRemaining: failStatus.attemptsRemaining,
       );
     }
+
+    // Code matched!
+    try {
+      await _supabaseClient
+          .from('password_reset_otps')
+          .update({
+            'is_verified': true,
+            'updated_at': now.toIso8601String(),
+          })
+          .eq('email', email);
+    } catch (_) {}
 
     _forgotPasswordOtpCode = null;
     _forgotPasswordVerified = true;
     _forgotPasswordAttempts = 0;
+
     if (email.isNotEmpty) {
-      await LocalStorageService.clearOtpLockout(email);
+      await RateLimitService.instance.clearRateLimit(
+        feature: 'forgot_password',
+        targetIdentifier: email,
+      );
     }
     return const FirstLoginOtpVerification(verified: true, reason: null);
   }
@@ -940,8 +1215,26 @@ class AuthRepository {
   }) async {
     final cleanEmail = email.trim().toLowerCase();
 
-    // Strict Security Gate
-    if (!_forgotPasswordVerified || _forgotPasswordEmail != cleanEmail) {
+    // Verify through Supabase password_reset_otps or in-memory gate
+    bool isAuthorized = _forgotPasswordVerified && _forgotPasswordEmail == cleanEmail;
+    if (!isAuthorized) {
+      try {
+        final existing = await _supabaseClient
+            .from('password_reset_otps')
+            .select()
+            .eq('email', cleanEmail)
+            .maybeSingle();
+        if (existing != null && existing['is_verified'] == true) {
+          final expStr = existing['expires_at']?.toString();
+          final expiresAt = expStr != null ? DateTime.tryParse(expStr)?.toUtc() : null;
+          if (expiresAt != null && DateTime.now().toUtc().isBefore(expiresAt)) {
+            isAuthorized = true;
+          }
+        }
+      } catch (_) {}
+    }
+
+    if (!isAuthorized) {
       return 'Unauthorized: OTP verification must be completed before updating your password.';
     }
 
@@ -998,7 +1291,12 @@ class AuthRepository {
             .eq('student_id', user.id);
       } catch (_) {}
 
-      // 3. Update local session or mock database if applicable
+      // 3. Clear verified OTP record after successful password change
+      try {
+        await _supabaseClient.from('password_reset_otps').delete().eq('email', cleanEmail);
+      } catch (_) {}
+
+      // 4. Update local session or mock database if applicable
       final mockIndex = MockDatabase.instance.users.indexWhere(
         (u) => u.email.trim().toLowerCase() == cleanEmail,
       );
@@ -1491,7 +1789,21 @@ class AuthRepository {
       debugPrint('Supabase user check notice: $e');
     }
 
-    // 2. Check for existing active challenge in admin_teacher_email_challenges
+    // 2. Check rate limit & lockout status
+    final rateStatus = await RateLimitService.instance.checkStatus(
+      feature: 'admin_add_teacher_otp',
+      targetIdentifier: cleanEmail,
+      maxAttempts: 5,
+    );
+    if (rateStatus.isLocked) {
+      throw AdminTeacherException(
+        'Too many failed attempts. Account temporarily locked for ${rateStatus.formattedCountdown}.',
+        maxAttemptsExceeded: true,
+        failedAttempts: rateStatus.failedAttempts,
+      );
+    }
+
+    // 3. Check for existing active challenge in admin_teacher_email_challenges
     Map<String, dynamic>? priorChallenge;
     try {
       final res = await _supabaseClient
@@ -1509,28 +1821,9 @@ class AuthRepository {
     final now = DateTime.now().toUtc();
 
     if (priorChallenge != null) {
-      // Check lockout
-      final lockedUntilStr = priorChallenge['locked_until']?.toString();
-      if (lockedUntilStr != null && lockedUntilStr.isNotEmpty) {
-        final lockedUntil = DateTime.tryParse(lockedUntilStr)?.toUtc();
-        if (lockedUntil != null && now.isBefore(lockedUntil)) {
-          throw const AdminTeacherException(
-            'Too many incorrect codes. Please try again after 15 minutes.',
-            maxAttemptsExceeded: true,
-            failedAttempts: 5,
-          );
-        }
-      }
-
-      final priorFailedAttempts =
-          (priorChallenge['failed_attempts'] as num?)?.toInt() ?? 0;
-      if (priorFailedAttempts >= 5) {
-        throw const AdminTeacherException(
-          'Maximum verification attempts exceeded (5/5). Please click Back to recheck teacher details.',
-          maxAttemptsExceeded: true,
-          failedAttempts: 5,
-        );
-      }
+      final priorResendCount =
+          (priorChallenge['resend_count'] as num?)?.toInt() ?? 0;
+      final priorFailedAttempts = rateStatus.failedAttempts;
 
       final lastSentAtStr = priorChallenge['last_sent_at']?.toString();
       final lastSentAt =
@@ -1540,7 +1833,7 @@ class AuthRepository {
       int secondsSinceLastSent = 999;
       if (lastSentAt != null) {
         final diff = now.difference(lastSentAt).inSeconds;
-        if (diff >= 0 && diff <= 600) {
+        if (diff >= 0 && diff <= 300) {
           secondsSinceLastSent = diff;
         }
       }
@@ -1552,17 +1845,30 @@ class AuthRepository {
           priorExpiresAt != null && now.isBefore(priorExpiresAt);
 
       if (isResend) {
+        if (priorResendCount >= 4) {
+          final lockStatus = await RateLimitService.instance.recordFailure(
+            feature: 'admin_add_teacher_otp',
+            targetIdentifier: cleanEmail,
+            maxAttempts: 0, // force lockout on 4th resend
+          );
+          throw AdminTeacherException(
+            'Maximum 4 resends reached. Please wait ${lockStatus.formattedCountdown} before requesting a new code.',
+            maxAttemptsExceeded: true,
+            failedAttempts: 5,
+          );
+        }
+
         if (secondsSinceLastSent < 60) {
           final waitSec = (60 - secondsSinceLastSent).clamp(1, 60);
           throw AdminTeacherException(
               'Please wait ${waitSec}s before requesting another code.');
         }
       } else {
-        // If user navigates Back and clicks Send again while an active code is still valid within 10 minutes:
+        // Anti-spam / Anti-F5: If user navigates Back and clicks Send again while an active code is still valid within 5 minutes:
         if (isChallengeStillValid) {
           final remainingCooldown = (60 - secondsSinceLastSent).clamp(0, 60);
           final remainingOtpSeconds =
-              priorExpiresAt.difference(now).inSeconds.clamp(0, 600);
+              priorExpiresAt.difference(now).inSeconds.clamp(0, 300);
           return {
             'sent': false,
             'reused': true,
@@ -1570,25 +1876,27 @@ class AuthRepository {
             'remainingCooldownSeconds': remainingCooldown,
             'remainingOtpSeconds': remainingOtpSeconds,
             'failedAttempts': priorFailedAttempts,
+            'resendCount': priorResendCount,
             'expiresAt': priorExpiresAt.toIso8601String(),
           };
         }
       }
     }
 
-    // 3. Generate a fresh 6-digit OTP code (valid for 10 minutes)
+    // 4. Generate a fresh 6-digit OTP code (strictly valid for 5 minutes / 300 seconds)
     final random = Random.secure();
     final code = (100000 + random.nextInt(900000)).toString();
-    final expiresAt = now.add(const Duration(minutes: 10));
-    final currentFailedAttempts =
-        (priorChallenge?['failed_attempts'] as num?)?.toInt() ?? 0;
+    final expiresAt = now.add(const Duration(minutes: 5));
+    final currentResendCount = isResend
+        ? (((priorChallenge?['resend_count'] as num?)?.toInt() ?? 0) + 1)
+        : 0;
 
     debugPrint('========================================================');
     debugPrint(
-        '[ClassRealm Teacher OTP] Code for $cleanEmail: $code (Valid for 10 mins)');
+        '[ClassRealm Teacher OTP] Code for $cleanEmail: $code (Valid for 5 mins)');
     debugPrint('========================================================');
 
-    // 4. Dispatch verification code via EmailService
+    // 5. Dispatch verification code via EmailService
     final fullName = [firstName.trim(), middleName.trim(), lastName.trim()]
         .where((s) => s.isNotEmpty)
         .join(' ');
@@ -1612,9 +1920,10 @@ class AuthRepository {
       throw AdminTeacherException(msg);
     }
 
-    // 5. Persist challenge in Supabase admin_teacher_email_challenges
+    // 6. Persist challenge in Supabase admin_teacher_email_challenges
     final bdayStr =
         '${birthday.year.toString().padLeft(4, '0')}-${birthday.month.toString().padLeft(2, '0')}-${birthday.day.toString().padLeft(2, '0')}';
+    final deviceId = LocalStorageService.getSyncDeviceId();
 
     try {
       await _supabaseClient.from('admin_teacher_email_challenges').upsert({
@@ -1628,7 +1937,9 @@ class AuthRepository {
         'created_by': currentUser?.id ?? 'admin',
         'expires_at': expiresAt.toUtc().toIso8601String(),
         'last_sent_at': now.toUtc().toIso8601String(),
-        'failed_attempts': currentFailedAttempts,
+        'failed_attempts': rateStatus.failedAttempts,
+        'resend_count': currentResendCount,
+        'device_id': deviceId,
         'locked_until': null,
       });
     } catch (e) {
@@ -1639,8 +1950,9 @@ class AuthRepository {
       'sent': true,
       'email': cleanEmail,
       'remainingCooldownSeconds': 60,
-      'remainingOtpSeconds': 600,
-      'failedAttempts': currentFailedAttempts,
+      'remainingOtpSeconds': 300,
+      'failedAttempts': rateStatus.failedAttempts,
+      'resendCount': currentResendCount,
       'expiresAt': expiresAt.toIso8601String(),
     };
   }
@@ -1720,7 +2032,21 @@ class AuthRepository {
     final cleanEmail = email.trim().toLowerCase();
     final cleanCode = code.trim();
 
-    // 1. Fetch challenge from admin_teacher_email_challenges
+    // 1. Check progressive lockout status
+    final rateStatus = await RateLimitService.instance.checkStatus(
+      feature: 'admin_add_teacher_otp',
+      targetIdentifier: cleanEmail,
+      maxAttempts: 5,
+    );
+    if (rateStatus.isLocked) {
+      throw AdminTeacherException(
+        'Too many incorrect codes. Please try again after ${rateStatus.formattedCountdown}.',
+        maxAttemptsExceeded: true,
+        failedAttempts: rateStatus.failedAttempts,
+      );
+    }
+
+    // 2. Fetch challenge from admin_teacher_email_challenges
     final challenge = await _supabaseClient
         .from('admin_teacher_email_challenges')
         .select()
@@ -1735,74 +2061,57 @@ class AuthRepository {
 
     final now = DateTime.now().toUtc();
 
-    // 2. Check lockout
-    final lockedUntilStr = challenge['locked_until']?.toString();
-    if (lockedUntilStr != null && lockedUntilStr.isNotEmpty) {
-      final lockedUntil = DateTime.tryParse(lockedUntilStr)?.toUtc();
-      if (lockedUntil != null && now.isBefore(lockedUntil)) {
-        throw const AdminTeacherException(
-          'Too many incorrect codes. Please try again after 15 minutes.',
-          maxAttemptsExceeded: true,
-          failedAttempts: 5,
-        );
-      }
-    }
-
-    final failedAttempts =
-        (challenge['failed_attempts'] as num?)?.toInt() ?? 0;
-    if (failedAttempts >= 5) {
-      throw const AdminTeacherException(
-        'Maximum verification attempts exceeded (5/5). Please click Back to recheck teacher details.',
-        maxAttemptsExceeded: true,
-        failedAttempts: 5,
-      );
-    }
-
-    // 3. Check expiration (10 minutes)
+    // 3. Check expiration (5 minutes / 300 seconds)
     final expiresAtStr = challenge['expires_at']?.toString();
     final expiresAt =
         expiresAtStr != null ? DateTime.tryParse(expiresAtStr)?.toUtc() : null;
     if (expiresAt == null || now.isAfter(expiresAt)) {
       throw const AdminTeacherException(
-        'The verification code has expired (valid for 10 minutes). Please click Resend.',
+        'The verification code has expired (valid for 5 minutes). Please click Resend.',
       );
     }
 
     // 4. Verify code match
     final expectedCode = challenge['code_hash']?.toString().trim();
     if (cleanCode != expectedCode) {
-      final newFailedAttempts = failedAttempts + 1;
-      final lockedUntil = newFailedAttempts >= 5
-          ? now.add(const Duration(minutes: 15)).toUtc().toIso8601String()
-          : null;
+      final failStatus = await RateLimitService.instance.recordFailure(
+        feature: 'admin_add_teacher_otp',
+        targetIdentifier: cleanEmail,
+        maxAttempts: 5,
+      );
 
       try {
         await _supabaseClient
             .from('admin_teacher_email_challenges')
             .update({
-              'failed_attempts': newFailedAttempts,
-              'locked_until': lockedUntil,
+              'failed_attempts': failStatus.failedAttempts,
             })
             .eq('email', cleanEmail);
       } catch (e) {
         debugPrint('Supabase failed attempts update notice: $e');
       }
 
-      if (newFailedAttempts >= 5) {
-        throw const AdminTeacherException(
-          'Maximum verification attempts exceeded (5/5). Please click Back to recheck teacher details.',
+      if (failStatus.isLocked) {
+        throw AdminTeacherException(
+          'Too many incorrect codes. Please try again after ${failStatus.formattedCountdown}.',
           maxAttemptsExceeded: true,
-          failedAttempts: 5,
+          failedAttempts: failStatus.failedAttempts,
         );
       }
 
-      final remaining = 5 - newFailedAttempts;
+      final remaining = failStatus.attemptsRemaining;
       throw AdminTeacherException(
         'Incorrect verification code. $remaining attempt${remaining == 1 ? '' : 's'} remaining.',
-        failedAttempts: newFailedAttempts,
+        failedAttempts: failStatus.failedAttempts,
         remainingAttempts: remaining,
       );
     }
+
+    // Code is valid! Clear rate limit for this email
+    unawaited(RateLimitService.instance.clearRateLimit(
+      feature: 'admin_add_teacher_otp',
+      targetIdentifier: cleanEmail,
+    ));
 
     // 5. Code is VALID! Extract details and create teacher account
     final firstName = challenge['first_name']?.toString() ?? '';

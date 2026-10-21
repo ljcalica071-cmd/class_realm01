@@ -7,7 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import 'package:class_realm/data/repositories/auth_repository.dart';
-import 'package:class_realm/features/auth/services/login_attempt_limiter.dart';
+import 'package:class_realm/core/services/rate_limit_service.dart';
 import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/routes/app_routes.dart';
 import 'package:class_realm/widgets/common/app_modals.dart';
@@ -32,7 +32,6 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _isLoading = false;
   bool _obscurePassword = true;
   bool _rememberMe = false;
-  final LoginAttemptLimiter _loginAttemptLimiter = LoginAttemptLimiter();
   Timer? _lockoutTimer;
   Duration? _lockoutRemaining;
   bool _wasMockLoginEmail = false;
@@ -71,8 +70,45 @@ class _LoginScreenState extends State<LoginScreen> {
       _passwordController.text = LocalStorageService.savedPassword ?? '';
     }
 
-    // Fast Login / Cache Check & Route User
+    // Fast Login / Cache Check & Route User + Rate Limit Status Check
     WidgetsBinding.instance.addPostFrameCallback((_) async {
+      try {
+        final devStatus = await RateLimitService.instance.checkStatus(
+          feature: 'login_device',
+          targetIdentifier: 'device_only',
+          maxAttempts: 10,
+        );
+        if (devStatus.isLocked && mounted) {
+          _beginLockoutCountdown(Duration(seconds: devStatus.remainingSeconds));
+          AppModals.showErrorDialog(
+            context: context,
+            title: 'Device Locked',
+            message:
+                'Device temporarily locked due to multiple failed login attempts. Try again in ${devStatus.formattedCountdown}.',
+          );
+          return;
+        }
+
+        final savedEmail = _emailController.text.trim().toLowerCase();
+        if (savedEmail.isNotEmpty) {
+          final accStatus = await RateLimitService.instance.checkStatus(
+            feature: 'login_account',
+            targetIdentifier: savedEmail,
+            maxAttempts: 5,
+          );
+          if (accStatus.isLocked && mounted) {
+            _beginLockoutCountdown(Duration(seconds: accStatus.remainingSeconds));
+            AppModals.showErrorDialog(
+              context: context,
+              title: 'Account Locked',
+              message:
+                  'Account temporarily locked due to multiple failed login attempts. Try again in ${accStatus.formattedCountdown}.',
+            );
+            return;
+          }
+        }
+      } catch (_) {}
+
       final cachedUser = await AuthRepository.instance.restoreSession();
       if (cachedUser != null && mounted) {
         _routeUser(cachedUser);
@@ -94,39 +130,30 @@ class _LoginScreenState extends State<LoginScreen> {
 
   void _handleEmailChanged() {
     final isMockLoginEmail = _isMockLoginEmail;
-    if (isMockLoginEmail == _wasMockLoginEmail) {
+    if (isMockLoginEmail != _wasMockLoginEmail) {
+      _wasMockLoginEmail = isMockLoginEmail;
       if (mounted) setState(() {});
-      return;
     }
-    _wasMockLoginEmail = isMockLoginEmail;
-    if (mounted) setState(() {});
   }
 
-  void _handlePasswordChanged() {
-    if (mounted) setState(() {});
-  }
-
-  void _recordFailedAttempt() {
-    if (_isMockLoginEmail) return;
-    final remaining = _loginAttemptLimiter.recordFailure(DateTime.now());
-    if (remaining != null) _beginLockoutCountdown(remaining);
-  }
+  void _handlePasswordChanged() {}
 
   void _beginLockoutCountdown(Duration remaining) {
     _lockoutTimer?.cancel();
+    final endTime = DateTime.now().add(remaining);
     setState(() => _lockoutRemaining = remaining);
     _lockoutTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      final currentRemaining = _loginAttemptLimiter.remainingAt(DateTime.now());
       if (!mounted) {
         timer.cancel();
         return;
       }
-      if (currentRemaining == null) {
+      final now = DateTime.now();
+      if (now.isAfter(endTime)) {
         timer.cancel();
         setState(() => _lockoutRemaining = null);
         return;
       }
-      setState(() => _lockoutRemaining = currentRemaining);
+      setState(() => _lockoutRemaining = endTime.difference(now));
     });
   }
 
@@ -140,7 +167,8 @@ class _LoginScreenState extends State<LoginScreen> {
     if (_isRateLimited || _isLoading) return;
     if (!_formKey.currentState!.validate()) return;
 
-    final emailInput = _emailController.text.trim().toLowerCase();
+    final rawEmail = _emailController.text.trim();
+    final emailInput = rawEmail.toLowerCase();
 
     // System Maintenance Gatekeeping (Edge Cases #1 & #5)
     try {
@@ -196,6 +224,8 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
 
+    if (!mounted) return;
+    FocusScope.of(context).unfocus();
     setState(() => _isLoading = true);
 
     try {
@@ -219,25 +249,26 @@ class _LoginScreenState extends State<LoginScreen> {
 
       if (user == null) {
         setState(() => _isLoading = false);
-        _recordFailedAttempt();
         TextInput.finishAutofillContext(shouldSave: false);
+        FocusScope.of(context).unfocus();
         if (_isRateLimited) return;
         AppModals.showErrorDialog(
           context: context,
           title: 'Authentication Failed',
           message:
               'Invalid email or password. Please check your credentials.',
-          onConfirm: () {
-            final len = _passwordController.text.length;
-            _passwordController.selection =
-                TextSelection.collapsed(offset: len);
-            _passwordFocusNode.requestFocus();
-          },
         );
         return;
       }
 
-      _loginAttemptLimiter.reset();
+      await RateLimitService.instance.clearRateLimit(
+        feature: 'login_account',
+        targetIdentifier: emailInput,
+      );
+      await RateLimitService.instance.clearRateLimit(
+        feature: 'login_device',
+        targetIdentifier: 'device_only',
+      );
       _lockoutTimer?.cancel();
       _lockoutRemaining = null;
 
@@ -246,26 +277,24 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!mounted) return;
       setState(() => _isLoading = false);
       TextInput.finishAutofillContext(shouldSave: false);
+      FocusScope.of(context).unfocus();
       if (e is LoginAttemptException) {
         if (e.providerRateLimited) {
-          _beginLockoutCountdown(
-            _loginAttemptLimiter.startLockout(DateTime.now()),
+          final seconds = e.retryAfterSeconds ?? 300;
+          _beginLockoutCountdown(Duration(seconds: seconds));
+          AppModals.showErrorDialog(
+            context: context,
+            title: 'Too Many Attempts',
+            message: e.message,
           );
           return;
         }
         if (e.invalidCredentials) {
-          _recordFailedAttempt();
           if (_isRateLimited) return;
           AppModals.showErrorDialog(
             context: context,
             title: 'Authentication Failed',
             message: e.message,
-            onConfirm: () {
-              final len = _passwordController.text.length;
-              _passwordController.selection =
-                  TextSelection.collapsed(offset: len);
-              _passwordFocusNode.requestFocus();
-            },
           );
           return;
         }
@@ -274,12 +303,6 @@ class _LoginScreenState extends State<LoginScreen> {
         context: context,
         title: 'Login Error',
         message: e.toString().replaceAll('Exception: ', ''),
-        onConfirm: () {
-          final len = _passwordController.text.length;
-          _passwordController.selection =
-              TextSelection.collapsed(offset: len);
-          _passwordFocusNode.requestFocus();
-        },
       );
     }
   }
@@ -395,8 +418,6 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Widget _buildLoginForm(BuildContext context) {
-    final theme = Theme.of(context);
-
     return Form(
       key: _formKey,
       child: AutofillGroup(
@@ -410,11 +431,18 @@ class _LoginScreenState extends State<LoginScreen> {
               focusNode: _emailFocusNode,
               autofillHints: const [AutofillHints.email],
               textInputAction: TextInputAction.next,
+              autovalidateMode: AutovalidateMode.onUserInteraction,
               onFieldSubmitted: (_) {
                 FocusScope.of(context).requestFocus(_passwordFocusNode);
               },
-              validator: (v) =>
-                  v == null || v.isEmpty ? 'Email is required' : null,
+              validator: (v) {
+                final val = v?.trim() ?? '';
+                if (val.isEmpty) return 'Email is required';
+                if (!_isMockLoginEmail && (!val.contains('@') || !val.contains('.'))) {
+                  return 'Please enter a valid email address';
+                }
+                return null;
+              },
               style: const TextStyle(
                 color: Color(0xFF0F172A),
                 fontSize: 14,
@@ -496,8 +524,10 @@ class _LoginScreenState extends State<LoginScreen> {
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
                 ),
-                validator: (v) =>
-                    v == null || v.isEmpty ? 'Password is required' : null,
+                validator: (v) {
+                  if (v == null || v.isEmpty) return 'Password is required';
+                  return null;
+                },
                 decoration: AuthResponsiveScaffold.inputDecoration(
                   hintText: 'Password',
                   prefixIcon: const Icon(
@@ -584,40 +614,7 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
             const SizedBox(height: 22),
 
-            if (_isRateLimited && _lockoutRemaining != null) ...[
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.errorContainer,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: theme.colorScheme.error.withValues(alpha: 0.35),
-                  ),
-                ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(
-                      Icons.lock_clock_outlined,
-                      size: 20,
-                      color: theme.colorScheme.onErrorContainer,
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        'Too many failed attempts. Try again after 15 minutes.',
-                        style: TextStyle(
-                          color: theme.colorScheme.onErrorContainer,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-            ],
+
 
             // Login Button
             AuthResponsiveScaffold.primaryButton(

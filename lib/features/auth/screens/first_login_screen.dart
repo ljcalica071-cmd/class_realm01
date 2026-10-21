@@ -145,6 +145,7 @@ class _FirstLoginScreenState extends State<FirstLoginScreen> with SingleTickerPr
       );
 
       if (!verified) {
+        if (!mounted) return;
         setState(() => _isLoading = false);
         AppModals.showErrorDialog(
           context: context,
@@ -192,7 +193,7 @@ class _FirstLoginScreenState extends State<FirstLoginScreen> with SingleTickerPr
           child: PasswordOtpDialog(
             email: user.email,
             initialResendCooldown: (otpResponse['resendAfter'] as num?)?.toInt() ?? 60,
-            initialInputCountdown: (otpResponse['expiresIn'] as num?)?.toInt() ?? 600,
+            initialInputCountdown: (otpResponse['expiresIn'] as num?)?.toInt() ?? 300,
             initialResendCount: (otpResponse['resendCount'] as num?)?.toInt() ?? 0,
             onResend: () => AuthRepository.instance.sendFirstLoginOtp(isResend: true),
           ),
