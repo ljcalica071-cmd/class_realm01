@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import 'package:class_realm/core/utils/validators.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/core/services/rate_limit_service.dart';
 import 'package:class_realm/models/user_model.dart';
@@ -65,10 +66,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
     // Load Remember Me state
     _rememberMe = LocalStorageService.isRememberMe;
-    if (_rememberMe) {
-      _emailController.text = LocalStorageService.savedEmail ?? '';
-      _passwordController.text = LocalStorageService.savedPassword ?? '';
-    }
 
     // Fast Login / Cache Check & Route User + Rate Limit Status Check
     WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -167,6 +164,9 @@ class _LoginScreenState extends State<LoginScreen> {
     if (_isRateLimited || _isLoading) return;
     if (!_formKey.currentState!.validate()) return;
 
+    // Instant UI feedback: set loading immediately with 0ms latency
+    setState(() => _isLoading = true);
+
     final rawEmail = _emailController.text.trim();
     final emailInput = rawEmail.toLowerCase();
 
@@ -188,6 +188,10 @@ class _LoginScreenState extends State<LoginScreen> {
 
         if (!isAdmin) {
           if (!mounted) return;
+          setState(() => _isLoading = false);
+          TextInput.finishAutofillContext(shouldSave: false);
+          _passwordController.clear();
+          _passwordFocusNode.unfocus();
           _showMaintenanceDialog();
           return;
         }
@@ -195,7 +199,7 @@ class _LoginScreenState extends State<LoginScreen> {
     } catch (_) {}
 
     if (_isMockLoginEmail) {
-      setState(() => _isLoading = true);
+      TextInput.finishAutofillContext(shouldSave: false);
       final email = _emailController.text.trim().toLowerCase();
       final user = await AuthRepository.instance.authenticate(email, 'mockpassword');
       
@@ -225,8 +229,6 @@ class _LoginScreenState extends State<LoginScreen> {
     }
 
     if (!mounted) return;
-    FocusScope.of(context).unfocus();
-    setState(() => _isLoading = true);
 
     try {
       final user = await AuthRepository.instance.authenticate(
@@ -236,13 +238,25 @@ class _LoginScreenState extends State<LoginScreen> {
 
       if (!mounted) return;
 
-      // Save Remember Me state upon successful login
+      // Save Remember Me state and trigger browser autofill ONLY upon 100% successful login
       if (user != null) {
-        TextInput.finishAutofillContext();
+        final email = _emailController.text.trim();
+        final pass = _passwordController.text;
+        final alreadySaved = LocalStorageService.hasSavedCredentials(email, pass);
+
+        if (!alreadySaved) {
+          // Trigger browser save/update prompt ONCE for new or updated credentials
+          TextInput.finishAutofillContext(shouldSave: true);
+          await LocalStorageService.markCredentialsSaved(email, pass);
+        } else {
+          // Already saved on this device: do NOT prompt again
+          TextInput.finishAutofillContext(shouldSave: false);
+        }
+
         await LocalStorageService.saveRememberMe(
           _rememberMe,
-          _emailController.text.trim(),
-          password: _rememberMe ? _passwordController.text : null,
+          email,
+          password: _rememberMe ? pass : null,
         );
         if (!mounted) return;
       }
@@ -250,7 +264,8 @@ class _LoginScreenState extends State<LoginScreen> {
       if (user == null) {
         setState(() => _isLoading = false);
         TextInput.finishAutofillContext(shouldSave: false);
-        FocusScope.of(context).unfocus();
+        _passwordController.clear();
+        _passwordFocusNode.unfocus();
         if (_isRateLimited) return;
         AppModals.showErrorDialog(
           context: context,
@@ -277,7 +292,8 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!mounted) return;
       setState(() => _isLoading = false);
       TextInput.finishAutofillContext(shouldSave: false);
-      FocusScope.of(context).unfocus();
+      _passwordController.clear();
+      _passwordFocusNode.unfocus();
       if (e is LoginAttemptException) {
         if (e.providerRateLimited) {
           final seconds = e.retryAfterSeconds ?? 300;
@@ -418,9 +434,10 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Widget _buildLoginForm(BuildContext context) {
-    return Form(
-      key: _formKey,
-      child: AutofillGroup(
+    return AutofillGroup(
+      onDisposeAction: AutofillContextAction.cancel,
+      child: Form(
+        key: _formKey,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,
@@ -429,19 +446,16 @@ class _LoginScreenState extends State<LoginScreen> {
             TextFormField(
               controller: _emailController,
               focusNode: _emailFocusNode,
-              autofillHints: const [AutofillHints.email],
+              autofillHints: const [AutofillHints.username, AutofillHints.email],
+              inputFormatters: AppValidators.emailFormatters,
               textInputAction: TextInputAction.next,
               autovalidateMode: AutovalidateMode.onUserInteraction,
               onFieldSubmitted: (_) {
                 FocusScope.of(context).requestFocus(_passwordFocusNode);
               },
               validator: (v) {
-                final val = v?.trim() ?? '';
-                if (val.isEmpty) return 'Email is required';
-                if (!_isMockLoginEmail && (!val.contains('@') || !val.contains('.'))) {
-                  return 'Please enter a valid email address';
-                }
-                return null;
+                if (_isMockLoginEmail) return null;
+                return AppValidators.validateEmail(v);
               },
               style: const TextStyle(
                 color: Color(0xFF0F172A),
@@ -501,7 +515,7 @@ class _LoginScreenState extends State<LoginScreen> {
               child: TextFormField(
                 controller: _passwordController,
                 focusNode: _passwordFocusNode,
-                autofillHints: kIsWeb ? null : const [AutofillHints.password],
+                autofillHints: const [AutofillHints.password],
                 textInputAction: TextInputAction.done,
                 enableSuggestions: false,
                 autocorrect: false,
@@ -524,8 +538,9 @@ class _LoginScreenState extends State<LoginScreen> {
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
                 ),
+                inputFormatters: AppValidators.passwordFormatters,
                 validator: (v) {
-                  if (v == null || v.isEmpty) return 'Password is required';
+                  if (v == null || v.trim().isEmpty) return 'Password is required';
                   return null;
                 },
                 decoration: AuthResponsiveScaffold.inputDecoration(

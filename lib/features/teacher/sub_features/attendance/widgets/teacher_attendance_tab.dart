@@ -177,7 +177,7 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
     if (teacherId == null) {
       setState(() {
         _isLoadingSubjects = false;
-        _subjectsLoadError = 'Sign in as a teacher to load your classes.';
+        _subjectsLoadError = 'Log in as a teacher to load your classes.';
       });
       return;
     }

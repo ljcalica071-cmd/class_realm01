@@ -524,7 +524,7 @@ class SupabaseParentRepository {
     }
 
     if (tempPasswordWorked) {
-      // If sign-in with tempPassword succeeds, simply update status = 'pending_first_login'
+      // If login with tempPassword succeeds, simply update status = 'pending_first_login'
       await _client
           .from('parent_profiles')
           .update({'status': 'pending_first_login'})

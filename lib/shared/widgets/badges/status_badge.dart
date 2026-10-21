@@ -12,6 +12,7 @@ class StatusBadge extends StatelessWidget {
   final Color backgroundColor;
   final Color textColor;
   final IconData? icon;
+  final bool isArchived;
 
   const StatusBadge({
     super.key,
@@ -19,6 +20,7 @@ class StatusBadge extends StatelessWidget {
     required this.backgroundColor,
     required this.textColor,
     this.icon,
+    this.isArchived = false,
   });
 
   factory StatusBadge.fromAccountStatus(AccountStatus status) {
@@ -45,11 +47,12 @@ class StatusBadge extends StatelessWidget {
           icon: LucideIcons.xCircle,
         );
       case AccountStatus.archived:
-        return StatusBadge(
+        return const StatusBadge(
           text: 'Archived',
-          backgroundColor: AppTheme.catSlate.withValues(alpha: 0.12),
-          textColor: AppTheme.catSlate,
+          backgroundColor: Color(0xFFFEF3C7),
+          textColor: Color(0xFFB45309),
           icon: LucideIcons.archive,
+          isArchived: true,
         );
       case AccountStatus.pendingFirstLogin:
         return StatusBadge(
@@ -99,17 +102,38 @@ class StatusBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Color effectiveBg = backgroundColor;
+    Color effectiveText = textColor;
+    Border? effectiveBorder;
+
+    if (isArchived) {
+      final isDark = Theme.of(context).brightness == Brightness.dark;
+      effectiveBg = isDark
+          ? const Color(0xFFFBBF24).withValues(alpha: 0.16)
+          : const Color(0xFFFEF3C7);
+      effectiveText = isDark
+          ? const Color(0xFFFACC15) // High-contrast radiant golden yellow for dark mode
+          : const Color(0xFFB45309); // Deep amber-gold for light mode
+      effectiveBorder = Border.all(
+        color: isDark
+            ? const Color(0xFFFBBF24).withValues(alpha: 0.35)
+            : const Color(0xFFFDE68A),
+        width: 1,
+      );
+    }
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: backgroundColor,
+        color: effectiveBg,
         borderRadius: BorderRadius.circular(20),
+        border: effectiveBorder,
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           if (icon != null) ...[
-            Icon(icon, size: 13, color: textColor),
+            Icon(icon, size: 13, color: effectiveText),
             const SizedBox(width: 4),
           ],
           Text(
@@ -117,7 +141,7 @@ class StatusBadge extends StatelessWidget {
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
-              color: textColor,
+              color: effectiveText,
             ),
           ),
         ],

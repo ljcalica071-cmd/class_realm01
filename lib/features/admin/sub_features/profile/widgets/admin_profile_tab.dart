@@ -30,7 +30,7 @@ class AdminProfileTab extends StatelessWidget {
               ),
               const SizedBox(height: 4),
               Text(
-                'Sign in again or contact your system administrator.',
+                'Log in again or contact your system administrator.',
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),

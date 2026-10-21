@@ -1323,7 +1323,7 @@ Phone Number: $phone
 
 Instructions:
 1. Open ClassRealm.
-2. Sign in using your Parent Email and Temporary Password.
+2. Log in using your Parent Email and Temporary Password.
 3. Set your new private password on first login.
 ''';
 
@@ -1362,7 +1362,7 @@ Instructions:
               ),
               const SizedBox(height: 8),
               Text(
-                'Provide these credentials to the parent/guardian so they can sign in to ClassRealm using their Parent Email and Temporary Password. They will be prompted to create their own new password upon first login.',
+                'Provide these credentials to the parent/guardian so they can log in to ClassRealm using their Parent Email and Temporary Password. They will be prompted to create their own new password upon first login.',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 13,

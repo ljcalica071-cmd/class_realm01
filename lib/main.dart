@@ -7,6 +7,7 @@ import 'package:class_realm/core/services/supabase_service.dart';
 import 'package:class_realm/core/services/local_storage_service.dart';
 import 'package:class_realm/core/services/sync_coordinator.dart';
 import 'package:class_realm/data/datasources/local/app_database.dart';
+import 'package:class_realm/data/repositories/auth_repository.dart';
 
 import 'package:flutter_web_plugins/url_strategy.dart';
 
@@ -76,6 +77,7 @@ class ClassRealmApp extends StatelessWidget {
       valueListenable: AppTheme.themeModeNotifier,
       builder: (context, themeMode, _) {
         return MaterialApp(
+          navigatorKey: AppRoutes.navigatorKey,
           scrollBehavior: const MaterialScrollBehavior().copyWith(
             dragDevices: {
               PointerDeviceKind.mouse,
@@ -94,11 +96,31 @@ class ClassRealmApp extends StatelessWidget {
           initialRoute: AppRoutes.login,
           routes: {
             '/': (context) {
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                if (ModalRoute.of(context)?.settings.name == '/') {
-                  Navigator.pushReplacementNamed(context, AppRoutes.login);
+              final user = AuthRepository.instance.currentUser;
+              if (user != null) {
+                switch (user.role) {
+                  case UserRole.admin:
+                    return const AuthGuard(
+                      allowedRoles: [UserRole.admin],
+                      child: AdminDashboardScreen(initialIndex: 0),
+                    );
+                  case UserRole.teacher:
+                    return const AuthGuard(
+                      allowedRoles: [UserRole.teacher],
+                      child: TeacherDashboardScreen(),
+                    );
+                  case UserRole.student:
+                    return const AuthGuard(
+                      allowedRoles: [UserRole.student],
+                      child: StudentHomeScreen(),
+                    );
+                  case UserRole.parent:
+                    return const AuthGuard(
+                      allowedRoles: [UserRole.parent],
+                      child: ParentHomeScreen(),
+                    );
                 }
-              });
+              }
               return const LoginScreen();
             },
             AppRoutes.login: (context) => const LoginScreen(),

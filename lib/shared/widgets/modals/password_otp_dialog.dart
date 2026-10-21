@@ -7,7 +7,7 @@ import 'package:class_realm/core/services/local_storage_service.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
 
 /// Reusable modal dialog for verifying a 6-digit OTP code dispatched via email.
-/// Used in both First Login Activation and Forgot Password Recovery flows.
+/// Used in both First Login Activation and Forgot Password Restorey flows.
 /// Features anti-spam rate limiting, animated cursor, 6 separate digit boxes,
 /// inline countdown timer placed directly above the boxes, and top-right close button.
 class PasswordOtpDialog extends StatefulWidget {

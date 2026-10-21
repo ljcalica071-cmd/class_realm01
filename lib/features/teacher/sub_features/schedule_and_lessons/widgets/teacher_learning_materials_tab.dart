@@ -146,7 +146,7 @@ class _TeacherLearningMaterialsTabState
     try {
       final teacherId = AuthRepository.instance.currentUser?.id;
       if (teacherId == null || teacherId.isEmpty) {
-        throw StateError('Please sign in as a teacher to manage learning materials.');
+        throw StateError('Please log in as a teacher to manage learning materials.');
       }
 
       // STRICT REQUIREMENT: Only show subjects/sections with enrolled students

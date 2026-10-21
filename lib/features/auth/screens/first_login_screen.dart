@@ -68,6 +68,7 @@ class _FirstLoginScreenState extends State<FirstLoginScreen> with SingleTickerPr
 
   @override
   void dispose() {
+    TextInput.finishAutofillContext(shouldSave: false);
     _newPassCtrl.dispose();
     _confirmPassCtrl.dispose();
     _parentPhoneCtrl.dispose();
@@ -75,8 +76,8 @@ class _FirstLoginScreenState extends State<FirstLoginScreen> with SingleTickerPr
     super.dispose();
   }
 
-
   void _submit() async {
+    TextInput.finishAutofillContext(shouldSave: false);
     if (!_isValid) return;
     setState(() => _isLoading = true);
     if (!mounted) return;
@@ -84,6 +85,7 @@ class _FirstLoginScreenState extends State<FirstLoginScreen> with SingleTickerPr
     final user = AuthRepository.instance.currentUser;
     if (user == null) {
       setState(() => _isLoading = false);
+      TextInput.finishAutofillContext(shouldSave: false);
       AppModals.showErrorDialog(
         context: context,
         title: 'Session Expired',
@@ -99,6 +101,7 @@ class _FirstLoginScreenState extends State<FirstLoginScreen> with SingleTickerPr
 
       if (phone.length != 11 || !phone.startsWith('09')) {
         setState(() => _isLoading = false);
+        TextInput.finishAutofillContext(shouldSave: false);
         AppModals.showErrorDialog(
           context: context,
           title: 'Phone Number Required',
@@ -109,6 +112,7 @@ class _FirstLoginScreenState extends State<FirstLoginScreen> with SingleTickerPr
 
       if (lrn4.length != 4) {
         setState(() => _isLoading = false);
+        TextInput.finishAutofillContext(shouldSave: false);
         AppModals.showErrorDialog(
           context: context,
           title: 'LRN Required',
@@ -128,6 +132,7 @@ class _FirstLoginScreenState extends State<FirstLoginScreen> with SingleTickerPr
 
       if (_newPassCtrl.text.trim().toLowerCase() == tempPassword.toLowerCase()) {
         setState(() => _isLoading = false);
+        TextInput.finishAutofillContext(shouldSave: false);
         AppModals.showErrorDialog(
           context: context,
           title: 'Password Rule Violation',
@@ -147,6 +152,7 @@ class _FirstLoginScreenState extends State<FirstLoginScreen> with SingleTickerPr
       if (!verified) {
         if (!mounted) return;
         setState(() => _isLoading = false);
+        TextInput.finishAutofillContext(shouldSave: false);
         AppModals.showErrorDialog(
           context: context,
           title: 'Identity Verification Failed',
@@ -160,6 +166,7 @@ class _FirstLoginScreenState extends State<FirstLoginScreen> with SingleTickerPr
       if (lockout != null && lockout.inSeconds > 0) {
         final minutes = (lockout.inSeconds / 60).ceil();
         setState(() => _isLoading = false);
+        TextInput.finishAutofillContext(shouldSave: false);
         AppModals.showErrorDialog(
           context: context,
           title: 'Account Temporarily Locked',
@@ -174,6 +181,7 @@ class _FirstLoginScreenState extends State<FirstLoginScreen> with SingleTickerPr
       } catch (error) {
         if (!mounted) return;
         setState(() => _isLoading = false);
+        TextInput.finishAutofillContext(shouldSave: false);
         AppModals.showErrorDialog(
           context: context,
           title: 'Verification Code Not Sent',
@@ -184,6 +192,9 @@ class _FirstLoginScreenState extends State<FirstLoginScreen> with SingleTickerPr
 
       setState(() => _isLoading = false);
       if (!mounted) return;
+
+      // Ensure autofill context is cancelled before opening modal OTP dialog
+      TextInput.finishAutofillContext(shouldSave: false);
 
       final bool? verified = await showDialog<bool>(
         context: context,
@@ -200,7 +211,10 @@ class _FirstLoginScreenState extends State<FirstLoginScreen> with SingleTickerPr
         ),
       );
 
-      if (verified != true) return;
+      if (verified != true) {
+        TextInput.finishAutofillContext(shouldSave: false);
+        return;
+      }
     }
 
     setState(() => _isLoading = true);
@@ -213,6 +227,7 @@ class _FirstLoginScreenState extends State<FirstLoginScreen> with SingleTickerPr
     if (error != null) {
       if (mounted) {
         setState(() => _isLoading = false);
+        TextInput.finishAutofillContext(shouldSave: false);
         AppModals.showErrorDialog(
           context: context,
           title: 'Password Setup Failed',
@@ -221,6 +236,9 @@ class _FirstLoginScreenState extends State<FirstLoginScreen> with SingleTickerPr
       }
       return;
     }
+
+    // Suppress browser save pass prompt in first login as specified by user
+    TextInput.finishAutofillContext(shouldSave: false);
 
     if (!mounted) return;
     final isUserDark = LocalStorageService.isUserDarkMode(user.id, email: user.email);
@@ -350,10 +368,12 @@ class _FirstLoginScreenState extends State<FirstLoginScreen> with SingleTickerPr
   Widget _buildFormContent(BuildContext context, UserModel? user) {
     final theme = Theme.of(context);
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      mainAxisSize: MainAxisSize.min,
-      children: [
+    return AutofillGroup(
+      onDisposeAction: AutofillContextAction.cancel,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
         if (user?.role == UserRole.parent) ...[
           _buildParentIdentityVerificationSection(theme),
           const SizedBox(height: 20),
@@ -364,13 +384,26 @@ class _FirstLoginScreenState extends State<FirstLoginScreen> with SingleTickerPr
           controller: _newPassCtrl,
           enabled: !_isLoading,
           obscureText: _obscureNew,
-          maxLength: 30,
+          enableSuggestions: false,
+          autocorrect: false,
+          maxLength: 50,
           style: const TextStyle(color: Color(0xFF0F172A), fontSize: 14, fontWeight: FontWeight.w600),
-          inputFormatters: [
-            FilteringTextInputFormatter.deny(RegExp(r' {2,}')),
-            FilteringTextInputFormatter.deny(RegExp(r'(.)\1{3,}')),
-          ],
-          buildCounter: (context, {required currentLength, required isFocused, maxLength}) => null,
+          inputFormatters: AppValidators.passwordFormatters,
+          buildCounter: (context, {required currentLength, required isFocused, maxLength}) {
+            return Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                '$currentLength/${maxLength ?? 50}',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: currentLength >= (maxLength ?? 50)
+                      ? const Color(0xFFDC2626)
+                      : const Color(0xFF64748B),
+                ),
+              ),
+            );
+          },
           decoration: AuthResponsiveScaffold.inputDecoration(
             labelText: 'New Password',
             hintText: '--------',
@@ -405,13 +438,26 @@ class _FirstLoginScreenState extends State<FirstLoginScreen> with SingleTickerPr
           controller: _confirmPassCtrl,
           enabled: !_isLoading,
           obscureText: _obscureConfirm,
-          maxLength: 30,
+          enableSuggestions: false,
+          autocorrect: false,
+          maxLength: 50,
           style: const TextStyle(color: Color(0xFF0F172A), fontSize: 14, fontWeight: FontWeight.w600),
-          inputFormatters: [
-            FilteringTextInputFormatter.deny(RegExp(r' {2,}')),
-            FilteringTextInputFormatter.deny(RegExp(r'(.)\1{3,}')),
-          ],
-          buildCounter: (context, {required currentLength, required isFocused, maxLength}) => null,
+          inputFormatters: AppValidators.passwordFormatters,
+          buildCounter: (context, {required currentLength, required isFocused, maxLength}) {
+            return Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                '$currentLength/${maxLength ?? 50}',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: currentLength >= (maxLength ?? 50)
+                      ? const Color(0xFFDC2626)
+                      : const Color(0xFF64748B),
+                ),
+              ),
+            );
+          },
           decoration: AuthResponsiveScaffold.inputDecoration(
             labelText: 'Confirm New Password',
             hintText: '--------',
@@ -476,6 +522,7 @@ class _FirstLoginScreenState extends State<FirstLoginScreen> with SingleTickerPr
           ),
         ),
       ],
+      ),
     );
   }
 }

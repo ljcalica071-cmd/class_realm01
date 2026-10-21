@@ -228,13 +228,31 @@ Future<DateTime?> showAppDatePickerDialog(
           ? DateTime(now.year - 18, now.month, now.day)
           : DateTime(now.year + 10, 12, 31));
 
+  final minDateOnly = DateTime(effectiveMin.year, effectiveMin.month, effectiveMin.day);
+  final maxDateOnly = DateTime(effectiveMax.year, effectiveMax.month, effectiveMax.day);
+
   DateTime tempDate = initialDate ?? (showAge ? DateTime(1995, 1, 1) : now);
-  if (tempDate.isAfter(effectiveMax)) tempDate = effectiveMax;
-  if (tempDate.isBefore(effectiveMin)) tempDate = effectiveMin;
+  if (tempDate.isAfter(maxDateOnly)) tempDate = maxDateOnly;
+  if (tempDate.isBefore(minDateOnly)) tempDate = minDateOnly;
 
   int selectedYear = tempDate.year;
   int selectedMonth = tempDate.month;
   int selectedDay = tempDate.day;
+
+  const monthNames = [
+    '01 - January',
+    '02 - February',
+    '03 - March',
+    '04 - April',
+    '05 - May',
+    '06 - June',
+    '07 - July',
+    '08 - August',
+    '09 - September',
+    '10 - October',
+    '11 - November',
+    '12 - December',
+  ];
 
   return showDialog<DateTime>(
     context: context,
@@ -255,12 +273,34 @@ Future<DateTime?> showAppDatePickerDialog(
           final age = _calculateAgeHelper(currentCandidate);
           final isUnderage = showAge && currentCandidate.isAfter(effectiveMax);
 
-          final minYear = math.min(effectiveMin.year, effectiveMax.year);
-          final maxYear = math.max(effectiveMin.year, effectiveMax.year);
+          final minYear = math.min(minDateOnly.year, maxDateOnly.year);
+          final maxYear = math.max(minDateOnly.year, maxDateOnly.year);
           final yearList = List.generate(
             maxYear - minYear + 1,
             (index) => maxYear - index,
           );
+
+          // Build valid months for current selectedYear
+          final validMonthItems = <DropdownMenuItem<int>>[];
+          for (int m = 1; m <= 12; m++) {
+            final isMonthFuture = selectedYear == maxDateOnly.year && m > maxDateOnly.month;
+            final isMonthPast = selectedYear == minDateOnly.year && m < minDateOnly.month;
+            if (!isMonthFuture && !isMonthPast) {
+              validMonthItems.add(
+                DropdownMenuItem<int>(
+                  value: m,
+                  child: Text(
+                    monthNames[m - 1],
+                    style: const TextStyle(fontSize: 13),
+                  ),
+                ),
+              );
+            }
+          }
+
+          final isCandidateOutOfRange =
+              currentCandidate.isAfter(maxDateOnly) || currentCandidate.isBefore(minDateOnly);
+          final isConfirmDisabled = isUnderage || isCandidateOutOfRange;
 
           return Dialog(
             shape: RoundedRectangleBorder(
@@ -313,7 +353,9 @@ Future<DateTime?> showAppDatePickerDialog(
                                     _formatDateHelper(currentCandidate),
                                     style: TextStyle(
                                       fontSize: 13,
-                                      color: theme.colorScheme.primary,
+                                      color: isCandidateOutOfRange
+                                          ? theme.colorScheme.error
+                                          : theme.colorScheme.primary,
                                       fontWeight: FontWeight.w600,
                                     ),
                                   ),
@@ -409,7 +451,34 @@ Future<DateTime?> showAppDatePickerDialog(
                                       .toList(),
                                   onChanged: (yr) {
                                     if (yr != null) {
-                                      setDialogState(() => selectedYear = yr);
+                                      setDialogState(() {
+                                        selectedYear = yr;
+                                        // Clamp month if exceeds bounds of new year
+                                        if (selectedYear == maxDateOnly.year &&
+                                            selectedMonth > maxDateOnly.month) {
+                                          selectedMonth = maxDateOnly.month;
+                                        }
+                                        if (selectedYear == minDateOnly.year &&
+                                            selectedMonth < minDateOnly.month) {
+                                          selectedMonth = minDateOnly.month;
+                                        }
+                                        final days = DateUtils.getDaysInMonth(
+                                          selectedYear,
+                                          selectedMonth,
+                                        );
+                                        if (selectedDay > days) selectedDay = days;
+                                        final testDate = DateTime(
+                                          selectedYear,
+                                          selectedMonth,
+                                          selectedDay,
+                                        );
+                                        if (testDate.isAfter(maxDateOnly)) {
+                                          selectedDay = maxDateOnly.day;
+                                        }
+                                        if (testDate.isBefore(minDateOnly)) {
+                                          selectedDay = minDateOnly.day;
+                                        }
+                                      });
                                     }
                                   },
                                 ),
@@ -451,98 +520,33 @@ Future<DateTime?> showAppDatePickerDialog(
                               ),
                               child: DropdownButtonHideUnderline(
                                 child: DropdownButton<int>(
-                                  value: selectedMonth,
+                                  value: validMonthItems.any((item) => item.value == selectedMonth)
+                                      ? selectedMonth
+                                      : (validMonthItems.isNotEmpty ? validMonthItems.last.value : 1),
                                   isExpanded: true,
                                   menuMaxHeight: 300,
-                                  items: const [
-                                    DropdownMenuItem(
-                                      value: 1,
-                                      child: Text(
-                                        '01 - January',
-                                        style: TextStyle(fontSize: 13),
-                                      ),
-                                    ),
-                                    DropdownMenuItem(
-                                      value: 2,
-                                      child: Text(
-                                        '02 - February',
-                                        style: TextStyle(fontSize: 13),
-                                      ),
-                                    ),
-                                    DropdownMenuItem(
-                                      value: 3,
-                                      child: Text(
-                                        '03 - March',
-                                        style: TextStyle(fontSize: 13),
-                                      ),
-                                    ),
-                                    DropdownMenuItem(
-                                      value: 4,
-                                      child: Text(
-                                        '04 - April',
-                                        style: TextStyle(fontSize: 13),
-                                      ),
-                                    ),
-                                    DropdownMenuItem(
-                                      value: 5,
-                                      child: Text(
-                                        '05 - May',
-                                        style: TextStyle(fontSize: 13),
-                                      ),
-                                    ),
-                                    DropdownMenuItem(
-                                      value: 6,
-                                      child: Text(
-                                        '06 - June',
-                                        style: TextStyle(fontSize: 13),
-                                      ),
-                                    ),
-                                    DropdownMenuItem(
-                                      value: 7,
-                                      child: Text(
-                                        '07 - July',
-                                        style: TextStyle(fontSize: 13),
-                                      ),
-                                    ),
-                                    DropdownMenuItem(
-                                      value: 8,
-                                      child: Text(
-                                        '08 - August',
-                                        style: TextStyle(fontSize: 13),
-                                      ),
-                                    ),
-                                    DropdownMenuItem(
-                                      value: 9,
-                                      child: Text(
-                                        '09 - September',
-                                        style: TextStyle(fontSize: 13),
-                                      ),
-                                    ),
-                                    DropdownMenuItem(
-                                      value: 10,
-                                      child: Text(
-                                        '10 - October',
-                                        style: TextStyle(fontSize: 13),
-                                      ),
-                                    ),
-                                    DropdownMenuItem(
-                                      value: 11,
-                                      child: Text(
-                                        '11 - November',
-                                        style: TextStyle(fontSize: 13),
-                                      ),
-                                    ),
-                                    DropdownMenuItem(
-                                      value: 12,
-                                      child: Text(
-                                        '12 - December',
-                                        style: TextStyle(fontSize: 13),
-                                      ),
-                                    ),
-                                  ],
+                                  items: validMonthItems,
                                   onChanged: (m) {
                                     if (m != null) {
-                                      setDialogState(() => selectedMonth = m);
+                                      setDialogState(() {
+                                        selectedMonth = m;
+                                        final days = DateUtils.getDaysInMonth(
+                                          selectedYear,
+                                          selectedMonth,
+                                        );
+                                        if (selectedDay > days) selectedDay = days;
+                                        final testDate = DateTime(
+                                          selectedYear,
+                                          selectedMonth,
+                                          selectedDay,
+                                        );
+                                        if (testDate.isAfter(maxDateOnly)) {
+                                          selectedDay = maxDateOnly.day;
+                                        }
+                                        if (testDate.isBefore(minDateOnly)) {
+                                          selectedDay = minDateOnly.day;
+                                        }
+                                      });
                                     }
                                   },
                                 ),
@@ -591,18 +595,29 @@ Future<DateTime?> showAppDatePickerDialog(
                       itemCount: daysInMonth,
                       itemBuilder: (ctx, idx) {
                         final dayNum = idx + 1;
-                        final isSelected = dayNum == selectedDay;
+                        final dayDate = DateTime(
+                          selectedYear,
+                          selectedMonth,
+                          dayNum,
+                        );
+                        final isDayDisabled =
+                            dayDate.isBefore(minDateOnly) || dayDate.isAfter(maxDateOnly);
+                        final isSelected = dayNum == selectedDay && !isDayDisabled;
+
                         return InkWell(
                           borderRadius: BorderRadius.circular(8),
-                          onTap: () =>
-                              setDialogState(() => selectedDay = dayNum),
+                          onTap: isDayDisabled
+                              ? null
+                              : () => setDialogState(() => selectedDay = dayNum),
                           child: AnimatedContainer(
                             duration: const Duration(milliseconds: 150),
                             alignment: Alignment.center,
                             decoration: BoxDecoration(
                               color: isSelected
                                   ? theme.colorScheme.primary
-                                  : Colors.transparent,
+                                  : (isDayDisabled
+                                      ? theme.colorScheme.onSurface.withValues(alpha: 0.04)
+                                      : Colors.transparent),
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Text(
@@ -612,9 +627,11 @@ Future<DateTime?> showAppDatePickerDialog(
                                 fontWeight: isSelected
                                     ? FontWeight.bold
                                     : FontWeight.normal,
-                                color: isSelected
-                                    ? theme.colorScheme.onPrimary
-                                    : theme.colorScheme.onSurface,
+                                color: isDayDisabled
+                                    ? theme.colorScheme.onSurface.withValues(alpha: 0.22)
+                                    : (isSelected
+                                        ? theme.colorScheme.onPrimary
+                                        : theme.colorScheme.onSurface),
                               ),
                             ),
                           ),
@@ -635,8 +652,8 @@ Future<DateTime?> showAppDatePickerDialog(
                       const SizedBox(width: 8),
                       ElevatedButton.icon(
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: isUnderage
-                              ? Colors.grey
+                          backgroundColor: isConfirmDisabled
+                              ? Colors.grey.withValues(alpha: 0.4)
                               : theme.colorScheme.primary,
                           foregroundColor: theme.colorScheme.onPrimary,
                           shape: RoundedRectangleBorder(
@@ -645,7 +662,7 @@ Future<DateTime?> showAppDatePickerDialog(
                         ),
                         icon: const Icon(Icons.check, size: 18),
                         label: const Text('Confirm Date'),
-                        onPressed: isUnderage
+                        onPressed: isConfirmDisabled
                             ? null
                             : () => Navigator.pop(
                                 ctx,

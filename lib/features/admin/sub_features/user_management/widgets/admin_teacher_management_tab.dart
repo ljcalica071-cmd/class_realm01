@@ -120,9 +120,13 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
 
     final confirm = await AppModals.showArchiveCooldownDialog(
       context: context,
-      title: 'Archive Teacher',
+      title: 'Archive Teacher Account',
       message:
-          'Are you sure you want to archive ${t.fullName}? Their login will be disabled and active teaching assignments moved to archives.',
+          'Are you sure you want to archive ${t.fullName}?\n\n'
+          '• Login access will be temporarily disabled.\n'
+          '• Assigned subjects and class sections will be deactivated from the active teaching schedule.\n'
+          '• Student attendance history, recorded term grades, and classwork records are securely preserved.\n'
+          '• You can restore this teacher account and restore their classes at any time.',
       confirmLabel: 'Archive',
       confirmColor: AppTheme.catOrange,
       cooldownSeconds: 5,
@@ -158,12 +162,12 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
     }
   }
 
-  void _handleRecover(UserModel t) async {
+  void _handleRestore(UserModel t) async {
     final confirm = await AppModals.showConfirmDialog(
       context: context,
-      title: 'Recover Teacher',
-      message: 'Are you sure you want to recover ${t.fullName}? This will restore their previous status and re-enable login.',
-      confirmLabel: 'Recover',
+      title: 'Restore Teacher',
+      message: 'Are you sure you want to restore ${t.fullName}? This will restore their previous status and re-enable login.',
+      confirmLabel: 'Restore',
       confirmColor: Colors.green,
     );
     if (confirm == true) {
@@ -175,9 +179,9 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
         if (mounted) {
           AppModals.showSuccessDialog(
             context: context,
-            title: 'Teacher Recovered',
+            title: 'Teacher Restoreed',
             message:
-                '${t.fullName} has been successfully recovered from archives.',
+                '${t.fullName} has been successfully restoreed from archives.',
             onConfirm: widget.onDataChanged,
           );
         }
@@ -186,8 +190,8 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
         if (mounted) {
           AppModals.showErrorDialog(
             context: context,
-            title: 'Recover Failed',
-            message: 'Failed to recover teacher. Please try again.',
+            title: 'Restore Failed',
+            message: 'Failed to restore teacher. Please try again.',
           );
         }
       }
@@ -211,7 +215,11 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
       context: context,
       title: 'Permanently Delete Teacher',
       message:
-          'Are you sure you want to permanently delete ${t.fullName}? This will erase their teacher profile and login access from the school system. This action is irreversible and cannot be undone.',
+          'Are you sure you want to permanently delete ${t.fullName}?\n\n'
+          '• This action is permanent and IRREVERSIBLE.\n'
+          '• Teacher profile, credentials, and account records will be permanently erased.\n'
+          '• All associated class schedules, activities, and teacher files will be removed from the system.\n'
+          '• Enrolled students will remain in the school directory, but this teacher cannot be restoreed.',
     );
     if (confirm == true) {
       final success = await AuthRepository.instance.deleteTeacherRecord(t.id);
@@ -775,7 +783,7 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
                                                 ),
                                           ),
 
-                                          // 8. Actions (Edit & Archive / Recover & Permanent Delete)
+                                          // 8. Actions (Edit & Archive / Restore & Permanent Delete)
                                           _buildDataCell(
                                             width: colActionsWidth,
                                             hasRightBorder: false,
@@ -843,7 +851,7 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
                                                   ),
                                                 ] else ...[
                                                   IconButton(
-                                                    tooltip: 'Recover Teacher',
+                                                    tooltip: 'Restore Teacher',
                                                     icon: const Icon(
                                                       Icons.restore,
                                                       color: Colors.green,
@@ -859,7 +867,7 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
                                                         VisualDensity.compact,
                                                     splashRadius: 18,
                                                     onPressed: () =>
-                                                        _handleRecover(t),
+                                                        _handleRestore(t),
                                                   ),
                                                   const SizedBox(width: 8),
                                                   IconButton(

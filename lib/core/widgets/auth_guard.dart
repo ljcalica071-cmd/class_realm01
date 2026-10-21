@@ -121,15 +121,8 @@ class _AuthGuardState extends State<AuthGuard> {
   Widget build(BuildContext context) {
     if (!_isAuthorized) {
       // Direct URL entry security guard: Never render protected child content
-      // to unauthenticated or unauthorized users. Return a blank loader while redirecting.
-      return const Scaffold(
-        backgroundColor: Colors.white,
-        body: Center(
-          child: CircularProgressIndicator(
-            valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF487898)),
-          ),
-        ),
-      );
+      // to unauthenticated or unauthorized users. Return blank while redirecting.
+      return const SizedBox.shrink();
     }
 
     // Wrap with a Listener to detect ANY interaction and reset the inactivity timer

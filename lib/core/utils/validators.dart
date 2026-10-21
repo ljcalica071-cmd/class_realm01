@@ -27,6 +27,12 @@ class AppValidators {
         FilteringTextInputFormatter.deny(RegExp(r'\s')),
       ];
 
+  /// Reusable input formatters for password fields (max 50 chars, no leading space, no consecutive spaces, allows identical characters)
+  static List<TextInputFormatter> get passwordFormatters => [
+        LengthLimitingTextInputFormatter(50),
+        _PasswordInputFormatter(),
+      ];
+
   /// Name validator
   static String? validateName(String? value, String fieldName) {
     if (value == null || value.trim().isEmpty) {
@@ -442,6 +448,26 @@ class _CleanInputFormatter extends TextInputFormatter {
       text: text,
       selection: newValue.selection,
     );
+  }
+}
+
+class _PasswordInputFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(TextEditingValue oldValue, TextEditingValue newValue) {
+    final text = newValue.text;
+    if (text.isEmpty) return newValue;
+
+    // Prevent leading space
+    if (text.startsWith(' ')) {
+      return oldValue;
+    }
+
+    // Prevent consecutive spaces without deleting text
+    if (text.contains('  ')) {
+      return oldValue;
+    }
+
+    return newValue;
   }
 }
 

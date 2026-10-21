@@ -100,6 +100,31 @@ class LocalStorageService {
     await _ensureSaved(await prefs.setString(keySavedPassword, newPassword));
   }
 
+  static const String _savedCredPrefix = 'auth.saved_cred.';
+
+  /// Checks if credentials have already been saved on this device for the given email and password.
+  static bool hasSavedCredentials(String email, String password) {
+    final sanitizedEmail = email.trim().toLowerCase();
+    final saved = _preferences?.getString('$_savedCredPrefix$sanitizedEmail');
+    if (saved != null && saved == password) {
+      return true;
+    }
+    if (isRememberMe &&
+        savedEmail != null &&
+        savedEmail!.trim().toLowerCase() == sanitizedEmail &&
+        savedPassword == password) {
+      return true;
+    }
+    return false;
+  }
+
+  /// Marks credentials as saved on this device so the user is not prompted again.
+  static Future<void> markCredentialsSaved(String email, String password) async {
+    final sanitizedEmail = email.trim().toLowerCase();
+    final prefs = await _prefs;
+    await _ensureSaved(await prefs.setString('$_savedCredPrefix$sanitizedEmail', password));
+  }
+
   static Future<void> saveUser(UserModel user) async {
     final prefs = await _prefs;
     final userJson = jsonEncode(user.toJson());

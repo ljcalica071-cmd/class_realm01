@@ -60,7 +60,7 @@ class _TeacherMaterialViewerModalState extends State<TeacherMaterialViewerModal>
 
   bool _isSaving = false;
   bool _isReplacingFile = false;
-  String? _draftRecoveredText;
+  String? _draftRestoreedText;
   DateTime? _lastAutoSavedAt;
   Timer? _autoSaveTimer;
 
@@ -108,7 +108,7 @@ class _TeacherMaterialViewerModalState extends State<TeacherMaterialViewerModal>
           savedDraft.trim().isNotEmpty &&
           savedDraft != (_currentMaterial.description ?? '')) {
         setState(() {
-          _draftRecoveredText = savedDraft;
+          _draftRestoreedText = savedDraft;
         });
       }
     } catch (e) {
@@ -143,10 +143,10 @@ class _TeacherMaterialViewerModalState extends State<TeacherMaterialViewerModal>
   }
 
   void _restoreDraft() {
-    if (_draftRecoveredText != null) {
+    if (_draftRestoreedText != null) {
       setState(() {
-        _descController.text = _draftRecoveredText!;
-        _draftRecoveredText = null;
+        _descController.text = _draftRestoreedText!;
+        _draftRestoreedText = null;
       });
       _showToast('Local draft restored!', isError: false);
     }
@@ -155,7 +155,7 @@ class _TeacherMaterialViewerModalState extends State<TeacherMaterialViewerModal>
   void _discardDraft() {
     _clearSavedDraft();
     setState(() {
-      _draftRecoveredText = null;
+      _draftRestoreedText = null;
     });
     _showToast('Local draft discarded.', isError: false);
   }
@@ -513,9 +513,9 @@ class _TeacherMaterialViewerModalState extends State<TeacherMaterialViewerModal>
               // Top Bar: Title & Close
               _buildTopBar(theme),
 
-              if (_draftRecoveredText != null) ...[
+              if (_draftRestoreedText != null) ...[
                 const SizedBox(height: 10),
-                _buildDraftRecoveryBanner(theme),
+                _buildDraftRestoreyBanner(theme),
               ],
 
               const SizedBox(height: 16),
@@ -589,7 +589,7 @@ class _TeacherMaterialViewerModalState extends State<TeacherMaterialViewerModal>
     );
   }
 
-  Widget _buildDraftRecoveryBanner(ThemeData theme) {
+  Widget _buildDraftRestoreyBanner(ThemeData theme) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       decoration: BoxDecoration(

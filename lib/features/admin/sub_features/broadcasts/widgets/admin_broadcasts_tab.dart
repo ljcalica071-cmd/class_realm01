@@ -5,9 +5,10 @@ import 'package:class_realm/data/repositories/admin_repository.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/models/academic_models.dart';
 import 'package:class_realm/core/theme/app_theme.dart';
-import 'package:class_realm/widgets/common/expandable_notification_card.dart';
 import 'package:class_realm/core/services/email_service.dart';
 import 'package:class_realm/core/services/rate_limit_service.dart';
+import 'package:class_realm/widgets/common/expandable_notification_card.dart';
+import 'package:loading_animation_widget/loading_animation_widget.dart';
 
 class AdminBroadcastsTab extends StatefulWidget {
   const AdminBroadcastsTab({super.key});
@@ -584,10 +585,9 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
                   ),
                 ),
                 if (_isTogglingMaintenance)
-                  const SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: CircularProgressIndicator(strokeWidth: 2),
+                  LoadingAnimationWidget.staggeredDotsWave(
+                    color: theme.colorScheme.primary,
+                    size: 20,
                   )
                 else
                   Switch(
@@ -815,10 +815,9 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
                           ? null
                           : _handleSendAnnouncement,
                       icon: _isSubmittingAnnouncement
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          ? LoadingAnimationWidget.staggeredDotsWave(
+                              color: Colors.white,
+                              size: 16,
                             )
                           : const Icon(Icons.send_rounded, size: 18),
                       label: Text(
@@ -877,7 +876,15 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
           const SizedBox(height: 12),
 
           if (_isLoadingBroadcasts)
-            const Center(child: Padding(padding: EdgeInsets.all(24), child: CircularProgressIndicator()))
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: LoadingAnimationWidget.staggeredDotsWave(
+                  color: theme.colorScheme.primary,
+                  size: 28,
+                ),
+              ),
+            )
           else if (_broadcasts.isEmpty)
             Container(
               padding: const EdgeInsets.all(32),

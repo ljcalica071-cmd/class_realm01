@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/widgets/common/app_modals.dart';
@@ -10,6 +11,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:class_realm/core/services/session_activity_tracker.dart';
 
 import 'package:class_realm/routes/app_routes.dart';
+import 'package:class_realm/core/utils/browser_url_helper.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   final int initialIndex;
@@ -23,8 +25,25 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   late int _selectedIndex;
   bool _isSidebarExpanded = true;
   List<UserModel> _teachers = [];
-  bool _isLoading = true;
+  bool _isLoading = false;
   RealtimeChannel? _realtimeChannel;
+
+  String _routeForIndex(int index) {
+    switch (index) {
+      case 0:
+        return AppRoutes.adminDashboard;
+      case 1:
+        return AppRoutes.adminBroadcasts;
+      case 2:
+        return AppRoutes.adminTeacherManagement;
+      case 3:
+        return AppRoutes.adminActivityAnalytics;
+      case 4:
+        return AppRoutes.adminProfile;
+      default:
+        return AppRoutes.adminDashboard;
+    }
+  }
 
   @override
   void initState() {
@@ -46,31 +65,19 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       return;
     }
 
-    _loadData(isInitial: true);
+    updateBrowserUrl(_routeForIndex(_selectedIndex));
+    _loadData();
     _subscribeToRealtimeChanges();
   }
 
   void _navigateToTab(int index) {
     if (_selectedIndex == index) return;
-    String route = AppRoutes.adminDashboard;
-    switch (index) {
-      case 0:
-        route = AppRoutes.adminDashboard;
-        break;
-      case 1:
-        route = AppRoutes.adminBroadcasts;
-        break;
-      case 2:
-        route = AppRoutes.adminTeacherManagement;
-        break;
-      case 3:
-        route = AppRoutes.adminActivityAnalytics;
-        break;
-      case 4:
-        route = AppRoutes.adminProfile;
-        break;
-    }
-    Navigator.pushReplacementNamed(context, route);
+    final route = _routeForIndex(index);
+    setState(() {
+      _selectedIndex = index;
+    });
+    updateBrowserUrl(route);
+    SystemChannels.navigation.invokeMethod<void>('selectRouteName', route);
   }
 
   void _subscribeToRealtimeChanges() {
@@ -138,44 +145,33 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     List<UserModel> students,
     List<UserModel> parents,
   ) {
-    switch (_selectedIndex) {
-      case 0:
-        return AdminOverviewTab(
+    return IndexedStack(
+      index: _selectedIndex,
+      children: [
+        AdminOverviewTab(
           teachers: teachers,
           students: students,
           parents: parents,
-          onNavigateToBroadcasts: () => setState(() => _selectedIndex = 1),
-        );
-      case 1:
-        return const AdminBroadcastsTab();
-      case 2:
-        return AdminTeacherManagementTab(
+          onNavigateToBroadcasts: () => _navigateToTab(1),
+        ),
+        const AdminBroadcastsTab(),
+        AdminTeacherManagementTab(
           teachers: teachers,
           onDataChanged: _loadData,
-        );
-      case 3:
-        return const AdminActivityAnalyticsTab();
-      case 4:
-        return AdminProfileTab(
+        ),
+        const AdminActivityAnalyticsTab(),
+        AdminProfileTab(
           adminUser: AuthRepository.instance.currentUser,
-        );
-      default:
-        return const Center(child: Text('Coming Soon'));
-    }
+        ),
+      ],
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final user = AuthRepository.instance.currentUser;
-    if (user == null || user.role != UserRole.admin || _isLoading) {
-      return const Scaffold(
-        backgroundColor: Colors.white,
-        body: Center(
-          child: CircularProgressIndicator(
-            valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF487898)),
-          ),
-        ),
-      );
+    if (user == null || user.role != UserRole.admin) {
+      return const SizedBox.shrink();
     }
 
     // Pass loaded teachers; students/parents to be populated later

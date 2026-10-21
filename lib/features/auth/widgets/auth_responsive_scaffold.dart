@@ -117,18 +117,21 @@ class AuthResponsiveScaffold extends StatelessWidget {
         style: ElevatedButton.styleFrom(
           backgroundColor: const Color(0xFF487898),
           foregroundColor: Colors.white,
-          disabledBackgroundColor: const Color(0xFFCBD5E1),
+          disabledBackgroundColor: isLoading
+              ? const Color(0xFF3B6480)
+              : const Color(0xFFCBD5E1),
           disabledForegroundColor: Colors.white,
-          elevation: isEnabled ? 2 : 0,
-          shadowColor: const Color(0xFF487898).withValues(alpha: 0.35),
+          elevation: isEnabled ? 3 : (isLoading ? 2 : 0),
+          shadowColor: const Color(0xFF487898).withValues(alpha: 0.4),
+          splashFactory: InkSparkle.splashFactory,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
         ),
         child: isLoading
-            ? LoadingAnimationWidget.threeArchedCircle(
+            ? LoadingAnimationWidget.staggeredDotsWave(
                 color: Colors.white,
-                size: 22,
+                size: 24,
               )
             : Text(
                 label,
@@ -278,7 +281,7 @@ class AuthResponsiveScaffold extends StatelessWidget {
           alignment: Alignment.centerLeft,
           child: Container(
             constraints: const BoxConstraints(maxWidth: 1420),
-            padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 24),
+            padding: const EdgeInsets.only(left: 100, right: 48, top: 24, bottom: 24),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
@@ -560,10 +563,10 @@ class AuthResponsiveScaffold extends StatelessWidget {
 
         // 3. Bottom-Left: 3D Closed Blue Book with Ribbon Bookmark
         Positioned(
-          bottom: isMobile ? -20 : 12,
-          left: isMobile ? -28 : -58,
+          bottom: isMobile ? -50 : -60,
+          left: isMobile ? -45 : -65,
           child: IgnorePointer(
-            child: ClosedBook3DWidget(size: isMobile ? 64 : 82),
+            child: ClosedBook3DWidget(size: isMobile ? 85 : 110),
           ),
         ),
       ],

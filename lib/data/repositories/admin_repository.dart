@@ -14,17 +14,17 @@ class AdminRepository {
   // 1. DURATION & INTERVAL ALGORITHMS (EDGE CASES #17 & #19)
   // =========================================================================
 
-  /// Human-readable duration formatting strictly conforming to:
-  /// '01hr 01min 1sec', '2hrs 57mins 05secs', '00hr 57mins 1sec', '00hr 00min 40secs'
+  /// Human-readable duration formatting conforming to concise format:
+  /// '01h 01m 01s', '02h 57m 05s', '00h 57m 01s', '00h 00m 40s'
   static String formatHumanReadableDuration(int totalSeconds) {
     if (totalSeconds < 0) totalSeconds = 0;
     final hours = totalSeconds ~/ 3600;
     final minutes = (totalSeconds % 3600) ~/ 60;
     final seconds = totalSeconds % 60;
 
-    final hrStr = hours <= 1 ? '${hours.toString().padLeft(2, '0')}hr' : '${hours}hrs';
-    final minStr = minutes <= 1 ? '${minutes.toString().padLeft(2, '0')}min' : '${minutes.toString().padLeft(2, '0')}mins';
-    final secStr = seconds == 1 ? '1sec' : '${seconds.toString().padLeft(2, '0')}secs';
+    final hrStr = '${hours.toString().padLeft(2, '0')}h';
+    final minStr = '${minutes.toString().padLeft(2, '0')}m';
+    final secStr = '${seconds.toString().padLeft(2, '0')}s';
 
     return '$hrStr $minStr $secStr';
   }

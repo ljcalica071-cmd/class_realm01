@@ -87,7 +87,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     super.dispose();
   }
 
-  void _showParentRecoveryDialog() {
+  void _showParentRestoreyDialog() {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -114,7 +114,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
               ),
               const SizedBox(height: 20),
               const Text(
-                'Parent Account Recovery',
+                'Parent Account Restorey',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 20,
@@ -152,7 +152,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
     // Check if parent account domain
     if (ParentCredentialHelper.isParentDomain(email)) {
-      _showParentRecoveryDialog();
+      _showParentRestoreyDialog();
       return;
     }
 
@@ -191,7 +191,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       if (user.role == UserRole.parent) {
         if (!mounted) return;
         setState(() => _isLoading = false);
-        _showParentRecoveryDialog();
+        _showParentRestoreyDialog();
         return;
       }
 
@@ -204,7 +204,8 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       if (!mounted) return;
       setState(() => _isLoading = false);
 
-      // 3. Open shared PasswordOtpDialog modal
+      // 3. Open shared PasswordOtpDialog modal (suppress autofill before opening modal)
+      TextInput.finishAutofillContext(shouldSave: false);
       final verified = await showDialog<bool>(
         context: context,
         barrierDismissible: false,
@@ -224,7 +225,10 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         ),
       );
 
-      if (verified != true || !mounted) return;
+      if (verified != true || !mounted) {
+        TextInput.finishAutofillContext(shouldSave: false);
+        return;
+      }
 
       // 4. Update forgotten password through strict security gate
       setState(() => _isLoading = true);
@@ -237,6 +241,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       setState(() => _isLoading = false);
 
       if (updateError != null) {
+        TextInput.finishAutofillContext(shouldSave: false);
         AppModals.showErrorDialog(
           context: context,
           title: 'Password Reset Failed',
@@ -245,12 +250,13 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         return;
       }
 
-      // 5. Success confirmation
+      // 5. Success confirmation (saving/updating is handled cleanly upon actual login)
+      TextInput.finishAutofillContext(shouldSave: false);
       AppModals.showSuccessDialog(
         context: context,
         title: 'Password Reset Successful',
-        message: 'Your account password has been updated securely. You can now sign in using your new password.',
-        confirmLabel: 'Proceed to Sign In',
+        message: 'Your account password has been updated securely. You can now log in using your new password.',
+        confirmLabel: 'Proceed to Login',
         onConfirm: () {
           Navigator.pushReplacementNamed(context, AppRoutes.login);
         },
@@ -258,6 +264,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _isLoading = false);
+      TextInput.finishAutofillContext(shouldSave: false);
       AppModals.showErrorDialog(
         context: context,
         title: 'Reset Request Failed',
@@ -290,6 +297,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
               keyboardType: TextInputType.emailAddress,
               autofillHints: const [AutofillHints.email],
               textInputAction: TextInputAction.next,
+              inputFormatters: AppValidators.emailFormatters,
               onFieldSubmitted: (_) {
                 FocusScope.of(context).requestFocus(_newPassFocusNode);
               },
@@ -315,16 +323,27 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
               controller: _newPassController,
               focusNode: _newPassFocusNode,
               obscureText: _obscureNew,
-              maxLength: 30,
+              maxLength: 50,
               textInputAction: TextInputAction.next,
               onFieldSubmitted: (_) {
                 FocusScope.of(context).requestFocus(_confirmPassFocusNode);
               },
-              inputFormatters: [
-                FilteringTextInputFormatter.deny(RegExp(r' {2,}')),
-                FilteringTextInputFormatter.deny(RegExp(r'(.)\1{3,}')),
-              ],
-              buildCounter: (context, {required currentLength, required isFocused, maxLength}) => null,
+              inputFormatters: AppValidators.passwordFormatters,
+              buildCounter: (context, {required currentLength, required isFocused, maxLength}) {
+                return Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    '$currentLength/${maxLength ?? 50}',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: currentLength >= (maxLength ?? 50)
+                          ? const Color(0xFFDC2626)
+                          : const Color(0xFF64748B),
+                    ),
+                  ),
+                );
+              },
               style: const TextStyle(
                 color: Color(0xFF0F172A),
                 fontSize: 14,
@@ -365,18 +384,29 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
               controller: _confirmPassController,
               focusNode: _confirmPassFocusNode,
               obscureText: _obscureConfirm,
-              maxLength: 30,
+              maxLength: 50,
               textInputAction: TextInputAction.done,
               onFieldSubmitted: (_) {
                 if (_isFormValid && !_isLoading) {
                   _handleResetFlow();
                 }
               },
-              inputFormatters: [
-                FilteringTextInputFormatter.deny(RegExp(r' {2,}')),
-                FilteringTextInputFormatter.deny(RegExp(r'(.)\1{3,}')),
-              ],
-              buildCounter: (context, {required currentLength, required isFocused, maxLength}) => null,
+              inputFormatters: AppValidators.passwordFormatters,
+              buildCounter: (context, {required currentLength, required isFocused, maxLength}) {
+                return Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    '$currentLength/${maxLength ?? 50}',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: currentLength >= (maxLength ?? 50)
+                          ? const Color(0xFFDC2626)
+                          : const Color(0xFF64748B),
+                    ),
+                  ),
+                );
+              },
               style: const TextStyle(
                 color: Color(0xFF0F172A),
                 fontSize: 14,
@@ -425,23 +455,23 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
             const SizedBox(height: 16),
 
-            // Back to Sign In Link
+            // Back to Login Link
             Center(
               child: TextButton.icon(
-                onPressed: () {
+                onPressed: _isLoading ? null : () {
                   Navigator.pushReplacementNamed(context, AppRoutes.login);
                 },
-                icon: const Icon(
+                icon: Icon(
                   LucideIcons.arrowLeft,
                   size: 16,
-                  color: Color(0xFF487898),
+                  color: _isLoading ? const Color(0xFF94A3B8) : const Color(0xFF487898),
                 ),
-                label: const Text(
-                  'Back to Sign In',
+                label: Text(
+                  'Back to Login',
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.bold,
-                    color: Color(0xFF487898),
+                    color: _isLoading ? const Color(0xFF94A3B8) : const Color(0xFF487898),
                   ),
                 ),
               ),

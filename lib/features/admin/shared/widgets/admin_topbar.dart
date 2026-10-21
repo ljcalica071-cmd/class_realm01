@@ -64,13 +64,14 @@ class AdminTopbar extends StatelessWidget {
                 : Icons.dark_mode),
             onPressed: () {
               final notifier = AppTheme.themeModeNotifier;
-              final isDark = notifier.value == ThemeMode.light;
-              notifier.value = isDark ? ThemeMode.dark : ThemeMode.light;
+              final currentIsDark = theme.brightness == Brightness.dark;
+              final newIsDark = !currentIsDark;
+              notifier.value = newIsDark ? ThemeMode.dark : ThemeMode.light;
               final user = adminUser ?? AuthRepository.instance.currentUser;
               if (user != null) {
-                LocalStorageService.saveUserThemeMode(user.id, isDark, email: user.email);
+                LocalStorageService.saveUserThemeMode(user.id, newIsDark, email: user.email);
               } else {
-                LocalStorageService.saveThemeMode(isDark);
+                LocalStorageService.saveThemeMode(newIsDark);
               }
             },
           ),

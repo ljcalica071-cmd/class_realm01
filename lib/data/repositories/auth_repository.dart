@@ -82,7 +82,7 @@ class AuthRepository {
     LocalStorageService.saveUser(user);
   }
 
-  // Sign In
+  // Login
   Future<custom.UserModel?> authenticate(String email, String password) async {
     final cleanEmail = email.trim().toLowerCase();
 
@@ -492,12 +492,12 @@ class AuthRepository {
   Future<String> _firebaseIdToken({bool forceRefresh = false}) async {
     final user = _firebaseAuth.currentUser;
     if (user == null) {
-      throw Exception('Your sign-in session has expired. Please log in again.');
+      throw Exception('Your login session has expired. Please log in again.');
     }
     final token = await user.getIdToken(forceRefresh);
     if (token == null || token.isEmpty) {
       throw Exception(
-        'Unable to verify your sign-in session. Please log in again.',
+        'Unable to verify your login session. Please log in again.',
       );
     }
     return token;
@@ -702,7 +702,7 @@ class AuthRepository {
       }
     }
 
-    // Fallback: recover active OTP from Supabase if in-memory cleared (e.g. on F5)
+    // Fallback: restore active OTP from Supabase if in-memory cleared (e.g. on F5)
     final now = DateTime.now().toUtc();
     if (_pendingOtpCode == null && user != null) {
       try {
@@ -897,7 +897,7 @@ class AuthRepository {
     }
   }
 
-  /// Sends a secure pure Dart 6-digit OTP code to the requested email for password recovery.
+  /// Sends a secure pure Dart 6-digit OTP code to the requested email for password restorey.
   Future<Map<String, dynamic>> sendForgotPasswordOtp({
     required String email,
     String? recipientName,
@@ -1089,7 +1089,7 @@ class AuthRepository {
     };
   }
 
-  /// Verifies the 6-digit OTP code entered by the user during password recovery.
+  /// Verifies the 6-digit OTP code entered by the user during password restorey.
   Future<FirstLoginOtpVerification> verifyForgotPasswordOtp(String code) async {
     final cleanCode = code.trim();
     final email = _forgotPasswordEmail ?? '';
@@ -1112,7 +1112,7 @@ class AuthRepository {
 
     final now = DateTime.now().toUtc();
 
-    // Fallback: recover active OTP from Supabase if in-memory cleared (e.g. on F5)
+    // Fallback: restore active OTP from Supabase if in-memory cleared (e.g. on F5)
     if (_forgotPasswordOtpCode == null && email.isNotEmpty) {
       try {
         final existing = await _supabaseClient

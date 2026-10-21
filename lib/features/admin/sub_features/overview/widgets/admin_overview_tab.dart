@@ -6,6 +6,7 @@ import 'package:class_realm/models/admin_portal_models.dart';
 import 'package:class_realm/data/repositories/admin_repository.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/core/services/rate_limit_service.dart';
+import 'package:loading_animation_widget/loading_animation_widget.dart';
 
 class AdminOverviewTab extends StatefulWidget {
   final List<UserModel> teachers;
@@ -818,10 +819,9 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
                     ),
                     const SizedBox(width: 12),
                     if (_isLoadingSchoolYears)
-                      const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
+                      LoadingAnimationWidget.staggeredDotsWave(
+                        color: theme.colorScheme.primary,
+                        size: 16,
                       )
                     else if (_allSchoolYears.isEmpty)
                       Text(

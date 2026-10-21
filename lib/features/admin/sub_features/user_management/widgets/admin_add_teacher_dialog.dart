@@ -1485,13 +1485,9 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog>
                               ? Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    SizedBox(
-                                      width: 14,
-                                      height: 14,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        color: theme.colorScheme.primary,
-                                      ),
+                                    LoadingAnimationWidget.staggeredDotsWave(
+                                      color: theme.colorScheme.primary,
+                                      size: 14,
                                     ),
                                     const SizedBox(width: 8),
                                     const Text('Resending...'),

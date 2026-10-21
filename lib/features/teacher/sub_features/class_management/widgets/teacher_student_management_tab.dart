@@ -982,7 +982,7 @@ class _TeacherStudentManagementTabState
                                                             ),
                                                           ] else ...[
                                                             IconButton(
-                                                              tooltip: 'Recover Student',
+                                                              tooltip: 'Restore Student',
                                                               icon: Icon(
                                                                 Icons.restore,
                                                                 color: AppTheme
@@ -993,9 +993,9 @@ class _TeacherStudentManagementTabState
                                                               onPressed: () async {
                                                                 final confirm = await AppModals.showConfirmDialog(
                                                                   context: context,
-                                                                  title: 'Recover Student',
+                                                                  title: 'Restore Student',
                                                                   message: 'Are you sure you want to restore ${s.fullName} to active enrollment in this class?',
-                                                                  confirmLabel: 'Recover',
+                                                                  confirmLabel: 'Restore',
                                                                   confirmColor: Colors.green,
                                                                 );
                                                                 if (confirm == true) {
@@ -1009,7 +1009,7 @@ class _TeacherStudentManagementTabState
                                                                     AppModals.showSuccessDialog(
                                                                       context:
                                                                           context,
-                                                                      title: 'Recovered',
+                                                                      title: 'Restoreed',
                                                                       message:
                                                                           '${s.fullName} has been restored to active enrollment.',
                                                                     );
@@ -1197,7 +1197,7 @@ class _TeacherStudentManagementTabState
                                       ),
                                       icon: Icon(Icons.restore, size: 16),
                                       label: Text(
-                                        'Recover',
+                                        'Restore',
                                         style: TextStyle(
                                           fontWeight: FontWeight.bold,
                                           fontSize: 13,
@@ -1209,10 +1209,10 @@ class _TeacherStudentManagementTabState
                                         final confirm =
                                             await AppModals.showConfirmDialog(
                                               context: context,
-                                              title: 'Recover Selected Students',
+                                              title: 'Restore Selected Students',
                                               message:
                                                   'Are you sure you want to restore $selectedCount selected student(s) to active enrollment?',
-                                              confirmLabel: 'Recover Selected',
+                                              confirmLabel: 'Restore Selected',
                                               confirmColor: Colors.green,
                                             );
                                         if (confirm == true) {
@@ -1227,7 +1227,7 @@ class _TeacherStudentManagementTabState
                                           if (context.mounted) {
                                             AppModals.showSuccessDialog(
                                               context: context,
-                                              title: 'Students Recovered',
+                                              title: 'Students Restoreed',
                                               message:
                                                   '$selectedCount student(s) restored to active enrollment.',
                                             );

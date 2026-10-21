@@ -297,7 +297,7 @@ class EmailService {
       <div style="font-family: Arial, sans-serif; max-width: 520px; margin: 20px auto; padding: 26px; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff;">
         <h2 style="color: #1e3a5f; margin-top: 0; font-size: 22px; font-weight: bold;">Welcome to ClassRealm!</h2>
         <p style="font-size: 15px; color: #334155; margin-bottom: 8px;">Hello <strong>$teacherName</strong>,</p>
-        <p style="font-size: 14px; color: #475569; line-height: 1.6; margin-top: 0;">Your teacher account for <strong>Eduardo Barretto Sr. Integrated School</strong> is ready. Use these credentials to sign in:</p>
+        <p style="font-size: 14px; color: #475569; line-height: 1.6; margin-top: 0;">Your teacher account for <strong>Eduardo Barretto Sr. Integrated School</strong> is ready. Use these credentials to log in:</p>
         
         <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 10px; padding: 18px 20px; margin: 20px 0;">
           <div style="margin-bottom: 12px;">
@@ -315,7 +315,7 @@ class EmailService {
             🔒 Notice: First-Time Password Change Required
           </p>
           <p style="margin: 4px 0 0 0; color: #b45309; font-size: 12px;">
-            For your security, you will be required to set a new password the first time you sign in.
+            For your security, you will be required to set a new password the first time you log in.
           </p>
         </div>
 

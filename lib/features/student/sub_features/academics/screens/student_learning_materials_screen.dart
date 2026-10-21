@@ -61,7 +61,7 @@ class _StudentLearningMaterialsScreenState
     if (user == null || user.id.isEmpty) {
       setState(() {
         _isLoading = false;
-        _errorMessage = 'Please sign in as a student to view your learning materials.';
+        _errorMessage = 'Please log in as a student to view your learning materials.';
       });
       return;
     }
