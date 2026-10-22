@@ -18,6 +18,7 @@ import 'package:class_realm/core/services/sync_coordinator.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:class_realm/data/repositories/admin_repository.dart';
 import 'package:class_realm/features/auth/widgets/auth_responsive_scaffold.dart';
+import 'package:class_realm/shared/widgets/shared_widgets.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -442,202 +443,216 @@ class _LoginScreenState extends State<LoginScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Email input
-            TextFormField(
-              controller: _emailController,
-              focusNode: _emailFocusNode,
-              autofillHints: const [AutofillHints.username, AutofillHints.email],
-              inputFormatters: AppValidators.emailFormatters,
-              textInputAction: TextInputAction.next,
-              autovalidateMode: AutovalidateMode.onUserInteraction,
-              onFieldSubmitted: (_) {
-                FocusScope.of(context).requestFocus(_passwordFocusNode);
-              },
-              validator: (v) {
-                if (_isMockLoginEmail) return null;
-                return AppValidators.validateEmail(v);
-              },
-              style: const TextStyle(
-                color: Color(0xFF0F172A),
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-              ),
-              decoration: AuthResponsiveScaffold.inputDecoration(
-                hintText: 'Email',
-                prefixIcon: const Icon(
-                  LucideIcons.mail,
-                  color: Color(0xFF475569),
-                  size: 20,
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // Password input with Backspace fix
-            Focus(
-              onKeyEvent: (node, event) {
-                if (event is KeyDownEvent &&
-                    event.logicalKey == LogicalKeyboardKey.backspace) {
-                  final text = _passwordController.text;
-                  final sel = _passwordController.selection;
-                  if (text.isNotEmpty) {
-                    if (!sel.isValid || sel.start == -1) {
-                      final newText = text.substring(0, text.length - 1);
-                      _passwordController.value = TextEditingValue(
-                        text: newText,
-                        selection: TextSelection.collapsed(offset: newText.length),
-                      );
-                      return KeyEventResult.handled;
-                    } else if (sel.isCollapsed && sel.start > 0) {
-                      final start = sel.start;
-                      final newText =
-                          text.substring(0, start - 1) + text.substring(start);
-                      _passwordController.value = TextEditingValue(
-                        text: newText,
-                        selection: TextSelection.collapsed(offset: start - 1),
-                      );
-                      return KeyEventResult.handled;
-                    } else if (!sel.isCollapsed && sel.start != sel.end) {
-                      final start = sel.start < sel.end ? sel.start : sel.end;
-                      final end = sel.start < sel.end ? sel.end : sel.start;
-                      final newText =
-                          text.substring(0, start) + text.substring(end);
-                      _passwordController.value = TextEditingValue(
-                        text: newText,
-                        selection: TextSelection.collapsed(offset: start),
-                      );
-                      return KeyEventResult.handled;
-                    }
-                  }
-                }
-                return KeyEventResult.ignored;
-              },
-              child: TextFormField(
-                controller: _passwordController,
-                focusNode: _passwordFocusNode,
-                autofillHints: const [AutofillHints.password],
-                textInputAction: TextInputAction.done,
-                enableSuggestions: false,
-                autocorrect: false,
-                onTap: () {
-                  final text = _passwordController.text;
-                  if (!_passwordController.selection.isValid ||
-                      _passwordController.selection.start == -1) {
-                    _passwordController.selection =
-                        TextSelection.collapsed(offset: text.length);
-                  }
-                },
-                onFieldSubmitted: (_) {
-                  if (!_isLoading && !_isRateLimited) {
-                    _handleLogin();
-                  }
-                },
-                obscureText: _obscurePassword,
-                style: const TextStyle(
-                  color: Color(0xFF0F172A),
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                ),
-                inputFormatters: AppValidators.passwordFormatters,
-                validator: (v) {
-                  if (v == null || v.trim().isEmpty) return 'Password is required';
-                  return null;
-                },
-                decoration: AuthResponsiveScaffold.inputDecoration(
-                  hintText: 'Password',
-                  prefixIcon: const Icon(
-                    LucideIcons.lock,
-                    color: Color(0xFF475569),
-                    size: 20,
-                  ),
-                  suffixIcon: IconButton(
-                    tooltip: _obscurePassword
-                        ? 'Show password'
-                        : 'Hide password',
-                    icon: Icon(
-                      _obscurePassword
-                          ? LucideIcons.eyeOff
-                          : LucideIcons.eye,
-                      color: const Color(0xFF64748B),
-                      size: 20,
+            // Section 1 (120ms): Email & Password fields
+            StaggeredEntrance(
+              index: 2,
+              delay: const Duration(milliseconds: 120),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextFormField(
+                    controller: _emailController,
+                    focusNode: _emailFocusNode,
+                    autofillHints: const [AutofillHints.username, AutofillHints.email],
+                    inputFormatters: AppValidators.emailFormatters,
+                    textInputAction: TextInputAction.next,
+                    autovalidateMode: AutovalidateMode.onUserInteraction,
+                    onFieldSubmitted: (_) {
+                      FocusScope.of(context).requestFocus(_passwordFocusNode);
+                    },
+                    validator: (v) {
+                      if (_isMockLoginEmail) return null;
+                      return AppValidators.validateEmail(v);
+                    },
+                    style: const TextStyle(
+                      color: Color(0xFF0F172A),
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
                     ),
-                    onPressed: () => setState(() {
-                      _obscurePassword = !_obscurePassword;
-                      final text = _passwordController.text;
-                      _passwordController.selection =
-                          TextSelection.collapsed(offset: text.length);
-                    }),
+                    decoration: AuthResponsiveScaffold.inputDecoration(
+                      hintText: 'Email',
+                      prefixIcon: const Icon(
+                        LucideIcons.mail,
+                        color: Color(0xFF475569),
+                        size: 20,
+                      ),
+                    ),
                   ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // Remember Me & Forgot Password
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  children: [
-                    SizedBox(
-                      height: 22,
-                      width: 22,
-                      child: Checkbox(
-                        value: _rememberMe,
-                        onChanged: (val) =>
-                            setState(() => _rememberMe = val ?? false),
-                        activeColor: const Color(0xFF487898),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(4),
+                  const SizedBox(height: 16),
+                  Focus(
+                    onKeyEvent: (node, event) {
+                      if (event is KeyDownEvent &&
+                          event.logicalKey == LogicalKeyboardKey.backspace) {
+                        final text = _passwordController.text;
+                        final sel = _passwordController.selection;
+                        if (text.isNotEmpty) {
+                          if (!sel.isValid || sel.start == -1) {
+                            final newText = text.substring(0, text.length - 1);
+                            _passwordController.value = TextEditingValue(
+                              text: newText,
+                              selection: TextSelection.collapsed(offset: newText.length),
+                            );
+                            return KeyEventResult.handled;
+                          } else if (sel.isCollapsed && sel.start > 0) {
+                            final start = sel.start;
+                            final newText =
+                                text.substring(0, start - 1) + text.substring(start);
+                            _passwordController.value = TextEditingValue(
+                              text: newText,
+                              selection: TextSelection.collapsed(offset: start - 1),
+                            );
+                            return KeyEventResult.handled;
+                          } else if (!sel.isCollapsed && sel.start != sel.end) {
+                            final start = sel.start < sel.end ? sel.start : sel.end;
+                            final end = sel.start < sel.end ? sel.end : sel.start;
+                            final newText =
+                                text.substring(0, start) + text.substring(end);
+                            _passwordController.value = TextEditingValue(
+                              text: newText,
+                              selection: TextSelection.collapsed(offset: start),
+                            );
+                            return KeyEventResult.handled;
+                          }
+                        }
+                      }
+                      return KeyEventResult.ignored;
+                    },
+                    child: TextFormField(
+                      controller: _passwordController,
+                      focusNode: _passwordFocusNode,
+                      autofillHints: const [AutofillHints.password],
+                      textInputAction: TextInputAction.done,
+                      enableSuggestions: false,
+                      autocorrect: false,
+                      onTap: () {
+                        final text = _passwordController.text;
+                        if (!_passwordController.selection.isValid ||
+                            _passwordController.selection.start == -1) {
+                          _passwordController.selection =
+                              TextSelection.collapsed(offset: text.length);
+                        }
+                      },
+                      onFieldSubmitted: (_) {
+                        if (!_isLoading && !_isRateLimited) {
+                          _handleLogin();
+                        }
+                      },
+                      obscureText: _obscurePassword,
+                      style: const TextStyle(
+                        color: Color(0xFF0F172A),
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      inputFormatters: AppValidators.passwordFormatters,
+                      validator: (v) {
+                        if (v == null || v.trim().isEmpty) return 'Password is required';
+                        return null;
+                      },
+                      decoration: AuthResponsiveScaffold.inputDecoration(
+                        hintText: 'Password',
+                        prefixIcon: const Icon(
+                          LucideIcons.lock,
+                          color: Color(0xFF475569),
+                          size: 20,
                         ),
-                        side: const BorderSide(
-                          color: Color(0xFF334155),
-                          width: 1.5,
+                        suffixIcon: IconButton(
+                          tooltip: _obscurePassword
+                              ? 'Show password'
+                              : 'Hide password',
+                          icon: Icon(
+                            _obscurePassword
+                                ? LucideIcons.eyeOff
+                                : LucideIcons.eye,
+                            color: const Color(0xFF64748B),
+                            size: 20,
+                          ),
+                          onPressed: () => setState(() {
+                            _obscurePassword = !_obscurePassword;
+                            final text = _passwordController.text;
+                            _passwordController.selection =
+                                TextSelection.collapsed(offset: text.length);
+                          }),
                         ),
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    const Text(
-                      'Remember me',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: Color(0xFF1E293B),
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-                TextButton(
-                  onPressed: () {
-                    Navigator.pushNamed(context, AppRoutes.forgotPassword);
-                  },
-                  style: TextButton.styleFrom(
-                    padding: EdgeInsets.zero,
-                    minimumSize: const Size(0, 0),
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   ),
-                  child: const Text(
-                    'Forgot password?',
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF487898),
-                    ),
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
-            const SizedBox(height: 22),
 
-
-
-            // Login Button
-            AuthResponsiveScaffold.primaryButton(
-              label: _isRateLimited && _lockoutRemaining != null
-                  ? 'TRY AGAIN IN ${_formatLockoutRemaining(_lockoutRemaining!)}'
-                  : 'LOGIN',
-              onPressed: _isLoading || _isRateLimited ? null : _handleLogin,
-              isLoading: _isLoading,
+            // Section 2 (180ms): Remember Me, Forgot Password, LOGIN Button
+            StaggeredEntrance(
+              index: 3,
+              delay: const Duration(milliseconds: 180),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          SizedBox(
+                            height: 22,
+                            width: 22,
+                            child: Checkbox(
+                              value: _rememberMe,
+                              onChanged: (val) =>
+                                  setState(() => _rememberMe = val ?? false),
+                              activeColor: const Color(0xFF487898),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              side: const BorderSide(
+                                color: Color(0xFF334155),
+                                width: 1.5,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          const Text(
+                            'Remember me',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Color(0xFF1E293B),
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                      TextButton(
+                        onPressed: () {
+                          Navigator.pushNamed(context, AppRoutes.forgotPassword);
+                        },
+                        style: TextButton.styleFrom(
+                          padding: EdgeInsets.zero,
+                          minimumSize: const Size(0, 0),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        child: const Text(
+                          'Forgot password?',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF487898),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 22),
+                  AuthResponsiveScaffold.primaryButton(
+                    label: _isRateLimited && _lockoutRemaining != null
+                        ? 'TRY AGAIN IN ${_formatLockoutRemaining(_lockoutRemaining!)}'
+                        : 'LOGIN',
+                    onPressed: _isLoading || _isRateLimited ? null : _handleLogin,
+                    isLoading: _isLoading,
+                  ),
+                ],
+              ),
             ),
 
             const SizedBox(height: 16),

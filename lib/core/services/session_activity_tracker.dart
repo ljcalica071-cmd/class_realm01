@@ -80,6 +80,12 @@ class _SessionActivityTrackerState extends State<SessionActivityTracker>
     final user = AuthRepository.instance.currentUser;
     if (user == null) return;
 
+    final existingSessionId = LocalStorageService.getActiveSessionId();
+    if (existingSessionId != null) {
+      _activeSessionLogId = existingSessionId;
+      return;
+    }
+
     try {
       final now = DateTime.now();
       _sessionStart = now;

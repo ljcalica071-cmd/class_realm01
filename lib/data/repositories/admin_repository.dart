@@ -8,7 +8,7 @@ class AdminRepository {
   static final AdminRepository instance = AdminRepository._internal();
   AdminRepository._internal();
 
-  final SupabaseClient _client = Supabase.instance.client;
+  SupabaseClient get _client => Supabase.instance.client;
 
   // =========================================================================
   // 1. DURATION & INTERVAL ALGORITHMS (EDGE CASES #17 & #19)

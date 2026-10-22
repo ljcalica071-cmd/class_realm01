@@ -16,6 +16,8 @@ import 'package:class_realm/core/utils/parent_credential_helper.dart';
 import 'package:class_realm/core/utils/validators.dart';
 import 'package:class_realm/core/services/firebase_auth_admin_service.dart';
 import 'package:class_realm/core/services/rate_limit_service.dart';
+import 'package:class_realm/core/services/app_data_cache.dart';
+import 'package:class_realm/core/utils/browser_url_helper.dart';
 
 class FirstLoginOtpVerification {
   const FirstLoginOtpVerification({
@@ -69,8 +71,8 @@ class AuthRepository {
   static final AuthRepository instance = AuthRepository._internal();
   AuthRepository._internal();
 
-  final firebase.FirebaseAuth _firebaseAuth = firebase.FirebaseAuth.instance;
-  final SupabaseClient _supabaseClient = Supabase.instance.client;
+  firebase.FirebaseAuth get _firebaseAuth => firebase.FirebaseAuth.instance;
+  SupabaseClient get _supabaseClient => Supabase.instance.client;
 
   custom.UserModel? _currentUser;
   custom.UserModel? get currentUser =>
@@ -80,6 +82,28 @@ class AuthRepository {
     _currentUser = user;
     MockDatabase.instance.currentUser = user;
     LocalStorageService.saveUser(user);
+  }
+
+  /// Synchronously hydrates the cached user model before the first frame renders (e.g. on F5 refresh).
+  /// Enforces wall-clock inactivity checks (>= 30 mins triggers expiration).
+  custom.UserModel? hydrateCachedSessionSync() {
+    final lastInteraction = LocalStorageService.getLastInteraction();
+    if (lastInteraction != null) {
+      final diff = DateTime.now().difference(lastInteraction);
+      if (diff >= const Duration(minutes: 30)) {
+        LocalStorageService.clearCachedUser();
+        _currentUser = null;
+        MockDatabase.instance.currentUser = null;
+        return null;
+      }
+    }
+    final cached = LocalStorageService.getCachedUser();
+    if (cached != null) {
+      _currentUser = cached;
+      MockDatabase.instance.currentUser = cached;
+      return cached;
+    }
+    return null;
   }
 
   // Login
@@ -162,6 +186,7 @@ class AuthRepository {
 
         await LocalStorageService.saveUser(_currentUser!);
         MockDatabase.instance.currentUser = _currentUser;
+        unawaited(startSessionLog(_currentUser!));
         return _currentUser;
       }
     } on firebase.FirebaseAuthException catch (e) {
@@ -257,6 +282,7 @@ class AuthRepository {
           return null;
         }
 
+        unawaited(startSessionLog(_currentUser!));
         return _currentUser;
       }
 
@@ -273,6 +299,7 @@ class AuthRepository {
           }
           await LocalStorageService.saveUser(_currentUser!);
           MockDatabase.instance.currentUser = _currentUser;
+          unawaited(startSessionLog(_currentUser!));
           return _currentUser;
         }
       } catch (e) {
@@ -298,17 +325,20 @@ class AuthRepository {
       final bool isArchived = userResp['is_archived'] == true;
 
       if (role == 'teacher') {
-        final infoResp = await _supabaseClient
-            .from('teacher_settings')
-            .select()
-            .eq('teacher_id', uid)
-            .single();
-
-        final profileResp = await _supabaseClient
-            .from('teacher_profiles')
-            .select()
-            .eq('teacher_id', uid)
-            .single();
+        final results = await Future.wait([
+          _supabaseClient
+              .from('teacher_settings')
+              .select()
+              .eq('teacher_id', uid)
+              .single(),
+          _supabaseClient
+              .from('teacher_profiles')
+              .select()
+              .eq('teacher_id', uid)
+              .single(),
+        ]);
+        final infoResp = results[0];
+        final profileResp = results[1];
 
         return custom.UserModel(
           id: uid,
@@ -357,26 +387,30 @@ class AuthRepository {
           isArchived: isArchived,
         );
       } else if (role == 'student') {
-        final infoResp = await _supabaseClient
-            .from('student_settings')
-            .select(
-              'student_id, status, student_profiles!inner(student_id, lrn, first_name, middle_name, last_name, birthday, gender)',
-            )
-            .eq('student_id', uid)
-            .single();
-        final profileRaw = infoResp['student_profiles'];
+        final results = await Future.wait<dynamic>(<Future<dynamic>>[
+          _supabaseClient
+              .from('student_settings')
+              .select(
+                'student_id, status, student_profiles!inner(student_id, lrn, first_name, middle_name, last_name, birthday, gender)',
+              )
+              .eq('student_id', uid)
+              .single(),
+          _supabaseClient
+              .from('student_enrollments')
+              .select('subject_offerings(sections(section_name, grade_level))')
+              .eq('student_id', uid)
+              .eq('status', 'enrolled')
+              .limit(1)
+              .maybeSingle(),
+        ]);
+        final infoResp = results[0] as Map<String, dynamic>?;
+        final profileRaw = infoResp?['student_profiles'];
         final Map<String, dynamic> profile = profileRaw is List
             ? (profileRaw.isNotEmpty
                   ? Map<String, dynamic>.from(profileRaw.first as Map)
                   : <String, dynamic>{})
             : Map<String, dynamic>.from(profileRaw as Map? ?? {});
-        final enrollment = await _supabaseClient
-            .from('student_enrollments')
-            .select('subject_offerings(sections(section_name, grade_level))')
-            .eq('student_id', uid)
-            .eq('status', 'enrolled')
-            .limit(1)
-            .maybeSingle();
+        final enrollment = results[1] as Map<String, dynamic>?;
         final offeringRaw = enrollment?['subject_offerings'];
         final offering = offeringRaw is List
             ? (offeringRaw.isNotEmpty ? offeringRaw.first : null)
@@ -411,24 +445,27 @@ class AuthRepository {
           gradeLevel: section is Map
               ? section['grade_level']?.toString()
               : null,
-          status: _parseStatus(infoResp['status']?.toString() ?? 'active'),
+          status: _parseStatus(infoResp?['status']?.toString() ?? 'active'),
           isArchived: isArchived,
         );
       } else if (role == 'parent') {
-        final profileResp = await _supabaseClient
-            .from('parent_profiles')
-            .select(
-              'parent_id, first_name, middle_name, last_name, contact_number, birthday, status',
-            )
-            .eq('parent_id', uid)
-            .maybeSingle();
+        final results = await Future.wait<dynamic>(<Future<dynamic>>[
+          _supabaseClient
+              .from('parent_profiles')
+              .select(
+                'parent_id, first_name, middle_name, last_name, contact_number, birthday, status',
+              )
+              .eq('parent_id', uid)
+              .maybeSingle(),
+          _supabaseClient
+              .from('parent_student_links')
+              .select('student_id, relationship')
+              .eq('parent_id', uid),
+        ]);
+        final profileResp = results[0] as Map<String, dynamic>?;
+        final linksResp = results[1];
 
-        final linksResp = await _supabaseClient
-            .from('parent_student_links')
-            .select('student_id, relationship')
-            .eq('parent_id', uid);
-
-        final links = linksResp as List;
+        final links = (linksResp as List?) ?? [];
         final linkedStudentId = links.isNotEmpty
             ? links.first['student_id']?.toString()
             : null;
@@ -479,7 +516,10 @@ class AuthRepository {
   // Logout
   Future<void> logout() async {
     _currentUser = null;
-    await LocalStorageService.clearCachedUser();
+    await endSession('manual_logout');
+    await LocalStorageService.clearAuth();
+    clearWarmSession();
+    AppDataCache.instance.clearAll();
     // Attempt to sign out of Firebase
     try {
       await _firebaseAuth.signOut();
@@ -487,6 +527,68 @@ class AuthRepository {
 
     // Also sign out of mock database just in case it was a student/parent
     MockDatabase.instance.logout();
+  }
+
+  // =========================================================================
+  // Non-Blocking Session Logging for ALL Roles (Admin, Teacher, Student, Parent)
+  // =========================================================================
+
+  Future<void> startSessionLog(custom.UserModel user) async {
+    try {
+      final now = DateTime.now();
+      final roleStr = user.role.name;
+      final res = await _supabaseClient
+          .from('user_session_logs')
+          .insert({
+            'user_id': user.id,
+            'role': roleStr,
+            'session_date': now.toIso8601String().split('T').first,
+            'login_at': now.toIso8601String(),
+            'last_active_at': now.toIso8601String(),
+            'is_active': true,
+            'duration_seconds': 0,
+          })
+          .select('id')
+          .single();
+      final sessionLogId = res['id']?.toString();
+      if (sessionLogId != null) {
+        await LocalStorageService.saveActiveSessionId(sessionLogId);
+      }
+    } catch (e) {
+      debugPrint('AuthRepository startSessionLog notice: $e');
+    }
+  }
+
+  Future<void> recordHeartbeat([String? sessionId]) async {
+    final user = currentUser;
+    if (user == null) return;
+    final id = sessionId ?? LocalStorageService.getActiveSessionId();
+    if (id == null) return;
+    final now = DateTime.now();
+    try {
+      await _supabaseClient.from('user_session_logs').update({
+        'last_active_at': now.toIso8601String(),
+      }).eq('id', id);
+    } catch (e) {
+      debugPrint('AuthRepository recordHeartbeat notice: $e');
+    }
+  }
+
+  Future<void> endSession([String? reason]) async {
+    final sessionId = LocalStorageService.getActiveSessionId();
+    if (sessionId == null) return;
+    final now = DateTime.now();
+    try {
+      await _supabaseClient.from('user_session_logs').update({
+        'logout_at': now.toIso8601String(),
+        'logout_reason': reason ?? 'manual_logout',
+        'is_active': false,
+      }).eq('id', sessionId);
+    } catch (e) {
+      debugPrint('AuthRepository endSession notice: $e');
+    } finally {
+      await LocalStorageService.clearActiveSessionId();
+    }
   }
 
   Future<String> _firebaseIdToken({bool forceRefresh = false}) async {

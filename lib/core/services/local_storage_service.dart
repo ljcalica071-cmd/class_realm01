@@ -155,6 +155,9 @@ class LocalStorageService {
   static Future<void> clearAuth() async {
     final prefs = await _prefs;
     await prefs.remove(keyCachedUser);
+    await prefs.remove('session.active_id');
+    await prefs.remove('session.last_interaction');
+    await prefs.remove('session.last_active_route');
     await _ensureSaved(await prefs.remove(keyRememberMe));
     await _ensureSaved(await prefs.remove(keySavedEmail));
     await _ensureSaved(await prefs.remove(keySavedPassword));
@@ -440,6 +443,24 @@ class LocalStorageService {
   static Future<void> savePendingHeartbeat(String sessionId, DateTime dt) async {
     final prefs = await _prefs;
     await prefs.setString('session.pending_heartbeat_$sessionId', dt.toIso8601String());
+  }
+
+  static Future<void> saveLastActiveRoute(String route) async {
+    final prefs = await _prefs;
+    await prefs.setString('session.last_active_route', route);
+  }
+
+  static String? getLastActiveRoute() {
+    return _preferences?.getString('session.last_active_route');
+  }
+
+  static Future<void> saveActiveDashboardTab(String role, int index) async {
+    final prefs = await _prefs;
+    await prefs.setInt('session.tab_$role', index);
+  }
+
+  static int getActiveDashboardTab(String role) {
+    return _preferences?.getInt('session.tab_$role') ?? 0;
   }
 
   static Future<void> _ensureSaved(bool saved) async {

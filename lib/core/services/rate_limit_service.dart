@@ -75,7 +75,7 @@ class RateLimitService {
   static final RateLimitService instance = RateLimitService._internal();
   RateLimitService._internal();
 
-  final SupabaseClient _supabaseClient = Supabase.instance.client;
+  SupabaseClient get _supabaseClient => Supabase.instance.client;
 
   // 4-Tier Lockout Durations
   static const Duration tier1Duration = Duration(minutes: 5);

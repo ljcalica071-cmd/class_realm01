@@ -1,6 +1,6 @@
 {
-    "name": "class_realm",
-    "short_name": "class_realm",
+    "name": "ClassRealm",
+    "short_name": "ClassRealm",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

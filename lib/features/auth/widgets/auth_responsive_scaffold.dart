@@ -3,6 +3,7 @@ import 'package:loading_animation_widget/loading_animation_widget.dart';
 import 'package:class_realm/core/constants/asset_paths.dart';
 import 'package:class_realm/core/theme/app_theme.dart';
 import 'package:class_realm/features/auth/widgets/login_aesthetic_decorations.dart';
+import 'package:class_realm/shared/widgets/shared_widgets.dart';
 
 /// Unified, highly responsive auth layout scaffold shared across:
 /// - LoginScreen
@@ -162,36 +163,74 @@ class AuthResponsiveScaffold extends StatelessWidget {
     );
   }
 
-  /// Clean circular logo with glowing aura matching brand aesthetics
+  /// Cohesive dual branding badges with glowing aura matching brand aesthetics
   Widget _buildGlowingLogo({double size = 64}) {
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF38BDF8).withValues(alpha: 0.65),
-            blurRadius: 22,
-            spreadRadius: 4,
+    final singleSize = size * 0.85;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // School Crest Badge
+        Container(
+          width: singleSize,
+          height: singleSize,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF38BDF8).withValues(alpha: 0.65),
+                blurRadius: 18,
+                spreadRadius: 2,
+              ),
+              BoxShadow(
+                color: Colors.white.withValues(alpha: 0.50),
+                blurRadius: 8,
+                spreadRadius: 1,
+              ),
+            ],
           ),
-          BoxShadow(
-            color: Colors.white.withValues(alpha: 0.50),
-            blurRadius: 10,
-            spreadRadius: 1,
-          ),
-        ],
-      ),
-      child: ClipOval(
-        child: Container(
-          color: Colors.white,
-          padding: const EdgeInsets.all(1.0),
-          child: Image.asset(
-            AssetPaths.schoolLogo,
-            fit: BoxFit.contain,
+          child: ClipOval(
+            child: Container(
+              color: Colors.white,
+              padding: const EdgeInsets.all(2.0),
+              child: Image.asset(
+                AssetPaths.schoolLogo,
+                fit: BoxFit.contain,
+              ),
+            ),
           ),
         ),
-      ),
+        const SizedBox(width: 8),
+        // App Emblem Badge
+        Container(
+          width: singleSize,
+          height: singleSize,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFFF59E0B).withValues(alpha: 0.60),
+                blurRadius: 18,
+                spreadRadius: 2,
+              ),
+              BoxShadow(
+                color: Colors.white.withValues(alpha: 0.50),
+                blurRadius: 8,
+                spreadRadius: 1,
+              ),
+            ],
+          ),
+          child: ClipOval(
+            child: Container(
+              color: Colors.white,
+              padding: const EdgeInsets.all(2.0),
+              child: Image.asset(
+                AssetPaths.appLogo,
+                fit: BoxFit.contain,
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -288,93 +327,97 @@ class AuthResponsiveScaffold extends StatelessWidget {
                 // Left Branding Column (closer to the left edge)
                 Expanded(
                   flex: 12,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Row(
-                        children: [
-                          _buildGlowingLogo(size: 86),
-                          const SizedBox(width: 16),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: const [
-                              Text(
-                                'CLASSREALM',
-                                style: TextStyle(
-                                  fontSize: 34,
-                                  fontWeight: FontWeight.w900,
-                                  color: Colors.white,
-                                  letterSpacing: 2.0,
+                  child: StaggeredEntrance(
+                    index: 0,
+                    delay: Duration.zero,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Row(
+                          children: [
+                            _buildGlowingLogo(size: 86),
+                            const SizedBox(width: 16),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: const [
+                                Text(
+                                  'CLASSREALM',
+                                  style: TextStyle(
+                                    fontSize: 34,
+                                    fontWeight: FontWeight.w900,
+                                    color: Colors.white,
+                                    letterSpacing: 2.0,
+                                  ),
                                 ),
-                              ),
-                              SizedBox(height: 2),
-                              Text(
-                                'CALAMBA CITY, LAGUNA',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w800,
-                                  color: Color(0xFFF59E0B),
-                                  letterSpacing: 1.5,
+                                SizedBox(height: 2),
+                                Text(
+                                  'CALAMBA CITY, LAGUNA',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w800,
+                                    color: Color(0xFFF59E0B),
+                                    letterSpacing: 1.5,
+                                  ),
                                 ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 38),
-                      RichText(
-                        text: TextSpan(
-                          style: TextStyle(
-                            fontSize: titleFontSize,
-                            fontWeight: FontWeight.w900,
-                            height: 1.25,
-                            shadows: const [
-                              Shadow(
-                                color: Color(0x66000000),
-                                offset: Offset(0, 3),
-                                blurRadius: 6,
-                              ),
-                            ],
-                          ),
-                          children: const [
-                            TextSpan(
-                              text: 'One Realm ',
-                              style: TextStyle(color: Color(0xFFF59E0B)),
-                            ),
-                            TextSpan(
-                              text: 'for Every\n',
-                              style: TextStyle(color: Colors.white),
-                            ),
-                            TextSpan(
-                              text: 'Learning Journey.',
-                              style: TextStyle(color: Color(0xFF38BDF8)),
+                              ],
                             ),
                           ],
                         ),
-                      ),
-                      const SizedBox(height: 18),
-                      ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 500),
-                        child: Text(
-                          'Integrated Senior High School Attendance, Activity and Requirement Tracking, Teacher Lesson Planning, and Learning Materials Management System.',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.white.withValues(alpha: 0.88),
-                            height: 1.55,
-                            fontWeight: FontWeight.w400,
-                            shadows: const [
-                              Shadow(
-                                color: Color(0x66000000),
-                                offset: Offset(0, 1),
-                                blurRadius: 3,
+                        const SizedBox(height: 38),
+                        RichText(
+                          text: TextSpan(
+                            style: TextStyle(
+                              fontSize: titleFontSize,
+                              fontWeight: FontWeight.w900,
+                              height: 1.25,
+                              shadows: const [
+                                Shadow(
+                                  color: Color(0x66000000),
+                                  offset: Offset(0, 3),
+                                  blurRadius: 6,
+                                ),
+                              ],
+                            ),
+                            children: const [
+                              TextSpan(
+                                text: 'One Realm ',
+                                style: TextStyle(color: Color(0xFFF59E0B)),
+                              ),
+                              TextSpan(
+                                text: 'for Every\n',
+                                style: TextStyle(color: Colors.white),
+                              ),
+                              TextSpan(
+                                text: 'Learning Journey.',
+                                style: TextStyle(color: Color(0xFF38BDF8)),
                               ),
                             ],
                           ),
                         ),
-                      ),
-                    ],
+                        const SizedBox(height: 18),
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 500),
+                          child: Text(
+                            'Integrated Senior High School Attendance, Activity and Requirement Tracking, Teacher Lesson Planning, and Learning Materials Management System.',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.white.withValues(alpha: 0.88),
+                              height: 1.55,
+                              fontWeight: FontWeight.w400,
+                              shadows: const [
+                                Shadow(
+                                  color: Color(0x66000000),
+                                  offset: Offset(0, 1),
+                                  blurRadius: 3,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
 
@@ -412,52 +455,60 @@ class AuthResponsiveScaffold extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    _buildGlowingLogo(size: 80),
-                    const SizedBox(width: 14),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: const [
-                        Text(
-                          'CLASSREALM',
+                StaggeredEntrance(
+                  index: 0,
+                  delay: Duration.zero,
+                  child: Column(
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          _buildGlowingLogo(size: 80),
+                          const SizedBox(width: 14),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: const [
+                              Text(
+                                'CLASSREALM',
+                                style: TextStyle(
+                                  fontSize: 28,
+                                  fontWeight: FontWeight.w900,
+                                  color: Colors.white,
+                                  letterSpacing: 2.0,
+                                ),
+                              ),
+                              Text(
+                                'CALAMBA CITY, LAGUNA',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w800,
+                                  color: Color(0xFFF59E0B),
+                                  letterSpacing: 1.5,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 18),
+                      RichText(
+                        textAlign: TextAlign.center,
+                        text: const TextSpan(
                           style: TextStyle(
                             fontSize: 28,
                             fontWeight: FontWeight.w900,
-                            color: Colors.white,
-                            letterSpacing: 2.0,
+                            height: 1.25,
+                            shadows: [
+                              Shadow(color: Color(0x66000000), offset: Offset(0, 2), blurRadius: 5),
+                            ],
                           ),
+                          children: [
+                            TextSpan(text: 'One Realm ', style: TextStyle(color: Color(0xFFF59E0B))),
+                            TextSpan(text: 'for Every\n', style: TextStyle(color: Colors.white)),
+                            TextSpan(text: 'Learning Journey.', style: TextStyle(color: Color(0xFF38BDF8))),
+                          ],
                         ),
-                        Text(
-                          'CALAMBA CITY, LAGUNA',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w800,
-                            color: Color(0xFFF59E0B),
-                            letterSpacing: 1.5,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 18),
-                RichText(
-                  textAlign: TextAlign.center,
-                  text: const TextSpan(
-                    style: TextStyle(
-                      fontSize: 28,
-                      fontWeight: FontWeight.w900,
-                      height: 1.25,
-                      shadows: [
-                        Shadow(color: Color(0x66000000), offset: Offset(0, 2), blurRadius: 5),
-                      ],
-                    ),
-                    children: [
-                      TextSpan(text: 'One Realm ', style: TextStyle(color: Color(0xFFF59E0B))),
-                      TextSpan(text: 'for Every\n', style: TextStyle(color: Colors.white)),
-                      TextSpan(text: 'Learning Journey.', style: TextStyle(color: Color(0xFF38BDF8))),
+                      ),
                     ],
                   ),
                 ),
@@ -482,50 +533,58 @@ class AuthResponsiveScaffold extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Centered Crest Logo
-            _buildGlowingLogo(size: 88),
-            const SizedBox(height: 10),
-
-            // CLASSREALM
-            const Text(
-              'CLASSREALM',
-              style: TextStyle(
-                fontSize: 26,
-                fontWeight: FontWeight.w900,
-                color: Colors.white,
-                letterSpacing: 2.0,
-              ),
-            ),
-            const SizedBox(height: 3),
-
-            // CALAMBA CITY, LAGUNA
-            const Text(
-              'CALAMBA CITY, LAGUNA',
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w800,
-                color: Color(0xFFF59E0B),
-                letterSpacing: 1.5,
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // Hero Tagline in 3 colors
-            RichText(
-              textAlign: TextAlign.center,
-              text: const TextSpan(
-                style: TextStyle(
-                  fontSize: 23,
-                  fontWeight: FontWeight.w900,
-                  height: 1.25,
-                  shadows: [
-                    Shadow(color: Color(0x66000000), offset: Offset(0, 2), blurRadius: 4),
-                  ],
-                ),
+            StaggeredEntrance(
+              index: 0,
+              delay: Duration.zero,
+              child: Column(
                 children: [
-                  TextSpan(text: 'One Realm ', style: TextStyle(color: Color(0xFFF59E0B))),
-                  TextSpan(text: 'for Every\n', style: TextStyle(color: Colors.white)),
-                  TextSpan(text: 'Learning Journey.', style: TextStyle(color: Color(0xFF38BDF8))),
+                  // Centered Crest Logo
+                  _buildGlowingLogo(size: 88),
+                  const SizedBox(height: 10),
+
+                  // CLASSREALM
+                  const Text(
+                    'CLASSREALM',
+                    style: TextStyle(
+                      fontSize: 26,
+                      fontWeight: FontWeight.w900,
+                      color: Colors.white,
+                      letterSpacing: 2.0,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+
+                  // CALAMBA CITY, LAGUNA
+                  const Text(
+                    'CALAMBA CITY, LAGUNA',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                      color: Color(0xFFF59E0B),
+                      letterSpacing: 1.5,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Hero Tagline in 3 colors
+                  RichText(
+                    textAlign: TextAlign.center,
+                    text: const TextSpan(
+                      style: TextStyle(
+                        fontSize: 23,
+                        fontWeight: FontWeight.w900,
+                        height: 1.25,
+                        shadows: [
+                          Shadow(color: Color(0x66000000), offset: Offset(0, 2), blurRadius: 4),
+                        ],
+                      ),
+                      children: [
+                        TextSpan(text: 'One Realm ', style: TextStyle(color: Color(0xFFF59E0B))),
+                        TextSpan(text: 'for Every\n', style: TextStyle(color: Colors.white)),
+                        TextSpan(text: 'Learning Journey.', style: TextStyle(color: Color(0xFF38BDF8))),
+                      ],
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -608,23 +667,33 @@ class AuthResponsiveScaffold extends StatelessWidget {
             Center(child: cardTopLogo!),
             const SizedBox(height: 12),
           ],
-          Text(
-            cardTitle,
-            style: TextStyle(
-              fontWeight: FontWeight.w800,
-              fontSize: isMobile ? 22 : 24,
-              color: const Color(0xFF0F172A),
-              letterSpacing: -0.3,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            cardSubtitle,
-            style: const TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
-              color: Color(0xFF64748B),
-              height: 1.35,
+          StaggeredEntrance(
+            index: 1,
+            delay: const Duration(milliseconds: 60),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  cardTitle,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: isMobile ? 22 : 24,
+                    color: const Color(0xFF0F172A),
+                    letterSpacing: -0.3,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  cardSubtitle,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: Color(0xFF64748B),
+                    height: 1.35,
+                  ),
+                ),
+              ],
             ),
           ),
           const SizedBox(height: 22),

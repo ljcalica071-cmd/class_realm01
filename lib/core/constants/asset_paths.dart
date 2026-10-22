@@ -9,6 +9,9 @@ class AssetPaths {
   /// School brand crest / logo used in app bars, headers, and print layouts.
   static const String schoolLogo = 'assets/branding/school_logo.png';
 
+  /// ClassRealm application logo used in app launcher, loading screen, and headers.
+  static const String appLogo = 'assets/branding/logo_app.png';
+
   /// School campus background image for landing / authentication screens.
   static const String landingBackground = 'assets/images/auth/school.jpg';
 

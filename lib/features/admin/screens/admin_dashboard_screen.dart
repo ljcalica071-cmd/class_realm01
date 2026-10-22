@@ -10,8 +10,12 @@ import 'package:class_realm/core/utils/logout_helper.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:class_realm/core/services/session_activity_tracker.dart';
 
+import 'dart:async';
 import 'package:class_realm/routes/app_routes.dart';
 import 'package:class_realm/core/utils/browser_url_helper.dart';
+import 'package:class_realm/core/services/app_data_cache.dart';
+import 'package:class_realm/core/services/local_storage_service.dart';
+import 'package:class_realm/shared/widgets/shared_widgets.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   final int initialIndex;
@@ -48,7 +52,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   @override
   void initState() {
     super.initState();
-    _selectedIndex = widget.initialIndex;
+    final savedTab = LocalStorageService.getActiveDashboardTab('admin');
+    _selectedIndex = widget.initialIndex != 0 ? widget.initialIndex : savedTab;
 
     // Direct URL entry security guard: only authenticated Admins allowed
     final user = AuthRepository.instance.currentUser;
@@ -65,7 +70,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       return;
     }
 
-    updateBrowserUrl(_routeForIndex(_selectedIndex));
+    final currentRoute = _routeForIndex(_selectedIndex);
+    updateBrowserUrl(currentRoute);
+    LocalStorageService.saveLastActiveRoute(currentRoute);
+    LocalStorageService.saveActiveDashboardTab('admin', _selectedIndex);
     _loadData();
     _subscribeToRealtimeChanges();
   }
@@ -77,6 +85,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       _selectedIndex = index;
     });
     updateBrowserUrl(route);
+    LocalStorageService.saveLastActiveRoute(route);
+    LocalStorageService.saveActiveDashboardTab('admin', index);
     SystemChannels.navigation.invokeMethod<void>('selectRouteName', route);
   }
 
@@ -111,15 +121,36 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   }
 
   Future<void> _loadData({bool isInitial = false}) async {
-    if (isInitial) {
-      setState(() => _isLoading = true);
-    }
-    final allTeachers = await AuthRepository.instance.getTeachers();
-    if (mounted) {
+    // SWR Instant Frame 1 Cache
+    final cached = AppDataCache.instance.getCached<List<UserModel>>(
+      'admin_teachers_list',
+      (json) => (json as List)
+          .map((e) => UserModel.fromJson(Map<String, dynamic>.from(e as Map)))
+          .toList(),
+    );
+    if (cached != null && cached.isNotEmpty && mounted) {
       setState(() {
-        _teachers = allTeachers;
+        _teachers = cached;
         _isLoading = false;
       });
+    } else if (isInitial) {
+      setState(() => _isLoading = true);
+    }
+
+    try {
+      final allTeachers = await AuthRepository.instance.getTeachers();
+      if (mounted) {
+        setState(() {
+          _teachers = allTeachers;
+          _isLoading = false;
+        });
+        unawaited(AppDataCache.instance.setCache(
+          'admin_teachers_list',
+          allTeachers.map((t) => t.toJson()).toList(),
+        ));
+      }
+    } catch (_) {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -220,10 +251,14 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 Expanded(
                   child: Container(
                     color: Theme.of(context).scaffoldBackgroundColor,
-                    child: _buildBodyContent(
-                      teachers,
-                      students,
-                      parents,
+                    child: StaggeredEntrance(
+                      key: ValueKey(_selectedIndex),
+                      index: 0,
+                      child: _buildBodyContent(
+                        teachers,
+                        students,
+                        parents,
+                      ),
                     ),
                   ),
                 ),

@@ -18,6 +18,8 @@ import 'package:class_realm/data/repositories/supabase_teacher_classwork_reposit
 import 'package:class_realm/widgets/common/app_modals.dart';
 import 'package:class_realm/core/services/local_storage_service.dart';
 import 'package:class_realm/core/services/session_activity_tracker.dart';
+import 'package:class_realm/shared/widgets/shared_widgets.dart';
+import 'package:class_realm/routes/app_routes.dart';
 
 class TeacherDashboardScreen extends StatefulWidget {
   const TeacherDashboardScreen({
@@ -47,6 +49,11 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   @override
   void initState() {
     super.initState();
+    final savedTab = LocalStorageService.getActiveDashboardTab('teacher');
+    if (savedTab != null && widget.initialSelectedIndex == 0) {
+      _selectedIndex = savedTab;
+    }
+    LocalStorageService.saveLastActiveRoute(AppRoutes.teacherDashboard);
     _loadData();
     _loadActivities();
     _checkGradebookLockStatus();
@@ -374,7 +381,10 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                   LucideIcons.bellRing,
                   color: theme.colorScheme.onSurface,
                 ),
-                onPressed: () => setState(() => _selectedIndex = 15),
+                onPressed: () {
+                  setState(() => _selectedIndex = 15);
+                  LocalStorageService.saveActiveDashboardTab('teacher', 15);
+                },
               ),
               const SizedBox(width: 8),
               CircleAvatar(
@@ -408,29 +418,33 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                         (widget.teacher ?? AuthRepository.instance.currentUser)
                             ?.fullName ??
                         'Teacher',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
-                      color: theme.colorScheme.onSurface,
-                    ),
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                    color: theme.colorScheme.onSurface,
                   ),
-                  Text(
-                    'Faculty',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                    ),
+                ),
+                Text(
+                  'Faculty',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                   ),
-                ],
-              ),
-            ],
-          ),
+                ),
+              ],
+            ),
+          ],
         ),
+      ),
 
-        // Dynamic Body View
-        Expanded(
-          child: Container(
-            color: Colors.transparent, // Inherits Scaffold 60% Background
+      // Dynamic Body View
+      Expanded(
+        child: Container(
+          color: Colors.transparent, // Inherits Scaffold 60% Background
+          child: StaggeredEntrance(
+            key: ValueKey(_selectedIndex),
+            index: 0,
+            duration: const Duration(milliseconds: 280),
             child: _buildTeacherBodyContent(
               activeStudents,
               archivedStudents,
@@ -444,8 +458,9 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
             ),
           ),
         ),
-      ],
-    );
+      ),
+    ],
+  );
 
     return SessionActivityTracker(
       child: Scaffold(
@@ -549,6 +564,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
               ? null 
               : () {
                   setState(() => _selectedIndex = index);
+                  LocalStorageService.saveActiveDashboardTab('teacher', index);
                   if (!isGradebook) {
                     _checkGradebookLockStatus();
                   }

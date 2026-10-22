@@ -9,6 +9,8 @@ import 'package:class_realm/widgets/common/sync_status_badge.dart';
 import 'package:class_realm/features/parent/widgets/widgets.dart';
 import 'package:class_realm/data/repositories/supabase_parent_repository.dart';
 import 'package:class_realm/core/services/session_activity_tracker.dart';
+import 'package:class_realm/shared/widgets/shared_widgets.dart';
+import 'package:class_realm/routes/app_routes.dart';
 
 class ParentHomeScreen extends StatefulWidget {
   const ParentHomeScreen({super.key});
@@ -28,6 +30,11 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
   @override
   void initState() {
     super.initState();
+    final savedTab = LocalStorageService.getActiveDashboardTab('parent');
+    if (savedTab != null && savedTab >= 0 && savedTab < 5) {
+      _currentIndex = savedTab;
+    }
+    LocalStorageService.saveLastActiveRoute(AppRoutes.parentHome);
     _loadLinkedStudents();
   }
 
@@ -309,7 +316,12 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
                           size: 40,
                         ),
                       )
-                    : pages[_currentIndex],
+                    : StaggeredEntrance(
+                        key: ValueKey(_currentIndex),
+                        index: 0,
+                        duration: const Duration(milliseconds: 280),
+                        child: pages[_currentIndex],
+                      ),
               ),
             ],
           );
@@ -324,7 +336,10 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
       ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
-        onTap: (index) => setState(() => _currentIndex = index),
+        onTap: (index) {
+          setState(() => _currentIndex = index);
+          LocalStorageService.saveActiveDashboardTab('parent', index);
+        },
         type: BottomNavigationBarType.fixed,
         items: const [
           BottomNavigationBarItem(
