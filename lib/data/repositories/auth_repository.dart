@@ -805,10 +805,82 @@ class AuthRepository {
   Future<String?> completeFirstLogin(String userId, String newPassword) async {
     try {
       final user = _firebaseAuth.currentUser;
-      if (user == null || user.uid != userId) {
+      final currentAppUser = _currentUser;
+      if ((user == null || user.uid != userId) &&
+          (currentAppUser == null || currentAppUser.id != userId)) {
         return "No matching authenticated user found.";
       }
-      await user.updatePassword(newPassword);
+
+      bool updated = false;
+
+      // 1. Try updating password via Firebase Client SDK
+      if (user != null && user.uid == userId) {
+        try {
+          await user.updatePassword(newPassword);
+          updated = true;
+          debugPrint('[AuthRepository] Password updated via client SDK.');
+        } catch (clientErr) {
+          debugPrint(
+              '[AuthRepository] Client updatePassword failed ($clientErr), falling back to Service Account Admin API...');
+        }
+      }
+
+      // 2. If client SDK threw requires-recent-login or was stale, update via Service Account Admin API
+      if (!updated) {
+        final adminOk = await FirebaseAuthAdminService.updateUserPassword(
+          uid: userId,
+          newPassword: newPassword,
+        );
+        if (adminOk) {
+          updated = true;
+          debugPrint(
+              '[AuthRepository] Password updated via FirebaseAuthAdminService.');
+          try {
+            await _firebaseAuth.currentUser?.reload();
+          } catch (_) {}
+        }
+      }
+
+      // 3. Fallback: Edge Function reset-password
+      if (!updated) {
+        final userEmail = user?.email ?? currentAppUser?.email;
+        if (userEmail != null && userEmail.isNotEmpty) {
+          final supabaseUrl = EnvConfig.supabaseUrl;
+          final supabaseAnonKey = EnvConfig.supabaseAnonKey;
+          if (supabaseUrl.isNotEmpty && supabaseAnonKey.isNotEmpty) {
+            try {
+              final resetUrl =
+                  Uri.parse('$supabaseUrl/functions/v1/reset-password');
+              final resp = await http.post(
+                resetUrl,
+                headers: {
+                  'Content-Type': 'application/json',
+                  'apikey': supabaseAnonKey,
+                  'Authorization': 'Bearer $supabaseAnonKey',
+                },
+                body: jsonEncode({
+                  'email': userEmail.trim().toLowerCase(),
+                  'new_password': newPassword,
+                }),
+              );
+              final respData =
+                  jsonDecode(resp.body) as Map<String, dynamic>?;
+              if (resp.statusCode == 200 && respData?['success'] == true) {
+                updated = true;
+                debugPrint(
+                    '[AuthRepository] Password updated via reset-password edge function.');
+              }
+            } catch (edgeErr) {
+              debugPrint(
+                  '[AuthRepository] Edge function fallback notice: $edgeErr');
+            }
+          }
+        }
+      }
+
+      if (!updated) {
+        return "Security check failed due to an inactive session. Please click 'Back to Login', re-enter your temporary credentials, and try setting your new password again.";
+      }
 
       // Direct Pure Dart Supabase profile updates
       try {
@@ -1244,29 +1316,39 @@ class AuthRepository {
         return 'User account not found.';
       }
 
-      // 1. Invoke Supabase Edge Function to update password in Firebase Authentication
-      final supabaseUrl = EnvConfig.supabaseUrl;
-      final supabaseAnonKey = EnvConfig.supabaseAnonKey;
-
-      final resetUrl = Uri.parse('$supabaseUrl/functions/v1/reset-password');
-      final resp = await http.post(
-        resetUrl,
-        headers: {
-          'Content-Type': 'application/json',
-          'apikey': supabaseAnonKey,
-          'Authorization': 'Bearer $supabaseAnonKey',
-        },
-        body: jsonEncode({
-          'email': cleanEmail,
-          'new_password': newPassword,
-        }),
+      // 1. Primary: Use FirebaseAuthAdminService to update password directly via Service Account
+      bool updated = await FirebaseAuthAdminService.updateUserPassword(
+        uid: user.id,
+        newPassword: newPassword,
       );
 
-      final respData = jsonDecode(resp.body) as Map<String, dynamic>?;
-      if (resp.statusCode != 200 || respData?['success'] != true) {
-        final err = respData?['error'] ?? 'Failed to update password in Firebase Auth.';
-        debugPrint('[AuthRepository] reset-password failed: $err');
-        return err.toString();
+      // 2. Fallback: Invoke Supabase Edge Function to update password in Firebase Authentication
+      if (!updated) {
+        final supabaseUrl = EnvConfig.supabaseUrl;
+        final supabaseAnonKey = EnvConfig.supabaseAnonKey;
+
+        final resetUrl = Uri.parse('$supabaseUrl/functions/v1/reset-password');
+        final resp = await http.post(
+          resetUrl,
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': supabaseAnonKey,
+            'Authorization': 'Bearer $supabaseAnonKey',
+          },
+          body: jsonEncode({
+            'email': cleanEmail,
+            'new_password': newPassword,
+          }),
+        );
+
+        final respData = jsonDecode(resp.body) as Map<String, dynamic>?;
+        if (resp.statusCode == 200 && respData?['success'] == true) {
+          updated = true;
+        } else {
+          final err = respData?['error'] ?? 'Failed to update password in Firebase Auth.';
+          debugPrint('[AuthRepository] reset-password failed: $err');
+          return err.toString();
+        }
       }
 
       // 2. Update Supabase status to active
