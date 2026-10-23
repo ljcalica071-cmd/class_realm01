@@ -163,74 +163,36 @@ class AuthResponsiveScaffold extends StatelessWidget {
     );
   }
 
-  /// Cohesive dual branding badges with glowing aura matching brand aesthetics
+  /// Cohesive branding badge with glowing aura matching brand aesthetics
   Widget _buildGlowingLogo({double size = 64}) {
-    final singleSize = size * 0.85;
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        // School Crest Badge
-        Container(
-          width: singleSize,
-          height: singleSize,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFF38BDF8).withValues(alpha: 0.65),
-                blurRadius: 18,
-                spreadRadius: 2,
-              ),
-              BoxShadow(
-                color: Colors.white.withValues(alpha: 0.50),
-                blurRadius: 8,
-                spreadRadius: 1,
-              ),
-            ],
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF38BDF8).withValues(alpha: 0.65),
+            blurRadius: 18,
+            spreadRadius: 2,
           ),
-          child: ClipOval(
-            child: Container(
-              color: Colors.white,
-              padding: const EdgeInsets.all(2.0),
-              child: Image.asset(
-                AssetPaths.schoolLogo,
-                fit: BoxFit.contain,
-              ),
-            ),
+          BoxShadow(
+            color: Colors.white.withValues(alpha: 0.50),
+            blurRadius: 8,
+            spreadRadius: 1,
+          ),
+        ],
+      ),
+      child: ClipOval(
+        child: Container(
+          color: Colors.white,
+          padding: const EdgeInsets.all(2.0),
+          child: Image.asset(
+            AssetPaths.schoolLogo,
+            fit: BoxFit.contain,
           ),
         ),
-        const SizedBox(width: 8),
-        // App Emblem Badge
-        Container(
-          width: singleSize,
-          height: singleSize,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFFF59E0B).withValues(alpha: 0.60),
-                blurRadius: 18,
-                spreadRadius: 2,
-              ),
-              BoxShadow(
-                color: Colors.white.withValues(alpha: 0.50),
-                blurRadius: 8,
-                spreadRadius: 1,
-              ),
-            ],
-          ),
-          child: ClipOval(
-            child: Container(
-              color: Colors.white,
-              padding: const EdgeInsets.all(2.0),
-              child: Image.asset(
-                AssetPaths.appLogo,
-                fit: BoxFit.contain,
-              ),
-            ),
-          ),
-        ),
-      ],
+      ),
     );
   }
 
@@ -256,20 +218,20 @@ class AuthResponsiveScaffold extends StatelessWidget {
                   height: double.infinity,
                 ),
 
-                // 2. Royal Blue Sky Gradient Overlay (Softened so school photo is clearly visible)
+                // 2. Royal Blue Sky Gradient Overlay (Darkened on the left for text legibility)
                 Positioned.fill(
                   child: Container(
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
+                        begin: Alignment.centerLeft,
+                        end: Alignment.centerRight,
                         colors: [
-                          const Color(0xFF034A7F).withValues(alpha: 0.68),
-                          const Color(0xFF0267A3).withValues(alpha: 0.38),
-                          const Color(0xFF0284C7).withValues(alpha: 0.14),
-                          const Color(0xFF0284C7).withValues(alpha: 0.03),
+                          const Color(0xFF034A7F).withValues(alpha: 0.90), // Much darker on the left text area
+                          const Color(0xFF0267A3).withValues(alpha: 0.70), 
+                          const Color(0xFF0284C7).withValues(alpha: 0.35),
+                          const Color(0xFF0284C7).withValues(alpha: 0.05),
                         ],
-                        stops: const [0.0, 0.35, 0.70, 1.0],
+                        stops: const [0.0, 0.30, 0.60, 1.0],
                       ),
                     ),
                   ),

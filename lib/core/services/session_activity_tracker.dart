@@ -171,10 +171,7 @@ class _SessionActivityTrackerState extends State<SessionActivityTracker>
       return;
     }
 
-    // 28-Minute Warning Prompt (2 minutes before logout)
-    if (inactiveDuration >= const Duration(minutes: 28) && !_isWarningDialogShowing) {
-      _showInactivityWarningModal();
-    }
+    // 28-Minute Warning Prompt completely removed as requested.
   }
 
   void _showInactivityWarningModal() {
@@ -229,21 +226,8 @@ class _SessionActivityTrackerState extends State<SessionActivityTracker>
       _isWarningDialogShowing = false;
     }
 
-    final sessionId = _activeSessionLogId ?? LocalStorageService.getActiveSessionId();
-    if (sessionId != null) {
-      try {
-        final now = DateTime.now();
-        await Supabase.instance.client.from('user_session_logs').update({
-          'logout_at': now.toIso8601String(),
-          'logout_reason': reason,
-          'is_active': false,
-        }).eq('id', sessionId);
-      } catch (_) {}
-      await LocalStorageService.clearActiveSessionId();
-    }
-
     if (mounted) {
-      await LogoutHelper.logout(context);
+      await LogoutHelper.logout(context, reason);
     }
   }
 

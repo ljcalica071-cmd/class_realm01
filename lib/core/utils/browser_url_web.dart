@@ -7,6 +7,15 @@ void updateBrowserUrlPath(String path) {
   } catch (_) {}
 }
 
+String getBrowserUrlPathWeb() {
+  try {
+    final path = html.window.location.pathname;
+    return (path != null && path.isNotEmpty) ? path : '/';
+  } catch (_) {
+    return '/';
+  }
+}
+
 bool isWarmSessionWeb() {
   try {
     return html.window.sessionStorage['classrealm_warm_session'] == '1';
@@ -24,6 +33,46 @@ void markWarmSessionWeb() {
 void clearWarmSessionWeb() {
   try {
     html.window.sessionStorage.remove('classrealm_warm_session');
+  } catch (_) {}
+}
+
+void removePreBootstrapLoaderWeb() {
+  try {
+    final loader = html.document.getElementById('pre-bootstrap-loader');
+    if (loader != null) {
+      loader.style.opacity = '0';
+      loader.style.transition = 'opacity 0.25s ease-out';
+      Future.delayed(const Duration(milliseconds: 250), () {
+        try {
+          loader.remove();
+        } catch (_) {}
+      });
+    }
+  } catch (_) {}
+}
+
+double getPreBootstrapProgressWeb() {
+  try {
+    final loader = html.document.getElementById('pre-bootstrap-loader');
+    final raw =
+        double.tryParse(loader?.getAttribute('data-progress') ?? '') ?? 0.0;
+    return raw > 1.0 ? (raw / 100.0).clamp(0.0, 1.0) : raw.clamp(0.0, 1.0);
+  } catch (_) {
+    return 0.0;
+  }
+}
+
+void updatePreBootstrapProgressWeb(double progress, String status) {
+  try {
+    final loader = html.document.getElementById('pre-bootstrap-loader');
+    if (loader == null) return;
+    final value = progress.clamp(0.0, 1.0);
+    loader.setAttribute('data-progress', value.toString());
+    html.document.getElementById('bootstrap-progress-fill')?.style.width =
+        '${(value * 100).toStringAsFixed(1)}%';
+    html.document.getElementById('bootstrap-progress-value')?.text =
+        '${(value * 100).round()}%';
+    html.document.getElementById('bootstrap-status')?.text = status;
   } catch (_) {}
 }
 

@@ -15,9 +15,7 @@ void main() {
   Widget buildSetupTab() {
     return const MaterialApp(
       home: Scaffold(
-        body: SingleChildScrollView(
-          child: TeacherClassroomSetupTab(),
-        ),
+        body: SingleChildScrollView(child: TeacherClassroomSetupTab()),
       ),
     );
   }
@@ -100,6 +98,69 @@ void main() {
 
       // Verify Term Block is marked required with asterisk
       expect(find.text('*'), findsWidgets);
+    },
+  );
+
+  testWidgets(
+    'subject and section names allow single internal spaces and show live length counters',
+    (tester) async {
+      tester.view.physicalSize = const Size(1400, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await tester.pumpWidget(buildSetupTab());
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Add Subject'));
+      await tester.pumpAndSettle();
+
+      final subjectFinder = find.widgetWithText(
+        TextField,
+        'e.g. General Mathematics',
+      );
+      final sectionFinder = find.widgetWithText(TextField, 'e.g. STEM 11-A');
+
+      expect(find.text('0/60'), findsOneWidget);
+      expect(find.text('0/30'), findsOneWidget);
+
+      await tester.enterText(subjectFinder, '  General   Mathematics  ');
+      await tester.pump();
+      expect(
+        tester.widget<TextField>(subjectFinder).controller!.text,
+        'General Mathematics ',
+      );
+      expect(find.text('20/60'), findsOneWidget);
+
+      await tester.testTextInput.receiveAction(TextInputAction.next);
+      await tester.pump();
+      expect(
+        tester.widget<TextField>(subjectFinder).controller!.text,
+        'General Mathematics',
+      );
+      expect(find.text('19/60'), findsOneWidget);
+
+      await tester.enterText(sectionFinder, '  STEM   11-A  ');
+      await tester.pump();
+      expect(
+        tester.widget<TextField>(sectionFinder).controller!.text,
+        'STEM 11-A ',
+      );
+      expect(find.text('10/30'), findsOneWidget);
+
+      await tester.testTextInput.receiveAction(TextInputAction.next);
+      await tester.pump();
+      expect(
+        tester.widget<TextField>(sectionFinder).controller!.text,
+        'STEM 11-A',
+      );
+      expect(find.text('9/30'), findsOneWidget);
+
+      await tester.enterText(subjectFinder, 'A' * 65);
+      await tester.pump();
+      expect(
+        tester.widget<TextField>(subjectFinder).controller!.text.length,
+        60,
+      );
+      expect(find.text('60/60'), findsOneWidget);
     },
   );
 }

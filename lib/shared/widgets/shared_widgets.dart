@@ -7,3 +7,4 @@ export 'modals/password_otp_dialog.dart';             // PasswordOtpDialog
 export 'badges/status_badge.dart';         // StatusBadge, AppSectionBanner, AppTableHeader, AppTableColumn
 export 'badges/sync_status_badge.dart';    // SyncStatusBadge
 export 'animations/staggered_entrance.dart'; // StaggeredEntrance
+export 'indicators/global_top_loading_bar.dart'; // GlobalTopLoadingBar

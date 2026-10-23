@@ -4,8 +4,8 @@ import 'package:class_realm/routes/app_routes.dart';
 import 'package:class_realm/core/theme/app_theme.dart';
 
 class LogoutHelper {
-  static Future<void> logout(BuildContext context) async {
-    await AuthRepository.instance.logout();
+  static Future<void> logout(BuildContext context, [String? reason]) async {
+    await AuthRepository.instance.logout(reason);
     AppTheme.themeModeNotifier.value = ThemeMode.light;
 
     if (context.mounted) {

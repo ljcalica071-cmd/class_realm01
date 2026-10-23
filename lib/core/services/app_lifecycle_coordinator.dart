@@ -29,7 +29,16 @@ class AppLifecycleCoordinator with WidgetsBindingObserver {
   final ValueNotifier<AppActivityLifecycleState> stateNotifier =
       ValueNotifier<AppActivityLifecycleState>(AppActivityLifecycleState.created);
 
+  /// Global notifier tracking background sync / session revalidation across warm refresh.
+  final ValueNotifier<bool> isSyncingNotifier = ValueNotifier<bool>(false);
+
   AppActivityLifecycleState get currentState => stateNotifier.value;
+
+  void setSyncing(bool syncing) {
+    if (isSyncingNotifier.value != syncing) {
+      isSyncingNotifier.value = syncing;
+    }
+  }
 
   final List<VoidCallback> _resumeListeners = <VoidCallback>[];
   final List<VoidCallback> _pauseListeners = <VoidCallback>[];

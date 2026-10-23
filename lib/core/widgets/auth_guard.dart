@@ -19,13 +19,9 @@ class AuthGuard extends StatefulWidget {
 }
 
 class _AuthGuardState extends State<AuthGuard> {
-  Timer? _inactivityTimer;
-  static const int _timeoutMinutes = 30;
-
   @override
   void initState() {
     super.initState();
-    _startInactivityTimer();
     _checkAuth();
   }
 
@@ -60,9 +56,10 @@ class _AuthGuardState extends State<AuthGuard> {
         return;
       }
 
-      // 2. Role not allowed for this route
+      // 2. Role not allowed for this route (e.g., URL tampering)
+      // Redirect back to their respective dashboard instead of logging them out
       if (!widget.allowedRoles.contains(user.role)) {
-        _redirect(AppRoutes.login);
+        _redirect(AppRoutes.getDashboardRouteForRole(user.role));
         return;
       }
 
@@ -86,35 +83,9 @@ class _AuthGuardState extends State<AuthGuard> {
     if (route == AppRoutes.login) {
       Navigator.pushNamedAndRemoveUntil(context, AppRoutes.login, (r) => false);
     } else if (ModalRoute.of(context)?.settings.name != route) {
+      // Use pushReplacementNamed to prevent filling the browser history with unauthorized route loops
       Navigator.pushReplacementNamed(context, route);
     }
-  }
-
-  void _resetInactivityTimer() {
-    _inactivityTimer?.cancel();
-    _startInactivityTimer();
-  }
-
-  void _startInactivityTimer() {
-    _inactivityTimer = Timer(const Duration(minutes: _timeoutMinutes), () {
-      // Session Expired
-      AuthRepository.instance.logout();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Session expired due to inactivity. Please log in again.'),
-            backgroundColor: Colors.redAccent,
-          ),
-        );
-        Navigator.pushNamedAndRemoveUntil(context, AppRoutes.login, (route) => false);
-      }
-    });
-  }
-
-  @override
-  void dispose() {
-    _inactivityTimer?.cancel();
-    super.dispose();
   }
 
   @override
@@ -125,12 +96,6 @@ class _AuthGuardState extends State<AuthGuard> {
       return const SizedBox.shrink();
     }
 
-    // Wrap with a Listener to detect ANY interaction and reset the inactivity timer
-    return Listener(
-      onPointerDown: (_) => _resetInactivityTimer(),
-      onPointerMove: (_) => _resetInactivityTimer(),
-      onPointerUp: (_) => _resetInactivityTimer(),
-      child: widget.child,
-    );
+    return widget.child;
   }
 }

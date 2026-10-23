@@ -13,7 +13,6 @@ import 'package:class_realm/features/student/sub_features/schedule/screens/stude
 import 'package:class_realm/features/student/sub_features/schedule/screens/student_schedule_screen.dart';
 import 'package:class_realm/models/student_dashboard_models.dart';
 import 'package:class_realm/models/user_model.dart';
-import 'package:class_realm/widgets/common/app_modals.dart';
 import 'package:loading_animation_widget/loading_animation_widget.dart';
 import 'package:class_realm/features/student/sub_features/profile/widgets/student_notifications_tab.dart';
 import 'package:class_realm/core/services/session_activity_tracker.dart';
@@ -38,7 +37,7 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
   void initState() {
     super.initState();
     final savedTab = LocalStorageService.getActiveDashboardTab('student');
-    if (savedTab != null && savedTab >= 0 && savedTab < 5) {
+    if (savedTab >= 0 && savedTab < 5) {
       _currentIndex = savedTab;
     }
     LocalStorageService.saveLastActiveRoute(AppRoutes.studentHome);

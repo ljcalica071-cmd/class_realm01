@@ -293,25 +293,30 @@ class AdminRepository {
     try {
       final res = await _client
           .from('users')
-          .select('role')
-          .eq('is_archived', false);
+          .select('role, email')
+          .eq('is_archived', false)
+          .not('email', 'in', '("teacher", "student", "parent")'); // exclude pure mock accounts
 
       final counts = <String, int>{
-        'teacher': 0,
-        'student': 0,
-        'parent': 0,
+        'teachers': 0,
+        'students': 0,
+        'parents': 0,
+        'total': 0,
       };
 
       for (var row in (res as List)) {
         final role = row['role']?.toString();
-        if (role != null && counts.containsKey(role)) {
-          counts[role] = (counts[role] ?? 0) + 1;
+        if (role == 'teacher') counts['teachers'] = counts['teachers']! + 1;
+        if (role == 'student') counts['students'] = counts['students']! + 1;
+        if (role == 'parent') counts['parents'] = counts['parents']! + 1;
+        if (role == 'teacher' || role == 'student' || role == 'parent') {
+          counts['total'] = counts['total']! + 1;
         }
       }
       return counts;
     } catch (e) {
       debugPrint('AdminRepository getActiveUserCountsByRole error: $e');
-      return {'teacher': 0, 'student': 0, 'parent': 0};
+      return {'teachers': 0, 'students': 0, 'parents': 0, 'total': 0};
     }
   }
 
@@ -440,7 +445,7 @@ class AdminRepository {
   /// Privacy-compliant teacher workload summary: integer counts only!
   Future<List<TeacherWorkloadSummary>> getTeacherWorkloadSummaries(String schoolYearId) async {
     try {
-      // 1. Get active teachers from teacher_profiles joined with users
+      // 1. Get ONLY active teachers (status = active), excluding archived and pending_first_login
       final teachersRes = await _client
           .from('teacher_profiles')
           .select('''
@@ -448,9 +453,11 @@ class AdminRepository {
             first_name,
             last_name,
             gender,
+            status,
             users!inner ( is_archived )
           ''')
-          .eq('users.is_archived', false);
+          .eq('users.is_archived', false)
+          .eq('status', 'active');
 
       final teachers = (teachersRes as List);
 

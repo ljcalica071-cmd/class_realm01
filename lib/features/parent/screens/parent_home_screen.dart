@@ -5,7 +5,6 @@ import 'package:class_realm/core/services/local_storage_service.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/data/mock_database.dart';
 import 'package:class_realm/models/user_model.dart';
-import 'package:class_realm/widgets/common/sync_status_badge.dart';
 import 'package:class_realm/features/parent/widgets/widgets.dart';
 import 'package:class_realm/data/repositories/supabase_parent_repository.dart';
 import 'package:class_realm/core/services/session_activity_tracker.dart';
@@ -31,7 +30,7 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
   void initState() {
     super.initState();
     final savedTab = LocalStorageService.getActiveDashboardTab('parent');
-    if (savedTab != null && savedTab >= 0 && savedTab < 5) {
+    if (savedTab >= 0 && savedTab < 5) {
       _currentIndex = savedTab;
     }
     LocalStorageService.saveLastActiveRoute(AppRoutes.parentHome);

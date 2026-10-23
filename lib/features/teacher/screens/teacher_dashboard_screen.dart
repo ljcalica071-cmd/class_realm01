@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:class_realm/core/utils/browser_url_helper.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:loading_animation_widget/loading_animation_widget.dart';
 
@@ -7,7 +9,6 @@ import 'package:class_realm/core/utils/logout_helper.dart';
 import 'package:class_realm/data/mock_database.dart';
 import 'package:class_realm/models/academic_models.dart';
 import 'package:class_realm/models/user_model.dart';
-import 'package:class_realm/widgets/common/sync_status_badge.dart';
 import 'package:class_realm/features/teacher/sub_features/assessments/screens/activity_submissions_screen.dart';
 import 'package:class_realm/features/teacher/sub_features/assessments/screens/create_assessment_flow.dart';
 import 'package:class_realm/features/teacher/sub_features/assessments/screens/create_requirement_flow.dart';
@@ -15,7 +16,6 @@ import 'package:class_realm/features/teacher/widgets/tabs/tabs.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/data/repositories/subject_repository.dart';
 import 'package:class_realm/data/repositories/supabase_teacher_classwork_repository.dart';
-import 'package:class_realm/widgets/common/app_modals.dart';
 import 'package:class_realm/core/services/local_storage_service.dart';
 import 'package:class_realm/core/services/session_activity_tracker.dart';
 import 'package:class_realm/shared/widgets/shared_widgets.dart';
@@ -46,14 +46,58 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   bool _isGradebookLocked = true;
   DateTime? _lastGradebookCheck;
 
+  String _routeForIndex(int index) {
+    switch (index) {
+      case 0:
+        return AppRoutes.teacherDashboard;
+      case 17:
+        return AppRoutes.teacherClassroomSetup;
+      case 18:
+        return AppRoutes.teacherGradebook;
+      case 12:
+        return AppRoutes.teacherManageStudents;
+      case 19:
+        return AppRoutes.teacherManageParents;
+      case 1:
+        return AppRoutes.teacherClasswork;
+      case 3:
+        return AppRoutes.teacherLessonPlanning;
+      case 4:
+        return AppRoutes.teacherLearningMaterials;
+      case 5:
+        return AppRoutes.teacherAttendance;
+      case 9:
+        return AppRoutes.teacherGrades;
+      case 14:
+        return AppRoutes.teacherSchedule;
+      case 15:
+        return AppRoutes.teacherNotifications;
+      case 16:
+        return AppRoutes.teacherProfile;
+      default:
+        return AppRoutes.teacherDashboard;
+    }
+  }
+
+  void _onSelectTab(int index) {
+    setState(() => _selectedIndex = index);
+    LocalStorageService.saveActiveDashboardTab('teacher', index);
+    final route = _routeForIndex(index);
+    LocalStorageService.saveLastActiveRoute(route);
+    updateBrowserUrl(route);
+    SystemChannels.navigation.invokeMethod<void>('selectRouteName', route);
+  }
+
   @override
   void initState() {
     super.initState();
     final savedTab = LocalStorageService.getActiveDashboardTab('teacher');
-    if (savedTab != null && widget.initialSelectedIndex == 0) {
+    if (widget.initialSelectedIndex == 0) {
       _selectedIndex = savedTab;
     }
-    LocalStorageService.saveLastActiveRoute(AppRoutes.teacherDashboard);
+    final currentRoute = _routeForIndex(_selectedIndex);
+    LocalStorageService.saveLastActiveRoute(currentRoute);
+    updateBrowserUrl(currentRoute);
     _loadData();
     _loadActivities();
     _checkGradebookLockStatus();
@@ -381,10 +425,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                   LucideIcons.bellRing,
                   color: theme.colorScheme.onSurface,
                 ),
-                onPressed: () {
-                  setState(() => _selectedIndex = 15);
-                  LocalStorageService.saveActiveDashboardTab('teacher', 15);
-                },
+                onPressed: () => _onSelectTab(15),
               ),
               const SizedBox(width: 8),
               CircleAvatar(
@@ -563,8 +604,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
           onTap: isLocked 
               ? null 
               : () {
-                  setState(() => _selectedIndex = index);
-                  LocalStorageService.saveActiveDashboardTab('teacher', index);
+                  _onSelectTab(index);
                   if (!isGradebook) {
                     _checkGradebookLockStatus();
                   }
@@ -649,7 +689,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         return TeacherDashboardOverviewTab(
           activeStudents: activeStudents,
           quizzesAndExams: quizzesAndExams,
-          onNavigateTo: (idx) => setState(() => _selectedIndex = idx),
+          onNavigateTo: (idx) => _onSelectTab(idx),
           onCreateChooser: () => _showUnifiedCreateChooser(context),
         );
       case 1:
@@ -692,7 +732,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         return const TeacherAcademicSetupTab();
       case 17:
         return TeacherClassroomSetupTab(
-          onNavigateTo: (idx) => setState(() => _selectedIndex = idx),
+          onNavigateTo: (idx) => _onSelectTab(idx),
         );
       case 18:
         return const TeacherGradebookTab();

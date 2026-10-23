@@ -2,6 +2,8 @@ void updateBrowserUrlPath(String path) {
   // No-op on mobile and desktop platforms.
 }
 
+String getBrowserUrlPathWeb() => '/';
+
 bool _mobileWarmSession = false;
 
 bool isWarmSessionWeb() => _mobileWarmSession;
@@ -13,6 +15,12 @@ void markWarmSessionWeb() {
 void clearWarmSessionWeb() {
   _mobileWarmSession = false;
 }
+
+void removePreBootstrapLoaderWeb() {}
+
+double getPreBootstrapProgressWeb() => 0;
+
+void updatePreBootstrapProgressWeb(double progress, String status) {}
 
 void registerWebLifecycleListenersPlatform({
   required void Function() onFocus,

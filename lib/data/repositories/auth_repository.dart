@@ -94,6 +94,7 @@ class AuthRepository {
         LocalStorageService.clearCachedUser();
         _currentUser = null;
         MockDatabase.instance.currentUser = null;
+        clearWarmSession();
         return null;
       }
     }
@@ -101,6 +102,7 @@ class AuthRepository {
     if (cached != null) {
       _currentUser = cached;
       MockDatabase.instance.currentUser = cached;
+      markWarmSession();
       return cached;
     }
     return null;
@@ -514,9 +516,9 @@ class AuthRepository {
   }
 
   // Logout
-  Future<void> logout() async {
+  Future<void> logout([String? reason]) async {
     _currentUser = null;
-    await endSession('manual_logout');
+    await endSession(reason ?? 'manual_logout');
     await LocalStorageService.clearAuth();
     clearWarmSession();
     AppDataCache.instance.clearAll();
@@ -575,15 +577,33 @@ class AuthRepository {
   }
 
   Future<void> endSession([String? reason]) async {
-    final sessionId = LocalStorageService.getActiveSessionId();
-    if (sessionId == null) return;
     final now = DateTime.now();
     try {
-      await _supabaseClient.from('user_session_logs').update({
-        'logout_at': now.toIso8601String(),
-        'logout_reason': reason ?? 'manual_logout',
-        'is_active': false,
-      }).eq('id', sessionId);
+      final sessionId = LocalStorageService.getActiveSessionId();
+      
+      if (sessionId != null) {
+        // Try closing the specific session first
+        await _supabaseClient.from('user_session_logs').update({
+          'logout_at': now.toIso8601String(),
+          'logout_reason': reason ?? 'manual_logout',
+          'is_active': false,
+        }).eq('id', sessionId);
+      }
+      
+      // FALLBACK & BULK CLEANUP:
+      // Even if session ID is lost in local storage (due to hot reloads/tests),
+      // force close ALL active sessions for this user to guarantee accuracy.
+      final user = currentUser;
+      if (user != null) {
+        await _supabaseClient.from('user_session_logs').update({
+          'logout_at': now.toIso8601String(),
+          'logout_reason': reason ?? 'manual_logout_fallback',
+          'is_active': false,
+        })
+        .eq('user_id', user.id)
+        .eq('is_active', true);
+      }
+      
     } catch (e) {
       debugPrint('AuthRepository endSession notice: $e');
     } finally {

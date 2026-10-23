@@ -1,7 +1,10 @@
 import 'dart:async';
 import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:class_realm/core/services/app_data_cache.dart';
+import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/data/repositories/admin_repository.dart';
 import 'package:class_realm/models/admin_portal_models.dart';
 import 'package:class_realm/core/theme/app_theme.dart';
@@ -13,7 +16,8 @@ class AdminActivityAnalyticsTab extends StatefulWidget {
   const AdminActivityAnalyticsTab({super.key});
 
   @override
-  State<AdminActivityAnalyticsTab> createState() => _AdminActivityAnalyticsTabState();
+  State<AdminActivityAnalyticsTab> createState() =>
+      _AdminActivityAnalyticsTabState();
 }
 
 class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
@@ -48,6 +52,7 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
     super.initState();
     _tickerNotifier = ValueNotifier<DateTime>(DateTime.now());
     _startTicker();
+    _restoreCachedData(_getCacheKey());
     _loadData();
     _subscribeToSessionRealtime();
   }
@@ -94,8 +99,66 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
     return _activeFilter;
   }
 
-  Future<void> _loadData({bool isSilent = false, bool isFilterSwitch = false}) async {
+  String _persistentCacheKey(String filterKey) {
+    final adminId = AuthRepository.instance.currentUser?.id ?? 'unknown';
+    return 'admin_activity_${adminId}_$filterKey';
+  }
+
+  bool _restoreCachedData(String filterKey) {
+    try {
+      final cached = AppDataCache.instance.getCached<Map<String, dynamic>>(
+        _persistentCacheKey(filterKey),
+        (json) => Map<String, dynamic>.from(json as Map),
+      );
+      if (cached == null) return false;
+
+      final logs = (cached['logs'] as List)
+          .map(
+            (entry) => UserSessionLog.fromJson(
+              Map<String, dynamic>.from(entry as Map),
+            ),
+          )
+          .toList();
+      final workloads = (cached['workloads'] as List)
+          .map((entry) => Map<String, dynamic>.from(entry as Map))
+          .map(
+            (entry) => TeacherWorkloadSummary(
+              teacherId: entry['teacher_id']?.toString() ?? '',
+              teacherName: entry['teacher_name']?.toString() ?? 'Teacher',
+              totalSubjectsCount:
+                  (entry['total_subjects_count'] as num?)?.toInt() ?? 0,
+              totalSectionsCount:
+                  (entry['total_sections_count'] as num?)?.toInt() ?? 0,
+              isActiveNow: entry['is_active_now'] == true,
+              todayDurationSeconds:
+                  (entry['today_duration_seconds'] as num?)?.toInt() ?? 0,
+              weekDurationSeconds:
+                  (entry['week_duration_seconds'] as num?)?.toInt() ?? 0,
+            ),
+          )
+          .toList();
+
+      _sessionLogsCache[filterKey] = logs;
+      _workloadCache[filterKey] = workloads;
+      _sessionLogs = logs;
+      _workloadSummaries = workloads;
+      _hasInitialLoaded = true;
+      return true;
+    } catch (error) {
+      debugPrint('Admin activity cache read notice: $error');
+      return false;
+    }
+  }
+
+  Future<void> _loadData({
+    bool isSilent = false,
+    bool isFilterSwitch = false,
+  }) async {
     final cacheKey = _getCacheKey();
+
+    if (isFilterSwitch && !_sessionLogsCache.containsKey(cacheKey)) {
+      _restoreCachedData(cacheKey);
+    }
 
     // If cached and switching filters, immediately display cached data with zero latency
     if (isFilterSwitch && _sessionLogsCache.containsKey(cacheKey)) {
@@ -125,7 +188,11 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
       endDate = DateTime(now.year, now.month, now.day);
     } else if (_activeFilter == 'week') {
       // Monday of current week
-      startDate = DateTime(now.year, now.month, now.day).subtract(Duration(days: now.weekday - 1));
+      startDate = DateTime(
+        now.year,
+        now.month,
+        now.day,
+      ).subtract(Duration(days: now.weekday - 1));
       endDate = DateTime(now.year, now.month, now.day);
     } else if (_activeFilter == 'custom' && _selectedCustomDate != null) {
       final d = _selectedCustomDate!;
@@ -141,10 +208,29 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
         startDate: startDate,
         endDate: endDate,
       );
-      final workloads = await AdminRepository.instance.getTeacherWorkloadSummaries(syId);
+      final workloads = await AdminRepository.instance
+          .getTeacherWorkloadSummaries(syId);
 
       _sessionLogsCache[cacheKey] = logs;
       _workloadCache[cacheKey] = workloads;
+      unawaited(
+        AppDataCache.instance.setCache(_persistentCacheKey(cacheKey), {
+          'logs': logs.map((log) {
+            return {...log.toJson(), 'teacher_name': log.teacherName};
+          }).toList(),
+          'workloads': workloads.map((summary) {
+            return {
+              'teacher_id': summary.teacherId,
+              'teacher_name': summary.teacherName,
+              'total_subjects_count': summary.totalSubjectsCount,
+              'total_sections_count': summary.totalSectionsCount,
+              'is_active_now': summary.isActiveNow,
+              'today_duration_seconds': summary.todayDurationSeconds,
+              'week_duration_seconds': summary.weekDurationSeconds,
+            };
+          }).toList(),
+        }),
+      );
 
       if (mounted) {
         setState(() {
@@ -242,13 +328,22 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
     final isDark = theme.brightness == Brightness.dark;
 
     // Initial load: show high-polish shimmer skeleton only on very first boot
-    if (!_hasInitialLoaded && _sessionLogs.isEmpty && _workloadSummaries.isEmpty) {
+    if (!_hasInitialLoaded &&
+        _sessionLogs.isEmpty &&
+        _workloadSummaries.isEmpty) {
       return _buildSkeletonLoading(context, isDark);
     }
 
-    final activeNowCount = _sessionLogs.where((s) => s.isActive).map((s) => s.userId).toSet().length;
+    final activeNowCount = _sessionLogs
+        .where((s) => s.isActive)
+        .map((s) => s.userId)
+        .toSet()
+        .length;
     final totalTrackedTeachers = _workloadSummaries.length;
-    final totalDurationSeconds = _sessionLogs.fold<int>(0, (sum, s) => sum + s.durationSeconds);
+    final totalDurationSeconds = _sessionLogs.fold<int>(
+      0,
+      (sum, s) => sum + s.durationSeconds,
+    );
 
     return Stack(
       children: [
@@ -262,11 +357,22 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
               const SizedBox(height: 22),
 
               // KPI Metric Cards
-              _buildMetricCardsRow(context, isDark, activeNowCount, totalTrackedTeachers, totalDurationSeconds),
+              _buildMetricCardsRow(
+                context,
+                isDark,
+                activeNowCount,
+                totalTrackedTeachers,
+                totalDurationSeconds,
+              ),
               const SizedBox(height: 24),
 
               // Visual Analytics Charts Row (Curve Chart & Donut Chart - inspired by Pic 4)
-              _buildAnalyticsChartsRow(context, isDark, activeNowCount, totalTrackedTeachers),
+              _buildAnalyticsChartsRow(
+                context,
+                isDark,
+                activeNowCount,
+                totalTrackedTeachers,
+              ),
               const SizedBox(height: 28),
 
               // Teacher Workload & Total Usage Summary Cards
@@ -288,7 +394,9 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
             child: LinearProgressIndicator(
               minHeight: 3,
               backgroundColor: Colors.transparent,
-              valueColor: AlwaysStoppedAnimation<Color>(theme.colorScheme.primary),
+              valueColor: AlwaysStoppedAnimation<Color>(
+                theme.colorScheme.primary,
+              ),
             ),
           ),
       ],
@@ -304,7 +412,8 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
     String customDateLabel = 'Select Date';
     if (_selectedCustomDate != null) {
       final d = _selectedCustomDate!;
-      customDateLabel = '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+      customDateLabel =
+          '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
     }
 
     return LayoutBuilder(
@@ -316,7 +425,11 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
           children: [
             Row(
               children: [
-                Icon(LucideIcons.chartColumn, size: 22, color: theme.colorScheme.primary),
+                Icon(
+                  LucideIcons.chartColumn,
+                  size: 22,
+                  color: theme.colorScheme.primary,
+                ),
                 const SizedBox(width: 10),
                 Text(
                   'Teacher Activity & Analytics Hub',
@@ -364,11 +477,7 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
         if (isNarrow) {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              headerText,
-              const SizedBox(height: 16),
-              filterBar,
-            ],
+            children: [headerText, const SizedBox(height: 16), filterBar],
           );
         }
 
@@ -401,9 +510,7 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         decoration: BoxDecoration(
-          color: isSelected
-              ? theme.colorScheme.primary
-              : Colors.transparent,
+          color: isSelected ? theme.colorScheme.primary : Colors.transparent,
           borderRadius: BorderRadius.circular(8),
           boxShadow: isSelected
               ? [
@@ -411,7 +518,7 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
                     color: theme.colorScheme.primary.withValues(alpha: 0.3),
                     blurRadius: 6,
                     offset: const Offset(0, 2),
-                  )
+                  ),
                 ]
               : null,
         ),
@@ -441,9 +548,7 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
-          color: isSelected
-              ? theme.colorScheme.primary
-              : Colors.transparent,
+          color: isSelected ? theme.colorScheme.primary : Colors.transparent,
           borderRadius: BorderRadius.circular(8),
           boxShadow: isSelected
               ? [
@@ -451,7 +556,7 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
                     color: theme.colorScheme.primary.withValues(alpha: 0.3),
                     blurRadius: 6,
                     offset: const Offset(0, 2),
-                  )
+                  ),
                 ]
               : null,
         ),
@@ -508,7 +613,9 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
     return LayoutBuilder(
       builder: (context, constraints) {
         final isNarrow = constraints.maxWidth < 900;
-        final cardWidth = isNarrow ? (constraints.maxWidth - 12) / 2 : (constraints.maxWidth - 36) / 3;
+        final cardWidth = isNarrow
+            ? (constraints.maxWidth - 12) / 2
+            : (constraints.maxWidth - 36) / 3;
 
         return Wrap(
           spacing: 12,
@@ -670,7 +777,12 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
             children: [
               _buildUsageCurveChartCard(context, isDark),
               const SizedBox(height: 16),
-              _buildActivityDonutChartCard(context, isDark, activeNowCount, totalTrackedTeachers),
+              _buildActivityDonutChartCard(
+                context,
+                isDark,
+                activeNowCount,
+                totalTrackedTeachers,
+              ),
             ],
           );
         }
@@ -678,9 +790,20 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
         return Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(flex: 6, child: _buildUsageCurveChartCard(context, isDark)),
+            Expanded(
+              flex: 6,
+              child: _buildUsageCurveChartCard(context, isDark),
+            ),
             const SizedBox(width: 16),
-            Expanded(flex: 4, child: _buildActivityDonutChartCard(context, isDark, activeNowCount, totalTrackedTeachers)),
+            Expanded(
+              flex: 4,
+              child: _buildActivityDonutChartCard(
+                context,
+                isDark,
+                activeNowCount,
+                totalTrackedTeachers,
+              ),
+            ),
           ],
         );
       },
@@ -731,9 +854,10 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
                   Text(
                     _activeFilter == 'week'
                         ? 'Daily hours spent by teachers using the system this week'
-                        : (_activeFilter == 'custom' && _selectedCustomDate != null
-                            ? 'Hourly hours spent by teachers on ${_formatDate(_selectedCustomDate!)}'
-                            : 'Hourly hours spent by teachers using the system today'),
+                        : (_activeFilter == 'custom' &&
+                                  _selectedCustomDate != null
+                              ? 'Hourly hours spent by teachers on ${_formatDate(_selectedCustomDate!)}'
+                              : 'Hourly hours spent by teachers using the system today'),
                     style: TextStyle(
                       fontSize: 12,
                       color: isDark ? Colors.white54 : const Color(0xFF64748B),
@@ -742,7 +866,10 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
                 ],
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 5,
+                ),
                 decoration: BoxDecoration(
                   color: AppTheme.catGreen.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(8),
@@ -797,7 +924,11 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
     final theme = Theme.of(context);
 
     // Calculate distribution
-    final completedSessionsCount = _sessionLogs.where((s) => !s.isActive).map((s) => s.userId).toSet().length;
+    final completedSessionsCount = _sessionLogs
+        .where((s) => !s.isActive)
+        .map((s) => s.userId)
+        .toSet()
+        .length;
     final totalActiveToday = activeNowCount + completedSessionsCount;
     final idleCount = math.max(0, totalTrackedTeachers - totalActiveToday);
 
@@ -853,7 +984,6 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
                         size: const Size(140, 140),
                         painter: _TeacherActivityDonutPainter(
                           activeNowCount: activeNowCount,
-                          completedCount: completedSessionsCount,
                           idleCount: idleCount,
                           total: math.max(1, totalTrackedTeachers),
                           isDark: isDark,
@@ -875,7 +1005,9 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
                             'Teachers',
                             style: TextStyle(
                               fontSize: 11,
-                              color: isDark ? Colors.white54 : const Color(0xFF64748B),
+                              color: isDark
+                                  ? Colors.white54
+                                  : const Color(0xFF64748B),
                             ),
                           ),
                         ],
@@ -900,16 +1032,11 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
                       ),
                       const SizedBox(height: 10),
                       _buildDonutLegendItem(
-                        label: 'Used System Earlier',
-                        count: completedSessionsCount,
-                        color: theme.colorScheme.primary,
-                        isDark: isDark,
-                      ),
-                      const SizedBox(height: 10),
-                      _buildDonutLegendItem(
-                        label: 'No Usage Recorded',
+                        label: 'Offline',
                         count: idleCount,
-                        color: isDark ? Colors.white24 : const Color(0xFFCBD5E1),
+                        color: isDark
+                            ? Colors.white24
+                            : const Color(0xFFCBD5E1),
                         isDark: isDark,
                       ),
                     ],
@@ -934,10 +1061,7 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
         Container(
           width: 10,
           height: 10,
-          decoration: BoxDecoration(
-            color: color,
-            shape: BoxShape.circle,
-          ),
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
         ),
         const SizedBox(width: 8),
         Expanded(
@@ -989,7 +1113,8 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
     for (final log in _sessionLogs) {
       final h = log.loginAt.hour;
       for (int i = 0; i < hourBuckets.length; i++) {
-        if (h >= hourBuckets[i] && (i == hourBuckets.length - 1 || h < hourBuckets[i + 1])) {
+        if (h >= hourBuckets[i] &&
+            (i == hourBuckets.length - 1 || h < hourBuckets[i + 1])) {
           values[i] += (log.durationSeconds / 3600.0);
           break;
         }
@@ -1044,25 +1169,33 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
                   alignment: Alignment.center,
                   child: Text(
                     'No teacher records found for this active school year.',
-                    style: TextStyle(color: isDark ? Colors.white54 : const Color(0xFF64748B)),
+                    style: TextStyle(
+                      color: isDark ? Colors.white54 : const Color(0xFF64748B),
+                    ),
                   ),
                 )
               : Wrap(
                   spacing: 12,
                   runSpacing: 12,
                   children: _workloadSummaries.map((w) {
-                    final teacherSessions = _sessionLogs.where((s) => s.userId == w.teacherId).toList();
+                    final teacherSessions = _sessionLogs
+                        .where((s) => s.userId == w.teacherId)
+                        .toList();
 
                     return Container(
                       width: 280,
                       padding: const EdgeInsets.all(14),
                       decoration: BoxDecoration(
-                        color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+                        color: isDark
+                            ? const Color(0xFF0F172A)
+                            : const Color(0xFFF8FAFC),
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
                           color: w.isActiveNow
                               ? AppTheme.catGreen.withValues(alpha: 0.6)
-                              : (isDark ? Colors.white10 : const Color(0xFFE2E8F0)),
+                              : (isDark
+                                    ? Colors.white10
+                                    : const Color(0xFFE2E8F0)),
                           width: w.isActiveNow ? 1.5 : 1,
                         ),
                       ),
@@ -1084,7 +1217,10 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
                               Expanded(
                                 child: Text(
                                   w.teacherName,
-                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5),
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13.5,
+                                  ),
                                   overflow: TextOverflow.ellipsis,
                                 ),
                               ),
@@ -1094,16 +1230,44 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Text('Subjects Handled:', style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurface.withValues(alpha: 0.6))),
-                              Text('${w.totalSubjectsCount}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                              Text(
+                                'Subjects Handled:',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: theme.colorScheme.onSurface.withValues(
+                                    alpha: 0.6,
+                                  ),
+                                ),
+                              ),
+                              Text(
+                                '${w.totalSubjectsCount}',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
+                                ),
+                              ),
                             ],
                           ),
                           const SizedBox(height: 4),
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Text('Sections Handled:', style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurface.withValues(alpha: 0.6))),
-                              Text('${w.totalSectionsCount}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                              Text(
+                                'Sections Handled:',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: theme.colorScheme.onSurface.withValues(
+                                    alpha: 0.6,
+                                  ),
+                                ),
+                              ),
+                              Text(
+                                '${w.totalSectionsCount}',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
+                                ),
+                              ),
                             ],
                           ),
                           const Divider(height: 16),
@@ -1113,8 +1277,12 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
                               int totalSecs = 0;
                               for (final s in teacherSessions) {
                                 if (s.isActive) {
-                                  final elapsed = currentNow.difference(s.loginAt).inSeconds;
-                                  totalSecs += (elapsed > 0 ? elapsed : s.durationSeconds);
+                                  final elapsed = currentNow
+                                      .difference(s.loginAt)
+                                      .inSeconds;
+                                  totalSecs += (elapsed > 0
+                                      ? elapsed
+                                      : s.durationSeconds);
                                 } else {
                                   totalSecs += s.durationSeconds;
                                 }
@@ -1125,28 +1293,35 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
                                 periodLabel = 'Today Usage:';
                               } else if (_activeFilter == 'week') {
                                 periodLabel = 'This Week Usage:';
-                              } else if (_activeFilter == 'custom' && _selectedCustomDate != null) {
+                              } else if (_activeFilter == 'custom' &&
+                                  _selectedCustomDate != null) {
                                 periodLabel = 'Date Usage:';
                               } else {
                                 periodLabel = 'Total Usage:';
                               }
 
                               return Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
                                 children: [
                                   Text(
                                     periodLabel,
                                     style: TextStyle(
                                       fontSize: 11.5,
-                                      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                                      color: theme.colorScheme.onSurface
+                                          .withValues(alpha: 0.6),
                                     ),
                                   ),
                                   Text(
-                                    AdminRepository.formatHumanReadableDuration(totalSecs),
+                                    AdminRepository.formatHumanReadableDuration(
+                                      totalSecs,
+                                    ),
                                     style: TextStyle(
                                       fontWeight: FontWeight.bold,
                                       fontSize: 11.5,
-                                      color: totalSecs > 0 ? AppTheme.catGreen : theme.colorScheme.primary,
+                                      color: totalSecs > 0
+                                          ? AppTheme.catGreen
+                                          : theme.colorScheme.primary,
                                     ),
                                   ),
                                 ],
@@ -1201,12 +1376,18 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
             decoration: BoxDecoration(
               color: isDark ? const Color(0xFF1E293B) : Colors.white,
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: isDark ? Colors.white10 : const Color(0xFFE2E8F0)),
+              border: Border.all(
+                color: isDark ? Colors.white10 : const Color(0xFFE2E8F0),
+              ),
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(LucideIcons.history, size: 44, color: isDark ? Colors.white24 : Colors.grey.shade300),
+                Icon(
+                  LucideIcons.history,
+                  size: 44,
+                  color: isDark ? Colors.white24 : Colors.grey.shade300,
+                ),
                 const SizedBox(height: 14),
                 Text(
                   'No Login Records Found',
@@ -1227,223 +1408,291 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
               ],
             ),
           )
-        else () {
-          final totalLogs = _sessionLogs.length;
-          final totalPages = (totalLogs / _historyItemsPerPage).ceil();
-          int safePage = _currentHistoryPage;
-          if (safePage > totalPages && totalPages > 0) {
-            safePage = totalPages;
-          }
-          if (safePage < 1) {
-            safePage = 1;
-          }
+        else
+          () {
+            final totalLogs = _sessionLogs.length;
+            final totalPages = (totalLogs / _historyItemsPerPage).ceil();
+            int safePage = _currentHistoryPage;
+            if (safePage > totalPages && totalPages > 0) {
+              safePage = totalPages;
+            }
+            if (safePage < 1) {
+              safePage = 1;
+            }
 
-          final startIndex = (safePage - 1) * _historyItemsPerPage;
-          final endIndex = math.min(startIndex + _historyItemsPerPage, totalLogs);
-          final pageLogs = totalLogs > 0 ? _sessionLogs.sublist(startIndex, endIndex) : <UserSessionLog>[];
+            final startIndex = (safePage - 1) * _historyItemsPerPage;
+            final endIndex = math.min(
+              startIndex + _historyItemsPerPage,
+              totalLogs,
+            );
+            final pageLogs = totalLogs > 0
+                ? _sessionLogs.sublist(startIndex, endIndex)
+                : <UserSessionLog>[];
 
-          return Container(
-            decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF1E293B) : Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: isDark ? Colors.white10 : const Color(0xFFE2E8F0)),
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  ValueListenableBuilder<DateTime>(
-                    valueListenable: _tickerNotifier,
-                    builder: (context, currentNow, _) {
-                      return Table(
-                        columnWidths: const {
-                          0: FlexColumnWidth(2.2),
-                          1: FlexColumnWidth(1.2),
-                          2: FlexColumnWidth(1.5),
-                          3: FlexColumnWidth(1.5),
-                          4: FlexColumnWidth(2.0),
-                        },
-                        children: [
-                          // Header Row
-                          TableRow(
-                            decoration: BoxDecoration(
-                              color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
-                            ),
-                            children: const [
-                              _TableHeaderCell('Teacher Name'),
-                              _TableHeaderCell('Date'),
-                              _TableHeaderCell('Time In'),
-                              _TableHeaderCell('Time Out'),
-                              _TableHeaderCell('Time Spent in System'),
-                            ],
-                          ),
-                          // Data Rows for Current Page
-                          ...pageLogs.map((log) {
-                            final isLive = log.isActive;
-                            int elapsedSeconds = log.durationSeconds;
-                            if (isLive) {
-                              elapsedSeconds = currentNow.difference(log.loginAt).inSeconds;
-                              if (elapsedSeconds < 0) elapsedSeconds = 0;
-                            }
-
-                            return TableRow(
+            return Container(
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF1E293B) : Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: isDark ? Colors.white10 : const Color(0xFFE2E8F0),
+                ),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    ValueListenableBuilder<DateTime>(
+                      valueListenable: _tickerNotifier,
+                      builder: (context, currentNow, _) {
+                        return Table(
+                          columnWidths: const {
+                            0: FlexColumnWidth(2.2),
+                            1: FlexColumnWidth(1.2),
+                            2: FlexColumnWidth(1.5),
+                            3: FlexColumnWidth(1.5),
+                            4: FlexColumnWidth(2.0),
+                          },
+                          children: [
+                            // Header Row
+                            TableRow(
                               decoration: BoxDecoration(
-                                border: Border(
-                                  bottom: BorderSide(
-                                    color: isDark ? Colors.white10 : const Color(0xFFE2E8F0),
-                                  ),
-                                ),
+                                color: isDark
+                                    ? const Color(0xFF0F172A)
+                                    : const Color(0xFFF8FAFC),
                               ),
-                              children: [
-                                // Teacher Name
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                                  child: Row(
-                                    children: [
-                                      if (isLive)
-                                        Container(
-                                          width: 8,
-                                          height: 8,
-                                          margin: const EdgeInsets.only(right: 8),
-                                          decoration: const BoxDecoration(
-                                            color: AppTheme.catGreen,
-                                            shape: BoxShape.circle,
-                                          ),
-                                        ),
-                                      Expanded(
-                                        child: Text(
-                                          log.teacherName ?? 'Teacher (${log.userId})',
-                                          style: TextStyle(
-                                            fontWeight: FontWeight.w600,
-                                            fontSize: 13,
-                                            color: theme.colorScheme.onSurface,
-                                          ),
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                // Date
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                                  child: Text(_formatDate(log.sessionDate), style: const TextStyle(fontSize: 12.5)),
-                                ),
-                                // Login Time
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                                  child: Text(_formatTimestamp(log.loginAt), style: const TextStyle(fontSize: 12.5)),
-                                ),
-                                // Logout Time
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                                  child: isLive
-                                      ? Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                          decoration: BoxDecoration(
-                                            color: AppTheme.catGreen.withValues(alpha: 0.12),
-                                            borderRadius: BorderRadius.circular(6),
-                                          ),
-                                          child: const Text(
-                                            'Online Now',
-                                            style: TextStyle(
-                                              fontSize: 11,
-                                              fontWeight: FontWeight.bold,
-                                              color: AppTheme.catGreen,
-                                            ),
-                                          ),
-                                        )
-                                      : Text(
-                                          log.logoutAt != null ? _formatTimestamp(log.logoutAt!) : 'Ended',
-                                          style: const TextStyle(fontSize: 12.5),
-                                        ),
-                                ),
-                                // Duration Ticker
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                                  child: Text(
-                                    AdminRepository.formatHumanReadableDuration(elapsedSeconds),
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontFamily: 'monospace',
-                                      fontSize: 13,
-                                      color: isLive ? AppTheme.catGreen : theme.colorScheme.primary,
+                              children: const [
+                                _TableHeaderCell('Teacher Name'),
+                                _TableHeaderCell('Date'),
+                                _TableHeaderCell('Time In'),
+                                _TableHeaderCell('Time Out'),
+                                _TableHeaderCell('Time Spent in System'),
+                              ],
+                            ),
+                            // Data Rows for Current Page
+                            ...pageLogs.map((log) {
+                              final isLive = log.isActive;
+                              int elapsedSeconds = log.durationSeconds;
+                              if (isLive) {
+                                elapsedSeconds = currentNow
+                                    .difference(log.loginAt)
+                                    .inSeconds;
+                                if (elapsedSeconds < 0) elapsedSeconds = 0;
+                              }
+
+                              return TableRow(
+                                decoration: BoxDecoration(
+                                  border: Border(
+                                    bottom: BorderSide(
+                                      color: isDark
+                                          ? Colors.white10
+                                          : const Color(0xFFE2E8F0),
                                     ),
                                   ),
                                 ),
-                              ],
-                            );
-                          }),
-                        ],
-                      );
-                    },
-                  ),
+                                children: [
+                                  // Teacher Name
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                      vertical: 12,
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        if (isLive)
+                                          Container(
+                                            width: 8,
+                                            height: 8,
+                                            margin: const EdgeInsets.only(
+                                              right: 8,
+                                            ),
+                                            decoration: const BoxDecoration(
+                                              color: AppTheme.catGreen,
+                                              shape: BoxShape.circle,
+                                            ),
+                                          ),
+                                        Expanded(
+                                          child: Text(
+                                            log.teacherName ??
+                                                'Teacher (${log.userId})',
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.w600,
+                                              fontSize: 13,
+                                              color:
+                                                  theme.colorScheme.onSurface,
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  // Date
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                      vertical: 12,
+                                    ),
+                                    child: Text(
+                                      _formatDate(log.sessionDate),
+                                      style: const TextStyle(fontSize: 12.5),
+                                    ),
+                                  ),
+                                  // Login Time
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                      vertical: 12,
+                                    ),
+                                    child: Text(
+                                      _formatTimestamp(log.loginAt),
+                                      style: const TextStyle(fontSize: 12.5),
+                                    ),
+                                  ),
+                                  // Logout Time
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                      vertical: 12,
+                                    ),
+                                    child: isLive
+                                        ? Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 8,
+                                              vertical: 2,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: AppTheme.catGreen
+                                                  .withValues(alpha: 0.12),
+                                              borderRadius:
+                                                  BorderRadius.circular(6),
+                                            ),
+                                            child: const Text(
+                                              'Online Now',
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.bold,
+                                                color: AppTheme.catGreen,
+                                              ),
+                                            ),
+                                          )
+                                        : Text(
+                                            log.logoutAt != null
+                                                ? _formatTimestamp(
+                                                    log.logoutAt!,
+                                                  )
+                                                : 'Ended',
+                                            style: const TextStyle(
+                                              fontSize: 12.5,
+                                            ),
+                                          ),
+                                  ),
+                                  // Duration Ticker
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                      vertical: 12,
+                                    ),
+                                    child: Text(
+                                      AdminRepository.formatHumanReadableDuration(
+                                        elapsedSeconds,
+                                      ),
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontFamily: 'monospace',
+                                        fontSize: 13,
+                                        color: isLive
+                                            ? AppTheme.catGreen
+                                            : theme.colorScheme.primary,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              );
+                            }),
+                          ],
+                        );
+                      },
+                    ),
 
-                  // Bottom Container: Entry count and pagination (Styled like Teacher Management)
-                  Container(
-                    height: 52,
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    decoration: BoxDecoration(
-                      color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC),
-                      border: Border(
-                        top: BorderSide(
-                          color: isDark ? Colors.white10 : const Color(0xFFE2E8F0),
+                    // Bottom Container: Entry count and pagination (Styled like Teacher Management)
+                    Container(
+                      height: 52,
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      decoration: BoxDecoration(
+                        color: isDark
+                            ? const Color(0xFF1E293B)
+                            : const Color(0xFFF8FAFC),
+                        border: Border(
+                          top: BorderSide(
+                            color: isDark
+                                ? Colors.white10
+                                : const Color(0xFFE2E8F0),
+                          ),
                         ),
                       ),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'Showing ${totalLogs == 0 ? 0 : startIndex + 1} to $endIndex of $totalLogs entries',
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
-                            color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Showing ${totalLogs == 0 ? 0 : startIndex + 1} to $endIndex of $totalLogs entries',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                              color: isDark
+                                  ? const Color(0xFF94A3B8)
+                                  : const Color(0xFF64748B),
+                            ),
                           ),
-                        ),
-                        if (totalPages > 1)
-                          Row(
-                            children: [
-                              _buildPageButton(
-                                'First',
-                                () => setState(() => _currentHistoryPage = 1),
-                                safePage > 1,
-                              ),
-                              _buildPageButton(
-                                '<',
-                                () => setState(() => _currentHistoryPage = safePage - 1),
-                                safePage > 1,
-                              ),
-                              for (int p = 1; p <= totalPages; p++)
-                                if (p >= safePage - 2 && p <= safePage + 2)
-                                  _buildPageButton(
-                                    p.toString(),
-                                    () => setState(() => _currentHistoryPage = p),
-                                    true,
-                                    isActive: p == safePage,
+                          if (totalPages > 1)
+                            Row(
+                              children: [
+                                _buildPageButton(
+                                  'First',
+                                  () => setState(() => _currentHistoryPage = 1),
+                                  safePage > 1,
+                                ),
+                                _buildPageButton(
+                                  '<',
+                                  () => setState(
+                                    () => _currentHistoryPage = safePage - 1,
                                   ),
-                              _buildPageButton(
-                                '>',
-                                () => setState(() => _currentHistoryPage = safePage + 1),
-                                safePage < totalPages,
-                              ),
-                              _buildPageButton(
-                                'Last',
-                                () => setState(() => _currentHistoryPage = totalPages),
-                                safePage < totalPages,
-                              ),
-                            ],
-                          ),
-                      ],
+                                  safePage > 1,
+                                ),
+                                for (int p = 1; p <= totalPages; p++)
+                                  if (p >= safePage - 2 && p <= safePage + 2)
+                                    _buildPageButton(
+                                      p.toString(),
+                                      () => setState(
+                                        () => _currentHistoryPage = p,
+                                      ),
+                                      true,
+                                      isActive: p == safePage,
+                                    ),
+                                _buildPageButton(
+                                  '>',
+                                  () => setState(
+                                    () => _currentHistoryPage = safePage + 1,
+                                  ),
+                                  safePage < totalPages,
+                                ),
+                                _buildPageButton(
+                                  'Last',
+                                  () => setState(
+                                    () => _currentHistoryPage = totalPages,
+                                  ),
+                                  safePage < totalPages,
+                                ),
+                              ],
+                            ),
+                        ],
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-          );
-        }(),
+            );
+          }(),
       ],
     );
   }
@@ -1473,8 +1722,8 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
             color: isActive
                 ? theme.colorScheme.onPrimary
                 : enabled
-                    ? theme.colorScheme.onSurface
-                    : theme.colorScheme.onSurface.withValues(alpha: 0.3),
+                ? theme.colorScheme.onSurface
+                : theme.colorScheme.onSurface.withValues(alpha: 0.3),
           ),
         ),
       ),
@@ -1541,7 +1790,12 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
                       children: [
                         _skeletonBar(width: 220, height: 16),
                         const SizedBox(height: 20),
-                        Expanded(child: _skeletonBar(width: double.infinity, height: double.infinity)),
+                        Expanded(
+                          child: _skeletonBar(
+                            width: double.infinity,
+                            height: double.infinity,
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -1577,7 +1831,10 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
               child: Wrap(
                 spacing: 12,
                 runSpacing: 12,
-                children: List.generate(3, (_) => _buildWorkloadCardSkeleton(isDark)),
+                children: List.generate(
+                  3,
+                  (_) => _buildWorkloadCardSkeleton(isDark),
+                ),
               ),
             ),
           ],
@@ -1586,7 +1843,11 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
     );
   }
 
-  static Widget _skeletonBar({double? width, required double height, double borderRadius = 6}) {
+  static Widget _skeletonBar({
+    double? width,
+    required double height,
+    double borderRadius = 6,
+  }) {
     return Container(
       width: width,
       height: height,
@@ -1825,16 +2086,16 @@ class _CurveChartPainter extends CustomPainter {
           Paint()..color = isDark ? const Color(0xFF1E293B) : Colors.white,
         );
         // Inner point
-        canvas.drawCircle(
-          pt,
-          3.5,
-          Paint()..color = lineColor,
-        );
+        canvas.drawCircle(pt, 3.5, Paint()..color = lineColor);
 
         // Draw Peak Highlight Badge if active
         if (i == peakIdx && peakVal > 0) {
           final badgeRect = RRect.fromRectAndRadius(
-            Rect.fromCenter(center: Offset(pt.dx, pt.dy - 18), width: 56, height: 20),
+            Rect.fromCenter(
+              center: Offset(pt.dx, pt.dy - 18),
+              width: 56,
+              height: 20,
+            ),
             const Radius.circular(6),
           );
           canvas.drawRRect(
@@ -1898,14 +2159,12 @@ class _CurveChartPainter extends CustomPainter {
 // =========================================================================
 class _TeacherActivityDonutPainter extends CustomPainter {
   final int activeNowCount;
-  final int completedCount;
   final int idleCount;
   final int total;
   final bool isDark;
 
   _TeacherActivityDonutPainter({
     required this.activeNowCount,
-    required this.completedCount,
     required this.idleCount,
     required this.total,
     required this.isDark,
@@ -1925,7 +2184,6 @@ class _TeacherActivityDonutPainter extends CustomPainter {
     canvas.drawCircle(center, radius, backgroundPaint);
 
     final activePct = activeNowCount / total;
-    final completedPct = completedCount / total;
     final idlePct = idleCount / total;
 
     final rect = Rect.fromCircle(center: center, radius: radius);
@@ -1934,7 +2192,8 @@ class _TeacherActivityDonutPainter extends CustomPainter {
 
     void drawSegment(double pct, Color color) {
       if (pct <= 0) return;
-      final sweepAngle = (pct * 2 * math.pi) - 0.08; // Small gap between segments
+      final sweepAngle =
+          (pct * 2 * math.pi) - 0.08; // Small gap between segments
       final paint = Paint()
         ..color = color
         ..style = PaintingStyle.stroke
@@ -1948,15 +2207,14 @@ class _TeacherActivityDonutPainter extends CustomPainter {
     }
 
     drawSegment(activePct, AppTheme.catGreen);
-    drawSegment(completedPct, const Color(0xFF0284C7));
     drawSegment(idlePct, isDark ? Colors.white24 : const Color(0xFFCBD5E1));
   }
 
   @override
   bool shouldRepaint(covariant _TeacherActivityDonutPainter oldDelegate) {
     return oldDelegate.activeNowCount != activeNowCount ||
-        oldDelegate.completedCount != completedCount ||
         oldDelegate.idleCount != idleCount ||
+        oldDelegate.total != total ||
         oldDelegate.isDark != isDark;
   }
 }
@@ -1972,7 +2230,8 @@ class _SkeletonShimmer extends StatefulWidget {
   State<_SkeletonShimmer> createState() => _SkeletonShimmerState();
 }
 
-class _SkeletonShimmerState extends State<_SkeletonShimmer> with SingleTickerProviderStateMixin {
+class _SkeletonShimmerState extends State<_SkeletonShimmer>
+    with SingleTickerProviderStateMixin {
   late AnimationController _shimmerController;
 
   @override
@@ -1993,8 +2252,12 @@ class _SkeletonShimmerState extends State<_SkeletonShimmer> with SingleTickerPro
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final baseColor = isDark ? Colors.white.withValues(alpha: 0.08) : Colors.grey.shade300;
-    final highlightColor = isDark ? Colors.white.withValues(alpha: 0.22) : Colors.grey.shade100;
+    final baseColor = isDark
+        ? Colors.white.withValues(alpha: 0.08)
+        : Colors.grey.shade300;
+    final highlightColor = isDark
+        ? Colors.white.withValues(alpha: 0.22)
+        : Colors.grey.shade100;
 
     return AnimatedBuilder(
       animation: _shimmerController,
@@ -2007,7 +2270,9 @@ class _SkeletonShimmerState extends State<_SkeletonShimmer> with SingleTickerPro
               end: const Alignment(1.5, 0.3),
               colors: [baseColor, highlightColor, baseColor],
               stops: const [0.1, 0.5, 0.9],
-              transform: _SlidingGradientTransform(slidePercent: _shimmerController.value),
+              transform: _SlidingGradientTransform(
+                slidePercent: _shimmerController.value,
+              ),
             ).createShader(bounds);
           },
           child: child,
@@ -2025,7 +2290,11 @@ class _SlidingGradientTransform extends GradientTransform {
 
   @override
   Matrix4? transform(Rect bounds, {TextDirection? textDirection}) {
-    return Matrix4.translationValues(bounds.width * (slidePercent * 2.5 - 1.25), 0.0, 0.0);
+    return Matrix4.translationValues(
+      bounds.width * (slidePercent * 2.5 - 1.25),
+      0.0,
+      0.0,
+    );
   }
 }
 
@@ -2039,10 +2308,7 @@ class _TableHeaderCell extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Text(
         text,
-        style: const TextStyle(
-          fontWeight: FontWeight.bold,
-          fontSize: 12.5,
-        ),
+        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5),
       ),
     );
   }

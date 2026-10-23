@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:class_realm/core/services/app_lifecycle_coordinator.dart';
 
 /// Reusable Staggered Entrance Animation Widget.
 ///
@@ -59,6 +60,26 @@ class _StaggeredEntranceState extends State<StaggeredEntrance>
       end: Offset.zero,
     ).animate(curved);
 
+    // If app is already started/resumed (warm boot or past loading), trigger immediately.
+    // Otherwise, listen for onStart() so elements don't animate invisibly behind the loading screen.
+    final coordinator = AppLifecycleCoordinator.instance;
+    if (coordinator.currentState != AppActivityLifecycleState.created) {
+      _scheduleEntrance();
+    } else {
+      coordinator.stateNotifier.addListener(_onLifecycleChanged);
+    }
+  }
+
+  void _onLifecycleChanged() {
+    if (AppLifecycleCoordinator.instance.currentState != AppActivityLifecycleState.created) {
+      AppLifecycleCoordinator.instance.stateNotifier.removeListener(_onLifecycleChanged);
+      if (mounted) {
+        _scheduleEntrance();
+      }
+    }
+  }
+
+  void _scheduleEntrance() {
     final effectiveDelay = widget.delay ?? (widget.delayStep * widget.index);
     if (effectiveDelay == Duration.zero) {
       _controller.forward();
@@ -73,6 +94,7 @@ class _StaggeredEntranceState extends State<StaggeredEntrance>
 
   @override
   void dispose() {
+    AppLifecycleCoordinator.instance.stateNotifier.removeListener(_onLifecycleChanged);
     _delayTimer?.cancel();
     _controller.dispose();
     super.dispose();

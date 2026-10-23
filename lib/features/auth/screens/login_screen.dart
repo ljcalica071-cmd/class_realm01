@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:ui';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -11,7 +10,6 @@ import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/core/services/rate_limit_service.dart';
 import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/routes/app_routes.dart';
-import 'package:class_realm/widgets/common/app_modals.dart';
 import 'package:class_realm/core/theme/app_theme.dart';
 import 'package:class_realm/core/services/local_storage_service.dart';
 import 'package:class_realm/core/services/sync_coordinator.dart';
@@ -19,6 +17,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:class_realm/data/repositories/admin_repository.dart';
 import 'package:class_realm/features/auth/widgets/auth_responsive_scaffold.dart';
 import 'package:class_realm/shared/widgets/shared_widgets.dart';
+import 'package:class_realm/core/utils/browser_url_helper.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -265,14 +264,19 @@ class _LoginScreenState extends State<LoginScreen> {
       if (user == null) {
         setState(() => _isLoading = false);
         TextInput.finishAutofillContext(shouldSave: false);
-        _passwordController.clear();
-        _passwordFocusNode.unfocus();
+        
         if (_isRateLimited) return;
+        
         AppModals.showErrorDialog(
           context: context,
           title: 'Authentication Failed',
-          message:
-              'Invalid email or password. Please check your credentials.',
+          message: 'Invalid email or password. Please check your credentials.',
+          onConfirm: () {
+            // Focus back to password without clearing it (User Friendly)
+            final len = _passwordController.text.length;
+            _passwordController.selection = TextSelection.collapsed(offset: len);
+            _passwordFocusNode.requestFocus();
+          }
         );
         return;
       }
@@ -293,8 +297,7 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!mounted) return;
       setState(() => _isLoading = false);
       TextInput.finishAutofillContext(shouldSave: false);
-      _passwordController.clear();
-      _passwordFocusNode.unfocus();
+      
       if (e is LoginAttemptException) {
         if (e.providerRateLimited) {
           final seconds = e.retryAfterSeconds ?? 300;
@@ -312,6 +315,11 @@ class _LoginScreenState extends State<LoginScreen> {
             context: context,
             title: 'Authentication Failed',
             message: e.message,
+            onConfirm: () {
+              final len = _passwordController.text.length;
+              _passwordController.selection = TextSelection.collapsed(offset: len);
+              _passwordFocusNode.requestFocus();
+            }
           );
           return;
         }
@@ -320,6 +328,11 @@ class _LoginScreenState extends State<LoginScreen> {
         context: context,
         title: 'Login Error',
         message: e.toString().replaceAll('Exception: ', ''),
+        onConfirm: () {
+          final len = _passwordController.text.length;
+          _passwordController.selection = TextSelection.collapsed(offset: len);
+          _passwordFocusNode.requestFocus();
+        }
       );
     }
   }
@@ -404,6 +417,10 @@ class _LoginScreenState extends State<LoginScreen> {
     // Now that the user enters their authenticated dashboard, apply their theme preference
     final isUserDark = LocalStorageService.isUserDarkMode(user.id, email: user.email);
     AppTheme.themeModeNotifier.value = isUserDark ? ThemeMode.dark : ThemeMode.light;
+
+    // Mark session warm and persist UserModel snapshot for instant zero-logout F5 reload
+    markWarmSession();
+    LocalStorageService.saveUser(user);
 
     switch (user.role) {
       case UserRole.admin:

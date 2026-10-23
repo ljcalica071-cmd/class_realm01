@@ -122,32 +122,62 @@ class _TeacherNotificationsTabState extends State<TeacherNotificationsTab> {
 
     if (_notifications.isEmpty) {
       return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.notifications_off_outlined,
-              size: 64,
-              color: theme.colorScheme.onSurface.withValues(alpha: 0.2),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 64, horizontal: 32),
+          margin: const EdgeInsets.symmetric(horizontal: 24),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surface,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.05),
+              width: 1.5,
             ),
-            const SizedBox(height: 16),
-            Text(
-              'No Notifications',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.02),
+                blurRadius: 20,
+                offset: const Offset(0, 10),
               ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'You have no new alerts or announcements at the moment.',
-              style: TextStyle(
-                fontSize: 14,
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 80,
+                height: 80,
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primary.withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.notifications_none_rounded,
+                  size: 40,
+                  color: theme.colorScheme.primary,
+                ),
               ),
-            ),
-          ],
+              const SizedBox(height: 24),
+              Text(
+                'You\'re all caught up!',
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800,
+                  color: theme.colorScheme.onSurface,
+                  letterSpacing: -0.5,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                'There are no new alerts or announcements at the moment. \nWe\'ll notify you when something important arrives.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 15,
+                  height: 1.5,
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                ),
+              ),
+            ],
+          ),
         ),
       );
     }

@@ -5,48 +5,10 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/data/repositories/subject_repository.dart';
 import 'package:class_realm/features/teacher/sub_features/class_management/widgets/unified_enroll_student_dialog.dart';
-import 'package:class_realm/models/subject_catalog_model.dart';
 import 'package:class_realm/shared/widgets/shared_widgets.dart';
+import 'package:class_realm/features/teacher/sub_features/setup/widgets/teacher_classroom_setup_templates.dart';
 import 'package:class_realm/core/theme/subject_palette.dart';
 import 'package:loading_animation_widget/loading_animation_widget.dart';
-
-/// Pre-defined grading templates
-class SubjectTemplate {
-  final String name;
-  final int ww;
-  final int pt;
-  final int ex;
-  final int termsTaught;
-  final String termBlock;
-  final double unitsPerTerm;
-  final double st1Weight;
-  final double st2Weight;
-  final double teWeight;
-  final String? gradeLevel;
-
-  const SubjectTemplate(
-    this.name,
-    this.ww,
-    this.pt,
-    this.ex, {
-    this.termsTaught = 3,
-    this.termBlock = '1ST, 2ND, 3RD',
-    this.unitsPerTerm = 2,
-    this.st1Weight = 30,
-    this.st2Weight = 30,
-    this.teWeight = 40,
-    this.gradeLevel,
-  });
-}
-
-const List<SubjectTemplate> _defaultTemplates = [
-  SubjectTemplate('Effective Communication', 20, 50, 30),
-  SubjectTemplate('Mabisang Komunikasyon', 20, 50, 30),
-  SubjectTemplate('Life and Career Skills', 20, 50, 30),
-  SubjectTemplate('General Mathematics', 20, 50, 30),
-  SubjectTemplate('General Science', 20, 50, 30),
-  SubjectTemplate('Pag-aaral ng Kasaysayan at Lipunang Pilipino', 20, 50, 30),
-];
 
 /// A section the teacher handles for a subject.
 class _ClassSection {
@@ -203,29 +165,7 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
   bool get _isWeightValid => _currentWeightTotal == 100;
 
   List<SubjectTemplate> get _availableTemplates {
-    final existingNames = _defaultTemplates
-        .map((template) => template.name.toLowerCase())
-        .toSet();
-    return [
-      ..._defaultTemplates,
-      for (final subject in DepEdSubjectCatalog.allSubjects)
-        if (!existingNames.contains(subject.name.toLowerCase()))
-          SubjectTemplate(
-            subject.name,
-            subject.wwWeight.toInt(),
-            subject.ptWeight.toInt(),
-            subject.exWeight.toInt(),
-            termsTaught: subject.termsTaught,
-            termBlock: subject.defaultTermBlock,
-            unitsPerTerm: subject.unitsPerTerm,
-            st1Weight: subject.st1Weight,
-            st2Weight: subject.st2Weight,
-            teWeight: subject.teWeight,
-            gradeLevel: subject.gradeLevel == 'Both'
-                ? null
-                : subject.gradeLevel,
-          ),
-    ];
+    return defaultSubjectTemplates;
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -268,9 +208,9 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
     final nameTitle = currentUser?.honorific.isNotEmpty == true
         ? currentUser!.honorific
         : ((currentUser?.gender?.trim().toLowerCase() == 'female' ||
-                currentUser?.gender?.trim().toLowerCase() == 'f')
-            ? "Ma'am"
-            : "Sir");
+                  currentUser?.gender?.trim().toLowerCase() == 'f')
+              ? "Ma'am"
+              : "Sir");
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
@@ -945,7 +885,10 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
                     icon: const Icon(LucideIcons.rotateCcw, size: 15),
                     label: const Text(
                       'Restore Subject',
-                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                     onPressed: () => _restoreSubject(subject),
                   ),
@@ -955,7 +898,9 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
                   child: OutlinedButton.icon(
                     style: OutlinedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 12),
-                      backgroundColor: theme.colorScheme.error.withValues(alpha: 0.08),
+                      backgroundColor: theme.colorScheme.error.withValues(
+                        alpha: 0.08,
+                      ),
                       side: BorderSide(color: theme.colorScheme.error),
                       foregroundColor: theme.colorScheme.error,
                       shape: RoundedRectangleBorder(
@@ -965,7 +910,10 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
                     icon: const Icon(LucideIcons.trash2, size: 15),
                     label: const Text(
                       'Delete Permanently',
-                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                     onPressed: () => _confirmPermanentDelete(subject),
                   ),
@@ -1030,7 +978,8 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.error.withValues(alpha: 0.12),
+                  color: Theme.of(context).colorScheme.error
+                      .withValues(alpha: 0.12),
                   shape: BoxShape.circle,
                 ),
                 child: Icon(
@@ -1054,7 +1003,8 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
             style: TextStyle(
               fontSize: 13,
               height: 1.45,
-              color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.85),
+              color: Theme.of(context).colorScheme.onSurface
+                  .withValues(alpha: 0.85),
             ),
           ),
           const SizedBox(height: 20),
@@ -1184,10 +1134,18 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
       label: 'Subject Name',
       isRequired: true,
       error: _subjectError,
+      labelTrailing: Text(
+        '${_subjectCtrl.text.length}/60',
+        style: TextStyle(
+          fontSize: 11,
+          color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+        ),
+      ),
       field: TextField(
         controller: _subjectCtrl,
         focusNode: _subjectFocus,
         maxLength: 60,
+        inputFormatters: [_SingleSpaceInputFormatter()],
         buildCounter: (
           _, {
           required currentLength,
@@ -1196,11 +1154,20 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
         }) => null,
         textInputAction: TextInputAction.next,
         onChanged: (_) {
-          if (_selectedTemplate != null &&
-              _selectedTemplate!.name != _subjectCtrl.text) {
-            setState(() => _selectedTemplate = null);
-          }
+          setState(() {
+            if (_selectedTemplate != null &&
+                _selectedTemplate!.name != _subjectCtrl.text) {
+              _selectedTemplate = null;
+            }
+          });
           _revalidateIfSubmitted();
+        },
+        onEditingComplete: () {
+          final trimmedText = _subjectCtrl.text.trimRight();
+          if (trimmedText != _subjectCtrl.text) {
+            setState(() => _subjectCtrl.text = trimmedText);
+          }
+          _subjectFocus.nextFocus();
         },
         decoration: _boxDecoration(
           hint: 'e.g. General Mathematics',
@@ -1239,11 +1206,16 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
       ),
     );
 
+    final isCoreLocked = _selectedTemplate?.category == 'SSHS - CORE';
+
     final termsTaughtField = _buildLabeledField(
       label: 'No. of Terms Taught',
       field: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12),
         decoration: BoxDecoration(
+          color: isCoreLocked
+              ? theme.colorScheme.onSurface.withValues(alpha: 0.05)
+              : null,
           border: Border.all(
             color: theme.colorScheme.outline.withValues(alpha: 0.4),
           ),
@@ -1253,6 +1225,7 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
           child: DropdownButton<int>(
             value: _termsTaught,
             isExpanded: true,
+            iconEnabledColor: isCoreLocked ? Colors.transparent : null,
             items: const [
               DropdownMenuItem(
                 value: 3,
@@ -1261,18 +1234,20 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
               DropdownMenuItem(value: 1, child: Text('1 Term Only')),
               DropdownMenuItem(value: 2, child: Text('2 Terms')),
             ],
-            onChanged: (value) {
-              if (value == null) return;
-              setState(() {
-                _termsTaught = value;
-                _termBlock = value == 3
-                    ? '1ST, 2ND, 3RD'
-                    : value == 1
-                    ? 'FIRST TERM'
-                    : '1ST & 2ND';
-                _termBlockError = null;
-              });
-            },
+            onChanged: isCoreLocked
+                ? null
+                : (value) {
+                    if (value == null) return;
+                    setState(() {
+                      _termsTaught = value;
+                      _termBlock = value == 3
+                          ? '1ST, 2ND, 3RD'
+                          : value == 1
+                          ? 'FIRST TERM'
+                          : '1ST & 2ND';
+                      _termBlockError = null;
+                    });
+                  },
           ),
         ),
       ),
@@ -1352,16 +1327,25 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
     final isTotalOver = _currentWeightTotal > 100;
     final showWeightError = _submitted ? !isTotalExact : isTotalOver;
 
+    final isTemplateLocked = _selectedTemplate != null;
+
     final wwField = _buildLabeledField(
       label: 'WRITTEN / ORAL WORKS',
       field: TextField(
         controller: _wwCtrl,
+        readOnly: isTemplateLocked,
         keyboardType: TextInputType.number,
         inputFormatters: [
           FilteringTextInputFormatter.digitsOnly,
           LengthLimitingTextInputFormatter(2),
         ],
-        decoration: _boxDecoration(hint: '0', hasError: showWeightError),
+        decoration: _boxDecoration(hint: '0', hasError: showWeightError)
+            .copyWith(
+              filled: isTemplateLocked,
+              fillColor: isTemplateLocked
+                  ? theme.colorScheme.onSurface.withValues(alpha: 0.05)
+                  : null,
+            ),
       ),
     );
 
@@ -1369,12 +1353,19 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
       label: 'PRODUCT / PERFORMANCE TASKS',
       field: TextField(
         controller: _ptCtrl,
+        readOnly: isTemplateLocked,
         keyboardType: TextInputType.number,
         inputFormatters: [
           FilteringTextInputFormatter.digitsOnly,
           LengthLimitingTextInputFormatter(2),
         ],
-        decoration: _boxDecoration(hint: '0', hasError: showWeightError),
+        decoration: _boxDecoration(hint: '0', hasError: showWeightError)
+            .copyWith(
+              filled: isTemplateLocked,
+              fillColor: isTemplateLocked
+                  ? theme.colorScheme.onSurface.withValues(alpha: 0.05)
+                  : null,
+            ),
       ),
     );
 
@@ -1382,12 +1373,19 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
       label: 'EXAMINATIONS',
       field: TextField(
         controller: _exCtrl,
+        readOnly: isTemplateLocked,
         keyboardType: TextInputType.number,
         inputFormatters: [
           FilteringTextInputFormatter.digitsOnly,
           LengthLimitingTextInputFormatter(2),
         ],
-        decoration: _boxDecoration(hint: '0', hasError: showWeightError),
+        decoration: _boxDecoration(hint: '0', hasError: showWeightError)
+            .copyWith(
+              filled: isTemplateLocked,
+              fillColor: isTemplateLocked
+                  ? theme.colorScheme.onSurface.withValues(alpha: 0.05)
+                  : null,
+            ),
       ),
     );
 
@@ -1631,19 +1629,43 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
       label: 'Section Name',
       isRequired: true,
       error: error,
+      labelTrailing: Text(
+        '${row.nameCtrl.text.length}/30',
+        style: TextStyle(
+          fontSize: 11,
+          color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+        ),
+      ),
       field: TextField(
         controller: row.nameCtrl,
         focusNode: row.focusNode,
         maxLength: 30,
+        textInputAction: TextInputAction.next,
+        onEditingComplete: () {
+          final trimmedText = row.nameCtrl.text.trimRight();
+          if (trimmedText != row.nameCtrl.text) {
+            setState(() => row.nameCtrl.text = trimmedText);
+          }
+          final rowIndex = _sectionRows.indexOf(row);
+          if (rowIndex >= 0 && rowIndex + 1 < _sectionRows.length) {
+            _sectionRows[rowIndex + 1].focusNode.requestFocus();
+          } else {
+            row.focusNode.unfocus();
+          }
+        },
         buildCounter: (
           _, {
           required currentLength,
           required isFocused,
           required maxLength,
         }) => null,
-        onChanged: (_) => _revalidateIfSubmitted(),
+        onChanged: (_) {
+          setState(() {});
+          _revalidateIfSubmitted();
+        },
         inputFormatters: [
           FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z0-9- ]')),
+          _SingleSpaceInputFormatter(),
         ],
         decoration: _boxDecoration(
           hint: 'e.g. STEM 11-A',
@@ -1765,9 +1787,11 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
     } else if (name.length < 2) {
       subjectError = 'Subject name is too short.';
     } else if (_subjects
-        .where((s) =>
-            s.id != _editingSubject?.id &&
-            s.subjectId != _editingSubject?.subjectId)
+        .where(
+          (s) =>
+              s.id != _editingSubject?.id &&
+              s.subjectId != _editingSubject?.subjectId,
+        )
         .any(
           (s) =>
               s.name.toLowerCase() == name.toLowerCase() &&
@@ -1935,11 +1959,13 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
           st2Weight: _st2Weight,
           teWeight: _teWeight,
           sections: _sectionRows
-              .map((r) => {
-                    'id': r.id,
-                    'name': r.nameCtrl.text.trim(),
-                    'isExisting': r.isExisting,
-                  })
+              .map(
+                (r) => {
+                  'id': r.id,
+                  'name': r.nameCtrl.text.trim(),
+                  'isExisting': r.isExisting,
+                },
+              )
               .toList(),
         );
       } else {
@@ -1950,8 +1976,9 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
           wwWeight: double.parse(_wwCtrl.text),
           ptWeight: double.parse(_ptCtrl.text),
           exWeight: double.parse(_exCtrl.text),
-          sectionNames:
-              _sectionRows.map((r) => r.nameCtrl.text.trim()).toList(),
+          sectionNames: _sectionRows
+              .map((r) => r.nameCtrl.text.trim())
+              .toList(),
           schoolYear: _currentSchoolYear,
           termsTaught: _termsTaught,
           termBlock: _termBlock,
@@ -2401,70 +2428,111 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
   // ─────────────────────────────────────────────────────────────────────────
   void _showTemplateModal() {
     final templates = _availableTemplates;
+    final Map<String, List<SubjectTemplate>> groupedTemplates = {};
+    for (var t in templates) {
+      groupedTemplates.putIfAbsent(t.category, () => []).add(t);
+    }
+
     _showConstrainedDialog(
       context: context,
-      maxWidth: 440,
+      maxWidth: 550,
       child: StatefulBuilder(
         builder: (context, setStateModal) {
           return SizedBox(
-            height: 380,
+            height: 550,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   'Select Subject Template',
                   style: TextStyle(
-                    fontSize: 16,
+                    fontSize: 18,
                     fontWeight: FontWeight.bold,
                     color: Theme.of(context).colorScheme.onSurface,
                   ),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 16),
                 Expanded(
-                  child: ListView.separated(
-                    itemCount: templates.length + 1,
-                    separatorBuilder: (_, _) => const Divider(height: 1),
-                    itemBuilder: (context, index) {
-                      if (index == 0) {
-                        return ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          title: const Text(
-                            'Custom / Manual Entry',
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          subtitle: const Text(
-                            'Enter custom subject name and grading weights',
-                            style: TextStyle(fontSize: 11),
-                          ),
-                          onTap: () {
-                            setState(() => _selectedTemplate = null);
-                            Navigator.pop(context);
-                          },
-                        );
-                      }
-                      final template = templates[index - 1];
-                      return ListTile(
+                  child: ListView(
+                    children: [
+                      ListTile(
                         contentPadding: EdgeInsets.zero,
-                        title: Text(
-                          template.name,
-                          style: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
+                        title: const Text(
+                          'Custom / Manual Entry',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
                           ),
                         ),
-                        subtitle: Text(
-                          'WW ${template.ww}% · PT ${template.pt}% · EX ${template.ex}%',
-                          style: const TextStyle(fontSize: 11),
+                        subtitle: const Text(
+                          'Enter custom subject name and grading weights',
+                          style: TextStyle(fontSize: 12),
                         ),
                         onTap: () {
-                          _applyTemplate(template);
+                          setState(() => _selectedTemplate = null);
                           Navigator.pop(context);
                         },
-                      );
-                    },
+                      ),
+                      const Divider(),
+                      ...groupedTemplates.entries.map((entry) {
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.only(
+                                top: 16,
+                                bottom: 8,
+                              ),
+                              child: Text(
+                                entry.key,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  color: Theme.of(context).colorScheme.primary,
+                                  letterSpacing: 1.0,
+                                ),
+                              ),
+                            ),
+                            ...entry.value.map((template) {
+                              return ListTile(
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                hoverColor: Theme.of(context)
+                                    .colorScheme
+                                    .primary
+                                    .withValues(alpha: 0.05),
+                                title: Text(
+                                  template.name,
+                                  style: const TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                subtitle: Text(
+                                  'WW ${template.ww}% · PT ${template.pt}% · EX ${template.ex}%  |  Terms Taught: ${template.termsTaught}',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurface
+                                        .withValues(alpha: 0.6),
+                                  ),
+                                ),
+                                onTap: () {
+                                  _applyTemplate(template);
+                                  Navigator.pop(context);
+                                },
+                              );
+                            }),
+                            const Divider(height: 24),
+                          ],
+                        );
+                      }),
+                    ],
                   ),
                 ),
                 Align(
@@ -2491,11 +2559,10 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
       _exCtrl.text = template.ex.toString();
       _termsTaught = template.termsTaught;
       _termBlock = template.termBlock;
-      _unitsPerTerm = template.unitsPerTerm;
+      _unitsPerTerm = 2.0; // Default or omitted
       _st1Weight = template.st1Weight;
       _st2Weight = template.st2Weight;
       _teWeight = template.teWeight;
-      if (template.gradeLevel != null) _gradeLevel = template.gradeLevel!;
     });
     _revalidateIfSubmitted();
   }
@@ -2505,6 +2572,7 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
     required Widget field,
     bool isRequired = false,
     String? error,
+    Widget? labelTrailing,
   }) {
     final theme = Theme.of(context);
     final errorColor = theme.colorScheme.error;
@@ -2514,17 +2582,35 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
       children: [
         Row(
           children: [
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
+            Expanded(
+              child: Row(
+                children: [
+                  Flexible(
+                    child: Text(
+                      label,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.8,
+                        ),
+                      ),
+                    ),
+                  ),
+                  if (isRequired) ...[
+                    const SizedBox(width: 4),
+                    Text(
+                      '*',
+                      style: TextStyle(color: errorColor, fontSize: 12),
+                    ),
+                  ],
+                ],
               ),
             ),
-            if (isRequired) ...[
-              const SizedBox(width: 4),
-              Text('*', style: TextStyle(color: errorColor, fontSize: 12)),
+            if (labelTrailing != null) ...[
+              const SizedBox(width: 8),
+              labelTrailing,
             ],
           ],
         ),
@@ -2562,6 +2648,43 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
       hintText: hint,
       error: hasError ? const SizedBox.shrink() : null,
       errorStyle: const TextStyle(fontSize: 0, height: 0),
+    );
+  }
+}
+
+class _SingleSpaceInputFormatter extends TextInputFormatter {
+  static final RegExp _leadingWhitespace = RegExp(r'^\s+');
+  static final RegExp _repeatedWhitespace = RegExp(r'\s{2,}');
+
+  String _normalize(String value) {
+    return value
+        .replaceAll(_leadingWhitespace, '')
+        .replaceAll(_repeatedWhitespace, ' ');
+  }
+
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    final normalized = _normalize(newValue.text);
+    if (normalized == newValue.text) return newValue;
+
+    int mapOffset(int offset) {
+      if (offset < 0) return normalized.length;
+      final safeOffset = offset.clamp(0, newValue.text.length);
+      return _normalize(newValue.text.substring(0, safeOffset)).length;
+    }
+
+    return TextEditingValue(
+      text: normalized,
+      selection: TextSelection(
+        baseOffset: mapOffset(newValue.selection.baseOffset),
+        extentOffset: mapOffset(newValue.selection.extentOffset),
+        affinity: newValue.selection.affinity,
+        isDirectional: newValue.selection.isDirectional,
+      ),
+      composing: TextRange.empty,
     );
   }
 }

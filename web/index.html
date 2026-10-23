@@ -8,39 +8,281 @@
     The path provided below has to start and end with a slash "/" in order for
     it to work correctly.
 
-    For more details:
-    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
-
-    This is a placeholder for base href that will be replaced by the value of
-    the `--base-href` argument provided to `flutter build`.
   -->
   <base href="$FLUTTER_BASE_HREF">
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
   <meta name="description" content="Integrated SHS Management System">
-
-  <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
   <meta name="apple-mobile-web-app-title" content="ClassRealm">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
-
-  <!-- Favicon -->
   <link rel="icon" type="image/png" href="favicon.png"/>
 
   <title>ClassRealm</title>
   <link rel="manifest" href="manifest.json">
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: #090e17;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+    #pre-bootstrap-loader {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      display: grid;
+      place-items: center;
+      overflow: auto;
+      padding: 28px 20px;
+      color: #fff;
+      background:
+        radial-gradient(ellipse at 50% 35%, rgba(19, 32, 60, .98), transparent 62%),
+        radial-gradient(ellipse at 8% 8%, rgba(2, 132, 199, .14), transparent 30%),
+        radial-gradient(ellipse at 94% 94%, rgba(245, 158, 11, .1), transparent 30%),
+        #060911;
+      opacity: 1;
+      transition: opacity .24s ease-out;
+    }
+    #pre-bootstrap-loader[hidden] {
+      display: none !important;
+    }
+    .bootstrap-card {
+      width: min(100%, 460px);
+      padding: 40px 36px;
+      border: 1px solid rgba(51, 65, 85, .8);
+      border-radius: 28px;
+      background: rgba(15, 23, 42, .92);
+      box-shadow: 0 24px 80px rgba(0, 0, 0, .48), 0 0 48px rgba(56, 189, 248, .08);
+      text-align: center;
+    }
+    .bootstrap-logos {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      margin-bottom: 26px;
+    }
+    .bootstrap-logo-frame {
+      width: 72px;
+      height: 72px;
+      border-radius: 50%;
+      border: 1.5px solid #ffffff;
+      background: #1e293b;
+      box-shadow: 0 0 22px rgba(56, 189, 248, .35);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      padding: 0;
+    }
+    .bootstrap-logo-frame.app {
+      box-shadow: 0 0 22px rgba(245, 158, 11, .35);
+    }
+    .bootstrap-logo-circle {
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      background: #ffffff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+    .bootstrap-logo {
+      width: 100%;
+      height: 100%;
+      padding: 3px;
+      object-fit: contain;
+    }
+    .bootstrap-logo.app {
+      padding: 0;
+      transform: scale(1.82);
+    }
+    .bootstrap-divider {
+      width: 2px;
+      height: 42px;
+      background: linear-gradient(#38bdf8, #f59e0b);
+    }
+    .bootstrap-title {
+      margin: 0;
+      color: #fff;
+      font-size: 28px;
+      font-weight: 900;
+      letter-spacing: 3.5px;
+    }
+    .bootstrap-school {
+      margin: 8px 0 34px;
+      color: #fbbf24;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      line-height: 1.6;
+    }
+    .bootstrap-progress-heading {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .bootstrap-status {
+      overflow: hidden;
+      color: #cbd5e1;
+      font-size: 12px;
+      text-align: left;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .bootstrap-percent {
+      color: #f8fafc;
+      font: 800 16px/1.2 monospace;
+    }
+    .bootstrap-track {
+      position: relative;
+      height: 9px;
+      overflow: hidden;
+      border: 1px solid rgba(148, 163, 184, .18);
+      border-radius: 999px;
+      background: #1e293b;
+    }
+    .bootstrap-fill {
+      width: 0;
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, #0ea5e9, #38bdf8, #fbbf24);
+      box-shadow: 0 0 18px rgba(56, 189, 248, .45);
+      transition: width .18s linear;
+    }
+    .bootstrap-footnote {
+      margin-top: 18px;
+      color: #64748b;
+      font-size: 11px;
+      letter-spacing: .3px;
+    }
+    @media (max-width: 520px) {
+      .bootstrap-card {
+        padding: 34px 24px;
+      }
+      .bootstrap-logo-frame {
+        width: 64px;
+        height: 64px;
+      }
+      .bootstrap-title {
+        font-size: 24px;
+      }
+    }
+  </style>
 </head>
 <body>
-  <!--
-    You can customize the "flutter_bootstrap.js" script.
-    This is useful to provide a custom configuration to the Flutter loader
-    or to give the user feedback during the initialization process.
+  <div id="pre-bootstrap-loader" hidden role="status" aria-live="polite" data-progress="0">
+    <main class="bootstrap-card">
+      <div class="bootstrap-logos" aria-hidden="true">
+        <div class="bootstrap-logo-frame">
+          <div class="bootstrap-logo-circle">
+            <img class="bootstrap-logo" id="bootstrap-school-logo" alt="">
+          </div>
+        </div>
+        <span class="bootstrap-divider"></span>
+        <div class="bootstrap-logo-frame app">
+          <div class="bootstrap-logo-circle">
+            <img class="bootstrap-logo app" id="bootstrap-app-logo" alt="">
+          </div>
+        </div>
+      </div>
+      <h1 class="bootstrap-title">CLASSREALM</h1>
+      <p class="bootstrap-school">EDUARDO BARRETTO SENIOR INTEGRATED SCHOOL</p>
+      <div class="bootstrap-progress-heading">
+        <span class="bootstrap-status" id="bootstrap-status">Initializing ClassRealm workspace...</span>
+        <span class="bootstrap-percent" id="bootstrap-progress-value">0%</span>
+      </div>
+      <div class="bootstrap-track" role="progressbar" aria-label="Loading ClassRealm" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+        <div class="bootstrap-fill" id="bootstrap-progress-fill"></div>
+      </div>
+      <div class="bootstrap-footnote">Preparing your secure learning workspace</div>
+    </main>
+  </div>
+  <script>
+    (() => {
+      const loader = document.getElementById("pre-bootstrap-loader");
+      let warmSession = false;
+      try {
+        warmSession = window.sessionStorage.getItem("classrealm_warm_session") === "1";
+      } catch (_) {}
 
-    For more details:
-    * https://docs.flutter.dev/platform-integration/web/initialization
-  -->
+      // On warm session (F5 / active login), destroy HTML loader immediately so Frame 1 renders instantly
+      if (warmSession) {
+        if (loader && loader.parentNode) {
+          loader.parentNode.removeChild(loader);
+        }
+      } else if (loader) {
+        loader.hidden = false;
+        const baseUrl = document.querySelector("base").href;
+        document.getElementById("bootstrap-school-logo").src =
+          new URL("assets/assets/branding/school_logo.png", baseUrl).href;
+        document.getElementById("bootstrap-app-logo").src =
+          new URL("assets/assets/branding/logo_app.png", baseUrl).href;
+
+        const fill = document.getElementById("bootstrap-progress-fill");
+        const value = document.getElementById("bootstrap-progress-value");
+        const bar = loader.querySelector('[role="progressbar"]');
+        const setProgress = (progress) => {
+          loader.dataset.progress = String(progress);
+          fill.style.width = `${progress}%`;
+          value.textContent = `${progress}%`;
+          bar.setAttribute("aria-valuenow", String(progress));
+        };
+        const animateTo = (target, duration, done) => {
+          const start = performance.now();
+          const from = Number(loader.dataset.progress) || 0;
+          const tick = (now) => {
+            const fraction = Math.min(1, (now - start) / duration);
+            setProgress(Math.round(from + (target - from) * fraction));
+            if (fraction < 1) {
+              requestAnimationFrame(tick);
+            } else if (done) {
+              done();
+            }
+          };
+          requestAnimationFrame(tick);
+        };
+
+        // Continuous progress without stalling at 65%: 0% -> 30% -> 65% -> 100%
+        const statusEl = document.getElementById("bootstrap-status");
+        animateTo(30, 500, () => {
+          if (statusEl) statusEl.textContent = "Connecting secure database & services...";
+          animateTo(65, 600, () => {
+            if (statusEl) statusEl.textContent = "ClassRealm Ready! Welcome.";
+            animateTo(100, 500);
+          });
+        });
+      }
+
+      // Global hook invoked when Flutter canvas is ready
+      window.removePreBootstrapLoader = function() {
+        const l = document.getElementById("pre-bootstrap-loader");
+        if (l) {
+          l.style.opacity = "0";
+          setTimeout(() => {
+            if (l && l.parentNode) {
+              l.parentNode.removeChild(l);
+            }
+          }, 240);
+        }
+      };
+
+      window.addEventListener("flutter-first-frame", function() {
+        if (window.removePreBootstrapLoader) {
+          window.removePreBootstrapLoader();
+        }
+      });
+    })();
+  </script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>
