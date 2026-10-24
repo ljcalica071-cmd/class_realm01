@@ -833,6 +833,8 @@ class _TeacherStudentManagementTabState
                                                         firstName,
                                                         style: TextStyle(
                                                           fontSize: 13,
+                                                          fontWeight:
+                                                              FontWeight.w600,
                                                           color: theme
                                                               .colorScheme
                                                               .onSurface,
@@ -902,7 +904,7 @@ class _TeacherStudentManagementTabState
                                                       width: colStatusWidth,
                                                       child:
                                                           StatusBadge.fromAccountStatus(
-                                                            s.status,
+                                                            s.isArchived ? AccountStatus.archived : s.status,
                                                           ),
                                                     ),
                                                     _buildDataCell(
@@ -913,23 +915,34 @@ class _TeacherStudentManagementTabState
                                                         children: [
                                                           if (!_showArchivedStudents) ...[
                                                             IconButton(
-                                                              tooltip: 'Edit Student Details',
+                                                              tooltip: s.status == AccountStatus.pendingFirstLogin
+                                                                  ? 'Cannot edit: Pending First Login'
+                                                                  : 'Edit Student Details',
                                                               icon: Icon(
                                                                 Icons
                                                                     .edit_outlined,
-                                                                color: Color(
-                                                                  0xFF64748B,
-                                                                ),
+                                                                color: s.status == AccountStatus.pendingFirstLogin
+                                                                    ? theme.colorScheme.onSurface.withValues(alpha: 0.25)
+                                                                    : const Color(0xFF64748B),
                                                                 size: 18,
                                                               ),
                                                               splashRadius: 18,
-                                                              onPressed: () =>
-                                                                  EditStudentDialog.show(
-                                                                    context,
-                                                                    student: s,
-                                                                    onStudentUpdated:
-                                                                        _loadData,
-                                                                  ),
+                                                              onPressed: s.status == AccountStatus.pendingFirstLogin
+                                                                  ? () {
+                                                                      AppModals.showErrorDialog(
+                                                                        context: context,
+                                                                        title: 'Cannot Edit Student',
+                                                                        message:
+                                                                            'This student account has not completed their first login yet. Profiles can only be edited once the student has logged in and set up their account.',
+                                                                      );
+                                                                    }
+                                                                  : () =>
+                                                                      EditStudentDialog.show(
+                                                                        context,
+                                                                        student: s,
+                                                                        onStudentUpdated:
+                                                                            _loadData,
+                                                                      ),
                                                             ),
                                                             IconButton(
                                                               tooltip: 'Archive Student',
@@ -1009,45 +1022,9 @@ class _TeacherStudentManagementTabState
                                                                     AppModals.showSuccessDialog(
                                                                       context:
                                                                           context,
-                                                                      title: 'Restoreed',
+                                                                      title: 'Restored',
                                                                       message:
                                                                           '${s.fullName} has been restored to active enrollment.',
-                                                                    );
-                                                                  }
-                                                                }
-                                                              },
-                                                            ),
-                                                            IconButton(
-                                                              tooltip: 'Permanently delete student',
-                                                              icon: Icon(
-                                                                Icons
-                                                                    .delete_forever_outlined,
-                                                                color: AppTheme
-                                                                    .catRed,
-                                                                size: 18,
-                                                              ),
-                                                              splashRadius: 18,
-                                                              onPressed: () async {
-                                                                final confirm = await AppModals.showTypeToConfirmDeleteDialog(
-                                                                  context:
-                                                                      context,
-                                                                  title: 'Permanently Delete Student',
-                                                                  message:
-                                                                      'Are you sure you want to permanently delete ${s.fullName}? If they have no other enrolled classes, their student account will be permanently removed. This action is irreversible and cannot be undone.',
-                                                                );
-                                                                if (confirm ==
-                                                                    true) {
-                                                                  await SupabaseStudentRepository()
-                                                                      .permanentlyDeleteStudent(
-                                                                        s.id,
-                                                                        s.enrolledSubjectId,
-                                                                      );
-                                                                  _loadData();
-                                                                  if (context.mounted) {
-                                                                    AppModals.showSuccessDialog(
-                                                                      context: context,
-                                                                      title: 'Student Deleted',
-                                                                      message: '${s.fullName} has been permanently deleted.',
                                                                     );
                                                                   }
                                                                 }
@@ -1227,7 +1204,7 @@ class _TeacherStudentManagementTabState
                                           if (context.mounted) {
                                             AppModals.showSuccessDialog(
                                               context: context,
-                                              title: 'Students Restoreed',
+                                              title: 'Students Restored',
                                               message:
                                                   '$selectedCount student(s) restored to active enrollment.',
                                             );
@@ -1235,8 +1212,8 @@ class _TeacherStudentManagementTabState
                                         }
                                       },
                                     ),
-                                    const SizedBox(width: 8),
-                                    ElevatedButton.icon(
+                                    if (false) const SizedBox(width: 8),
+                                    if (false) ElevatedButton.icon(
                                       style: ElevatedButton.styleFrom(
                                         backgroundColor: AppTheme.catRed,
                                         foregroundColor: Colors.white,

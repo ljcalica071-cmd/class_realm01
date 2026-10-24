@@ -6,6 +6,8 @@ import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:csv/csv.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:archive/archive.dart';
 
 import 'package:class_realm/core/theme/app_theme.dart';
 import 'package:class_realm/data/repositories/supabase_student_repository.dart';
@@ -82,6 +84,130 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
 
   bool _isSubmitting = false;
 
+  // Resumable Batch Import Session State
+  Map<String, dynamic>? _resumableBatch;
+
+  int? get _calculatedAge {
+    if (_birthday == null) return null;
+    final now = DateTime.now();
+    int age = now.year - _birthday!.year;
+    if (now.month < _birthday!.month ||
+        (now.month == _birthday!.month && now.day < _birthday!.day)) {
+      age--;
+    }
+    return age;
+  }
+
+  Widget _buildAgeField(ThemeData theme) {
+    final age = _calculatedAge;
+    final text = age != null ? '$age yrs old' : 'Auto';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Age',
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: theme.colorScheme.onSurface,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Container(
+          height: 48,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          alignment: Alignment.centerLeft,
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: theme.colorScheme.outline.withValues(alpha: 0.25),
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                LucideIcons.calendarCheck,
+                size: 15,
+                color: age != null
+                    ? theme.colorScheme.primary
+                    : theme.colorScheme.onSurface.withValues(alpha: 0.4),
+              ),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  text,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: age != null
+                        ? theme.colorScheme.onSurface
+                        : theme.colorScheme.onSurface.withValues(alpha: 0.45),
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _checkResumableBatch() async {
+    if (_selectedOfferingId == null) {
+      if (_resumableBatch != null && mounted) {
+        setState(() => _resumableBatch = null);
+      }
+      return;
+    }
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString('batch_enroll_session_$_selectedOfferingId');
+      if (raw != null && raw.isNotEmpty) {
+        final decoded = jsonDecode(raw) as Map<String, dynamic>;
+        final pending = decoded['pending'] as List<dynamic>?;
+        if (pending != null && pending.isNotEmpty && mounted) {
+          setState(() => _resumableBatch = decoded);
+          return;
+        }
+      }
+    } catch (_) {}
+    if (_resumableBatch != null && mounted) {
+      setState(() => _resumableBatch = null);
+    }
+  }
+
+  Future<void> _discardResumableBatch() async {
+    if (_selectedOfferingId == null) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('batch_enroll_session_$_selectedOfferingId');
+    } catch (_) {}
+    if (mounted) setState(() => _resumableBatch = null);
+  }
+
+  Future<void> _resumeBatchEnrollment() async {
+    if (_resumableBatch == null) return;
+    final pendingList = _resumableBatch!['pending'] as List<dynamic>;
+    final fileName = _resumableBatch!['fileName']?.toString() ?? 'Spreadsheet';
+    final students = pendingList.map((m) {
+      final map = m as Map<String, dynamic>;
+      return _ParsedStudentRow(
+        rowNumber: map['rowNumber'] as int? ?? 1,
+        lrn: map['lrn'] as String,
+        firstName: map['firstName'] as String,
+        middleName: map['middleName'] as String? ?? '',
+        lastName: map['lastName'] as String,
+        gender: map['gender'] as String,
+        birthday: DateTime.parse(map['birthday'] as String),
+        email: map['email'] as String,
+      );
+    }).toList();
+
+    await _executeBatchEnrollment(students, isResumed: true, fileName: fileName);
+  }
+
   @override
   void initState() {
     super.initState();
@@ -92,6 +218,7 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
     );
 
     _initCascadingSelections();
+    _checkResumableBatch();
   }
 
   void _initCascadingSelections() {
@@ -190,6 +317,14 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
       );
       return;
     }
+    if (_gender == null) {
+      AppModals.showErrorDialog(
+        context: context,
+        title: 'Gender Required',
+        message: 'Please select the student\'s gender.',
+      );
+      return;
+    }
     if (_selectedOfferingId == null) {
       AppModals.showErrorDialog(
         context: context,
@@ -199,15 +334,31 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
       return;
     }
 
-    // Email typo checker (Scenario 2)
+    final rawEmail = _emailCtrl.text.trim().toLowerCase();
+
+    // 1. Email deliverability & DNS check (verifies valid domain / MX records)
+    setState(() => _isSubmitting = true);
+    final deliverability = await AppValidators.checkDomainDeliverability(rawEmail);
+    if (!deliverability.isDeliverable) {
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+        AppModals.showErrorDialog(
+          context: context,
+          title: 'Invalid Email Address',
+          message: deliverability.error ?? 'The email domain is invalid or cannot receive emails.',
+        );
+      }
+      return;
+    }
+
+    // 2. Email typo suggestion
     if (!_hasCheckedTypo) {
-      final email = _emailCtrl.text.trim().toLowerCase();
-      final typoMatch = RegExp(r'@(gamil\.com|yaho\.com|gmail\.con|gmal\.com|yahoo\.con)$').firstMatch(email);
+      final typoMatch = RegExp(r'@(gamil\.com|yaho\.com|gmail\.con|gmal\.com|yahoo\.con)$').firstMatch(rawEmail);
       if (typoMatch != null) {
         final typo = typoMatch.group(1);
         final isGmail = typo?.startsWith('g') == true;
         final suggestion = isGmail ? 'gmail.com' : 'yahoo.com';
-        final suggestedEmail = email.replaceAll(typo!, suggestion);
+        final suggestedEmail = rawEmail.replaceAll(typo!, suggestion);
         
         final useSuggestion = await showDialog<bool>(
           context: context,
@@ -230,14 +381,11 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
         if (useSuggestion == true) {
           _emailCtrl.text = suggestedEmail;
         }
-        _hasCheckedTypo = true; // Don't check again on immediate retry
-        if (useSuggestion != true) {
-           // Allow them to review, or proceed? Let's just proceed.
-        }
+        _hasCheckedTypo = true;
       }
     }
 
-    setState(() => _isSubmitting = true);
+    final emailToUse = _emailCtrl.text.trim().toLowerCase();
 
     try {
       final repo = SupabaseStudentRepository();
@@ -247,7 +395,7 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
         middleName: _middleNameCtrl.text.trim(),
         lastName: _lastNameCtrl.text.trim(),
         birthday: _birthday!,
-        email: _emailCtrl.text.trim(),
+        email: emailToUse,
         gender: _gender!,
         subjectId: _selectedOfferingId!,
       );
@@ -257,8 +405,6 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
         if (_middleNameCtrl.text.trim().isNotEmpty) _middleNameCtrl.text.trim(),
         _lastNameCtrl.text.trim(),
       ].join(' ');
-      final email = _emailCtrl.text.trim();
-      // Credentials email is sent server-side by the provision-student Edge Function.
 
       if (mounted) {
         Navigator.of(context).pop();
@@ -267,7 +413,8 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
         _showSuccessConfirmationDialog(
           context: context,
           fullName: fullName,
-          email: email,
+          email: emailToUse,
+          tempPassword: result.tempPassword,
           createdAccount: result.createdAccount,
         );
       }
@@ -327,31 +474,31 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
   String _generateTemplateCsv() {
     final headers = [
       'LRN',
+      'Email',
+      'Last Name',
       'First Name',
       'Middle Name',
-      'Last Name',
       'Gender',
       'Birthday',
-      'Email',
     ];
     final sampleRows = [
       [
         '101234567890',
+        'juan.delacruz@example.com',
+        'Dela Cruz',
         'Juan',
         'Protacio',
-        'Dela Cruz',
         'Male',
         '2007-06-19',
-        'juan.delacruz@example.com',
       ],
       [
         '101234567891',
+        'maria.santos@example.com',
+        'Santos',
         'Maria',
         'Clara',
-        'Santos',
         'Female',
         '2007-11-03',
-        'maria.santos@example.com',
       ],
     ];
 
@@ -500,49 +647,76 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
     try {
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
-        allowedExtensions: ['csv'],
+        allowedExtensions: ['csv', 'xlsx', 'xls'],
         withData: true,
       );
 
       if (result == null || result.files.isEmpty) return;
 
       final pickedFile = result.files.single;
-      final String csvString;
+      final ext = (pickedFile.extension ?? '').toLowerCase();
+
+      // Format validation: CSV and Excel only
+      if (ext != 'csv' && ext != 'xlsx' && ext != 'xls') {
+        throw Exception(
+          'Unsupported file format (.${pickedFile.extension}). Please upload a valid CSV or Excel spreadsheet (.csv, .xlsx).'
+        );
+      }
+
+      // File size validation: max 5 MB
+      const maxBytes = 5 * 1024 * 1024;
+      if (pickedFile.size > maxBytes) {
+        final mb = (pickedFile.size / (1024 * 1024)).toStringAsFixed(1);
+        throw Exception(
+          'The selected file is $mb MB, which exceeds the 5 MB maximum limit. Please ensure your file is within 5 MB.'
+        );
+      }
+
+      final Uint8List fileBytes;
       if (pickedFile.bytes != null) {
-        csvString = utf8.decode(pickedFile.bytes!);
+        fileBytes = pickedFile.bytes!;
       } else if (!kIsWeb && pickedFile.path != null) {
         final file = File(pickedFile.path!);
-        csvString = await file.readAsString();
+        fileBytes = await file.readAsBytes();
       } else {
         throw Exception('Unable to read selected file contents.');
       }
 
-      final rows = const CsvToListConverter(shouldParseNumbers: false).convert(csvString);
+      final List<List<dynamic>> rows;
+      if (ext == 'csv') {
+        final csvString = utf8.decode(fileBytes);
+        rows = const CsvToListConverter(shouldParseNumbers: false).convert(csvString);
+      } else if (ext == 'xlsx') {
+        rows = _parseXlsxBytes(fileBytes);
+      } else {
+        throw Exception('Excel 97-2003 (.xls) format is deprecated. Please save your file as modern Excel (.xlsx) or CSV (.csv).');
+      }
+
       if (rows.isEmpty || rows.length <= 1) {
-        throw Exception('The CSV file is empty or does not contain any student rows.');
+        throw Exception('The spreadsheet file is empty or does not contain any student rows.');
       }
 
       final header = rows.first.map((e) => e.toString().toLowerCase().trim()).toList();
       final lrnIndex = header.indexWhere((h) => h == 'lrn' || h.contains('lrn') || h.contains('student id'));
+      final emailIndex = header.indexWhere((h) => h == 'email' || h.contains('email'));
+      final lastNameIndex = header.indexWhere((h) => h == 'last name' || h == 'lastname' || h == 'last_name' || h == 'surname');
       final firstNameIndex = header.indexWhere((h) => h == 'first name' || h == 'firstname' || h == 'first_name');
       final middleNameIndex = header.indexWhere((h) => h == 'middle name' || h == 'middlename' || h == 'middle_name');
-      final lastNameIndex = header.indexWhere((h) => h == 'last name' || h == 'lastname' || h == 'last_name' || h == 'surname');
       final genderIndex = header.indexWhere((h) => h == 'gender' || h == 'sex');
       final birthdayIndex = header.indexWhere((h) => h == 'birthday' || h == 'birthdate' || h == 'birth date' || h == 'dob');
-      final emailIndex = header.indexWhere((h) => h == 'email' || h.contains('email'));
 
       final missingHeaders = <String>[];
       if (lrnIndex == -1) missingHeaders.add('LRN');
-      if (firstNameIndex == -1) missingHeaders.add('First Name');
+      if (emailIndex == -1) missingHeaders.add('Email');
       if (lastNameIndex == -1) missingHeaders.add('Last Name');
+      if (firstNameIndex == -1) missingHeaders.add('First Name');
       if (genderIndex == -1) missingHeaders.add('Gender');
       if (birthdayIndex == -1) missingHeaders.add('Birthday');
-      if (emailIndex == -1) missingHeaders.add('Email');
 
       if (missingHeaders.isNotEmpty) {
         throw Exception(
           'Missing required column headers: ${missingHeaders.join(', ')}.\n\n'
-          'Please ensure your CSV has: LRN, First Name, Last Name, Gender, Birthday, and Email. '
+          'Please ensure your file has: LRN, Email, Last Name, First Name, Gender, and Birthday. '
           'Use "Download Official Template" to see the correct format.',
         );
       }
@@ -755,7 +929,10 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
 
       if (shouldProceed != true || !mounted) return;
 
-      await _executeBatchEnrollment(validStudents);
+      await _executeBatchEnrollment(
+        validStudents,
+        fileName: pickedFile.name,
+      );
     } catch (e) {
       if (mounted) {
         AppModals.showErrorDialog(
@@ -764,6 +941,62 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
           message: e.toString().replaceAll('Exception: ', ''),
         );
       }
+    }
+  }
+
+  List<List<dynamic>> _parseXlsxBytes(Uint8List bytes) {
+    try {
+      final archive = ZipDecoder().decodeBytes(bytes);
+      final sharedStrings = <String>[];
+      final ssFile = archive.findFile('xl/sharedStrings.xml');
+      if (ssFile != null) {
+        final ssXml = utf8.decode(ssFile.content as List<int>);
+        final tMatches = RegExp(r'<t(?:\s[^>]*)?>([^<]*)<\/t>').allMatches(ssXml);
+        for (final m in tMatches) {
+          sharedStrings.add(m.group(1) ?? '');
+        }
+      }
+
+      ArchiveFile? sheetFile = archive.findFile('xl/worksheets/sheet1.xml');
+      if (sheetFile == null) {
+        for (final f in archive.files) {
+          if (f.name.startsWith('xl/worksheets/sheet') && f.name.endsWith('.xml')) {
+            sheetFile = f;
+            break;
+          }
+        }
+      }
+
+      if (sheetFile == null) {
+        throw Exception('Could not locate worksheet in the Excel file.');
+      }
+
+      final sheetXml = utf8.decode(sheetFile.content as List<int>);
+      final rowMatches = RegExp(r'<row[^>]*>(.*?)<\/row>').allMatches(sheetXml);
+
+      final allRows = <List<dynamic>>[];
+      for (final rm in rowMatches) {
+        final rowXml = rm.group(1) ?? '';
+        final cellMatches = RegExp(r'<c\s+r="([A-Z]+)(\d+)"(?:\s+t="([a-z]+)")?[^>]*>(?:<v>([^<]*)<\/v>)?<\/c>').allMatches(rowXml);
+
+        final rowData = <dynamic>[];
+        for (final cm in cellMatches) {
+          final type = cm.group(3);
+          final rawVal = cm.group(4) ?? '';
+          if (type == 's' && int.tryParse(rawVal) != null) {
+            final sIdx = int.parse(rawVal);
+            rowData.add(sIdx < sharedStrings.length ? sharedStrings[sIdx] : rawVal);
+          } else {
+            rowData.add(rawVal);
+          }
+        }
+        if (rowData.isNotEmpty) {
+          allRows.add(rowData);
+        }
+      }
+      return allRows;
+    } catch (e) {
+      throw Exception('Failed to read Excel (.xlsx) file: ${e.toString().replaceAll('Exception: ', '')}. You can also save as .csv and upload.');
     }
   }
 
@@ -794,10 +1027,41 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
     );
   }
 
-  Future<void> _executeBatchEnrollment(List<_ParsedStudentRow> students) async {
+  Future<void> _executeBatchEnrollment(
+    List<_ParsedStudentRow> students, {
+    bool isResumed = false,
+    String fileName = 'Spreadsheet',
+  }) async {
     final repo = SupabaseStudentRepository();
     final successful = <_ParsedStudentRow>[];
     final failed = <Map<String, dynamic>>[];
+
+    SharedPreferences? prefs;
+    String? sessionKey;
+    List<Map<String, dynamic>> pendingJson = [];
+
+    try {
+      prefs = await SharedPreferences.getInstance();
+      sessionKey = 'batch_enroll_session_$_selectedOfferingId';
+
+      pendingJson = students.map((s) => {
+        'rowNumber': s.rowNumber,
+        'lrn': s.lrn,
+        'firstName': s.firstName,
+        'middleName': s.middleName,
+        'lastName': s.lastName,
+        'gender': s.gender,
+        'birthday': s.birthday.toIso8601String(),
+        'email': s.email,
+      }).toList();
+
+      await prefs.setString(sessionKey, jsonEncode({
+        'fileName': fileName,
+        'offeringId': _selectedOfferingId,
+        'total': students.length,
+        'pending': pendingJson,
+      }));
+    } catch (_) {}
 
     int currentIdx = 0;
     String currentStudentName = '';
@@ -811,25 +1075,64 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
           builder: (context, setState) {
             setProgressState = setState;
             final progress = students.isEmpty ? 0.0 : (currentIdx / students.length);
+            final percent = (progress * 100).toInt();
             return AlertDialog(
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              title: const Text('Enrolling Students in Bulk...', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              title: Row(
+                children: [
+                  const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2.5),
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    isResumed ? 'Resuming Enrollment...' : 'Enrolling Students in Bulk...',
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  ),
+                ],
+              ),
               content: SizedBox(
-                width: 360,
+                width: 380,
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    LinearProgressIndicator(value: progress),
-                    const SizedBox(height: 16),
-                    Text(
-                      'Processing $currentIdx of ${students.length}',
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: LinearProgressIndicator(
+                        value: progress,
+                        minHeight: 8,
+                        backgroundColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.15),
+                      ),
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 12),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Student $currentIdx of ${students.length}',
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                        ),
+                        Text(
+                          '$percent%',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
                     Text(
-                      currentStudentName.isNotEmpty ? currentStudentName : 'Starting enrollment...',
-                      style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7)),
+                      currentStudentName.isNotEmpty ? currentStudentName : 'Preparing student accounts...',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
+                      ),
                       textAlign: TextAlign.center,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ],
                 ),
@@ -860,7 +1163,6 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
           gender: s.gender,
           subjectId: _selectedOfferingId!,
         );
-        // Credentials email is sent server-side by the provision-student Edge Function.
         if (result.studentId.isNotEmpty) successful.add(s);
       } catch (e) {
         failed.add({
@@ -868,6 +1170,24 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
           'error': e.toString().replaceAll('Exception: ', '').trim(),
         });
       }
+
+      // Update persisted pending batch
+      if (prefs != null && sessionKey != null) {
+        pendingJson.removeWhere((item) => item['lrn'] == s.lrn);
+        if (pendingJson.isNotEmpty) {
+          await prefs.setString(sessionKey, jsonEncode({
+            'fileName': fileName,
+            'offeringId': _selectedOfferingId,
+            'total': students.length,
+            'pending': pendingJson,
+          }));
+        }
+      }
+    }
+
+    if (prefs != null && sessionKey != null) {
+      await prefs.remove(sessionKey);
+      if (mounted) setState(() => _resumableBatch = null);
     }
 
     if (mounted) {
@@ -972,66 +1292,164 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
     required BuildContext context,
     required String fullName,
     required String email,
+    String? tempPassword,
     required bool createdAccount,
   }) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        contentPadding: const EdgeInsets.all(28),
-        content: SizedBox(
-          width: 460,
+      barrierDismissible: false,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: Container(
+          width: 520,
+          padding: const EdgeInsets.all(32),
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF1E293B) : Colors.white,
+            borderRadius: BorderRadius.circular(24),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.15),
+                blurRadius: 40,
+                offset: const Offset(0, 20),
+              ),
+            ],
+            border: Border.all(
+              color: isDark ? Colors.white12 : const Color(0xFFF1F5F9),
+              width: 1.5,
+            ),
+          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              // Success Icon Animation / Graphic
               Container(
-                padding: const EdgeInsets.all(14),
+                width: 80,
+                height: 80,
                 decoration: BoxDecoration(
-                  color: AppTheme.catGreen.withValues(alpha: 0.1),
+                  color: AppTheme.catGreen.withValues(alpha: 0.12),
                   shape: BoxShape.circle,
+                  border: Border.all(color: AppTheme.catGreen.withValues(alpha: 0.2), width: 6),
                 ),
-                child: Icon(
-                  Icons.how_to_reg_outlined,
+                child: const Icon(
+                  Icons.how_to_reg_rounded,
                   color: AppTheme.catGreen,
-                  size: 32,
+                  size: 40,
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 24),
+              
               Text(
-                createdAccount ? 'STUDENT ACCOUNT CREATED' : 'STUDENT ENROLLED',
+                createdAccount ? 'Student Successfully Added' : 'Student Enrolled',
                 style: TextStyle(
-                  fontSize: 18,
+                  fontSize: 22,
                   fontWeight: FontWeight.w900,
-                  color: Theme.of(context).colorScheme.onSurface,
-                  letterSpacing: 1,
+                  color: theme.colorScheme.onSurface,
+                  letterSpacing: -0.5,
                 ),
                 textAlign: TextAlign.center,
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 12),
+              
               Text(
                 createdAccount
-                    ? 'A temporary password was sent to the student email. On first sign-in, the student must set a new password and verify it by email.'
-                    : 'The student was successfully enrolled in this subject and section.',
+                    ? 'Login credentials were sent to the student\'s email address. They will be prompted to create a new password upon their first login.'
+                    : 'The student was successfully enrolled into this subject and section.',
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  fontSize: 13,
-                  color: Theme.of(context).colorScheme.onSurface
-                      .withValues(alpha: 0.7),
+                  fontSize: 14.5,
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                   height: 1.5,
                 ),
               ),
-              const SizedBox(height: 20),
-              _CredentialRow(label: 'Student', value: fullName),
-              _CredentialRow(label: 'Email / Username', value: email),
-              const SizedBox(height: 24),
-              AppPrimaryButton(
-                label: 'Done',
-                onPressed: () => Navigator.of(ctx).pop(),
+              const SizedBox(height: 32),
+
+              // Modern Details Card
+              Container(
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: isDark ? Colors.white10 : const Color(0xFFE2E8F0)),
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                child: Column(
+                  children: [
+                    _buildInfoRow('Student Name', fullName, theme),
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 8),
+                      child: Divider(height: 1),
+                    ),
+                    _buildInfoRow('Email Address', email, theme),
+                    if (tempPassword != null && tempPassword.isNotEmpty) ...[
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 8),
+                        child: Divider(height: 1),
+                      ),
+                      _buildInfoRow('Temporary Password', tempPassword, theme, isCode: true),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(height: 32),
+
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: FilledButton(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: theme.colorScheme.primary,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  child: const Text('Continue', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                ),
               ),
             ],
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildInfoRow(String label, String value, ThemeData theme, {bool isCode = false}) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 13,
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Flexible(
+          child: Container(
+            padding: EdgeInsets.symmetric(horizontal: isCode ? 10 : 0, vertical: isCode ? 4 : 0),
+            decoration: isCode
+                ? BoxDecoration(
+                    color: AppTheme.catBlue.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: AppTheme.catBlue.withValues(alpha: 0.2)),
+                  )
+                : null,
+            child: Text(
+              value,
+              textAlign: TextAlign.right,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: isCode ? FontWeight.bold : FontWeight.w600,
+                color: isCode ? AppTheme.catBlue : theme.colorScheme.onSurface,
+                fontFamily: isCode ? 'monospace' : null,
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -1261,6 +1679,7 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
                             _selectedOfferingId = null;
                           }
                         });
+                        _checkResumableBatch();
                       }
                     },
                   ),
@@ -1298,6 +1717,7 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
                           _selectedOfferingId =
                               secs.isNotEmpty ? secs.first['id']?.toString() : null;
                         });
+                        _checkResumableBatch();
                       }
                     },
                   ),
@@ -1328,6 +1748,7 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
                     }).toList(),
                     onChanged: (val) {
                       setState(() => _selectedOfferingId = val);
+                      _checkResumableBatch();
                     },
                   ),
                 ),
@@ -1441,26 +1862,18 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
               children: [
                 Expanded(
                   flex: 5,
-                  child: AppTextField(
-                    label: 'LRN (12-digit DepEd ID) *',
-                    controller: _studentIdCtrl,
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [
-                      FilteringTextInputFormatter.digitsOnly,
-                      LengthLimitingTextInputFormatter(12),
-                    ],
-                    validator: (v) {
-                      if (v == null || v.isEmpty) return 'LRN is required';
-                      if (v.length != 12 || int.tryParse(v) == null) {
-                        return 'LRN must be exactly 12 digits';
-                      }
-                      return null;
-                    },
+                  child: AppDatePickerField(
+                    label: 'Birthday *',
+                    initialDate: _birthday,
+                    firstDate: BirthdayValidator.getMinDate('student'),
+                    lastDate: BirthdayValidator.getMaxDate('student'),
+                    onDateSelected: (d) => setState(() => _birthday = d),
+                    validator: (d) => BirthdayValidator.validateBirthday(d, 'student'),
                   ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  flex: 4,
+                  flex: 5,
                   child: _buildGenderField(theme),
                 ),
               ],
@@ -1470,23 +1883,20 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
-                  flex: 5,
-                  child: AppDatePickerField(
-                    label: 'Birthday *',
-                    initialDate: _birthday,
-                    firstDate: BirthdayValidator.getMinDate(),
-                    lastDate: BirthdayValidator.getMaxDate('student'),
-                    onDateSelected: (d) => setState(() => _birthday = d),
-                    validator: (d) {
-                      if (d == null) return 'Birthday is required';
-                      final now = DateTime.now();
-                      int age = now.year - d.year;
-                      if (now.month < d.month ||
-                          (now.month == d.month && now.day < d.day)) {
-                        age--;
-                      }
-                      if (age < 10) {
-                        return 'Student must be at least 10 years old.';
+                  flex: 3,
+                  child: AppTextField(
+                    label: 'LRN (12-digit ID) *',
+                    controller: _studentIdCtrl,
+                    keyboardType: TextInputType.number,
+                    autovalidateMode: AutovalidateMode.onUserInteraction,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                      LengthLimitingTextInputFormatter(12),
+                    ],
+                    validator: (v) {
+                      if (v == null || v.isEmpty) return 'Required';
+                      if (v.length != 12 || int.tryParse(v) == null) {
+                        return 'Invalid length';
                       }
                       return null;
                     },
@@ -1499,6 +1909,7 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
                     label: 'Email Address *',
                     controller: _emailCtrl,
                     keyboardType: TextInputType.emailAddress,
+                    inputFormatters: AppValidators.emailFormatters,
                     autovalidateMode: AutovalidateMode.onUserInteraction,
                     validator: AppValidators.validateEmail,
                   ),
@@ -1513,6 +1924,12 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
                   onPressed: () => Navigator.of(context).pop(),
                   style: OutlinedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    side: BorderSide(
+                      color: theme.colorScheme.outline.withValues(alpha: 0.3),
+                    ),
                   ),
                   child: const Text('Cancel'),
                 ),
@@ -1598,84 +2015,131 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
       padding: const EdgeInsets.fromLTRB(24, 16, 24, 20),
       child: Column(
         children: [
-          // Drag & Drop / File Click Area
-          InkWell(
-            onTap: _processBatchImport,
-            borderRadius: BorderRadius.circular(14),
-            child: Container(
+          // ── Resumable Interrupted Session Banner ──
+          if (_resumableBatch != null) ...[
+            Container(
               width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+              padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                border: Border.all(
-                  color: theme.colorScheme.primary.withValues(alpha: 0.4),
-                  width: 1.5,
-                  strokeAlign: BorderSide.strokeAlignInside,
-                ),
-                color: isDark
-                    ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.15)
-                    : const Color(0xFFF8FAFC),
-                borderRadius: BorderRadius.circular(14),
+                color: Colors.amber.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.amber.withValues(alpha: 0.4)),
               ),
-              child: Column(
+              child: Row(
                 children: [
                   Container(
-                    padding: const EdgeInsets.all(14),
+                    padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: theme.colorScheme.primary.withValues(alpha: 0.1),
+                      color: Colors.amber.withValues(alpha: 0.2),
                       shape: BoxShape.circle,
                     ),
-                    child: Icon(
-                      LucideIcons.fileSpreadsheet,
-                      size: 36,
-                      color: theme.colorScheme.primary,
-                    ),
+                    child: const Icon(LucideIcons.alertCircle, color: Colors.amber, size: 20),
                   ),
-                  const SizedBox(height: 14),
-                  const Text(
-                    'Click to upload or drag & drop CSV file',
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'Supports standard .csv file format (compatible with Excel & Sheets)',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.surface,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: theme.colorScheme.outline.withValues(alpha: 0.2),
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Icon(LucideIcons.info, size: 14, color: Colors.blue),
-                        const SizedBox(width: 8),
-                        Flexible(
-                          child: Text(
-                            'Required: LRN (12 digits) • First Name • Last Name • Gender • Birthday (YYYY-MM-DD) • Email',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                              color: theme.colorScheme.onSurface.withValues(alpha: 0.85),
-                            ),
+                        const Text(
+                          'Interrupted Session Found',
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '${_resumableBatch!['pendingCount']} student(s) from "${_resumableBatch!['fileName']}" were not finished.',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: theme.colorScheme.onSurface.withValues(alpha: 0.75),
                           ),
                         ),
                       ],
                     ),
                   ),
+                  const SizedBox(width: 8),
+                  TextButton(
+                    onPressed: _discardResumableBatch,
+                    child: const Text('Discard', style: TextStyle(color: Colors.red, fontSize: 12)),
+                  ),
+                  const SizedBox(width: 4),
+                  FilledButton.icon(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: Colors.amber[700],
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    ),
+                    icon: const Icon(LucideIcons.play, size: 14),
+                    label: const Text('Resume', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                    onPressed: _resumeBatchEnrollment,
+                  ),
                 ],
               ),
+            ),
+            const SizedBox(height: 14),
+          ],
+
+          // ── Animated Marching Ants Drag & Drop / File Click Area ──
+          _AnimatedMarchingAntsBox(
+            onTap: _processBatchImport,
+            isDark: isDark,
+            child: Column(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primary.withValues(alpha: 0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    LucideIcons.fileSpreadsheet,
+                    size: 36,
+                    color: theme.colorScheme.primary,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                const Text(
+                  'Click to upload or drag & drop Excel / CSV file',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Supports Excel (.xlsx) and standard CSV (.csv) files up to 5 MB',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.surface,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: theme.colorScheme.outline.withValues(alpha: 0.2),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(LucideIcons.info, size: 14, color: Colors.blue),
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: Text(
+                          'Required: LRN • Email • Last Name • First Name • Gender • Birthday (YYYY-MM-DD)',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: theme.colorScheme.onSurface.withValues(alpha: 0.85),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
 
@@ -1697,7 +2161,7 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    'Tip: Click "Download Official Template" below to get the pre-formatted CSV template. Keep the column headers unchanged when entering student details.',
+                    'Tip: Click "Download Official Template" below to get the pre-formatted Excel or CSV template. Keep the column headers unchanged when entering student details.',
                     style: TextStyle(
                       fontSize: 12,
                       color: theme.colorScheme.onSurface.withValues(alpha: 0.75),
@@ -1717,19 +2181,23 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
               OutlinedButton.icon(
                 style: OutlinedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   side: BorderSide(
                     color: const Color(0xFF0F8A48).withValues(alpha: 0.6),
                   ),
                   foregroundColor: const Color(0xFF0F8A48),
                 ),
                 icon: const Icon(LucideIcons.download, size: 16),
-                label: const Text('Download Official Template'),
+                label: const Text('Download Official Template (Excel / CSV)'),
                 onPressed: _downloadOfficialTemplate,
               ),
-              AppButton.primary(
-                icon: LucideIcons.upload,
-                label: 'Choose File',
-                onPressed: _processBatchImport,
+              Text(
+                'Max file size: 5 MB',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                  fontWeight: FontWeight.w500,
+                ),
               ),
             ],
           ),
@@ -1763,8 +2231,12 @@ class _SectionLabel extends StatelessWidget {
 class _CredentialRow extends StatelessWidget {
   final String label;
   final String value;
+  final bool isCode;
 
-  const _CredentialRow({required this.label, required this.value});
+  const _CredentialRow({
+    required this.label,
+    required this.value,
+  }) : isCode = false;
 
   @override
   Widget build(BuildContext context) {
@@ -1789,19 +2261,26 @@ class _CredentialRow extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
-                color: Theme.of(context).scaffoldBackgroundColor,
+                color: isCode
+                    ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.08)
+                    : Theme.of(context).scaffoldBackgroundColor,
                 borderRadius: BorderRadius.circular(6),
                 border: Border.all(
-                  color: Theme.of(context).colorScheme.onSurface
-                      .withValues(alpha: 0.12),
+                  color: isCode
+                      ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.35)
+                      : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.12),
                 ),
               ),
-              child: Text(
+              child: SelectableText(
                 value,
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.bold,
-                  color: Theme.of(context).colorScheme.onSurface,
+                  fontFamily: isCode ? 'monospace' : null,
+                  letterSpacing: isCode ? 1.0 : null,
+                  color: isCode
+                      ? Theme.of(context).colorScheme.primary
+                      : Theme.of(context).colorScheme.onSurface,
                 ),
               ),
             ),
@@ -1845,3 +2324,153 @@ class _InvalidStudentRow {
     required this.reason,
   });
 }
+
+class _AnimatedMarchingAntsBox extends StatefulWidget {
+  final VoidCallback onTap;
+  final bool isDark;
+  final Widget child;
+
+  const _AnimatedMarchingAntsBox({
+    required this.onTap,
+    required this.isDark,
+    required this.child,
+  });
+
+  @override
+  State<_AnimatedMarchingAntsBox> createState() => _AnimatedMarchingAntsBoxState();
+}
+
+class _AnimatedMarchingAntsBoxState extends State<_AnimatedMarchingAntsBox>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  bool _isHovered = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 4),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _onHover(bool hover) {
+    setState(() => _isHovered = hover);
+    if (hover) {
+      _controller.repeat();
+    } else {
+      _controller.stop();
+      _controller.reset();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final borderColor = _isHovered
+        ? theme.colorScheme.primary
+        : theme.colorScheme.primary.withValues(alpha: 0.4);
+
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => _onHover(true),
+      onExit: (_) => _onHover(false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedBuilder(
+          animation: _controller,
+          builder: (context, _) {
+            return CustomPaint(
+              painter: _MarchingAntsPainter(
+                strokeColor: borderColor,
+                phase: _controller.value * 20.0,
+                radius: 14.0,
+                strokeWidth: _isHovered ? 2.0 : 1.5,
+              ),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(14),
+                  color: widget.isDark
+                      ? (_isHovered
+                          ? theme.colorScheme.primary.withValues(alpha: 0.12)
+                          : theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.15))
+                      : (_isHovered
+                          ? theme.colorScheme.primary.withValues(alpha: 0.05)
+                          : const Color(0xFFF8FAFC)),
+                ),
+                child: widget.child,
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+class _MarchingAntsPainter extends CustomPainter {
+  final Color strokeColor;
+  final double phase;
+  final double radius;
+  final double strokeWidth;
+
+  _MarchingAntsPainter({
+    required this.strokeColor,
+    required this.phase,
+    required this.radius,
+    required this.strokeWidth,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = strokeColor
+      ..strokeWidth = strokeWidth
+      ..style = PaintingStyle.stroke;
+
+    final rrect = RRect.fromRectAndRadius(
+      Offset.zero & size,
+      Radius.circular(radius),
+    );
+
+    final path = Path()..addRRect(rrect);
+
+    final dashedPath = _createDashedPath(path, 7.0, 5.0, phase);
+    canvas.drawPath(dashedPath, paint);
+  }
+
+  Path _createDashedPath(Path source, double dashLength, double gapLength, double distanceOffset) {
+    final dest = Path();
+    for (final metric in source.computeMetrics()) {
+      double distance = distanceOffset % (dashLength + gapLength);
+      while (distance < metric.length) {
+        final length = (distance + dashLength < metric.length)
+            ? dashLength
+            : metric.length - distance;
+        dest.addPath(
+          metric.extractPath(distance, distance + length),
+          Offset.zero,
+        );
+        distance += dashLength + gapLength;
+      }
+    }
+    return dest;
+  }
+
+  @override
+  bool shouldRepaint(_MarchingAntsPainter oldDelegate) {
+    return oldDelegate.phase != phase ||
+        oldDelegate.strokeColor != strokeColor ||
+        oldDelegate.strokeWidth != strokeWidth;
+  }
+}
+

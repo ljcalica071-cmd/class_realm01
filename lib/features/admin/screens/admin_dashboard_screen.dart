@@ -162,7 +162,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       case 2:
         return 'Teacher Management';
       case 3:
-        return 'Teacher Activity & Analytics Hub';
+        return 'Activity Analytics';
       case 4:
         return 'Administrator Profile';
       default:

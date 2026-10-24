@@ -213,6 +213,43 @@ class FirebaseAuthAdminService {
     return false;
   }
 
+  /// Updates user email in Firebase Authentication directly via Service Account Admin API.
+  static Future<bool> updateUserEmail({
+    required String uid,
+    required String newEmail,
+  }) async {
+    try {
+      final token = await _getAccessToken();
+      final projectId = EnvConfig.firebaseProjectId.isNotEmpty
+          ? EnvConfig.firebaseProjectId
+          : 'classrealm01';
+
+      if (token != null && token.isNotEmpty) {
+        final res = await http.post(
+          Uri.parse('https://identitytoolkit.googleapis.com/v1/projects/$projectId/accounts:update'),
+          headers: {
+            'Authorization': 'Bearer $token',
+            'Content-Type': 'application/json',
+          },
+          body: jsonEncode({
+            'localId': uid,
+            'email': newEmail,
+            'emailVerified': true, // Auto-verify since admin triggered it
+          }),
+        );
+        if (res.statusCode == 200) {
+          debugPrint('FirebaseAuthAdminService: Successfully updated email for UID $uid');
+          return true;
+        } else {
+          debugPrint('FirebaseAuthAdminService updateUserEmail returned ${res.statusCode}: ${res.body}');
+        }
+      }
+    } catch (e) {
+      debugPrint('FirebaseAuthAdminService updateUserEmail error: $e');
+    }
+    return false;
+  }
+
   /// Updates user password in Firebase Authentication directly via Service Account Admin API.
   /// Bypasses client SDK 'requires-recent-login' and freshness restrictions.
   static Future<bool> updateUserPassword({

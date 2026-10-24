@@ -87,8 +87,8 @@ class _SessionActivityTrackerState extends State<SessionActivityTracker>
     }
 
     try {
-      final now = DateTime.now();
-      _sessionStart = now;
+      final now = DateTime.now().toUtc();
+      _sessionStart = DateTime.now();
 
       final roleStr = user.role.name;
       final res = await Supabase.instance.client
@@ -116,25 +116,25 @@ class _SessionActivityTrackerState extends State<SessionActivityTracker>
 
   void _startHeartbeat() {
     _heartbeatTimer?.cancel();
-    _heartbeatTimer = Timer.periodic(const Duration(seconds: 60), (_) async {
+    _heartbeatTimer = Timer.periodic(const Duration(seconds: 15), (_) async {
       final user = AuthRepository.instance.currentUser;
       if (user == null) return;
 
       final sessionId = _activeSessionLogId ?? LocalStorageService.getActiveSessionId();
       if (sessionId == null) return;
 
-      final now = DateTime.now();
-      final totalSeconds = now.difference(_sessionStart).inSeconds;
+      final nowUtc = DateTime.now().toUtc();
+      final totalSeconds = DateTime.now().difference(_sessionStart).inSeconds;
 
       try {
         await Supabase.instance.client.from('user_session_logs').update({
-          'last_active_at': now.toIso8601String(),
+          'last_active_at': nowUtc.toIso8601String(),
           'duration_seconds': totalSeconds >= 0 ? totalSeconds : 0,
         }).eq('id', sessionId);
       } catch (e) {
         // Edge Case #18: Silent try-catch with local cache fallback
         debugPrint('Heartbeat sync silent retry notice: $e');
-        LocalStorageService.savePendingHeartbeat(sessionId, now);
+        LocalStorageService.savePendingHeartbeat(sessionId, nowUtc);
       }
     });
   }
@@ -167,7 +167,7 @@ class _SessionActivityTrackerState extends State<SessionActivityTracker>
 
     // Strict 30-Minute Inactivity Limit
     if (inactiveDuration >= const Duration(minutes: 30)) {
-      _triggerAutoLogout('inactivity_timeout');
+      _triggerAutoLogout('inactivity');
       return;
     }
 

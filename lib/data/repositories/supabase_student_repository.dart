@@ -41,7 +41,21 @@ class SupabaseStudentRepository implements StudentRepository {
     String? subjectId,
     bool includeArchived = false,
   }) async {
-    // 1. FAST LOCAL DRIFT SQLITE READ (0 milliseconds load)
+    // 1. Fetch live cloud students first to ensure real registered email and Supabase status
+    try {
+      final cloudStudents = await _syncStudentsFromCloud(
+        teacherId: teacherId,
+        subjectId: subjectId,
+        includeArchived: includeArchived,
+      );
+      if (cloudStudents.isNotEmpty || includeArchived) {
+        return cloudStudents;
+      }
+    } catch (e) {
+      debugPrint('Cloud sync error in getStudentsForTeacher, falling back to local: $e');
+    }
+
+    // 2. FAST LOCAL DRIFT SQLITE READ (offline fallback)
     try {
       final List<LocalStudent> localStudents;
       if (subjectId != null && subjectId.isNotEmpty) {
@@ -51,13 +65,6 @@ class SupabaseStudentRepository implements StudentRepository {
       }
 
       if (localStudents.isNotEmpty) {
-        // Trigger silent background cloud sync
-        unawaited(_syncStudentsFromCloud(
-          teacherId: teacherId,
-          subjectId: subjectId,
-          includeArchived: includeArchived,
-        ));
-
         return localStudents.map((st) {
           final fullName = [st.firstName, st.middleName, st.lastName]
               .where((name) => name != null && name.trim().isNotEmpty)
@@ -68,7 +75,7 @@ class SupabaseStudentRepository implements StudentRepository {
             username: st.lrn ?? '',
             fullName: fullName.isEmpty ? 'Student' : fullName,
             role: UserRole.student,
-            email: '${st.lrn ?? 'student'}@classrealm.edu',
+            email: '',
             firstName: st.firstName,
             middleName: st.middleName,
             lastName: st.lastName,
@@ -84,11 +91,7 @@ class SupabaseStudentRepository implements StudentRepository {
       debugPrint('Drift local students read notice: $e');
     }
 
-    return _syncStudentsFromCloud(
-      teacherId: teacherId,
-      subjectId: subjectId,
-      includeArchived: includeArchived,
-    );
+    return [];
   }
 
   Future<List<UserModel>> _syncStudentsFromCloud({
@@ -102,7 +105,8 @@ class SupabaseStudentRepository implements StudentRepository {
           .select('''
             id, status, created_at,
             student_profiles!inner ( 
-              student_id, lrn, first_name, middle_name, last_name, gender, birthday
+              student_id, lrn, first_name, middle_name, last_name, gender, birthday,
+              users!inner ( email, status, is_archived )
             ),
             subject_offerings!inner ( 
               id, teacher_id,
@@ -118,11 +122,39 @@ class SupabaseStudentRepository implements StudentRepository {
 
       if (!includeArchived) {
         query = query.ilike('status', 'enrolled');
+      } else {
+        query = query.ilike('status', 'archived');
       }
 
       final response = await query;
       if ((response as List).isEmpty) {
         return [];
+      }
+
+      // Collect student IDs to query student_settings for authoritative status
+      final studentIds = (response as List)
+          .map((r) => (r['student_profiles'] as Map?)?['student_id']?.toString())
+          .whereType<String>()
+          .toSet()
+          .toList();
+
+      final Map<String, String> studentSettingsStatus = {};
+      if (studentIds.isNotEmpty) {
+        try {
+          final settingsRes = await _client
+              .from('student_settings')
+              .select('student_id, status')
+              .inFilter('student_id', studentIds);
+          for (final row in (settingsRes as List)) {
+            final sid = row['student_id']?.toString();
+            final st = row['status']?.toString();
+            if (sid != null && st != null) {
+              studentSettingsStatus[sid] = st;
+            }
+          }
+        } catch (settingsErr) {
+          debugPrint('student_settings fetch notice: $settingsErr');
+        }
       }
 
       final mapped = (response as List).map<UserModel>((row) {
@@ -135,12 +167,39 @@ class SupabaseStudentRepository implements StudentRepository {
             .where((name) => name != null && name.toString().trim().isNotEmpty)
             .join(' ');
 
+        final usersData = profile['users'] as Map<String, dynamic>? ?? {};
+        final studentId = profile['student_id']?.toString() ?? '';
+        final realEmail = usersData['email']?.toString() ?? '';
+        
+        final enrollmentStatus = row['status']?.toString().toLowerCase();
+        final isEnrollmentArchived = enrollmentStatus == 'archived';
+        final isUserArchived = usersData['is_archived'] == true;
+        final isArchived = isEnrollmentArchived || isUserArchived;
+
+        AccountStatus accountStatus;
+        if (isArchived) {
+          accountStatus = AccountStatus.archived;
+        } else {
+          final rawStatus = (studentSettingsStatus[studentId] ?? usersData['status']?.toString() ?? 'pending_first_login')
+              .toLowerCase()
+              .replaceAll(RegExp(r'[\s_-]'), '');
+          if (rawStatus == 'active') {
+            accountStatus = AccountStatus.active;
+          } else if (rawStatus == 'pending' || rawStatus == 'pendingfirstlogin') {
+            accountStatus = AccountStatus.pendingFirstLogin;
+          } else if (rawStatus == 'deactivated') {
+            accountStatus = AccountStatus.deactivated;
+          } else {
+            accountStatus = AccountStatus.pendingFirstLogin;
+          }
+        }
+
         return UserModel(
-          id: profile['student_id']?.toString() ?? '',
-          username: profile['lrn']?.toString() ?? '',
+          id: studentId,
+          username: profile['lrn']?.toString() ?? realEmail,
           fullName: fullName.isEmpty ? 'Student' : fullName,
           role: UserRole.student,
-          email: '${profile['lrn'] ?? 'student'}@classrealm.edu',
+          email: realEmail,
           firstName: profile['first_name']?.toString() ?? 'Unknown',
           middleName: profile['middle_name']?.toString(),
           lastName: profile['last_name']?.toString() ?? 'Unknown',
@@ -152,8 +211,8 @@ class SupabaseStudentRepository implements StudentRepository {
           departmentOrSection: sec['section_name']?.toString(),
           enrolledSubjectId: sub['id']?.toString() ?? offering['id']?.toString(),
           enrolledSubjectName: sub['subject_name']?.toString(),
-          status: AccountStatus.active,
-          isArchived: (row['status']?.toString().toLowerCase() != 'enrolled'),
+          status: accountStatus,
+          isArchived: isArchived,
         );
       }).toList();
 
@@ -228,6 +287,7 @@ class SupabaseStudentRepository implements StudentRepository {
     required String gender,
     required String subjectId,
   }) async {
+    final cleanEmail = email.trim().toLowerCase();
     final bdayStr =
         '${birthday.year.toString().padLeft(4, '0')}-${birthday.month.toString().padLeft(2, '0')}-${birthday.day.toString().padLeft(2, '0')}';
     final cleanLastName =
@@ -241,7 +301,7 @@ class SupabaseStudentRepository implements StudentRepository {
     String? fbUid;
     try {
       fbUid = await FirebaseAuthAdminService.createUser(
-        email: email,
+        email: cleanEmail,
         password: tempPassword,
         displayName: studentFullName,
       );
@@ -255,8 +315,9 @@ class SupabaseStudentRepository implements StudentRepository {
       // 1. Direct Pure Dart insert into Supabase users, profiles, and settings
       await _client.from('users').upsert({
         'id': studentId,
-        'email': email,
+        'email': cleanEmail,
         'role': 'student',
+        'status': 'pending_first_login',
         'is_archived': false,
       });
 
@@ -302,11 +363,9 @@ class SupabaseStudentRepository implements StudentRepository {
 
     final newStudentModel = UserModel(
       id: studentId,
-      username: lrn,
-      fullName: [firstName, middleName, lastName]
-          .where((s) => s.isNotEmpty)
-          .join(' '),
-      email: email,
+      username: cleanEmail,
+      fullName: studentFullName,
+      email: cleanEmail,
       role: UserRole.student,
       firstName: firstName,
       middleName: middleName,
@@ -314,19 +373,20 @@ class SupabaseStudentRepository implements StudentRepository {
       gender: gender,
       birthday: birthday,
       lrn: lrn,
-      status: AccountStatus.active,
+      status: AccountStatus.pendingFirstLogin,
     );
     MockDatabase.instance.users.add(newStudentModel);
 
-    // Send welcome email with student credentials in background
+    // Send welcome email with student credentials
     try {
-      EmailService.sendStudentCredentials(
-        recipientEmail: email,
-        studentName: [firstName, lastName].where((s) => s.isNotEmpty).join(' '),
-        studentId: lrn,
+      await EmailService.instance.sendStudentWelcomeEmail(
+        recipientEmail: cleanEmail,
+        studentName: studentFullName,
         tempPassword: tempPassword,
       );
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[SupabaseStudentRepository] Student welcome email error: $e');
+    }
 
     return StudentEnrollmentResult(
       studentId: studentId,

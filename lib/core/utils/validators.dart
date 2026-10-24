@@ -481,20 +481,23 @@ extension BirthdayValidator on AppValidators {
       age--;
     }
 
-    if (date.year <= 1950) {
-      return 'Birthdates from 1950 and below are not supported.';
-    }
-
+    // Role-specific age logic
     if (role == 'teacher' || role == 'parent') {
+      if (date.year <= 1950) return 'Birthdates from 1950 and below are not supported.';
       if (age < 18) return 'Must be at least 18 years old.';
     } else if (role == 'student') {
+      if (age > 50) return 'Student cannot be older than 50 years old.';
       if (age < 10) return 'Must be at least 10 years old.';
     }
 
     return null;
   }
 
-  static DateTime getMinDate() {
+  static DateTime getMinDate([String role = '']) {
+    final now = DateTime.now();
+    if (role == 'student') {
+      return DateTime(now.year - 50, now.month, now.day);
+    }
     return DateTime(1951, 1, 1);
   }
 

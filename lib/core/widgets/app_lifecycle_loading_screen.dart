@@ -180,12 +180,18 @@ class _AppLifecycleLoadingScreenState extends State<AppLifecycleLoadingScreen>
     if (!mounted) return;
     updatePreBootstrapProgress(1.0, _statusText);
 
-    // Concurrently await real init result if not yet done
-    _resolvedUser = await initialization;
+    // Concurrently await real init result if not yet done (fast cap so we NEVER freeze at 100%)
+    try {
+      _resolvedUser = await initialization.timeout(
+        const Duration(milliseconds: 200),
+      );
+    } catch (_) {
+      _resolvedUser = AuthRepository.instance.currentUser;
+    }
     if (!mounted) return;
 
-    // Brief 160ms visual confirmation of 100% "Ready", then dissolve smoothly into app
-    await Future<void>.delayed(const Duration(milliseconds: 160));
+    // Brief 120ms visual confirmation of 100% "Ready", then dissolve smoothly into destination
+    await Future<void>.delayed(const Duration(milliseconds: 120));
     if (!mounted) return;
 
     AppLifecycleCoordinator.instance.onStart();

@@ -291,29 +291,87 @@ class AdminRepository {
   /// Returns real counts of active (non-archived) users grouped by role
   Future<Map<String, int>> getActiveUserCountsByRole() async {
     try {
-      final res = await _client
-          .from('users')
-          .select('role, email')
-          .eq('is_archived', false)
-          .not('email', 'in', '("teacher", "student", "parent")'); // exclude pure mock accounts
-
-      final counts = <String, int>{
-        'teachers': 0,
-        'students': 0,
-        'parents': 0,
-        'total': 0,
-      };
-
-      for (var row in (res as List)) {
-        final role = row['role']?.toString();
-        if (role == 'teacher') counts['teachers'] = counts['teachers']! + 1;
-        if (role == 'student') counts['students'] = counts['students']! + 1;
-        if (role == 'parent') counts['parents'] = counts['parents']! + 1;
-        if (role == 'teacher' || role == 'student' || role == 'parent') {
-          counts['total'] = counts['total']! + 1;
+      // 1. Try dedicated RPC function first (accurate DB-level aggregate)
+      try {
+        final rpcRes = await _client.rpc('get_active_audience_counts');
+        if (rpcRes is Map) {
+          return {
+            'teachers': (rpcRes['teachers'] as num?)?.toInt() ?? 0,
+            'students': (rpcRes['students'] as num?)?.toInt() ?? 0,
+            'parents': (rpcRes['parents'] as num?)?.toInt() ?? 0,
+            'total': (rpcRes['total'] as num?)?.toInt() ?? 0,
+          };
         }
+      } catch (rpcErr) {
+        debugPrint('getActiveUserCountsByRole RPC notice: $rpcErr');
       }
-      return counts;
+
+      // 2. Fallback queries strictly filtering by status == 'active'
+      final teacherRes = await _client
+          .from('teacher_settings')
+          .select('teacher_id')
+          .eq('status', 'active');
+      final activeTeacherIds = (teacherRes as List)
+          .map((r) => r['teacher_id']?.toString())
+          .whereType<String>()
+          .toList();
+
+      int teachersCount = 0;
+      if (activeTeacherIds.isNotEmpty) {
+        final validTeachers = await _client
+            .from('users')
+            .select('id')
+            .inFilter('id', activeTeacherIds)
+            .eq('is_archived', false);
+        teachersCount = (validTeachers as List).length;
+      }
+
+      int studentsCount = 0;
+      try {
+        final studentRes = await _client
+            .from('student_settings')
+            .select('student_id')
+            .eq('status', 'active');
+        final activeStudentIds = (studentRes as List)
+            .map((r) => r['student_id']?.toString())
+            .whereType<String>()
+            .toList();
+        if (activeStudentIds.isNotEmpty) {
+          final validStudents = await _client
+              .from('users')
+              .select('id')
+              .inFilter('id', activeStudentIds)
+              .eq('is_archived', false);
+          studentsCount = (validStudents as List).length;
+        }
+      } catch (_) {}
+
+      int parentsCount = 0;
+      try {
+        final parentRes = await _client
+            .from('parent_profiles')
+            .select('parent_id')
+            .eq('status', 'active');
+        final activeParentIds = (parentRes as List)
+            .map((r) => r['parent_id']?.toString())
+            .whereType<String>()
+            .toList();
+        if (activeParentIds.isNotEmpty) {
+          final validParents = await _client
+              .from('users')
+              .select('id')
+              .inFilter('id', activeParentIds)
+              .eq('is_archived', false);
+          parentsCount = (validParents as List).length;
+        }
+      } catch (_) {}
+
+      return {
+        'teachers': teachersCount,
+        'students': studentsCount,
+        'parents': parentsCount,
+        'total': teachersCount + studentsCount + parentsCount,
+      };
     } catch (e) {
       debugPrint('AdminRepository getActiveUserCountsByRole error: $e');
       return {'teachers': 0, 'students': 0, 'parents': 0, 'total': 0};
@@ -431,11 +489,14 @@ class AdminRepository {
         nameMap[id] = raw.isNotEmpty ? '$prefix$raw' : 'Teacher';
       }
 
-      return rawLogs.map((r) {
-        final uId = r['user_id']?.toString() ?? '';
-        final teacherName = nameMap[uId] ?? 'Teacher';
-        return UserSessionLog.fromJson(r as Map<String, dynamic>, teacherName: teacherName);
-      }).toList();
+      return rawLogs
+        .map((r) {
+          final uId = r['user_id']?.toString() ?? '';
+          final teacherName = nameMap[uId] ?? 'Teacher';
+          return UserSessionLog.fromJson(r as Map<String, dynamic>, teacherName: teacherName);
+        })
+        .where((log) => log.isActive || log.durationSeconds > 0) // Hide zero-second dead sessions
+        .toList();
     } catch (e) {
       debugPrint('AdminRepository getTeacherSessionLogs error: $e');
       return [];
@@ -445,7 +506,18 @@ class AdminRepository {
   /// Privacy-compliant teacher workload summary: integer counts only!
   Future<List<TeacherWorkloadSummary>> getTeacherWorkloadSummaries(String schoolYearId) async {
     try {
-      // 1. Get ONLY active teachers (status = active), excluding archived and pending_first_login
+      // 1. Get ONLY active teachers (teacher_settings.status = active), excluding archived and pending_first_login
+      final activeSettings = await _client
+          .from('teacher_settings')
+          .select('teacher_id')
+          .eq('status', 'active');
+      final activeTeacherIds = (activeSettings as List)
+          .map((r) => r['teacher_id']?.toString())
+          .whereType<String>()
+          .toList();
+
+      if (activeTeacherIds.isEmpty) return [];
+
       final teachersRes = await _client
           .from('teacher_profiles')
           .select('''
@@ -453,11 +525,10 @@ class AdminRepository {
             first_name,
             last_name,
             gender,
-            status,
             users!inner ( is_archived )
           ''')
           .eq('users.is_archived', false)
-          .eq('status', 'active');
+          .inFilter('teacher_id', activeTeacherIds);
 
       final teachers = (teachersRes as List);
 
@@ -478,7 +549,8 @@ class AdminRepository {
           .from('user_session_logs')
           .select()
           .eq('role', 'teacher')
-          .gte('session_date', weekStart.toIso8601String().split('T').first);
+          .gte('session_date', weekStart.toIso8601String().split('T').first)
+          .order('login_at', ascending: false);
 
       final sessions = (sessionsRes as List)
           .map((s) => UserSessionLog.fromJson(s as Map<String, dynamic>))

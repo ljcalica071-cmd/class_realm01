@@ -254,25 +254,34 @@
 
         // Continuous progress without stalling at 65%: 0% -> 30% -> 65% -> 100%
         const statusEl = document.getElementById("bootstrap-status");
-        animateTo(30, 500, () => {
+        animateTo(30, 450, () => {
           if (statusEl) statusEl.textContent = "Connecting secure database & services...";
-          animateTo(65, 600, () => {
+          animateTo(65, 550, () => {
             if (statusEl) statusEl.textContent = "ClassRealm Ready! Welcome.";
-            animateTo(100, 500);
+            animateTo(100, 450, () => {
+              window.setTimeout(() => {
+                if (window.removePreBootstrapLoader) {
+                  window.removePreBootstrapLoader();
+                }
+              }, 160);
+            });
           });
         });
       }
 
-      // Global hook invoked when Flutter canvas is ready
+      // Global hook invoked when Flutter canvas is ready or loading finishes
       window.removePreBootstrapLoader = function() {
         const l = document.getElementById("pre-bootstrap-loader");
-        if (l) {
+        if (l && l.style.opacity !== "0") {
+          l.style.transition = "opacity 0.35s ease-out, transform 0.35s ease-out";
           l.style.opacity = "0";
+          l.style.transform = "scale(1.02)";
+          l.style.pointerEvents = "none";
           setTimeout(() => {
             if (l && l.parentNode) {
               l.parentNode.removeChild(l);
             }
-          }, 240);
+          }, 360);
         }
       };
 

@@ -1009,16 +1009,15 @@ class _TeacherParentManagementTabState
                                                           if (!_showArchivedParents)
                                                             IconButton(
                                                               tooltip:
-                                                                  'Edit Parent Details',
-                                                              icon: const Icon(
+                                                                  p.status == AccountStatus.pendingFirstLogin ? 'Cannot edit: Pending First Login' : 'Edit Parent Details',
+                                                              icon: Icon(
                                                                 Icons
                                                                     .edit_outlined,
                                                                 size: 18,
-                                                                color: Color(
-                                                                    0xFF64748B),
+                                                                color: p.status == AccountStatus.pendingFirstLogin ? theme.colorScheme.onSurface.withValues(alpha: 0.25) : const Color(0xFF64748B),
                                                               ),
                                                               splashRadius: 18,
-                                                              onPressed: () =>
+                                                              onPressed: p.status == AccountStatus.pendingFirstLogin ? () { AppModals.showErrorDialog(context: context, title: 'Cannot Edit Parent', message: 'This parent account has not completed their first login yet. Profiles can only be edited once the parent has logged in and set up their account.'); } : () =>
                                                                   _showEditParentDialog(
                                                                       p),
                                                             ),
@@ -1045,7 +1044,7 @@ class _TeacherParentManagementTabState
                                                           ),
 
                                                           // Delete (in archive mode)
-                                                          if (_showArchivedParents)
+                                                          if (false)
                                                             IconButton(
                                                               tooltip:
                                                                   'Permanently Delete',

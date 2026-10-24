@@ -517,8 +517,10 @@ class AuthRepository {
 
   // Logout
   Future<void> logout([String? reason]) async {
+    final userToLogOut = _currentUser;
+    final sessionId = LocalStorageService.getActiveSessionId();
+    await endSession(reason ?? 'manual', userToLogOut, sessionId);
     _currentUser = null;
-    await endSession(reason ?? 'manual_logout');
     await LocalStorageService.clearAuth();
     clearWarmSession();
     AppDataCache.instance.clearAll();
@@ -537,8 +539,45 @@ class AuthRepository {
 
   Future<void> startSessionLog(custom.UserModel user) async {
     try {
-      final now = DateTime.now();
+      final now = DateTime.now().toUtc();
       final roleStr = user.role.name;
+
+      // Close any previous open session for this user before starting new one
+      try {
+        // Delete all dangling empty ghost sessions (0 seconds and not properly closed)
+        await _supabaseClient
+            .from('user_session_logs')
+            .delete()
+            .eq('user_id', user.id)
+            .eq('is_active', false)
+            .eq('duration_seconds', 0);
+            
+        // Find existing active sessions
+        final oldSessions = await _supabaseClient
+            .from('user_session_logs')
+            .select('id, login_at, last_active_at')
+            .eq('user_id', user.id)
+            .eq('is_active', true);
+            
+        for (var old in oldSessions) {
+          final loginTime = DateTime.parse(old['login_at']);
+          final lastActiveTime = DateTime.parse(old['last_active_at'] ?? now.toIso8601String());
+          final computedDuration = lastActiveTime.difference(loginTime).inSeconds.abs();
+          
+          if (computedDuration < 2) {
+             // If they immediately refreshed (creating duplicate), delete the tiny ghost
+             await _supabaseClient.from('user_session_logs').delete().eq('id', old['id']);
+          } else {
+             await _supabaseClient.from('user_session_logs').update({
+              'is_active': false,
+              'logout_at': lastActiveTime.toIso8601String(), // Use last known active time as logout
+              'logout_reason': 'terminated',
+              'duration_seconds': computedDuration,
+            }).eq('id', old['id']);
+          }
+        }
+      } catch (_) {}
+
       final res = await _supabaseClient
           .from('user_session_logs')
           .insert({
@@ -566,44 +605,101 @@ class AuthRepository {
     if (user == null) return;
     final id = sessionId ?? LocalStorageService.getActiveSessionId();
     if (id == null) return;
-    final now = DateTime.now();
+    final now = DateTime.now().toUtc();
     try {
-      await _supabaseClient.from('user_session_logs').update({
+      int? currentDuration;
+      try {
+        final sRow = await _supabaseClient
+            .from('user_session_logs')
+            .select('login_at')
+            .eq('id', id)
+            .maybeSingle();
+        if (sRow != null && sRow['login_at'] != null) {
+          final loginAt = DateTime.tryParse(sRow['login_at'].toString());
+          if (loginAt != null) {
+            currentDuration = now.difference(loginAt).inSeconds;
+            if (currentDuration < 0) currentDuration = 0;
+          }
+        }
+      } catch (_) {}
+
+      final updateData = <String, dynamic>{
         'last_active_at': now.toIso8601String(),
-      }).eq('id', id);
+      };
+      if (currentDuration != null) {
+        updateData['duration_seconds'] = currentDuration;
+      }
+
+      await _supabaseClient
+          .from('user_session_logs')
+          .update(updateData)
+          .eq('id', id);
     } catch (e) {
       debugPrint('AuthRepository recordHeartbeat notice: $e');
     }
   }
 
-  Future<void> endSession([String? reason]) async {
-    final now = DateTime.now();
+  Future<void> endSession([
+    String? reason,
+    custom.UserModel? targetUser,
+    String? targetSessionId,
+  ]) async {
+    final now = DateTime.now().toUtc();
+    final cleanReason = (reason == null || reason.isEmpty || reason == 'manual_logout')
+        ? 'manual'
+        : (reason == 'session_superseded' || reason == 'app_closed'
+            ? 'terminated'
+            : (reason == 'inactivity_timeout' ? 'inactivity' : reason));
     try {
-      final sessionId = LocalStorageService.getActiveSessionId();
-      
+      final sessionId = targetSessionId ?? LocalStorageService.getActiveSessionId();
+      final user = targetUser ?? currentUser;
+
       if (sessionId != null) {
-        // Try closing the specific session first
-        await _supabaseClient.from('user_session_logs').update({
+        int? computedDuration;
+        try {
+          final sRow = await _supabaseClient
+              .from('user_session_logs')
+              .select('login_at')
+              .eq('id', sessionId)
+              .maybeSingle();
+          if (sRow != null && sRow['login_at'] != null) {
+            final loginAt = DateTime.tryParse(sRow['login_at'].toString());
+            if (loginAt != null) {
+              computedDuration = now.difference(loginAt).inSeconds;
+              if (computedDuration < 0) computedDuration = 0;
+            }
+          }
+        } catch (_) {}
+
+        final updatePayload = <String, dynamic>{
           'logout_at': now.toIso8601String(),
-          'logout_reason': reason ?? 'manual_logout',
+          'logout_reason': cleanReason,
           'is_active': false,
-        }).eq('id', sessionId);
+          'last_active_at': now.toIso8601String(),
+        };
+        if (computedDuration != null) {
+          updatePayload['duration_seconds'] = computedDuration;
+        }
+
+        await _supabaseClient
+            .from('user_session_logs')
+            .update(updatePayload)
+            .eq('id', sessionId);
       }
-      
+
       // FALLBACK & BULK CLEANUP:
       // Even if session ID is lost in local storage (due to hot reloads/tests),
       // force close ALL active sessions for this user to guarantee accuracy.
-      final user = currentUser;
       if (user != null) {
         await _supabaseClient.from('user_session_logs').update({
           'logout_at': now.toIso8601String(),
-          'logout_reason': reason ?? 'manual_logout_fallback',
+          'logout_reason': cleanReason,
           'is_active': false,
+          'last_active_at': now.toIso8601String(),
         })
         .eq('user_id', user.id)
         .eq('is_active', true);
       }
-      
     } catch (e) {
       debugPrint('AuthRepository endSession notice: $e');
     } finally {
@@ -1573,6 +1669,65 @@ class AuthRepository {
       return teachers;
     } catch (e) {
       return [];
+    }
+  }
+
+  // =========================================================================
+  // Admin: Account Recovery and Email Fixes
+  // =========================================================================
+
+  /// Action A: Update Email Only (For fixing typos, doesn't reset password)
+  Future<void> updateTeacherEmailOnly({required String teacherId, required String newEmail}) async {
+    final cleanEmail = newEmail.trim().toLowerCase();
+    
+    // 1. Verify if email exists
+    final exists = await _supabaseClient.from('users').select('id').eq('email', cleanEmail).maybeSingle();
+    if (exists != null && exists['id'] != teacherId) {
+      throw Exception('This email is already in use by another account.');
+    }
+
+    // 2. Try updating Firebase Auth Email via Edge Function or Admin SDK
+    final adminOk = await FirebaseAuthAdminService.updateUserEmail(uid: teacherId, newEmail: cleanEmail);
+    if (!adminOk) {
+      throw Exception('Failed to update email in Firebase Authentication. Check service account permissions.');
+    }
+
+    // 3. Update Supabase Database Email
+    await _supabaseClient.from('users').update({'email': cleanEmail, 'updated_at': DateTime.now().toIso8601String()}).eq('id', teacherId);
+  }
+
+  /// Action B: Full Reset & Recover Account (Updates Email, Generates Temp Password, Forces First Login)
+  Future<void> recoverTeacherAccount({required String teacherId, required String newEmail}) async {
+    final cleanEmail = newEmail.trim().toLowerCase();
+    
+    // 1. Verify if email exists
+    final exists = await _supabaseClient.from('users').select('id').eq('email', cleanEmail).maybeSingle();
+    if (exists != null && exists['id'] != teacherId) {
+      throw Exception('This email is already in use by another account.');
+    }
+
+    // 2. Generate a secure temporary password
+    final tempPassword = 'Realm-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}x';
+
+    // 3. Update Firebase Auth (Email and Password)
+    final emailOk = await FirebaseAuthAdminService.updateUserEmail(uid: teacherId, newEmail: cleanEmail);
+    final passOk = await FirebaseAuthAdminService.updateUserPassword(uid: teacherId, newPassword: tempPassword);
+
+    if (!emailOk || !passOk) {
+      throw Exception('Failed to recover account in Firebase Authentication.');
+    }
+
+    // 4. Reset Supabase Status to pending_first_login
+    await _supabaseClient.from('users').update({'email': cleanEmail, 'status': 'pending_first_login', 'updated_at': DateTime.now().toIso8601String()}).eq('id', teacherId);
+    await _supabaseClient.from('teacher_settings').update({'status': 'pending_first_login'}).eq('teacher_id', teacherId);
+
+    // 5. Send Email with the new credentials
+    try {
+      final res = await _supabaseClient.from('teacher_profiles').select('first_name').eq('teacher_id', teacherId).maybeSingle();
+      final name = res?['first_name']?.toString() ?? 'Teacher';
+      await EmailService.instance.sendTeacherWelcomeEmail(recipientEmail: cleanEmail, teacherName: name, tempPassword: tempPassword);
+    } catch (e) {
+      debugPrint('Warning: Recovery completed but failed to send email: $e');
     }
   }
 

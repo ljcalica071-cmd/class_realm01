@@ -115,7 +115,7 @@ class AppLifecycleCoordinator with WidgetsBindingObserver {
         // Notify session expiration if authenticated
         final user = AuthRepository.instance.currentUser;
         if (user != null) {
-          unawaited(AuthRepository.instance.endSession('inactivity_timeout'));
+          unawaited(AuthRepository.instance.endSession('inactivity'));
         }
       }
     }
@@ -183,7 +183,7 @@ class AppLifecycleCoordinator with WidgetsBindingObserver {
     stateNotifier.value = AppActivityLifecycleState.destroyed;
     debugPrint('[AppLifecycleCoordinator] onDestroy()');
 
-    unawaited(AuthRepository.instance.endSession('app_closed'));
+    unawaited(AuthRepository.instance.endSession('terminated'));
   }
 
   // =========================================================================

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:class_realm/data/repositories/admin_repository.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
@@ -9,6 +10,7 @@ import 'package:class_realm/core/services/email_service.dart';
 import 'package:class_realm/core/services/rate_limit_service.dart';
 import 'package:class_realm/widgets/common/expandable_notification_card.dart';
 import 'package:loading_animation_widget/loading_animation_widget.dart';
+import 'package:class_realm/shared/widgets/shimmer_loading.dart';
 
 class AdminBroadcastsTab extends StatefulWidget {
   const AdminBroadcastsTab({super.key});
@@ -36,6 +38,7 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
   // Broadcast History State
   List<AppNotificationModel> _broadcasts = [];
   bool _isLoadingBroadcasts = true;
+  bool _isInitialLoading = true;
 
   RealtimeChannel? _realtimeChannel;
 
@@ -100,6 +103,9 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
       _loadBroadcastHistory(),
       _loadUserCounts(),
     ]);
+    if (mounted) {
+      setState(() => _isInitialLoading = false);
+    }
   }
 
   Future<void> _loadUserCounts() async {
@@ -243,92 +249,7 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
     return showDialog<bool>(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: const Row(
-            children: [
-              Icon(Icons.warning_amber_rounded, color: AppTheme.catRed, size: 30),
-              SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  'Enable Maintenance Mode?',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-                ),
-              ),
-            ],
-          ),
-          content: Container(
-            constraints: const BoxConstraints(maxWidth: 480),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: AppTheme.catRed.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: AppTheme.catRed.withValues(alpha: 0.3)),
-                  ),
-                  child: const Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(Icons.error_outline, color: AppTheme.catRed, size: 20),
-                      SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          'CRITICAL WARNING: Enabling System Maintenance Mode will immediately enforce full system lock down.',
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.bold,
-                            color: AppTheme.catRed,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-                const Text(
-                  'The following actions will take effect immediately:',
-                  style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(height: 8),
-                _buildBulletPoint('Non-admin users (Teachers, Students, Parents) CANNOT log in.'),
-                _buildBulletPoint('All currently active Teachers, Students, and Parents will be FORCEFULLY LOGGED OUT of their accounts.'),
-                _buildBulletPoint('Any pending offline teacher queues will be preserved before logout.'),
-                _buildBulletPoint('Only System Administrators can access the portal to perform IT maintenance.'),
-                const SizedBox(height: 16),
-                const Center(
-                  child: Text(
-                    'Are you sure you want to toggle Maintenance Mode now?',
-                    style: TextStyle(fontSize: 13, color: Colors.grey),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            OutlinedButton(
-              onPressed: () => Navigator.of(ctx).pop(false),
-              style: OutlinedButton.styleFrom(
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-              ),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.catRed,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-              ),
-              onPressed: () => Navigator.of(ctx).pop(true),
-              child: const Text('Enable Maintenance Mode', style: TextStyle(fontWeight: FontWeight.bold)),
-            ),
-          ],
-        );
-      },
+      builder: (ctx) => const _EnableMaintenanceDialog(),
     );
   }
 
@@ -603,7 +524,10 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
           // =================================================================
           // SECTION 2: GLOBAL ANNOUNCEMENT COMPOSER
           // =================================================================
-          Container(
+          if (_isInitialLoading)
+            const ShimmerComposeCard()
+          else
+            Container(
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
               color: isDark ? theme.colorScheme.surface : Colors.white,
@@ -876,22 +800,69 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
           const SizedBox(height: 12),
 
           if (_isLoadingBroadcasts)
-            Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: LoadingAnimationWidget.staggeredDotsWave(
-                  color: theme.colorScheme.primary,
-                  size: 28,
-                ),
-              ),
+            const Column(
+              children: [
+                ShimmerBroadcastItem(),
+                ShimmerBroadcastItem(),
+                ShimmerBroadcastItem(),
+              ],
             )
           else if (_broadcasts.isEmpty)
             Container(
-              padding: const EdgeInsets.all(32),
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 24),
               alignment: Alignment.center,
-              child: Text(
-                'No announcements sent yet.',
-                style: TextStyle(color: theme.colorScheme.onSurface.withValues(alpha: 0.5)),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF1E293B) : Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: isDark ? Colors.white10 : const Color(0xFFE2E8F0),
+                  width: 1,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.03),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 56,
+                    height: 56,
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.primary.withValues(alpha: 0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      Icons.campaign_outlined,
+                      color: theme.colorScheme.primary,
+                      size: 30,
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Text(
+                    'No Broadcast Announcements Sent Yet',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: theme.colorScheme.onSurface,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Institutional broadcasts and urgent push announcements dispatched to faculty, students, or parents will be archived here.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: isDark ? Colors.white54 : const Color(0xFF64748B),
+                      height: 1.4,
+                    ),
+                  ),
+                ],
               ),
             )
           else
@@ -909,6 +880,248 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
             ),
         ],
       ),
+    );
+  }
+}
+
+class _EnableMaintenanceDialog extends StatefulWidget {
+  const _EnableMaintenanceDialog();
+
+  @override
+  State<_EnableMaintenanceDialog> createState() =>
+      _EnableMaintenanceDialogState();
+}
+
+class _EnableMaintenanceDialogState extends State<_EnableMaintenanceDialog> {
+  final TextEditingController _controller = TextEditingController();
+  final FocusNode _focusNode = FocusNode();
+  String? _inlineError;
+  bool _isConfirmed = false;
+  static const String _requiredText = 'I confirm';
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _focusNode.requestFocus();
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  void _onTextChanged(String value) {
+    final trimmed = value.trim();
+    final isMatch = trimmed.toLowerCase() == _requiredText.toLowerCase();
+
+    setState(() {
+      _isConfirmed = isMatch;
+      if (isMatch) {
+        _inlineError = null;
+        // Auto-submit when strictly confirmed
+        Future.delayed(const Duration(milliseconds: 200), _handleConfirm);
+      } else if (value.isNotEmpty &&
+          !_requiredText.toLowerCase().startsWith(value.trimLeft().toLowerCase())) {
+        _inlineError = "Please type '$_requiredText' exactly.";
+      } else {
+        _inlineError = null;
+      }
+    });
+  }
+
+  void _handleConfirm() {
+    if (_isConfirmed) {
+      Navigator.of(context).pop(true);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    return AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      title: const Row(
+        children: [
+          Icon(Icons.warning_amber_rounded, color: AppTheme.catRed, size: 30),
+          SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              'Enable Maintenance Mode?',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+            ),
+          ),
+        ],
+      ),
+      content: Container(
+        constraints: const BoxConstraints(maxWidth: 480),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppTheme.catRed.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(10),
+                  border:
+                      Border.all(color: AppTheme.catRed.withValues(alpha: 0.3)),
+                ),
+                child: const Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(Icons.error_outline, color: AppTheme.catRed, size: 20),
+                    SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'CRITICAL WARNING: Enabling System Maintenance Mode will immediately enforce full system lock down.',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          color: AppTheme.catRed,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'The following actions will take effect immediately:',
+                style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 8),
+              _AdminBroadcastsTabState._buildBulletPoint(
+                  'Non-admin users (Teachers, Students, Parents) CANNOT log in.'),
+              _AdminBroadcastsTabState._buildBulletPoint(
+                  'All currently active Teachers, Students, and Parents will be FORCEFULLY LOGGED OUT of their accounts.'),
+              _AdminBroadcastsTabState._buildBulletPoint(
+                  'Any pending offline teacher queues will be preserved before logout.'),
+              _AdminBroadcastsTabState._buildBulletPoint(
+                  'Only System Administrators can access the portal to perform IT maintenance.'),
+              const SizedBox(height: 18),
+
+              // Type to confirm instruction
+              RichText(
+                text: TextSpan(
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.9),
+                    height: 1.4,
+                  ),
+                  children: const [
+                    TextSpan(text: 'To confirm system lockdown, please type '),
+                    TextSpan(
+                      text: _requiredText,
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.catRed,
+                      ),
+                    ),
+                    TextSpan(text: ' below:'),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+
+              // Input field with real-time inline validation (strictly adhering to inline-input-validation skill)
+              TextField(
+                controller: _controller,
+                focusNode: _focusNode,
+                maxLength: 15,
+                buildCounter: (_, {required currentLength, required isFocused, required maxLength}) => null, // Hide counter text
+                inputFormatters: [
+                  LengthLimitingTextInputFormatter(15),
+                ],
+                onChanged: _onTextChanged,
+                onSubmitted: (_) {
+                  if (_isConfirmed) _handleConfirm();
+                },
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: theme.colorScheme.onSurface,
+                ),
+                decoration: InputDecoration(
+                  hintText: _requiredText,
+                  hintStyle: TextStyle(
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.35),
+                    fontWeight: FontWeight.normal,
+                  ),
+                  counterText: '',
+                  filled: true,
+                  fillColor: isDark
+                      ? const Color(0xFF1E293B)
+                      : const Color(0xFFF8FAFC),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 12,
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide(
+                      color: _inlineError != null
+                          ? AppTheme.catRed
+                          : theme.colorScheme.outline.withValues(alpha: 0.25),
+                      width: _inlineError != null ? 1.5 : 1.0,
+                    ),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide(
+                      color: _inlineError != null
+                          ? AppTheme.catRed
+                          : theme.colorScheme.primary,
+                      width: 2.0,
+                    ),
+                  ),
+                ),
+              ),
+
+              // Inline error underneath the field
+              if (_inlineError != null) ...[
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.error_outline,
+                      color: AppTheme.catRed,
+                      size: 14,
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        _inlineError!,
+                        style: const TextStyle(
+                          color: AppTheme.catRed,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        OutlinedButton(
+          onPressed: () => Navigator.of(context).pop(false),
+          style: OutlinedButton.styleFrom(
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          ),
+          child: const Text('Cancel'),
+        ),
+      ],
     );
   }
 }

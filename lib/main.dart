@@ -77,9 +77,27 @@ Future<UserModel?> _restoreUserSession() async {
 
 Future<UserModel?> _bootstrapClassRealmServices() async {
   await LocalStorageService.init();
-  AuthRepository.instance.hydrateCachedSessionSync();
-  await _initializeRuntimeServices();
-  return _restoreUserSession();
+  final cached = AuthRepository.instance.hydrateCachedSessionSync();
+
+  // Run heavy runtime services asynchronously without blocking the loading screen completion
+  final runtimeInit = _initializeRuntimeServices().catchError((e) {
+    debugPrint('Runtime services initialization notice: $e');
+  });
+
+  if (cached != null) {
+    try {
+      final restored = await _restoreUserSession().timeout(
+        const Duration(milliseconds: 300),
+        onTimeout: () => cached,
+      );
+      return restored ?? cached;
+    } catch (_) {
+      return cached;
+    }
+  }
+
+  unawaited(runtimeInit);
+  return null;
 }
 
 void main() async {
@@ -94,6 +112,10 @@ void main() async {
 
   // 1. Initialize synchronous local cache layer (< 5ms)
   await LocalStorageService.init();
+
+  // 1.5 Sync-Initialize basic config needed for background revalidation
+  await EnvConfig.init();
+  await SupabaseService.initialize();
 
   // 2. Synchronously hydrate cached UserModel before first frame renders (if active & < 30m idle)
   final cachedUser = AuthRepository.instance.hydrateCachedSessionSync();
@@ -158,10 +180,11 @@ class _ClassRealmAppState extends State<ClassRealmApp> {
     super.initState();
     if (widget.isWarmBoot) {
       _bootstrappedUser = AuthRepository.instance.currentUser;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        removePreBootstrapLoader();
-      });
     }
+    // Remove static HTML pre-loader as soon as Flutter renders
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      removePreBootstrapLoader();
+    });
 
     final initialPath = getBrowserUrlPath();
     const restorableRoutes = {
@@ -217,10 +240,17 @@ class _ClassRealmAppState extends State<ClassRealmApp> {
         AuthRepository.instance.currentUser ??
         LocalStorageService.getCachedUser();
     if (activeUser != null) {
-      final dest =
-          _targetRoute ??
-          LocalStorageService.getLastActiveRoute() ??
-          AppRoutes.getDashboardRouteForRole(activeUser.role);
+      final String dest;
+      final savedRoute = LocalStorageService.getLastActiveRoute();
+      if (_targetRoute != null && _targetRoute!.isNotEmpty && _targetRoute != '/') {
+        dest = _targetRoute!;
+      } else if (savedRoute != null && savedRoute.isNotEmpty && savedRoute != '/') {
+        dest = savedRoute;
+      } else {
+        dest = AppRoutes.getDashboardRouteForRole(activeUser.role);
+      }
+      
+      updateBrowserUrl(dest);
       if (dest.isNotEmpty &&
           dest != AppRoutes.login &&
           dest != AppRoutes.splash &&
@@ -232,10 +262,9 @@ class _ClassRealmAppState extends State<ClassRealmApp> {
         );
       }
     } else {
+      updateBrowserUrl(AppRoutes.login);
       final current = getBrowserUrlPath();
-      if (current != AppRoutes.login &&
-          current != '/' &&
-          current != AppRoutes.splash) {
+      if (current != AppRoutes.login) {
         AppRoutes.navigatorKey.currentState?.pushReplacementNamed(
           AppRoutes.login,
         );
@@ -329,7 +358,21 @@ class _ClassRealmAppState extends State<ClassRealmApp> {
               }
               return const LoginScreen();
             },
-            AppRoutes.login: (context) => const LoginScreen(),
+            AppRoutes.login: (context) {
+              final activeUser = AuthRepository.instance.currentUser;
+              if (activeUser != null) {
+                // If a user is already logged in and tries to go to login page (or refreshes on it),
+                // bounce them back to their dashboard.
+                Future.microtask(() {
+                  Navigator.pushReplacementNamed(
+                    context, 
+                    AppRoutes.getDashboardRouteForRole(activeUser.role)
+                  );
+                });
+                return const Scaffold(body: Center(child: CircularProgressIndicator())); // Temporary blank state
+              }
+              return const LoginScreen();
+            },
             AppRoutes.adminAddTeacher: (context) => const AuthGuard(
               allowedRoles: [UserRole.admin],
               child: AdminAddTeacherScreen(),

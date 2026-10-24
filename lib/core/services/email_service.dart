@@ -222,33 +222,63 @@ class EmailService {
     );
   }
 
-  /// Send student credentials
+  /// Send student temporary credentials welcome email (matching teacher welcome email design)
+  Future<bool> sendStudentWelcomeEmail({
+    required String recipientEmail,
+    required String studentName,
+    required String tempPassword,
+  }) async {
+    final cleanRecipient = recipientEmail.trim();
+    final String htmlTemplate = '''
+      <div style="font-family: Arial, sans-serif; max-width: 520px; margin: 20px auto; padding: 26px; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff;">
+        <h2 style="color: #1e3a5f; margin-top: 0; font-size: 22px; font-weight: bold;">Welcome to ClassRealm!</h2>
+        <p style="font-size: 15px; color: #334155; margin-bottom: 8px;">Hello <strong>$studentName</strong>,</p>
+        <p style="font-size: 14px; color: #475569; line-height: 1.6; margin-top: 0;">Your student account for <strong>Eduardo Barretto Sr. Integrated School</strong> is ready. Use these credentials to log in to the ClassRealm app:</p>
+        
+        <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 10px; padding: 18px 20px; margin: 20px 0;">
+          <div style="margin-bottom: 12px;">
+            <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: #64748b; display: block; margin-bottom: 4px;">Email Address</span>
+            <span style="font-size: 15px; font-weight: 600; color: #1e293b; font-family: monospace;">$cleanRecipient</span>
+          </div>
+          <div>
+            <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: #64748b; display: block; margin-bottom: 4px;">Temporary Password</span>
+            <code style="font-size: 18px; font-weight: 700; color: #2563eb; background: #eff6ff; border: 1px solid #bfdbfe; padding: 5px 12px; border-radius: 6px; letter-spacing: 1px; display: inline-block; font-family: monospace;">$tempPassword</code>
+          </div>
+        </div>
+
+        <div style="background: #fef3c7; border: 1px solid #f59e0b; border-radius: 8px; padding: 12px 16px; margin: 20px 0;">
+          <p style="margin: 0; color: #92400e; font-size: 13px; font-weight: bold;">
+            🔒 Notice: First-Time Password Change Required
+          </p>
+          <p style="margin: 4px 0 0 0; color: #b45309; font-size: 12px;">
+            For your security, you will be required to set a new password the first time you log in.
+          </p>
+        </div>
+
+        <p style="font-size: 12px; color: #64748b; margin-top: 16px;">Please keep these credentials secure. Do not share your temporary password with unauthorized individuals.</p>
+        <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 18px 0;" />
+        <p style="font-size: 11px; color: #94a3b8; margin: 0; text-align: center;">Eduardo Barretto Sr. Integrated School — ClassRealm</p>
+      </div>
+    ''';
+
+    return await sendEmail(
+      to: cleanRecipient,
+      subject: 'Welcome to ClassRealm - Student Account Credentials',
+      html: htmlTemplate,
+    );
+  }
+
+  /// Send student credentials (backward-compatible wrapper)
   static Future<void> sendStudentCredentials({
     required String recipientEmail,
     required String studentName,
     required String studentId,
     required String tempPassword,
   }) async {
-    final String htmlTemplate = '''
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #ffffff; padding: 24px; border-radius: 12px; border: 1px solid #e2e8f0;">
-        <h2 style="color: #1e3a5f;">Welcome to ClassRealm, $studentName!</h2>
-        <p style="color: #334155; font-size: 15px;">Your student account has been successfully created by your teacher.</p>
-        <p style="color: #334155; font-size: 15px;">Below are your temporary login details. Please log in to complete your account setup and change your password.</p>
-        <br>
-        <div style="background-color: #f8fafc; padding: 18px; border-radius: 8px; border: 1px solid #cbd5e1;">
-          <p style="margin: 6px 0;"><strong>Email / Username:</strong> $recipientEmail</p>
-          <p style="margin: 6px 0;"><strong>LRN / Student ID:</strong> $studentId</p>
-          <p style="margin: 6px 0;"><strong>Temporary Password:</strong> <code style="font-weight: bold; color: #2563eb;">$tempPassword</code></p>
-        </div>
-        <br>
-        <p style="font-size: 13px; color: #64748b;"><em>This is an automated message. Please keep your credentials secure.</em></p>
-      </div>
-    ''';
-
-    await EmailService.instance.sendEmail(
-      to: recipientEmail,
-      subject: 'Welcome to ClassRealm: Your Student Credentials',
-      html: htmlTemplate,
+    await EmailService.instance.sendStudentWelcomeEmail(
+      recipientEmail: recipientEmail,
+      studentName: studentName,
+      tempPassword: tempPassword,
     );
   }
 

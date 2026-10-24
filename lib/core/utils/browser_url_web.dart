@@ -40,9 +40,11 @@ void removePreBootstrapLoaderWeb() {
   try {
     final loader = html.document.getElementById('pre-bootstrap-loader');
     if (loader != null) {
+      loader.style.pointerEvents = 'none';
       loader.style.opacity = '0';
-      loader.style.transition = 'opacity 0.25s ease-out';
-      Future.delayed(const Duration(milliseconds: 250), () {
+      loader.style.transition = 'opacity 0.25s ease-out, transform 0.25s ease-out';
+      loader.style.transform = 'scale(1.02)';
+      Future.delayed(const Duration(milliseconds: 260), () {
         try {
           loader.remove();
         } catch (_) {}

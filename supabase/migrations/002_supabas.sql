@@ -40,7 +40,7 @@ CREATE TABLE public.teacher_settings (
   consultation_hours character varying,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   updated_at timestamp with time zone NOT NULL DEFAULT now(),
-  previous_status character varying DEFAULT 'pending_first_login'::character varying,
+  previous_status character varying,
   CONSTRAINT teacher_settings_pkey PRIMARY KEY (teacher_id),
   CONSTRAINT teacher_settings_teacher_id_fkey FOREIGN KEY (teacher_id) REFERENCES public.teacher_profiles(teacher_id)
 );
@@ -61,6 +61,7 @@ CREATE TABLE public.student_settings (
   status character varying NOT NULL DEFAULT 'pending_first_login'::character varying CHECK (status::text = ANY (ARRAY['pending_first_login'::text, 'active'::text, 'archived'::text])),
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  previous_status character varying,
   CONSTRAINT student_settings_pkey PRIMARY KEY (student_id),
   CONSTRAINT student_settings_student_id_fkey FOREIGN KEY (student_id) REFERENCES public.student_profiles(student_id)
 );
@@ -73,6 +74,7 @@ CREATE TABLE public.parent_profiles (
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   birthday date,
   status character varying DEFAULT 'pending_first_login'::character varying CHECK (status::text = ANY (ARRAY['pending_first_login'::text, 'active'::text, 'archived'::text])),
+  previous_status character varying,
   CONSTRAINT parent_profiles_pkey PRIMARY KEY (parent_id),
   CONSTRAINT parent_profiles_parent_id_fkey FOREIGN KEY (parent_id) REFERENCES public.users(id)
 );
@@ -441,6 +443,10 @@ CREATE TABLE public.admin_teacher_email_challenges (
   last_sent_at timestamp with time zone NOT NULL,
   failed_attempts integer NOT NULL DEFAULT 0,
   locked_until timestamp with time zone,
+  resend_count integer NOT NULL DEFAULT 0,
+  window_started_at timestamp with time zone NOT NULL DEFAULT now(),
+  lockout_tier smallint NOT NULL DEFAULT 0,
+  tier_escalated_at timestamp with time zone,
   CONSTRAINT admin_teacher_email_challenges_pkey PRIMARY KEY (email)
 );
 CREATE TABLE public.first_login_otp_verifications (
@@ -453,6 +459,11 @@ CREATE TABLE public.first_login_otp_verifications (
   is_verified boolean NOT NULL DEFAULT false,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  email character varying,
+  window_started_at timestamp with time zone NOT NULL DEFAULT now(),
+  lockout_tier smallint NOT NULL DEFAULT 0,
+  tier_escalated_at timestamp with time zone,
+  locked_until timestamp with time zone,
   CONSTRAINT first_login_otp_verifications_pkey PRIMARY KEY (user_id)
 );
 CREATE TABLE public.gradebook_term_sheets (
@@ -483,10 +494,40 @@ CREATE TABLE public.user_session_logs (
   login_at timestamp with time zone NOT NULL DEFAULT now(),
   last_active_at timestamp with time zone NOT NULL DEFAULT now(),
   logout_at timestamp with time zone,
-  logout_reason character varying CHECK (logout_reason::text = ANY (ARRAY['manual'::character varying, 'inactivity_timeout'::character varying, 'maintenance_forced'::character varying, 'session_expired'::character varying]::text[])),
+  logout_reason character varying CHECK (logout_reason IS NULL OR (logout_reason::text = ANY (ARRAY['manual'::character varying, 'inactivity'::character varying, 'inactivity_timeout'::character varying, 'terminated'::character varying, 'app_closed'::character varying, 'session_expired'::character varying, 'session_superseded'::character varying]::text[]))),
   is_active boolean NOT NULL DEFAULT true,
   duration_seconds integer NOT NULL DEFAULT 0 CHECK (duration_seconds >= 0),
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   CONSTRAINT user_session_logs_pkey PRIMARY KEY (id),
   CONSTRAINT user_session_logs_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id)
+);
+CREATE TABLE public.auth_rate_limits (
+  scope_key character varying NOT NULL,
+  feature character varying NOT NULL CHECK (feature::text = ANY (ARRAY['login_account'::character varying::text, 'login_device'::character varying::text, 'forgot_password'::character varying::text, 'first_login_otp'::character varying::text, 'admin_add_teacher_otp'::character varying::text, 'admin_broadcast'::character varying::text, 'admin_sy_switch'::character varying::text, 'admin_maintenance_toggle'::character varying::text])),
+  device_id character varying NOT NULL,
+  target_identifier character varying NOT NULL,
+  failed_attempts integer NOT NULL DEFAULT 0 CHECK (failed_attempts >= 0),
+  resend_count integer NOT NULL DEFAULT 0 CHECK (resend_count >= 0),
+  window_started_at timestamp with time zone NOT NULL DEFAULT now(),
+  lockout_tier smallint NOT NULL DEFAULT 0 CHECK (lockout_tier >= 0 AND lockout_tier <= 4),
+  tier_escalated_at timestamp with time zone,
+  locked_until timestamp with time zone,
+  cooldown_until timestamp with time zone,
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT auth_rate_limits_pkey PRIMARY KEY (scope_key)
+);
+CREATE TABLE public.password_reset_otps (
+  email character varying NOT NULL,
+  code_hash text NOT NULL,
+  expires_at timestamp with time zone NOT NULL,
+  last_sent_at timestamp with time zone NOT NULL DEFAULT now(),
+  resend_count integer NOT NULL DEFAULT 0,
+  failed_attempts integer NOT NULL DEFAULT 0,
+  window_started_at timestamp with time zone NOT NULL DEFAULT now(),
+  lockout_tier smallint NOT NULL DEFAULT 0,
+  tier_escalated_at timestamp with time zone,
+  locked_until timestamp with time zone,
+  is_verified boolean NOT NULL DEFAULT false,
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT password_reset_otps_pkey PRIMARY KEY (email)
 );

@@ -391,7 +391,14 @@ class AuthResponsiveScaffold extends StatelessWidget {
                   child: Center(
                     child: ConstrainedBox(
                       constraints: BoxConstraints(maxWidth: cardMaxWidth),
-                      child: _buildDecoratedCard(isMobile: false, isTablet: false),
+                      child: StaggeredEntrance(
+                        index: 1,
+                        delay: const Duration(milliseconds: 90),
+                        initialOffset: const Offset(0.0, 0.06),
+                        duration: const Duration(milliseconds: 460),
+                        curve: Curves.easeOutCubic,
+                        child: _buildDecoratedCard(isMobile: false, isTablet: false),
+                      ),
                     ),
                   ),
                 ),
@@ -475,7 +482,14 @@ class AuthResponsiveScaffold extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 28),
-                _buildDecoratedCard(isMobile: false, isTablet: true),
+                StaggeredEntrance(
+                  index: 1,
+                  delay: const Duration(milliseconds: 90),
+                  initialOffset: const Offset(0.0, 0.06),
+                  duration: const Duration(milliseconds: 460),
+                  curve: Curves.easeOutCubic,
+                  child: _buildDecoratedCard(isMobile: false, isTablet: true),
+                ),
               ],
             ),
           ),
@@ -555,7 +569,14 @@ class AuthResponsiveScaffold extends StatelessWidget {
             // Center Frosted Glass Login Card with all 3D decorations anchored
             ConstrainedBox(
               constraints: BoxConstraints(maxWidth: cardMaxWidth.clamp(320.0, 390.0)),
-              child: _buildDecoratedCard(isMobile: true, isTablet: false),
+              child: StaggeredEntrance(
+                index: 1,
+                delay: const Duration(milliseconds: 90),
+                initialOffset: const Offset(0.0, 0.06),
+                duration: const Duration(milliseconds: 460),
+                curve: Curves.easeOutCubic,
+                child: _buildDecoratedCard(isMobile: true, isTablet: false),
+              ),
             ),
             const SizedBox(height: 16),
           ],

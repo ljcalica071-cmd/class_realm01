@@ -82,6 +82,20 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
         _selectedSection = firstSubject?['section_name']?.toString();
         _isLoadingSubjects = false;
         _studentLoadError = null;
+        if (firstSubject != null) {
+          final termsTaught = firstSubject['terms_taught'] is int
+              ? firstSubject['terms_taught'] as int
+              : int.tryParse(firstSubject['terms_taught']?.toString() ?? '') ?? 3;
+          final termBlock =
+              firstSubject['term_block']?.toString() ?? '1ST, 2ND, 3RD';
+          final active = DepEdSubjectCatalog.getActiveTermsForBlock(
+            termsTaught,
+            termBlock,
+          );
+          if (_selectedTerm != 0 && !active.contains(_selectedTerm)) {
+            _selectedTerm = active.isNotEmpty ? active.first : 1;
+          }
+        }
       });
       final subjectId = firstSubject?['id']?.toString();
       if (subjectId != null) {
@@ -459,6 +473,17 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
     setState(() {
       _selectedSubject = subjectName;
       _selectedSection = sectionName;
+      final termsTaught = offering['terms_taught'] is int
+          ? offering['terms_taught'] as int
+          : int.tryParse(offering['terms_taught']?.toString() ?? '') ?? 3;
+      final termBlock = offering['term_block']?.toString() ?? '1ST, 2ND, 3RD';
+      final active = DepEdSubjectCatalog.getActiveTermsForBlock(
+        termsTaught,
+        termBlock,
+      );
+      if (_selectedTerm != 0 && !active.contains(_selectedTerm)) {
+        _selectedTerm = active.isNotEmpty ? active.first : 1;
+      }
     });
     final teacherId = AuthRepository.instance.currentUser?.id;
     final offeringId = offering['id']?.toString();
@@ -1147,7 +1172,7 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
   }
 
   Widget _buildInactiveTermBanner(ThemeData theme) {
-    final activeTerm = _activeTerms.first;
+    final activeTerm = _activeTerms.isEmpty ? 1 : _activeTerms.first;
     return Material(
       color: theme.colorScheme.errorContainer.withValues(alpha: 0.75),
       child: Padding(
@@ -1222,7 +1247,9 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
     final headerColor = isDark
         ? theme.colorScheme.surfaceContainerHighest
         : const Color(0xFFE8EDF5);
-    const minTableWidth = 1040.0;
+    final activeTermsList = _activeTerms.isEmpty ? const [1] : _activeTerms;
+    final termCount = activeTermsList.length;
+    final minTableWidth = 740.0 + (termCount * 100.0);
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -1234,9 +1261,8 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
 
         final numW = 40.0;
         final lrnW = 130.0;
-        final term1W = 100.0;
-        final term2W = 100.0;
-        final term3W = 100.0;
+        const termW = 100.0;
+        final totalTermsW = termW * termCount;
         final finalGradeW = 105.0;
         final nameW = 260.0 + (extraWidth * 0.55);
         final descriptorW = 145.0 + (extraWidth * 0.25);
@@ -1244,9 +1270,7 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
             (numW +
                 lrnW +
                 nameW +
-                term1W +
-                term2W +
-                term3W +
+                totalTermsW +
                 finalGradeW +
                 descriptorW);
 
@@ -1254,9 +1278,7 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
           numW,
           lrnW,
           nameW,
-          term1W,
-          term2W,
-          term3W,
+          for (int i = 0; i < termCount; i++) termW,
           finalGradeW,
           descriptorW,
           remarkW,
@@ -1301,13 +1323,13 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
                   headerCell('LRN', lrnW, 52),
                   headerCell("LEARNERS' NAMES", nameW, 52),
                   SizedBox(
-                    width: term1W + term2W + term3W,
+                    width: totalTermsW,
                     height: 52,
                     child: Column(
                       children: [
                         Container(
                           height: 26,
-                          width: term1W + term2W + term3W,
+                          width: totalTermsW,
                           alignment: Alignment.center,
                           decoration: BoxDecoration(
                             border: Border(
@@ -1331,9 +1353,16 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
                           height: 26,
                           child: Row(
                             children: [
-                              headerCell('FIRST TERM', term1W, 26),
-                              headerCell('SECOND TERM', term2W, 26),
-                              headerCell('THIRD TERM', term3W, 26),
+                              for (final term in activeTermsList)
+                                headerCell(
+                                  term == 1
+                                      ? 'FIRST TERM'
+                                      : (term == 2
+                                          ? 'SECOND TERM'
+                                          : 'THIRD TERM'),
+                                  termW,
+                                  26,
+                                ),
                             ],
                           ),
                         ),
@@ -1420,13 +1449,15 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
     return AnimatedBuilder(
       animation: Listenable.merge([_revisionFor(student.id), _hpsRevision]),
       builder: (context, _) {
+        final activeTermsList = _activeTerms.isEmpty ? const [1] : _activeTerms;
+        final termCount = activeTermsList.length;
         final termGrades = {
-          for (final term in const [1, 2, 3])
+          for (final term in activeTermsList)
             term: _termGrade(student.id, term),
         };
         final finalGrade = DepEdGradingEngine.computeFinalGrade(
           termsTaught: _termsTaught,
-          activeTerms: _activeTerms,
+          activeTerms: activeTermsList,
           termGrades: termGrades,
           unitsPerTerm: _unitsPerTerm,
           totalUnitsEarned: _unitsPerYear,
@@ -1435,10 +1466,8 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
           '$rowNumber',
           student.lrn ?? '-',
           _displayName(student),
-          for (final term in const [1, 2, 3])
-            _activeTerms.contains(term)
-                ? termGrades[term]?.toString() ?? ''
-                : 'N/A',
+          for (final term in activeTermsList)
+            termGrades[term]?.toString() ?? '',
           finalGrade?.toString() ?? '',
           finalGrade == null
               ? ''
@@ -1454,6 +1483,10 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
                   : const Color(0xFFF8FAFC))
             : theme.colorScheme.surface;
 
+        final finalGradeIndex = 3 + termCount;
+        final descriptorIndex = finalGradeIndex + 1;
+        final remarkIndex = finalGradeIndex + 2;
+
         return Container(
           height: 38,
           decoration: BoxDecoration(
@@ -1463,12 +1496,9 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
           child: Row(
             children: List.generate(values.length, (index) {
               final isName = index == 2;
-              final isFinalGrade = index == 6;
-              final isRemark = index == 8;
-              final isMuted = values[index] == 'N/A';
-              final textColor = isMuted
-                  ? theme.colorScheme.onSurface.withValues(alpha: 0.4)
-                  : theme.colorScheme.onSurface;
+              final isFinalGrade = index == finalGradeIndex;
+              final isRemark = index == remarkIndex;
+              final textColor = theme.colorScheme.onSurface;
 
               return Container(
                 width: widths[index],
@@ -1508,14 +1538,13 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
   ) {
     final rowBackground = theme.colorScheme.surface;
     final textColor = theme.colorScheme.onSurface.withValues(alpha: 0.45);
+    final activeTermsList = _activeTerms.isEmpty ? const [1] : _activeTerms;
 
     final values = [
       '$rowNumber',
       '-',
       label,
-      '-',
-      '-',
-      '-',
+      for (int i = 0; i < activeTermsList.length; i++) '-',
       '-',
       '-',
       '-',
@@ -1624,7 +1653,7 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
                 ),
                 // EX
                 _categoryBlock(
-                  'EXAMINATIONS (EXs)',
+                  exW == 0 ? 'NO EXAM (EXs)' : 'EXAMINATIONS (EXs)',
                   '${exW.toStringAsFixed(0)}%',
                   exColumns * colW +
                       (exColumns + 2) *
@@ -2432,11 +2461,16 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
   // TERM TABS (Bottom)
   // ====================================================================
   Widget _buildTermTabs(ThemeData theme, bool isDark, Color borderColor) {
+    final allTermTabs = [
+      {'term': 1, 'label': 'Term 1', 'color': AppTheme.catBlue},
+      {'term': 2, 'label': 'Term 2', 'color': AppTheme.catGreen},
+      {'term': 3, 'label': 'Term 3', 'color': AppTheme.catOrange},
+    ];
+
+    final activeTermsList = _activeTerms.isEmpty ? const [1] : _activeTerms;
     final tabs = [
-      {'label': 'Term 1', 'color': AppTheme.catBlue},
-      {'label': 'Term 2', 'color': AppTheme.catGreen},
-      {'label': 'Term 3', 'color': AppTheme.catOrange},
-      {'label': 'FINAL GRADES', 'color': AppTheme.catPurple},
+      ...allTermTabs.where((t) => activeTermsList.contains(t['term'] as int)),
+      {'term': 0, 'label': 'FINAL GRADES', 'color': AppTheme.catPurple},
     ];
 
     return Container(
@@ -2450,17 +2484,14 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
       child: Row(
         children: [
           const SizedBox(width: 12),
-          ...tabs.asMap().entries.map((entry) {
-            final i = entry.key;
-            final tab = entry.value;
-            final isSelected =
-                (i < 3 && _selectedTerm == i + 1) ||
-                (i == 3 && _selectedTerm == 0);
+          ...tabs.map((tab) {
+            final term = tab['term'] as int;
+            final isSelected = _selectedTerm == term;
 
             return Padding(
               padding: const EdgeInsets.only(right: 4),
               child: InkWell(
-                onTap: () => unawaited(_changeTerm(i < 3 ? i + 1 : 0)),
+                onTap: () => unawaited(_changeTerm(term)),
                 borderRadius: BorderRadius.circular(6),
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 200),

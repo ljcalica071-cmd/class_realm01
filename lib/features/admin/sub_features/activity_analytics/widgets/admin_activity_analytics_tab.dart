@@ -31,6 +31,17 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
   DateTime? _selectedCustomDate;
   int _currentHistoryPage = 1;
   static const int _historyItemsPerPage = 10;
+  String? _selectedTeacherId; // null = all teachers
+
+  static const List<Color> _teacherColorPalette = [
+    AppTheme.catGreen, // Emerald
+    Color(0xFF6366F1), // Indigo
+    Color(0xFFF59E0B), // Amber
+    Color(0xFF8B5CF6), // Purple
+    Color(0xFF06B6D4), // Cyan
+    Color(0xFFF43F5E), // Coral / Rose
+    Color(0xFF3B82F6), // Blue
+  ];
 
   List<UserSessionLog> _sessionLogs = [];
   List<TeacherWorkloadSummary> _workloadSummaries = [];
@@ -43,9 +54,10 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
   late final ValueNotifier<DateTime> _tickerNotifier;
   Timer? _oneSecondTimer;
 
-  // Realtime debounce buffer (5-second throttle for heavy teacher concurrency)
+  // Realtime debounce buffer
   RealtimeChannel? _realtimeChannel;
   Timer? _debounceTimer;
+  Timer? _autoRefreshTimer;
 
   @override
   void initState() {
@@ -55,15 +67,25 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
     _restoreCachedData(_getCacheKey());
     _loadData();
     _subscribeToSessionRealtime();
+
+    // Resilient 15-second background auto-refresh in case of dropped WebSockets
+    _autoRefreshTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+      if (mounted) {
+        _loadData(isSilent: true);
+      }
+    });
   }
 
   @override
   void dispose() {
     _oneSecondTimer?.cancel();
     _debounceTimer?.cancel();
+    _autoRefreshTimer?.cancel();
     _tickerNotifier.dispose();
     if (_realtimeChannel != null) {
-      Supabase.instance.client.removeChannel(_realtimeChannel!);
+      try {
+        Supabase.instance.client.removeChannel(_realtimeChannel!);
+      } catch (_) {}
     }
     super.dispose();
   }
@@ -75,20 +97,38 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
   }
 
   void _subscribeToSessionRealtime() {
-    _realtimeChannel = Supabase.instance.client
-        .channel('admin_activity_realtime')
+    final client = Supabase.instance.client;
+    if (_realtimeChannel != null) {
+      try {
+        client.removeChannel(_realtimeChannel!);
+      } catch (_) {}
+      _realtimeChannel = null;
+    }
+
+    _realtimeChannel = client
+        .channel('admin_activity_realtime_${DateTime.now().millisecondsSinceEpoch}')
         .onPostgresChanges(
           event: PostgresChangeEvent.all,
           schema: 'public',
           table: 'user_session_logs',
-          callback: (_) {
-            _debounceTimer?.cancel();
-            _debounceTimer = Timer(const Duration(seconds: 5), () {
-              _loadData(isSilent: true);
-            });
+          callback: (payload) {
+            final newData = payload.newRecord;
+            if (newData.isNotEmpty && newData['role'] == 'teacher') {
+                _debounceTimer?.cancel();
+                _debounceTimer = Timer(const Duration(milliseconds: 300), () {
+                  if (mounted) {
+                    _loadData(isSilent: true);
+                  }
+                });
+            }
           },
         )
-        .subscribe();
+        .subscribe((status, [error]) {
+          debugPrint('[ActivityAnalytics] Realtime status: $status');
+          if (error != null) {
+            debugPrint('[ActivityAnalytics] Realtime error: $error');
+          }
+        });
   }
 
   String _getCacheKey() {
@@ -301,15 +341,17 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
   }
 
   String _formatTimestamp(DateTime dt) {
-    final hour = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
-    final ampm = dt.hour >= 12 ? 'PM' : 'AM';
-    final minute = dt.minute.toString().padLeft(2, '0');
-    final second = dt.second.toString().padLeft(2, '0');
+    final localDt = dt.toLocal();
+    final hour = localDt.hour % 12 == 0 ? 12 : localDt.hour % 12;
+    final ampm = localDt.hour >= 12 ? 'PM' : 'AM';
+    final minute = localDt.minute.toString().padLeft(2, '0');
+    final second = localDt.second.toString().padLeft(2, '0');
     return '$hour:$minute:$second $ampm';
   }
 
   String _formatDate(DateTime dt) {
-    return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
+    final localDt = dt.toLocal();
+    return '${localDt.year}-${localDt.month.toString().padLeft(2, '0')}-${localDt.day.toString().padLeft(2, '0')}';
   }
 
   String _formatHumanReadableTotal(int totalSeconds) {
@@ -321,28 +363,275 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
     return '${minutes}m';
   }
 
+  static String _shortMonth(int month) {
+    const months = [
+      '',
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    if (month >= 1 && month <= 12) return months[month];
+    return '';
+  }
+
+  static String _formatTooltipDuration(int totalSeconds) {
+    if (totalSeconds <= 0) return '00h 00m';
+    final h = totalSeconds ~/ 3600;
+    final m = (totalSeconds % 3600) ~/ 60;
+    final s = totalSeconds % 60;
+    if (h == 0 && m == 0) {
+      return '${s.toString().padLeft(2, '0')}s';
+    }
+    return '${h.toString().padLeft(2, '0')}h ${m.toString().padLeft(2, '0')}m';
+  }
+
+  List<_TeacherInfo> _getTeacherInfoList() {
+    if (_workloadSummaries.isNotEmpty) {
+      return List.generate(_workloadSummaries.length, (i) {
+        final w = _workloadSummaries[i];
+        return _TeacherInfo(
+          id: w.teacherId,
+          name: w.teacherName,
+          color: _teacherColorPalette[i % _teacherColorPalette.length],
+        );
+      });
+    }
+
+    final uniqueTeacherIds = <String>{};
+    final teachers = <_TeacherInfo>[];
+    int colorIdx = 0;
+    for (final log in _sessionLogs) {
+      if (!uniqueTeacherIds.contains(log.userId)) {
+        uniqueTeacherIds.add(log.userId);
+        teachers.add(
+          _TeacherInfo(
+            id: log.userId,
+            name: log.teacherName ?? 'Teacher',
+            color: _teacherColorPalette[colorIdx % _teacherColorPalette.length],
+          ),
+        );
+        colorIdx++;
+      }
+    }
+
+    if (teachers.isEmpty) {
+      return const [
+        _TeacherInfo(
+          id: 'faculty',
+          name: 'Faculty',
+          color: AppTheme.catGreen,
+        ),
+      ];
+    }
+    return teachers;
+  }
+
+  String _getChartSubtitle() {
+    if (_selectedTeacherId != null) {
+      final teachers = _getTeacherInfoList();
+      final match = teachers.where((t) => t.id == _selectedTeacherId);
+      final teacherName = match.isNotEmpty ? match.first.name : 'Selected Faculty';
+      return 'Session telemetry & usage timeline for $teacherName';
+    }
+
+    if (_activeFilter == 'all') {
+      return 'Historical timeline across all recorded session dates';
+    } else if (_activeFilter == 'week') {
+      return 'Daily faculty usage breakdown this week (Monday – Sunday)';
+    } else if (_activeFilter == 'custom' && _selectedCustomDate != null) {
+      return 'Hourly faculty usage on ${_formatDate(_selectedCustomDate!)}';
+    }
+    return 'Real-time hourly faculty activity and usage today';
+  }
+
+  Widget _buildTeacherFilterMenu(BuildContext context, bool isDark) {
+    final teachers = _getTeacherInfoList();
+    if (teachers.isEmpty) return const SizedBox.shrink();
+
+    final selectedTeacher = _selectedTeacherId != null
+        ? teachers.firstWhere(
+            (t) => t.id == _selectedTeacherId,
+            orElse: () => teachers.first,
+          )
+        : null;
+
+    return Theme(
+      data: Theme.of(context).copyWith(
+        popupMenuTheme: PopupMenuThemeData(
+          color: isDark ? const Color(0xFF1E293B) : Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(
+              color: isDark ? Colors.white12 : const Color(0xFFE2E8F0),
+            ),
+          ),
+        ),
+      ),
+      child: PopupMenuButton<String?>(
+        tooltip: 'Filter by Teacher',
+        offset: const Offset(0, 36),
+        onSelected: (String? teacherId) {
+          setState(() => _selectedTeacherId = teacherId);
+        },
+        itemBuilder: (context) => [
+          PopupMenuItem<String?>(
+            value: null,
+            child: Row(
+              children: [
+                Icon(
+                  LucideIcons.users,
+                  size: 15,
+                  color: _selectedTeacherId == null
+                      ? AppTheme.catGreen
+                      : (isDark ? Colors.white70 : const Color(0xFF475569)),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'All Faculty',
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: _selectedTeacherId == null
+                        ? FontWeight.bold
+                        : FontWeight.w500,
+                    color: _selectedTeacherId == null
+                        ? AppTheme.catGreen
+                        : (isDark ? Colors.white : const Color(0xFF1E293B)),
+                  ),
+                ),
+                const Spacer(),
+                if (_selectedTeacherId == null)
+                  const Icon(Icons.check, size: 16, color: AppTheme.catGreen),
+              ],
+            ),
+          ),
+          const PopupMenuDivider(),
+          ...teachers.map((t) {
+            final isCurrent = _selectedTeacherId == t.id;
+            return PopupMenuItem<String?>(
+              value: t.id,
+              child: Row(
+                children: [
+                  Container(
+                    width: 10,
+                    height: 10,
+                    decoration: BoxDecoration(
+                      color: t.color,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      t.name,
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: isCurrent ? FontWeight.bold : FontWeight.w500,
+                        color: isCurrent
+                            ? t.color
+                            : (isDark ? Colors.white : const Color(0xFF1E293B)),
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  if (isCurrent)
+                    Icon(Icons.check, size: 16, color: t.color),
+                ],
+              ),
+            );
+          }),
+        ],
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: selectedTeacher != null
+                  ? selectedTeacher.color.withValues(alpha: 0.5)
+                  : (isDark ? Colors.white12 : const Color(0xFFCBD5E1)),
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (selectedTeacher != null)
+                Container(
+                  width: 8,
+                  height: 8,
+                  margin: const EdgeInsets.only(right: 6),
+                  decoration: BoxDecoration(
+                    color: selectedTeacher.color,
+                    shape: BoxShape.circle,
+                  ),
+                )
+              else
+                Padding(
+                  padding: const EdgeInsets.only(right: 6),
+                  child: Icon(
+                    LucideIcons.users,
+                    size: 13,
+                    color: isDark ? Colors.white70 : const Color(0xFF64748B),
+                  ),
+                ),
+              Text(
+                selectedTeacher != null ? selectedTeacher.name : 'All Faculty',
+                style: TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w600,
+                  color: isDark ? Colors.white : const Color(0xFF1E293B),
+                ),
+              ),
+              const SizedBox(width: 4),
+              Icon(
+                Icons.keyboard_arrow_down_rounded,
+                size: 16,
+                color: isDark ? Colors.white54 : const Color(0xFF64748B),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    // Initial load: show high-polish shimmer skeleton only on very first boot
-    if (!_hasInitialLoaded &&
-        _sessionLogs.isEmpty &&
-        _workloadSummaries.isEmpty) {
+    // Use skeleton loading if still fetching AND cache is empty
+    if (!_hasInitialLoaded || _isSwitchingFilter) {
       return _buildSkeletonLoading(context, isDark);
     }
 
+    final currentNow = DateTime.now();
     final activeNowCount = _sessionLogs
         .where((s) => s.isActive)
         .map((s) => s.userId)
         .toSet()
         .length;
-    final totalTrackedTeachers = _workloadSummaries.length;
+    final totalTrackedTeachers = _workloadSummaries.isNotEmpty
+        ? _workloadSummaries.length
+        : math.max(activeNowCount, 1);
     final totalDurationSeconds = _sessionLogs.fold<int>(
       0,
-      (sum, s) => sum + s.durationSeconds,
+      (sum, s) {
+        if (s.isActive) {
+          final liveSec = currentNow.difference(s.loginAt).inSeconds;
+          return sum + (liveSec > s.durationSeconds ? liveSec : s.durationSeconds);
+        }
+        return sum + s.durationSeconds;
+      },
     );
 
     return Stack(
@@ -813,8 +1102,8 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
   Widget _buildUsageCurveChartCard(BuildContext context, bool isDark) {
     final theme = Theme.of(context);
 
-    // Prepare chart data points based on filter
-    final points = _generateChartData();
+    // Prepare chart series data based on active filter and teacher selection
+    final seriesList = _generateChartData();
 
     return Container(
       padding: const EdgeInsets.all(22),
@@ -838,76 +1127,85 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Teacher System Usage Over Time',
-                    style: TextStyle(
-                      fontSize: 15.5,
-                      fontWeight: FontWeight.bold,
-                      color: theme.colorScheme.onSurface,
-                    ),
-                  ),
-                  const SizedBox(height: 3),
-                  Text(
-                    _activeFilter == 'week'
-                        ? 'Daily hours spent by teachers using the system this week'
-                        : (_activeFilter == 'custom' &&
-                                  _selectedCustomDate != null
-                              ? 'Hourly hours spent by teachers on ${_formatDate(_selectedCustomDate!)}'
-                              : 'Hourly hours spent by teachers using the system today'),
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: isDark ? Colors.white54 : const Color(0xFF64748B),
-                    ),
-                  ),
-                ],
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 5,
-                ),
-                decoration: BoxDecoration(
-                  color: AppTheme.catGreen.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Container(
-                      width: 6,
-                      height: 6,
-                      decoration: const BoxDecoration(
-                        color: AppTheme.catGreen,
-                        shape: BoxShape.circle,
+                    Text(
+                      'Faculty Engagement & System Usage',
+                      style: TextStyle(
+                        fontSize: 15.5,
+                        fontWeight: FontWeight.bold,
+                        color: theme.colorScheme.onSurface,
                       ),
                     ),
-                    const SizedBox(width: 6),
-                    const Text(
-                      'Real-time',
+                    const SizedBox(height: 3),
+                    Text(
+                      _getChartSubtitle(),
                       style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        color: AppTheme.catGreen,
+                        fontSize: 12,
+                        color: isDark ? Colors.white54 : const Color(0xFF64748B),
                       ),
                     ),
                   ],
                 ),
               ),
+              const SizedBox(width: 12),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _buildTeacherFilterMenu(context, isDark),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 5,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppTheme.catGreen.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 6,
+                          height: 6,
+                          decoration: const BoxDecoration(
+                            color: AppTheme.catGreen,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        const Text(
+                          'Real-time',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: AppTheme.catGreen,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ],
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 20),
 
-          // Custom Curve Chart Painter
+          // Custom Curve Chart Painter with smooth hover and multi-series support
           SizedBox(
-            height: 190,
+            height: seriesList.length > 1 ? 220 : 190,
             child: _TeacherActivityCurveChart(
-              points: points,
+              seriesList: seriesList,
               isDark: isDark,
-              lineColor: AppTheme.catGreen,
+              activeFilter: _activeFilter,
+              onTeacherSelected: (teacherId) {
+                setState(() => _selectedTeacherId = teacherId);
+              },
             ),
           ),
         ],
@@ -923,14 +1221,7 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
   ) {
     final theme = Theme.of(context);
 
-    // Calculate distribution
-    final completedSessionsCount = _sessionLogs
-        .where((s) => !s.isActive)
-        .map((s) => s.userId)
-        .toSet()
-        .length;
-    final totalActiveToday = activeNowCount + completedSessionsCount;
-    final idleCount = math.max(0, totalTrackedTeachers - totalActiveToday);
+    final idleCount = math.max(0, totalTrackedTeachers - activeNowCount);
 
     return Container(
       padding: const EdgeInsets.all(22),
@@ -1087,41 +1378,178 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
   }
 
   // =========================================================================
-  // Chart Data Generation
+  // Chart Data Generation (Multi-Teacher & All-Records Aware)
   // =========================================================================
-  List<_ChartPoint> _generateChartData() {
-    if (_activeFilter == 'week') {
-      // Monday through Sunday
-      final days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-      final values = List.filled(7, 0.0);
+  List<_TeacherSeries> _generateChartData() {
+    final currentNow = DateTime.now();
+    final allTeachers = _getTeacherInfoList();
 
-      for (final log in _sessionLogs) {
-        final weekdayIdx = log.sessionDate.weekday - 1;
-        if (weekdayIdx >= 0 && weekdayIdx < 7) {
-          values[weekdayIdx] += (log.durationSeconds / 3600.0);
-        }
-      }
-
-      return List.generate(7, (i) => _ChartPoint(days[i], values[i]));
+    // Determine target teachers to plot
+    final List<_TeacherInfo> targetTeachers;
+    if (_selectedTeacherId != null) {
+      final matched = allTeachers.where((t) => t.id == _selectedTeacherId).toList();
+      targetTeachers = matched.isNotEmpty ? matched : allTeachers;
+    } else {
+      targetTeachers = allTeachers;
     }
 
-    // Default to Hourly buckets (8 AM to 6 PM)
+    // Filter session logs for target teachers if single teacher selected
+    final List<UserSessionLog> relevantLogs;
+    if (_selectedTeacherId != null) {
+      relevantLogs = _sessionLogs.where((s) => s.userId == _selectedTeacherId).toList();
+    } else {
+      relevantLogs = _sessionLogs;
+    }
+
+    if (_activeFilter == 'all') {
+      // Collect sorted unique dates across relevant logs
+      final allDatesSet = <DateTime>{};
+      for (final log in relevantLogs) {
+        allDatesSet.add(DateTime(log.sessionDate.year, log.sessionDate.month, log.sessionDate.day));
+      }
+      final sortedDates = allDatesSet.toList()..sort((a, b) => a.compareTo(b));
+
+      List<DateTime> displayDates;
+      if (sortedDates.isEmpty) {
+        displayDates = List.generate(
+          5,
+          (i) => DateTime(currentNow.year, currentNow.month, currentNow.day)
+              .subtract(Duration(days: 4 - i)),
+        );
+      } else if (sortedDates.length == 1) {
+        final singleDate = sortedDates.first;
+        displayDates = List.generate(
+          5,
+          (i) => singleDate.subtract(Duration(days: 4 - i)),
+        );
+      } else if (sortedDates.length > 7) {
+        displayDates = sortedDates.sublist(sortedDates.length - 7);
+      } else {
+        displayDates = sortedDates;
+      }
+
+      return targetTeachers.map((teacher) {
+        final teacherLogs = relevantLogs.where((s) => s.userId == teacher.id).toList();
+        final points = displayDates.map((date) {
+          int sec = 0;
+          for (final log in teacherLogs) {
+            if (log.sessionDate.year == date.year &&
+                log.sessionDate.month == date.month &&
+                log.sessionDate.day == date.day) {
+              int sessionSec = log.durationSeconds;
+              if (log.isActive) {
+                final activeSec = currentNow.difference(log.loginAt).inSeconds;
+                if (activeSec > sessionSec) sessionSec = activeSec;
+              }
+              sec += sessionSec;
+            }
+          }
+          final hoursVal = sec / 3600.0;
+          final dateLabel = '${_shortMonth(date.month)} ${date.day}';
+          return _ChartPoint(
+            label: dateLabel,
+            value: hoursVal,
+            totalSeconds: sec,
+            teacherId: teacher.id,
+            teacherName: teacher.name,
+            date: date,
+          );
+        }).toList();
+
+        return _TeacherSeries(
+          teacherId: teacher.id,
+          teacherName: teacher.name,
+          color: teacher.color,
+          points: points,
+        );
+      }).toList();
+    }
+
+    if (_activeFilter == 'week') {
+      final days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+      return targetTeachers.map((teacher) {
+        final teacherLogs = relevantLogs.where((s) => s.userId == teacher.id).toList();
+        final points = List.generate(7, (weekdayIdx) {
+          int sec = 0;
+          for (final log in teacherLogs) {
+            if (log.sessionDate.weekday - 1 == weekdayIdx) {
+              int sessionSec = log.durationSeconds;
+              if (log.isActive) {
+                final activeSec = currentNow.difference(log.loginAt).inSeconds;
+                if (activeSec > sessionSec) sessionSec = activeSec;
+              }
+              sec += sessionSec;
+            }
+          }
+          final hoursVal = sec / 3600.0;
+          return _ChartPoint(
+            label: days[weekdayIdx],
+            value: hoursVal,
+            totalSeconds: sec,
+            teacherId: teacher.id,
+            teacherName: teacher.name,
+          );
+        });
+
+        return _TeacherSeries(
+          teacherId: teacher.id,
+          teacherName: teacher.name,
+          color: teacher.color,
+          points: points,
+        );
+      }).toList();
+    }
+
+    // Default to Hourly buckets (8 AM to 6 PM) for 'today' and 'custom'
     final hours = ['8 AM', '10 AM', '12 PM', '2 PM', '4 PM', '6 PM'];
     final hourBuckets = [8, 10, 12, 14, 16, 18];
-    final values = List.filled(6, 0.0);
 
-    for (final log in _sessionLogs) {
-      final h = log.loginAt.hour;
-      for (int i = 0; i < hourBuckets.length; i++) {
-        if (h >= hourBuckets[i] &&
-            (i == hourBuckets.length - 1 || h < hourBuckets[i + 1])) {
-          values[i] += (log.durationSeconds / 3600.0);
-          break;
+    return targetTeachers.map((teacher) {
+      final teacherLogs = relevantLogs.where((s) => s.userId == teacher.id).toList();
+      final points = List.generate(6, (i) {
+        int sec = 0;
+        final bucketHour = hourBuckets[i];
+        final nextBucketHour = i < hourBuckets.length - 1 ? hourBuckets[i + 1] : 24;
+
+        for (final log in teacherLogs) {
+          final h = log.loginAt.hour;
+          bool inBucket = false;
+          if (i == 0 && h < hourBuckets[0]) {
+            inBucket = true;
+          } else if (i == hourBuckets.length - 1 && h >= hourBuckets.last) {
+            inBucket = true;
+          } else if (h >= bucketHour && h < nextBucketHour) {
+            inBucket = true;
+          }
+
+          if (inBucket) {
+            int sessionSec = log.durationSeconds;
+            if (log.isActive) {
+              final activeSec = currentNow.difference(log.loginAt).inSeconds;
+              if (activeSec > sessionSec) sessionSec = activeSec;
+            }
+            sec += sessionSec;
+          }
         }
-      }
-    }
 
-    return List.generate(6, (i) => _ChartPoint(hours[i], values[i]));
+        final hoursVal = sec / 3600.0;
+        return _ChartPoint(
+          label: hours[i],
+          value: hoursVal,
+          totalSeconds: sec,
+          teacherId: teacher.id,
+          teacherName: teacher.name,
+        );
+      });
+
+      return _TeacherSeries(
+        teacherId: teacher.id,
+        teacherName: teacher.name,
+        color: teacher.color,
+        points: points,
+      );
+    }).toList();
   }
 
   // =========================================================================
@@ -1737,108 +2165,144 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
     final cardBg = isDark ? const Color(0xFF1E293B) : Colors.white;
     final borderColor = isDark ? Colors.white10 : const Color(0xFFE2E8F0);
 
-    return _SkeletonShimmer(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header Skeleton
-            Row(
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header Skeleton
+          _SkeletonShimmer(
+            child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _skeletonBar(width: 300, height: 24, borderRadius: 8),
+                    _skeletonBar(width: 300, height: 24, borderRadius: 8, isDark: isDark),
                     const SizedBox(height: 8),
-                    _skeletonBar(width: 400, height: 14, borderRadius: 6),
+                    _skeletonBar(width: 400, height: 14, borderRadius: 6, isDark: isDark),
                   ],
                 ),
-                _skeletonBar(width: 280, height: 38, borderRadius: 10),
+                _skeletonBar(width: 280, height: 38, borderRadius: 10, isDark: isDark),
               ],
             ),
-            const SizedBox(height: 24),
+          ),
+          const SizedBox(height: 24),
 
-            // Overview KPI Cards Skeleton
-            Row(
-              children: [
-                Expanded(child: _buildMetricCardSkeleton(cardBg, borderColor)),
-                const SizedBox(width: 16),
-                Expanded(child: _buildMetricCardSkeleton(cardBg, borderColor)),
-                const SizedBox(width: 16),
-                Expanded(child: _buildMetricCardSkeleton(cardBg, borderColor)),
-              ],
-            ),
-            const SizedBox(height: 24),
+          // Overview KPI Cards Skeleton
+          Row(
+            children: [
+              Expanded(child: _buildMetricCardSkeleton(cardBg, borderColor, isDark)),
+              const SizedBox(width: 16),
+              Expanded(child: _buildMetricCardSkeleton(cardBg, borderColor, isDark)),
+              const SizedBox(width: 16),
+              Expanded(child: _buildMetricCardSkeleton(cardBg, borderColor, isDark)),
+            ],
+          ),
+          const SizedBox(height: 24),
 
-            // Charts Skeleton Row
-            Row(
-              children: [
-                Expanded(
-                  flex: 6,
-                  child: Container(
-                    height: 240,
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: cardBg,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: borderColor),
-                    ),
+          // Charts Skeleton Row
+          Row(
+            children: [
+              Expanded(
+                flex: 6,
+                child: Container(
+                  height: 240,
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: cardBg,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: borderColor),
+                    boxShadow: isDark
+                        ? []
+                        : [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.03),
+                              blurRadius: 10,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                  ),
+                  child: _SkeletonShimmer(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _skeletonBar(width: 220, height: 16),
+                        _skeletonBar(width: 220, height: 16, isDark: isDark),
                         const SizedBox(height: 20),
                         Expanded(
                           child: _skeletonBar(
                             width: double.infinity,
                             height: double.infinity,
+                            isDark: isDark,
                           ),
                         ),
                       ],
                     ),
                   ),
                 ),
-                const SizedBox(width: 16),
-                Expanded(
-                  flex: 4,
-                  child: Container(
-                    height: 240,
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: cardBg,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: borderColor),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                flex: 4,
+                child: Container(
+                  height: 240,
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: cardBg,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: borderColor),
+                    boxShadow: isDark
+                        ? []
+                        : [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.03),
+                              blurRadius: 10,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                  ),
+                  child: Center(
+                    child: _SkeletonShimmer(
+                      child: _skeletonCircle(size: 130, isDark: isDark),
                     ),
-                    child: Center(child: _skeletonCircle(size: 130)),
                   ),
                 ),
-              ],
-            ),
-            const SizedBox(height: 28),
+              ),
+            ],
+          ),
+          const SizedBox(height: 28),
 
-            // Workload Telemetry Cards Skeleton
-            _skeletonBar(width: 280, height: 18, borderRadius: 6),
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(18),
-              decoration: BoxDecoration(
-                color: cardBg,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: borderColor),
-              ),
-              child: Wrap(
-                spacing: 12,
-                runSpacing: 12,
-                children: List.generate(
-                  3,
-                  (_) => _buildWorkloadCardSkeleton(isDark),
-                ),
+          // Workload Telemetry Cards Skeleton
+          _SkeletonShimmer(
+            child: _skeletonBar(width: 280, height: 18, borderRadius: 6, isDark: isDark),
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: cardBg,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: borderColor),
+              boxShadow: isDark
+                  ? []
+                  : [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.03),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+            ),
+            child: Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: List.generate(
+                3,
+                (_) => _buildWorkloadCardSkeleton(isDark),
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -1847,53 +2311,76 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
     double? width,
     required double height,
     double borderRadius = 6,
+    bool isDark = false,
   }) {
     return Container(
       width: width,
       height: height,
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: isDark
+            ? Colors.white.withValues(alpha: 0.12)
+            : const Color(0xFFE2E8F0),
         borderRadius: BorderRadius.circular(borderRadius),
       ),
     );
   }
 
-  static Widget _skeletonCircle({required double size}) {
+  static Widget _skeletonCircle({
+    required double size,
+    bool isDark = false,
+  }) {
     return Container(
       width: size,
       height: size,
-      decoration: const BoxDecoration(
-        color: Colors.white,
+      decoration: BoxDecoration(
+        color: isDark
+            ? Colors.white.withValues(alpha: 0.12)
+            : const Color(0xFFE2E8F0),
         shape: BoxShape.circle,
       ),
     );
   }
 
-  static Widget _buildMetricCardSkeleton(Color cardBg, Color borderColor) {
+  static Widget _buildMetricCardSkeleton(
+    Color cardBg,
+    Color borderColor,
+    bool isDark,
+  ) {
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: cardBg,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: borderColor),
-      ),
-      child: Row(
-        children: [
-          _skeletonCircle(size: 46),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _skeletonBar(width: 90, height: 12),
-                const SizedBox(height: 6),
-                _skeletonBar(width: 120, height: 16),
-                const SizedBox(height: 4),
-                _skeletonBar(width: 70, height: 10),
+        boxShadow: isDark
+            ? []
+            : [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.03),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
               ],
+      ),
+      child: _SkeletonShimmer(
+        child: Row(
+          children: [
+            _skeletonCircle(size: 46, isDark: isDark),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _skeletonBar(width: 90, height: 12, isDark: isDark),
+                  const SizedBox(height: 6),
+                  _skeletonBar(width: 120, height: 16, isDark: isDark),
+                  const SizedBox(height: 4),
+                  _skeletonBar(width: 70, height: 10, isDark: isDark),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -1903,40 +2390,45 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
       width: 280,
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+        color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9),
         borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isDark ? Colors.white10 : const Color(0xFFE2E8F0),
+        ),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _skeletonBar(width: 140, height: 14),
-          const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              _skeletonBar(width: 100, height: 12),
-              _skeletonBar(width: 24, height: 12),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              _skeletonBar(width: 100, height: 12),
-              _skeletonBar(width: 24, height: 12),
-            ],
-          ),
-          const SizedBox(height: 12),
-          _skeletonBar(width: double.infinity, height: 1),
-          const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              _skeletonBar(width: 90, height: 11),
-              _skeletonBar(width: 50, height: 11),
-            ],
-          ),
-        ],
+      child: _SkeletonShimmer(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _skeletonBar(width: 140, height: 14, isDark: isDark),
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                _skeletonBar(width: 100, height: 12, isDark: isDark),
+                _skeletonBar(width: 24, height: 12, isDark: isDark),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                _skeletonBar(width: 100, height: 12, isDark: isDark),
+                _skeletonBar(width: 24, height: 12, isDark: isDark),
+              ],
+            ),
+            const SizedBox(height: 12),
+            _skeletonBar(width: double.infinity, height: 1, isDark: isDark),
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                _skeletonBar(width: 90, height: 11, isDark: isDark),
+                _skeletonBar(width: 50, height: 11, isDark: isDark),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1945,32 +2437,247 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
 // =========================================================================
 // Custom Painter: Activity Curve Chart (Inspired by Pic 4)
 // =========================================================================
+class _TeacherInfo {
+  final String id;
+  final String name;
+  final Color color;
+  const _TeacherInfo({
+    required this.id,
+    required this.name,
+    required this.color,
+  });
+}
+
 class _ChartPoint {
   final String label;
   final double value;
-  const _ChartPoint(this.label, this.value);
+  final int totalSeconds;
+  final String? teacherId;
+  final String? teacherName;
+  final DateTime? date;
+
+  const _ChartPoint({
+    required this.label,
+    required this.value,
+    this.totalSeconds = 0,
+    this.teacherId,
+    this.teacherName,
+    this.date,
+  });
 }
 
-class _TeacherActivityCurveChart extends StatelessWidget {
+class _TeacherSeries {
+  final String teacherId;
+  final String teacherName;
+  final Color color;
+  final List<_ChartPoint> points;
+
+  const _TeacherSeries({
+    required this.teacherId,
+    required this.teacherName,
+    required this.color,
+    required this.points,
+  });
+}
+
+class _TeacherActivityCurveChart extends StatefulWidget {
   final List<_ChartPoint> points;
   final bool isDark;
   final Color lineColor;
+  final List<_TeacherSeries> seriesList;
+  final String activeFilter;
+  final ValueChanged<String?>? onTeacherSelected;
 
   const _TeacherActivityCurveChart({
-    required this.points,
     required this.isDark,
-    required this.lineColor,
-  });
+    this.seriesList = const [],
+    this.activeFilter = 'today',
+    this.onTeacherSelected,
+  }) : points = const [], lineColor = AppTheme.catGreen;
+
+  @override
+  State<_TeacherActivityCurveChart> createState() =>
+      _TeacherActivityCurveChartState();
+}
+
+class _TeacherActivityCurveChartState extends State<_TeacherActivityCurveChart>
+    with SingleTickerProviderStateMixin {
+  int? _hoveredPointIndex;
+  int? _hoveredSeriesIndex;
+  late final AnimationController _hoverAnimController;
+  late final Animation<double> _scaleAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _hoverAnimController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 240),
+    );
+    _scaleAnimation = CurvedAnimation(
+      parent: _hoverAnimController,
+      curve: Curves.easeOutBack,
+    );
+  }
+
+  @override
+  void dispose() {
+    _hoverAnimController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return CustomPaint(
-      size: Size.infinite,
-      painter: _CurveChartPainter(
-        points: points,
-        isDark: isDark,
-        lineColor: lineColor,
-      ),
+    final effectiveSeries = widget.seriesList.isNotEmpty
+        ? widget.seriesList
+        : (widget.points.isNotEmpty
+            ? [
+                _TeacherSeries(
+                  teacherId: 'default',
+                  teacherName: 'Faculty',
+                  color: widget.lineColor,
+                  points: widget.points,
+                ),
+              ]
+            : <_TeacherSeries>[]);
+
+    if (effectiveSeries.isEmpty || effectiveSeries.first.points.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    final pointsCount = effectiveSeries.first.points.length;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              return MouseRegion(
+                onHover: (event) {
+                  final x = event.localPosition.dx;
+                  final width = constraints.maxWidth;
+                  final dxPerPoint =
+                      pointsCount > 1 ? width / (pointsCount - 1) : width;
+
+                  final nearestPointIndex =
+                      (x / dxPerPoint).round().clamp(0, pointsCount - 1);
+
+                  // If multiple series, determine which series line is closest in Y
+                  int nearestSeriesIndex = 0;
+                  if (effectiveSeries.length > 1) {
+                    double minDiff = double.infinity;
+                    final chartHeight = constraints.maxHeight - 44.0;
+                    double maxVal = 0.0;
+                    for (final s in effectiveSeries) {
+                      for (final p in s.points) {
+                        if (p.value > maxVal) maxVal = p.value;
+                      }
+                    }
+                    if (maxVal <= 0.0) maxVal = 4.0;
+                    maxVal = maxVal * 1.25;
+
+                    for (int sIdx = 0; sIdx < effectiveSeries.length; sIdx++) {
+                      final p = effectiveSeries[sIdx].points[nearestPointIndex];
+                      final normalizedY = p.value / maxVal;
+                      final ptY = 20.0 + chartHeight * (1.0 - normalizedY);
+                      final diff = (event.localPosition.dy - ptY).abs();
+                      if (diff < minDiff) {
+                        minDiff = diff;
+                        nearestSeriesIndex = sIdx;
+                      }
+                    }
+                  }
+
+                  if (_hoveredPointIndex != nearestPointIndex ||
+                      _hoveredSeriesIndex != nearestSeriesIndex) {
+                    setState(() {
+                      _hoveredPointIndex = nearestPointIndex;
+                      _hoveredSeriesIndex = nearestSeriesIndex;
+                    });
+                    _hoverAnimController.forward(from: 0.0);
+                  }
+                },
+                onExit: (_) {
+                  setState(() {
+                    _hoveredPointIndex = null;
+                    _hoveredSeriesIndex = null;
+                  });
+                  _hoverAnimController.reverse();
+                },
+                child: AnimatedBuilder(
+                  animation: _scaleAnimation,
+                  builder: (context, _) {
+                    return CustomPaint(
+                      size: Size.infinite,
+                      painter: _CurveChartPainter(
+                        seriesList: effectiveSeries,
+                        isDark: widget.isDark,
+                        lineColor: widget.lineColor,
+                        activeFilter: widget.activeFilter,
+                        hoveredPointIndex: _hoveredPointIndex,
+                        hoveredSeriesIndex: _hoveredSeriesIndex,
+                        hoverAnimValue: _scaleAnimation.value,
+                      ),
+                    );
+                  },
+                ),
+              );
+            },
+          ),
+        ),
+        // If there are 2 or more series, render interactive legend pills below
+        if (effectiveSeries.length > 1)
+          Padding(
+            padding: const EdgeInsets.only(top: 10),
+            child: Wrap(
+              spacing: 10,
+              runSpacing: 6,
+              children: effectiveSeries.map((series) {
+                return InkWell(
+                  onTap: () => widget.onTeacherSelected?.call(series.teacherId),
+                  borderRadius: BorderRadius.circular(16),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: series.color
+                          .withValues(alpha: widget.isDark ? 0.14 : 0.08),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: series.color.withValues(alpha: 0.4),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 8,
+                          height: 8,
+                          decoration: BoxDecoration(
+                            color: series.color,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          series.teacherName,
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.bold,
+                            color: series.color,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+      ],
     );
   }
 }
@@ -1979,16 +2686,40 @@ class _CurveChartPainter extends CustomPainter {
   final List<_ChartPoint> points;
   final bool isDark;
   final Color lineColor;
+  final int? hoveredIndex;
+  final List<_TeacherSeries> seriesList;
+  final String activeFilter;
+  final int? hoveredPointIndex;
+  final int? hoveredSeriesIndex;
+  final double hoverAnimValue;
 
   _CurveChartPainter({
-    required this.points,
     required this.isDark,
-    required this.lineColor,
-  });
+    this.lineColor = AppTheme.catGreen,
+    this.seriesList = const [],
+    this.activeFilter = 'today',
+    this.hoveredIndex,
+    this.hoveredPointIndex,
+    this.hoveredSeriesIndex,
+    this.hoverAnimValue = 0.0,
+  }) : points = const [];
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (points.isEmpty) return;
+    final effectiveSeries = seriesList.isNotEmpty
+        ? seriesList
+        : (points.isNotEmpty
+            ? [
+                _TeacherSeries(
+                  teacherId: 'default',
+                  teacherName: 'Faculty',
+                  color: lineColor,
+                  points: points,
+                ),
+              ]
+            : <_TeacherSeries>[]);
+
+    if (effectiveSeries.isEmpty || effectiveSeries.first.points.isEmpty) return;
 
     const bottomPadding = 24.0;
     const topPadding = 20.0;
@@ -1996,8 +2727,10 @@ class _CurveChartPainter extends CustomPainter {
     final chartWidth = size.width;
 
     double maxVal = 0.0;
-    for (final p in points) {
-      if (p.value > maxVal) maxVal = p.value;
+    for (final s in effectiveSeries) {
+      for (final p in s.points) {
+        if (p.value > maxVal) maxVal = p.value;
+      }
     }
     if (maxVal <= 0.0) maxVal = 4.0; // Default scale ceiling
     maxVal = maxVal * 1.25; // Top breathing room
@@ -2013,136 +2746,323 @@ class _CurveChartPainter extends CustomPainter {
       canvas.drawLine(Offset(0, y), Offset(chartWidth, y), gridPaint);
     }
 
-    final n = points.length;
-    final dx = n > 1 ? chartWidth / (n - 1) : chartWidth;
+    final pointsCount = effectiveSeries.first.points.length;
+    final dx = pointsCount > 1 ? chartWidth / (pointsCount - 1) : chartWidth;
 
-    final path = Path();
-    final fillPath = Path();
+    // Collect coordinates for every series
+    final allSeriesCoords = <List<Offset>>[];
 
-    final pointCoords = <Offset>[];
+    for (int sIdx = 0; sIdx < effectiveSeries.length; sIdx++) {
+      final series = effectiveSeries[sIdx];
+      final pointCoords = <Offset>[];
 
-    for (int i = 0; i < n; i++) {
-      final x = dx * i;
-      final normalizedY = points[i].value / maxVal;
-      final y = topPadding + chartHeight * (1.0 - normalizedY);
-      pointCoords.add(Offset(x, y));
+      for (int i = 0; i < pointsCount; i++) {
+        final x = dx * i;
+        final normalizedY = (series.points[i].value / maxVal).clamp(0.0, 1.0);
+        final y = topPadding + chartHeight * (1.0 - normalizedY);
+        pointCoords.add(Offset(x, y));
+      }
+      allSeriesCoords.add(pointCoords);
+
+      if (pointCoords.isNotEmpty) {
+        final path = Path();
+        final fillPath = Path();
+
+        path.moveTo(pointCoords[0].dx, pointCoords[0].dy);
+        fillPath.moveTo(pointCoords[0].dx, pointCoords[0].dy);
+
+        for (int i = 0; i < pointCoords.length - 1; i++) {
+          final p0 = pointCoords[i];
+          final p1 = pointCoords[i + 1];
+          final controlX1 = p0.dx + (p1.dx - p0.dx) / 2;
+          final controlX2 = controlX1;
+          path.cubicTo(controlX1, p0.dy, controlX2, p1.dy, p1.dx, p1.dy);
+          fillPath.cubicTo(controlX1, p0.dy, controlX2, p1.dy, p1.dx, p1.dy);
+        }
+
+        fillPath.lineTo(pointCoords.last.dx, size.height - bottomPadding);
+        fillPath.lineTo(pointCoords.first.dx, size.height - bottomPadding);
+        fillPath.close();
+
+        // If single series, draw gradient fill under curve
+        if (effectiveSeries.length == 1) {
+          final gradientPaint = Paint()
+            ..shader = LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                series.color.withValues(alpha: isDark ? 0.32 : 0.20),
+                series.color.withValues(alpha: 0.0),
+              ],
+            ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
+          canvas.drawPath(fillPath, gradientPaint);
+        }
+
+        // Draw curve stroke
+        final strokePaint = Paint()
+          ..color = series.color
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = effectiveSeries.length == 1 ? 3.0 : 2.5
+          ..strokeCap = StrokeCap.round
+          ..strokeJoin = StrokeJoin.round;
+        canvas.drawPath(path, strokePaint);
+      }
     }
 
-    if (pointCoords.isNotEmpty) {
-      path.moveTo(pointCoords[0].dx, pointCoords[0].dy);
-      fillPath.moveTo(pointCoords[0].dx, pointCoords[0].dy);
+    // Determine which point and series tooltip to target
+    int? targetPointIdx = hoveredPointIndex;
+    int targetSeriesIdx = hoveredSeriesIndex ?? 0;
 
-      for (int i = 0; i < pointCoords.length - 1; i++) {
-        final p0 = pointCoords[i];
-        final p1 = pointCoords[i + 1];
-        final controlX1 = p0.dx + (p1.dx - p0.dx) / 2;
-        final controlX2 = controlX1;
-        path.cubicTo(controlX1, p0.dy, controlX2, p1.dy, p1.dx, p1.dy);
-        fillPath.cubicTo(controlX1, p0.dy, controlX2, p1.dy, p1.dx, p1.dy);
-      }
-
-      fillPath.lineTo(pointCoords.last.dx, size.height - bottomPadding);
-      fillPath.lineTo(pointCoords.first.dx, size.height - bottomPadding);
-      fillPath.close();
-
-      // Draw Gradient Area Fill under the curve
-      final gradientPaint = Paint()
-        ..shader = LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            lineColor.withValues(alpha: isDark ? 0.35 : 0.22),
-            lineColor.withValues(alpha: 0.0),
-          ],
-        ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
-      canvas.drawPath(fillPath, gradientPaint);
-
-      // Draw Curve Stroke
-      final strokePaint = Paint()
-        ..color = lineColor
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 3.0
-        ..strokeCap = StrokeCap.round
-        ..strokeJoin = StrokeJoin.round;
-      canvas.drawPath(path, strokePaint);
-
-      // Draw Points & Highlight Pill on Peak
-      int peakIdx = 0;
+    // If not hovering, find peak point from series
+    if (targetPointIdx == null) {
       double peakVal = -1;
-      for (int i = 0; i < points.length; i++) {
-        if (points[i].value > peakVal) {
-          peakVal = points[i].value;
-          peakIdx = i;
+      int peakPt = 0;
+      int peakS = 0;
+      for (int s = 0; s < effectiveSeries.length; s++) {
+        for (int p = 0; p < effectiveSeries[s].points.length; p++) {
+          if (effectiveSeries[s].points[p].value > peakVal) {
+            peakVal = effectiveSeries[s].points[p].value;
+            peakPt = p;
+            peakS = s;
+          }
         }
       }
+      if (peakVal > 0) {
+        targetPointIdx = peakPt;
+        targetSeriesIdx = peakS;
+      }
+    }
 
-      for (int i = 0; i < pointCoords.length; i++) {
-        final pt = pointCoords[i];
+    // Draw Points on each curve
+    for (int sIdx = 0; sIdx < effectiveSeries.length; sIdx++) {
+      final series = effectiveSeries[sIdx];
+      final coords = allSeriesCoords[sIdx];
 
-        // Outer glow
-        canvas.drawCircle(
-          pt,
-          5.0,
-          Paint()..color = isDark ? const Color(0xFF1E293B) : Colors.white,
-        );
-        // Inner point
-        canvas.drawCircle(pt, 3.5, Paint()..color = lineColor);
+      for (int i = 0; i < coords.length; i++) {
+        final pt = coords[i];
+        final isThisTarget = (targetPointIdx == i) && (targetSeriesIdx == sIdx);
+        final isHovered = (hoveredPointIndex == i) && (hoveredSeriesIndex == sIdx);
 
-        // Draw Peak Highlight Badge if active
-        if (i == peakIdx && peakVal > 0) {
-          final badgeRect = RRect.fromRectAndRadius(
-            Rect.fromCenter(
-              center: Offset(pt.dx, pt.dy - 18),
-              width: 56,
-              height: 20,
-            ),
-            const Radius.circular(6),
-          );
-          canvas.drawRRect(
-            badgeRect,
-            Paint()..color = isDark ? const Color(0xFF0F172A) : Colors.white,
-          );
-          canvas.drawRRect(
-            badgeRect,
+        if (isHovered && hoverAnimValue > 0) {
+          // Animated glowing ring on hover
+          final outerGlowRadius = 5.0 + (3.5 * hoverAnimValue);
+          canvas.drawCircle(
+            pt,
+            outerGlowRadius,
             Paint()
-              ..color = lineColor
-              ..style = PaintingStyle.stroke
-              ..strokeWidth = 1.0,
+              ..color = series.color.withValues(alpha: 0.25 * hoverAnimValue),
           );
 
-          final tpVal = TextPainter(
-            text: TextSpan(
-              text: '${peakVal.toStringAsFixed(1)}h',
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.bold,
-                color: isDark ? Colors.white : const Color(0xFF1E293B),
-              ),
-            ),
-            textDirection: TextDirection.ltr,
-          )..layout();
-          tpVal.paint(canvas, Offset(pt.dx - (tpVal.width / 2), pt.dy - 24));
+          // Center white/dark circle ring
+          canvas.drawCircle(
+            pt,
+            6.5,
+            Paint()
+              ..color = isDark ? const Color(0xFF1E293B) : Colors.white,
+          );
+          // Inner dot
+          canvas.drawCircle(
+            pt,
+            4.5,
+            Paint()..color = series.color,
+          );
+        } else {
+          // Normal point
+          canvas.drawCircle(
+            pt,
+            isThisTarget ? 6.0 : 4.5,
+            Paint()
+              ..color = isDark ? const Color(0xFF1E293B) : Colors.white,
+          );
+          canvas.drawCircle(
+            pt,
+            isThisTarget ? 4.0 : 3.0,
+            Paint()..color = series.color,
+          );
         }
       }
+    }
+
+    // Draw Highlight Badge Tooltip for targeted point
+    if (targetPointIdx != null &&
+        targetSeriesIdx < effectiveSeries.length &&
+        targetPointIdx < effectiveSeries[targetSeriesIdx].points.length) {
+      final targetSeries = effectiveSeries[targetSeriesIdx];
+      final targetPoint = targetSeries.points[targetPointIdx];
+      final pt = allSeriesCoords[targetSeriesIdx][targetPointIdx];
+
+      // Format duration strictly as 00h 00m (or 00s if < 1m)
+      final durationStr = _AdminActivityAnalyticsTabState._formatTooltipDuration(
+        targetPoint.totalSeconds,
+      );
+
+      final teacherName = targetPoint.teacherName ?? targetSeries.teacherName;
+
+      // Text Painters
+      final nameSpan = TextSpan(
+        text: teacherName,
+        style: TextStyle(
+          fontSize: 10.5,
+          fontWeight: FontWeight.bold,
+          color: isDark ? Colors.white : const Color(0xFF0F172A),
+        ),
+      );
+      final tpName = TextPainter(
+        text: nameSpan,
+        textDirection: TextDirection.ltr,
+      )..layout();
+
+      final timeSpan = TextSpan(
+        text: durationStr,
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w800,
+          fontFamily: 'monospace',
+          color: targetSeries.color,
+        ),
+      );
+      final tpTime = TextPainter(
+        text: timeSpan,
+        textDirection: TextDirection.ltr,
+      )..layout();
+
+      // If activeFilter is 'all', show the date label in subtle text
+      TextPainter? tpDate;
+      if (activeFilter == 'all') {
+        tpDate = TextPainter(
+          text: TextSpan(
+            text: targetPoint.label,
+            style: TextStyle(
+              fontSize: 9.5,
+              fontWeight: FontWeight.w600,
+              color: isDark ? Colors.white60 : const Color(0xFF64748B),
+            ),
+          ),
+          textDirection: TextDirection.ltr,
+        )..layout();
+      }
+
+      double maxContentWidth = math.max(tpName.width, tpTime.width);
+      if (tpDate != null && tpDate.width > maxContentWidth) {
+        maxContentWidth = tpDate.width;
+      }
+
+      final badgeWidth = maxContentWidth + 20;
+      final badgeHeight = tpName.height +
+          tpTime.height +
+          (tpDate != null ? tpDate.height + 4 : 0) +
+          14;
+
+      // Check whether tooltip fits comfortably above the point
+      final fitsAbove = (pt.dy - badgeHeight - 16) >= 0;
+      final badgeCenterY = fitsAbove
+          ? pt.dy - (badgeHeight / 2) - 12
+          : pt.dy + (badgeHeight / 2) + 12;
+
+      final badgeCenterX =
+          pt.dx.clamp(badgeWidth / 2 + 6, chartWidth - badgeWidth / 2 - 6);
+
+      canvas.save();
+      canvas.translate(badgeCenterX, badgeCenterY);
+
+      // Smooth scale spring animation on hover
+      final scale = hoveredPointIndex != null
+          ? (0.85 + (0.15 * hoverAnimValue.clamp(0.0, 1.0)))
+          : 1.0;
+      canvas.scale(scale, scale);
+
+      final badgeRect = RRect.fromRectAndRadius(
+        Rect.fromCenter(
+          center: Offset.zero,
+          width: badgeWidth,
+          height: badgeHeight,
+        ),
+        const Radius.circular(8),
+      );
+
+      // Shadow
+      canvas.drawRRect(
+        badgeRect.shift(const Offset(0, 3)),
+        Paint()
+          ..color = Colors.black.withValues(alpha: isDark ? 0.45 : 0.12)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6),
+      );
+
+      // Background
+      canvas.drawRRect(
+        badgeRect,
+        Paint()..color = isDark ? const Color(0xFF0F172A) : Colors.white,
+      );
+
+      // Border with teacher color
+      canvas.drawRRect(
+        badgeRect,
+        Paint()
+          ..color = targetSeries.color
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.3,
+      );
+
+      // Triangle Caret pointing towards circle dot
+      final caretPath = Path();
+      final caretX =
+          (pt.dx - badgeCenterX).clamp(-badgeWidth / 2 + 10, badgeWidth / 2 - 10);
+      if (fitsAbove) {
+        caretPath.moveTo(caretX - 5, badgeHeight / 2);
+        caretPath.lineTo(caretX + 5, badgeHeight / 2);
+        caretPath.lineTo(caretX, badgeHeight / 2 + 5);
+      } else {
+        caretPath.moveTo(caretX - 5, -badgeHeight / 2);
+        caretPath.lineTo(caretX + 5, -badgeHeight / 2);
+        caretPath.lineTo(caretX, -badgeHeight / 2 - 5);
+      }
+      caretPath.close();
+
+      canvas.drawPath(
+        caretPath,
+        Paint()..color = isDark ? const Color(0xFF0F172A) : Colors.white,
+      );
+      canvas.drawPath(
+        caretPath,
+        Paint()
+          ..color = targetSeries.color
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.3,
+      );
+
+      // Paint texts inside badge
+      double currY = -badgeHeight / 2 + 6;
+      tpName.paint(canvas, Offset(-tpName.width / 2, currY));
+      currY += tpName.height + 2;
+
+      if (tpDate != null) {
+        tpDate.paint(canvas, Offset(-tpDate.width / 2, currY));
+        currY += tpDate.height + 2;
+      }
+
+      tpTime.paint(canvas, Offset(-tpTime.width / 2, currY));
+
+      canvas.restore();
     }
 
     // X-Axis Text Labels
     final textStyle = TextStyle(
       fontSize: 11,
-      color: isDark ? Colors.white54 : const Color(0xFF94A3B8),
-      fontWeight: FontWeight.w500,
+      color: isDark ? Colors.white60 : const Color(0xFF64748B),
+      fontWeight: FontWeight.w600,
     );
 
-    for (int i = 0; i < points.length; i++) {
+    final firstPoints = effectiveSeries.first.points;
+    for (int i = 0; i < firstPoints.length; i++) {
       final x = dx * i;
       final tp = TextPainter(
-        text: TextSpan(text: points[i].label, style: textStyle),
+        text: TextSpan(text: firstPoints[i].label, style: textStyle),
         textDirection: TextDirection.ltr,
       )..layout();
 
       double drawX = x - (tp.width / 2);
       if (i == 0) drawX = 0;
-      if (i == points.length - 1) drawX = chartWidth - tp.width;
+      if (i == firstPoints.length - 1) drawX = chartWidth - tp.width;
 
       tp.paint(canvas, Offset(drawX, size.height - bottomPadding + 6));
     }
@@ -2150,7 +3070,13 @@ class _CurveChartPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _CurveChartPainter oldDelegate) {
-    return oldDelegate.points != points || oldDelegate.isDark != isDark;
+    return oldDelegate.seriesList != seriesList ||
+        oldDelegate.points != points ||
+        oldDelegate.isDark != isDark ||
+        oldDelegate.hoveredPointIndex != hoveredPointIndex ||
+        oldDelegate.hoveredSeriesIndex != hoveredSeriesIndex ||
+        oldDelegate.hoverAnimValue != hoverAnimValue ||
+        oldDelegate.activeFilter != activeFilter;
   }
 }
 
@@ -2254,10 +3180,10 @@ class _SkeletonShimmerState extends State<_SkeletonShimmer>
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final baseColor = isDark
         ? Colors.white.withValues(alpha: 0.08)
-        : Colors.grey.shade300;
+        : const Color(0xFFE2E8F0);
     final highlightColor = isDark
-        ? Colors.white.withValues(alpha: 0.22)
-        : Colors.grey.shade100;
+        ? Colors.white.withValues(alpha: 0.28)
+        : Colors.white;
 
     return AnimatedBuilder(
       animation: _shimmerController,

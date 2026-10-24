@@ -86,16 +86,16 @@ class UserSessionLog {
       teacherName: teacherName ?? json['teacher_name']?.toString(),
       role: json['role']?.toString() ?? '',
       sessionDate: json['session_date'] != null
-          ? DateTime.tryParse(json['session_date'].toString()) ?? DateTime.now()
+          ? DateTime.tryParse(json['session_date'].toString())?.toLocal() ?? DateTime.now()
           : DateTime.now(),
       loginAt: json['login_at'] != null
-          ? DateTime.tryParse(json['login_at'].toString()) ?? DateTime.now()
+          ? DateTime.tryParse(json['login_at'].toString())?.toLocal() ?? DateTime.now()
           : DateTime.now(),
       lastActiveAt: json['last_active_at'] != null
-          ? DateTime.tryParse(json['last_active_at'].toString()) ?? DateTime.now()
+          ? DateTime.tryParse(json['last_active_at'].toString())?.toLocal() ?? DateTime.now()
           : DateTime.now(),
       logoutAt: json['logout_at'] != null
-          ? DateTime.tryParse(json['logout_at'].toString())
+          ? DateTime.tryParse(json['logout_at'].toString())?.toLocal()
           : null,
       logoutReason: json['logout_reason']?.toString(),
       isActive: json['is_active'] == true,
@@ -144,6 +144,22 @@ class UserSessionLog {
       isActive: isActive ?? this.isActive,
       durationSeconds: durationSeconds ?? this.durationSeconds,
     );
+  }
+
+  String get formattedLogoutReason {
+    switch (logoutReason) {
+      case 'manual':
+        return 'Manual Logout';
+      case 'inactivity':
+      case 'inactivity_timeout':
+        return 'Inactivity';
+      case 'terminated':
+      case 'app_closed':
+      case 'session_superseded':
+        return 'Terminated';
+      default:
+        return logoutReason ?? 'Active';
+    }
   }
 }
 

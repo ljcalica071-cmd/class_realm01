@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import 'package:class_realm/core/theme/app_theme.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/data/repositories/subject_repository.dart';
 import 'package:class_realm/features/teacher/sub_features/class_management/widgets/unified_enroll_student_dialog.dart';
@@ -736,17 +737,17 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
             children: [
               _buildBadge(
                 'WW ${subject.wwWeight}%',
-                subtle: true,
+                isPrimary: true,
                 compact: true,
               ),
               _buildBadge(
                 'PT ${subject.ptWeight}%',
-                subtle: true,
+                isPrimary: true,
                 compact: true,
               ),
               _buildBadge(
-                'EX ${subject.exWeight}%',
-                subtle: true,
+                subject.exWeight == 0 ? 'NO EXAM' : 'EX ${subject.exWeight}%',
+                isPrimary: true,
                 compact: true,
               ),
             ],
@@ -940,8 +941,14 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
     }
 
     setState(() {
-      _editingSubject = subject;
-      _selectedTemplate = null;
+      _selectedTemplate = defaultSubjectTemplates
+          .cast<SubjectTemplate?>()
+          .firstWhere(
+            (t) =>
+                t?.name.trim().toLowerCase() ==
+                subject.name.trim().toLowerCase(),
+            orElse: () => null,
+          );
       _subjectCtrl.text = subject.name;
       _gradeLevel = subject.gradeLevel;
       _wwCtrl.text = subject.wwWeight.toString();
@@ -1130,20 +1137,43 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
       ),
     );
 
+    final isTemplateLocked = _selectedTemplate != null;
+
     final subjectField = _buildLabeledField(
       label: 'Subject Name',
       isRequired: true,
       error: _subjectError,
-      labelTrailing: Text(
-        '${_subjectCtrl.text.length}/60',
-        style: TextStyle(
-          fontSize: 11,
-          color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-        ),
-      ),
+      labelTrailing: isTemplateLocked
+          ? Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  LucideIcons.lock,
+                  size: 11,
+                  color: theme.colorScheme.primary,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  'Template Locked',
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.bold,
+                    color: theme.colorScheme.primary,
+                  ),
+                ),
+              ],
+            )
+          : Text(
+              '${_subjectCtrl.text.length}/60',
+              style: TextStyle(
+                fontSize: 11,
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+              ),
+            ),
       field: TextField(
         controller: _subjectCtrl,
         focusNode: _subjectFocus,
+        readOnly: isTemplateLocked,
         maxLength: 60,
         inputFormatters: [_SingleSpaceInputFormatter()],
         buildCounter: (
@@ -1153,15 +1183,17 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
           required maxLength,
         }) => null,
         textInputAction: TextInputAction.next,
-        onChanged: (_) {
-          setState(() {
-            if (_selectedTemplate != null &&
-                _selectedTemplate!.name != _subjectCtrl.text) {
-              _selectedTemplate = null;
-            }
-          });
-          _revalidateIfSubmitted();
-        },
+        onChanged: isTemplateLocked
+            ? null
+            : (_) {
+                setState(() {
+                  if (_selectedTemplate != null &&
+                      _selectedTemplate!.name != _subjectCtrl.text) {
+                    _selectedTemplate = null;
+                  }
+                });
+                _revalidateIfSubmitted();
+              },
         onEditingComplete: () {
           final trimmedText = _subjectCtrl.text.trimRight();
           if (trimmedText != _subjectCtrl.text) {
@@ -1172,6 +1204,11 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
         decoration: _boxDecoration(
           hint: 'e.g. General Mathematics',
           hasError: _subjectError != null,
+        ).copyWith(
+          filled: isTemplateLocked,
+          fillColor: isTemplateLocked
+              ? theme.colorScheme.onSurface.withValues(alpha: 0.05)
+              : null,
         ),
       ),
     );
@@ -1206,14 +1243,35 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
       ),
     );
 
-    final isCoreLocked = _selectedTemplate?.category == 'SSHS - CORE';
+    final isTermsTaughtLocked = isTemplateLocked;
 
     final termsTaughtField = _buildLabeledField(
       label: 'No. of Terms Taught',
+      labelTrailing: isTermsTaughtLocked
+          ? Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  LucideIcons.lock,
+                  size: 11,
+                  color: theme.colorScheme.primary,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  'Standardized',
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.bold,
+                    color: theme.colorScheme.primary,
+                  ),
+                ),
+              ],
+            )
+          : null,
       field: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12),
         decoration: BoxDecoration(
-          color: isCoreLocked
+          color: isTermsTaughtLocked
               ? theme.colorScheme.onSurface.withValues(alpha: 0.05)
               : null,
           border: Border.all(
@@ -1225,7 +1283,7 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
           child: DropdownButton<int>(
             value: _termsTaught,
             isExpanded: true,
-            iconEnabledColor: isCoreLocked ? Colors.transparent : null,
+            iconEnabledColor: isTermsTaughtLocked ? Colors.transparent : null,
             items: const [
               DropdownMenuItem(
                 value: 3,
@@ -1234,7 +1292,7 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
               DropdownMenuItem(value: 1, child: Text('1 Term Only')),
               DropdownMenuItem(value: 2, child: Text('2 Terms')),
             ],
-            onChanged: isCoreLocked
+            onChanged: isTermsTaughtLocked
                 ? null
                 : (value) {
                     if (value == null) return;
@@ -1272,6 +1330,8 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
       _ => 'Note: Accomplish all Term sheets.',
     };
 
+    final isTermBlockLocked = _termsTaught == 3;
+
     final termBlockField = _buildLabeledField(
       label: 'Term Block (Active Term)',
       isRequired: true,
@@ -1282,6 +1342,9 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12),
             decoration: BoxDecoration(
+              color: isTermBlockLocked
+                  ? theme.colorScheme.onSurface.withValues(alpha: 0.05)
+                  : null,
               border: Border.all(
                 color: _termBlockError != null
                     ? theme.colorScheme.error
@@ -1293,6 +1356,7 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
               child: DropdownButton<String>(
                 value: _termBlock.isNotEmpty ? _termBlock : null,
                 isExpanded: true,
+                iconEnabledColor: isTermBlockLocked ? Colors.transparent : null,
                 items: termBlockOptions
                     .map(
                       (option) => DropdownMenuItem(
@@ -1304,7 +1368,7 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
                       ),
                     )
                     .toList(),
-                onChanged: _termsTaught == 3
+                onChanged: isTermBlockLocked
                     ? null
                     : (value) {
                         if (value != null) {
@@ -1324,10 +1388,6 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
     );
 
     final isTotalExact = _currentWeightTotal == 100;
-    final isTotalOver = _currentWeightTotal > 100;
-    final showWeightError = _submitted ? !isTotalExact : isTotalOver;
-
-    final isTemplateLocked = _selectedTemplate != null;
 
     final wwField = _buildLabeledField(
       label: 'WRITTEN / ORAL WORKS',
@@ -1337,15 +1397,14 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
         keyboardType: TextInputType.number,
         inputFormatters: [
           FilteringTextInputFormatter.digitsOnly,
-          LengthLimitingTextInputFormatter(2),
+          LengthLimitingTextInputFormatter(3),
         ],
-        decoration: _boxDecoration(hint: '0', hasError: showWeightError)
-            .copyWith(
-              filled: isTemplateLocked,
-              fillColor: isTemplateLocked
-                  ? theme.colorScheme.onSurface.withValues(alpha: 0.05)
-                  : null,
-            ),
+        decoration: _boxDecoration(hint: '0', hasError: false).copyWith(
+          filled: isTemplateLocked,
+          fillColor: isTemplateLocked
+              ? theme.colorScheme.onSurface.withValues(alpha: 0.05)
+              : null,
+        ),
       ),
     );
 
@@ -1357,15 +1416,14 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
         keyboardType: TextInputType.number,
         inputFormatters: [
           FilteringTextInputFormatter.digitsOnly,
-          LengthLimitingTextInputFormatter(2),
+          LengthLimitingTextInputFormatter(3),
         ],
-        decoration: _boxDecoration(hint: '0', hasError: showWeightError)
-            .copyWith(
-              filled: isTemplateLocked,
-              fillColor: isTemplateLocked
-                  ? theme.colorScheme.onSurface.withValues(alpha: 0.05)
-                  : null,
-            ),
+        decoration: _boxDecoration(hint: '0', hasError: false).copyWith(
+          filled: isTemplateLocked,
+          fillColor: isTemplateLocked
+              ? theme.colorScheme.onSurface.withValues(alpha: 0.05)
+              : null,
+        ),
       ),
     );
 
@@ -1377,15 +1435,14 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
         keyboardType: TextInputType.number,
         inputFormatters: [
           FilteringTextInputFormatter.digitsOnly,
-          LengthLimitingTextInputFormatter(2),
+          LengthLimitingTextInputFormatter(3),
         ],
-        decoration: _boxDecoration(hint: '0', hasError: showWeightError)
-            .copyWith(
-              filled: isTemplateLocked,
-              fillColor: isTemplateLocked
-                  ? theme.colorScheme.onSurface.withValues(alpha: 0.05)
-                  : null,
-            ),
+        decoration: _boxDecoration(hint: '0', hasError: false).copyWith(
+          filled: isTemplateLocked,
+          fillColor: isTemplateLocked
+              ? theme.colorScheme.onSurface.withValues(alpha: 0.05)
+              : null,
+        ),
       ),
     );
 
@@ -1399,16 +1456,11 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
       totalBgColor = theme.colorScheme.primary.withValues(alpha: 0.08);
       totalTextColor = theme.colorScheme.primary;
       totalIcon = LucideIcons.checkCircle;
-    } else if (showWeightError) {
+    } else {
       totalBorderColor = theme.colorScheme.error;
       totalBgColor = theme.colorScheme.error.withValues(alpha: 0.08);
       totalTextColor = theme.colorScheme.error;
       totalIcon = LucideIcons.alertCircle;
-    } else {
-      totalBorderColor = theme.colorScheme.outline.withValues(alpha: 0.35);
-      totalBgColor = theme.colorScheme.surface;
-      totalTextColor = theme.colorScheme.onSurface.withValues(alpha: 0.7);
-      totalIcon = LucideIcons.scale;
     }
 
     final totalField = _buildLabeledField(
@@ -2424,123 +2476,566 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
   }
 
   // ─────────────────────────────────────────────────────────────────────────
-  // Template Picker Dialog (Constrained Width)
+  // Template Picker Dialog (Searchable & Filterable by Category & Cluster)
   // ─────────────────────────────────────────────────────────────────────────
   void _showTemplateModal() {
-    final templates = _availableTemplates;
-    final Map<String, List<SubjectTemplate>> groupedTemplates = {};
-    for (var t in templates) {
-      groupedTemplates.putIfAbsent(t.category, () => []).add(t);
-    }
+    final allTemplates = _availableTemplates;
+    String searchQuery = '';
+    String selectedCategory = 'ALL CATEGORIES';
+    final searchCtrl = TextEditingController();
+
+    const categories = [
+      'ALL CATEGORIES',
+      'SSHS - CORE',
+      'SSHS - ACADEMIC',
+      'SSHS - TECH-PRO',
+    ];
 
     _showConstrainedDialog(
       context: context,
-      maxWidth: 550,
+      maxWidth: 680,
       child: StatefulBuilder(
-        builder: (context, setStateModal) {
+        builder: (dialogCtx, setModalState) {
+          final theme = Theme.of(dialogCtx);
+          final isDark = theme.brightness == Brightness.dark;
+
+          // Filter templates
+          final filtered = allTemplates.where((t) {
+            if (selectedCategory != 'ALL CATEGORIES' &&
+                t.category != selectedCategory) {
+              return false;
+            }
+            if (searchQuery.isNotEmpty) {
+              final q = searchQuery.toLowerCase().trim();
+              final matchesName = t.name.toLowerCase().contains(q);
+              final matchesCluster = t.cluster.toLowerCase().contains(q);
+              final matchesCategory = t.category.toLowerCase().contains(q);
+              if (!matchesName && !matchesCluster && !matchesCategory) {
+                return false;
+              }
+            }
+            return true;
+          }).toList();
+
+          // Group by Cluster
+          final Map<String, List<SubjectTemplate>> groupedByCluster = {};
+          for (final t in filtered) {
+            groupedByCluster.putIfAbsent(t.cluster, () => []).add(t);
+          }
+
+          int getCategoryCount(String cat) {
+            if (cat == 'ALL CATEGORIES') return allTemplates.length;
+            return allTemplates.where((t) => t.category == cat).length;
+          }
+
           return SizedBox(
-            height: 550,
+            height: 600,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'Select Subject Template',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Theme.of(context).colorScheme.onSurface,
+                // Top Header Row
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.primary.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(
+                        Icons.auto_stories_rounded,
+                        color: theme.colorScheme.primary,
+                        size: 24,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Select Subject Template',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: theme.colorScheme.onSurface,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Standardized DepEd DO 15, s. 2026 grading weight & term presets',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close_rounded, size: 20),
+                      splashRadius: 18,
+                      onPressed: () => Navigator.pop(dialogCtx),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+
+                // Search Bar Input
+                Container(
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.4)
+                        : const Color(0xFFF1F5F9),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: isDark ? Colors.white10 : const Color(0xFFE2E8F0),
+                    ),
+                  ),
+                  child: TextField(
+                    controller: searchCtrl,
+                    style: const TextStyle(fontSize: 13),
+                    decoration: InputDecoration(
+                      hintText: 'Search by subject name or cluster (e.g. Mathematics, ICT, Accounting)...',
+                      hintStyle: TextStyle(
+                        fontSize: 13,
+                        color: isDark ? Colors.white38 : Colors.grey.shade400,
+                      ),
+                      prefixIcon: const Icon(Icons.search_rounded, size: 20),
+                      suffixIcon: searchQuery.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.clear_rounded, size: 16),
+                              onPressed: () {
+                                searchCtrl.clear();
+                                setModalState(() => searchQuery = '');
+                              },
+                            )
+                          : null,
+                      border: InputBorder.none,
+                      contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                    ),
+                    onChanged: (val) {
+                      setModalState(() => searchQuery = val);
+                    },
                   ),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 12),
+
+                // Category Filter Pills
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: categories.map((cat) {
+                      final isSelected = selectedCategory == cat;
+                      final count = getCategoryCount(cat);
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: InkWell(
+                          onTap: () {
+                            setModalState(() => selectedCategory = cat);
+                          },
+                          borderRadius: BorderRadius.circular(20),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 180),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 6,
+                            ),
+                            decoration: BoxDecoration(
+                              color: isSelected
+                                  ? theme.colorScheme.primary
+                                  : (isDark
+                                      ? Colors.white.withValues(alpha: 0.05)
+                                      : const Color(0xFFF1F5F9)),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                color: isSelected
+                                    ? theme.colorScheme.primary
+                                    : (isDark
+                                        ? Colors.white12
+                                        : const Color(0xFFE2E8F0)),
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  cat,
+                                  style: TextStyle(
+                                    fontSize: 11.5,
+                                    fontWeight: isSelected
+                                        ? FontWeight.bold
+                                        : FontWeight.w600,
+                                    color: isSelected
+                                        ? Colors.white
+                                        : theme.colorScheme.onSurface
+                                            .withValues(alpha: 0.75),
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 1.5,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: isSelected
+                                        ? Colors.white.withValues(alpha: 0.25)
+                                        : (isDark
+                                            ? Colors.white10
+                                            : Colors.grey.shade300),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Text(
+                                    '$count',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                      color: isSelected
+                                          ? Colors.white
+                                          : theme.colorScheme.onSurface,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
+                const SizedBox(height: 14),
+
+                // Main Content List
                 Expanded(
                   child: ListView(
                     children: [
-                      ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: const Text(
-                          'Custom / Manual Entry',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        subtitle: const Text(
-                          'Enter custom subject name and grading weights',
-                          style: TextStyle(fontSize: 12),
-                        ),
+                      // Prominent Hero Card: Custom / Manual Entry
+                      InkWell(
                         onTap: () {
                           setState(() => _selectedTemplate = null);
-                          Navigator.pop(context);
+                          Navigator.pop(dialogCtx);
+                          _subjectFocus.requestFocus();
                         },
-                      ),
-                      const Divider(),
-                      ...groupedTemplates.entries.map((entry) {
-                        return Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Padding(
-                              padding: const EdgeInsets.only(
-                                top: 16,
-                                bottom: 8,
+                        borderRadius: BorderRadius.circular(12),
+                        child: Container(
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: isDark
+                                ? theme.colorScheme.primary.withValues(alpha: 0.08)
+                                : theme.colorScheme.primary.withValues(alpha: 0.04),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: theme.colorScheme.primary.withValues(alpha: 0.35),
+                              width: 1.2,
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 38,
+                                height: 38,
+                                decoration: BoxDecoration(
+                                  color: theme.colorScheme.primary.withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Icon(
+                                  Icons.edit_note_rounded,
+                                  color: theme.colorScheme.primary,
+                                  size: 22,
+                                ),
                               ),
-                              child: Text(
-                                entry.key,
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Text(
+                                          'Custom / Manual Entry',
+                                          style: TextStyle(
+                                            fontSize: 13.5,
+                                            fontWeight: FontWeight.bold,
+                                            color: theme.colorScheme.primary,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 6,
+                                            vertical: 2,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: AppTheme.catPurple.withValues(alpha: 0.12),
+                                            borderRadius: BorderRadius.circular(6),
+                                          ),
+                                          child: const Text(
+                                            'User Defined',
+                                            style: TextStyle(
+                                              fontSize: 9.5,
+                                              fontWeight: FontWeight.bold,
+                                              color: AppTheme.catPurple,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      'Enter custom subject name, custom grading weights, and term configuration',
+                                      style: TextStyle(
+                                        fontSize: 11.5,
+                                        color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Icon(
+                                Icons.arrow_forward_ios_rounded,
+                                size: 14,
+                                color: theme.colorScheme.primary,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+
+                      // Empty Search State
+                      if (filtered.isEmpty)
+                        Container(
+                          padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 20),
+                          alignment: Alignment.center,
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.search_off_rounded,
+                                size: 44,
+                                color: isDark ? Colors.white24 : Colors.grey.shade400,
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                'No subjects found matching "$searchQuery"',
+                                style: TextStyle(
+                                  fontSize: 13.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'You can create it as a custom subject with your own weights.',
                                 style: TextStyle(
                                   fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                  color: Theme.of(context).colorScheme.primary,
-                                  letterSpacing: 1.0,
+                                  color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
                                 ),
                               ),
+                              if (searchQuery.isNotEmpty) ...[
+                                const SizedBox(height: 14),
+                                ElevatedButton.icon(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: theme.colorScheme.primary,
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                      vertical: 10,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                  ),
+                                  icon: const Icon(Icons.add_rounded, size: 18),
+                                  label: Text(
+                                    'Use "$searchQuery" as Subject Name',
+                                    style: const TextStyle(
+                                      fontSize: 12.5,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  onPressed: () {
+                                    setState(() {
+                                      _selectedTemplate = null;
+                                      _subjectCtrl.text = searchQuery.trim();
+                                    });
+                                    Navigator.pop(dialogCtx);
+                                    _revalidateIfSubmitted();
+                                  },
+                                ),
+                              ],
+                            ],
+                          ),
+                        )
+                      else
+                        // Filtered Subjects Grouped by Cluster
+                        ...groupedByCluster.entries.map((clusterEntry) {
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 16),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                // Cluster Section Header
+                                Row(
+                                  children: [
+                                    Container(
+                                      width: 4,
+                                      height: 14,
+                                      decoration: BoxDecoration(
+                                        color: theme.colorScheme.primary,
+                                        borderRadius: BorderRadius.circular(2),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      clusterEntry.key,
+                                      style: TextStyle(
+                                        fontSize: 11.5,
+                                        fontWeight: FontWeight.bold,
+                                        color: theme.colorScheme.primary,
+                                        letterSpacing: 0.6,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      '(${clusterEntry.value.length})',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: theme.colorScheme.onSurface.withValues(alpha: 0.45),
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+
+                                // Subject Items
+                                ...clusterEntry.value.map((template) {
+                                  return Container(
+                                    margin: const EdgeInsets.only(bottom: 6),
+                                    decoration: BoxDecoration(
+                                      color: isDark
+                                          ? theme.colorScheme.surface
+                                          : const Color(0xFFF8FAFC),
+                                      borderRadius: BorderRadius.circular(10),
+                                      border: Border.all(
+                                        color: isDark
+                                            ? Colors.white10
+                                            : const Color(0xFFE2E8F0),
+                                      ),
+                                    ),
+                                    child: ListTile(
+                                      dense: true,
+                                      contentPadding: const EdgeInsets.symmetric(
+                                        horizontal: 14,
+                                        vertical: 4,
+                                      ),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      hoverColor: theme.colorScheme.primary.withValues(alpha: 0.05),
+                                      title: Text(
+                                        template.name,
+                                        style: TextStyle(
+                                          fontSize: 13.5,
+                                          fontWeight: FontWeight.w600,
+                                          color: theme.colorScheme.onSurface,
+                                        ),
+                                      ),
+                                      subtitle: Padding(
+                                        padding: const EdgeInsets.only(top: 4),
+                                        child: Wrap(
+                                          spacing: 6,
+                                          runSpacing: 4,
+                                          children: [
+                                            // Weight badge (Unified Blue)
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(
+                                                horizontal: 7,
+                                                vertical: 2,
+                                              ),
+                                              decoration: BoxDecoration(
+                                                color: theme.colorScheme.primary.withValues(alpha: 0.10),
+                                                borderRadius: BorderRadius.circular(5),
+                                              ),
+                                              child: Text(
+                                                template.weightSummary,
+                                                style: TextStyle(
+                                                  fontSize: 10.5,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: theme.colorScheme.primary,
+                                                ),
+                                              ),
+                                            ),
+                                            // Term badge
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(
+                                                horizontal: 7,
+                                                vertical: 2,
+                                              ),
+                                              decoration: BoxDecoration(
+                                                color: isDark
+                                                    ? Colors.white10
+                                                    : Colors.grey.shade200,
+                                                borderRadius: BorderRadius.circular(5),
+                                              ),
+                                              child: Text(
+                                                template.termsSummary,
+                                                style: TextStyle(
+                                                  fontSize: 10.5,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      trailing: const Icon(
+                                        Icons.chevron_right_rounded,
+                                        size: 20,
+                                        color: Colors.grey,
+                                      ),
+                                      onTap: () {
+                                        _applyTemplate(template);
+                                        Navigator.pop(dialogCtx);
+                                      },
+                                    ),
+                                  );
+                                }),
+                              ],
                             ),
-                            ...entry.value.map((template) {
-                              return ListTile(
-                                contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                hoverColor: Theme.of(context)
-                                    .colorScheme
-                                    .primary
-                                    .withValues(alpha: 0.05),
-                                title: Text(
-                                  template.name,
-                                  style: const TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                                subtitle: Text(
-                                  'WW ${template.ww}% · PT ${template.pt}% · EX ${template.ex}%  |  Terms Taught: ${template.termsTaught}',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .onSurface
-                                        .withValues(alpha: 0.6),
-                                  ),
-                                ),
-                                onTap: () {
-                                  _applyTemplate(template);
-                                  Navigator.pop(context);
-                                },
-                              );
-                            }),
-                            const Divider(height: 24),
-                          ],
-                        );
-                      }),
+                          );
+                        }),
                     ],
                   ),
                 ),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('Close'),
-                  ),
+                const SizedBox(height: 8),
+
+                // Bottom Close Button Bar
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      '${filtered.length} of ${allTemplates.length} subjects available',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    TextButton(
+                      style: TextButton.styleFrom(
+                        foregroundColor: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                      ),
+                      onPressed: () => Navigator.pop(dialogCtx),
+                      child: const Text('Close', style: TextStyle(fontWeight: FontWeight.bold)),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -2559,7 +3054,9 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
       _exCtrl.text = template.ex.toString();
       _termsTaught = template.termsTaught;
       _termBlock = template.termBlock;
-      _unitsPerTerm = 2.0; // Default or omitted
+      _unitsPerTerm = template.category == 'SSHS - ACADEMIC'
+          ? 3.0
+          : (template.category == 'SSHS - TECH-PRO' ? 4.0 : 2.0);
       _st1Weight = template.st1Weight;
       _st2Weight = template.st2Weight;
       _teWeight = template.teWeight;

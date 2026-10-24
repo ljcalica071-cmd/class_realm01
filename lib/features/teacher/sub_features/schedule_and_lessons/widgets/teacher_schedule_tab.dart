@@ -722,9 +722,9 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
     String selectedSectionId = selectedOffering['section_id']?.toString() ?? selectedOfferingId;
     String selectedSectionName = selectedOffering['section_name']?.toString() ?? (schedule?.section ?? '');
 
-    double wwWeight = (selectedOffering['ww_weight'] as num?)?.toDouble() ?? (schedule?.wwWeight ?? 20.0);
-    double ptWeight = (selectedOffering['pt_weight'] as num?)?.toDouble() ?? (schedule?.ptWeight ?? 50.0);
-    double exWeight = (selectedOffering['ex_weight'] as num?)?.toDouble() ?? (schedule?.exWeight ?? 30.0);
+    double wwWeight = (selectedOffering['ww_weight'] as num?)?.toDouble() ?? (schedule?.wwWeight ?? 0.0);
+    double ptWeight = (selectedOffering['pt_weight'] as num?)?.toDouble() ?? (schedule?.ptWeight ?? 0.0);
+    double exWeight = (selectedOffering['ex_weight'] as num?)?.toDouble() ?? (schedule?.exWeight ?? 0.0);
 
     final roomCtrl = TextEditingController(text: schedule?.room ?? '');
     String selectedDay = schedule?.dayOfWeek ?? 'Monday';
@@ -849,9 +849,9 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
                                 selectedOfferingId = selectedOffering['id']?.toString() ?? '';
                                 selectedSectionId = selectedOffering['section_id']?.toString() ?? selectedOfferingId;
                                 selectedSectionName = selectedOffering['section_name']?.toString() ?? '';
-                                wwWeight = (selectedOffering['ww_weight'] as num?)?.toDouble() ?? 20.0;
-                                ptWeight = (selectedOffering['pt_weight'] as num?)?.toDouble() ?? 50.0;
-                                exWeight = (selectedOffering['ex_weight'] as num?)?.toDouble() ?? 30.0;
+                                wwWeight = (selectedOffering['ww_weight'] as num?)?.toDouble() ?? 0.0;
+                                ptWeight = (selectedOffering['pt_weight'] as num?)?.toDouble() ?? 0.0;
+                                exWeight = (selectedOffering['ex_weight'] as num?)?.toDouble() ?? 0.0;
                                 clashErrorMessage = null;
                               });
                             },
@@ -887,9 +887,9 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
                                 );
                                 selectedSectionId = selectedOffering['section_id']?.toString() ?? val;
                                 selectedSectionName = selectedOffering['section_name']?.toString() ?? 'Section';
-                                wwWeight = (selectedOffering['ww_weight'] as num?)?.toDouble() ?? 20.0;
-                                ptWeight = (selectedOffering['pt_weight'] as num?)?.toDouble() ?? 50.0;
-                                exWeight = (selectedOffering['ex_weight'] as num?)?.toDouble() ?? 30.0;
+                                wwWeight = (selectedOffering['ww_weight'] as num?)?.toDouble() ?? 0.0;
+                                ptWeight = (selectedOffering['pt_weight'] as num?)?.toDouble() ?? 0.0;
+                                exWeight = (selectedOffering['ex_weight'] as num?)?.toDouble() ?? 0.0;
                                 clashErrorMessage = null;
                               });
                             },

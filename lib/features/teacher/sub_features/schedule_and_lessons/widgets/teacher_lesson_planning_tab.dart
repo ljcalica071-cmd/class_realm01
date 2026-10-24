@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:class_realm/core/theme/app_theme.dart';
 import 'package:class_realm/models/academic_models.dart';
 import 'package:class_realm/shared/widgets/shared_widgets.dart';
+import 'package:class_realm/features/teacher/sub_features/schedule_and_lessons/widgets/generate_lesson_plan_modal.dart';
+import 'package:class_realm/core/services/gemini_service.dart';
 
 class TeacherLessonPlanningTab extends StatefulWidget {
   final List<LessonPlanModel> lessonPlans;
@@ -19,6 +21,51 @@ class TeacherLessonPlanningTab extends StatefulWidget {
 }
 
 class _TeacherLessonPlanningTabState extends State<TeacherLessonPlanningTab> {
+  void _openGenerateModal() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => GenerateLessonPlanModal(
+        onGenerate: (subject, topic, gradeLevel, duration) async {
+          final result = await GeminiService.instance.generateLessonPlan(
+            subject: subject,
+            topic: topic,
+            gradeLevel: gradeLevel,
+            duration: duration,
+          );
+          
+          if (!mounted) return;
+          
+          if (result != null && !result.startsWith('Error')) {
+            // Ideally save to Supabase here, but for now we show a dialog
+            showDialog(
+              context: context,
+              builder: (ctx) => AlertDialog(
+                title: Text('Generated Lesson Plan for $topic'),
+                content: SingleChildScrollView(
+                  child: Text(result),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    child: const Text('Close'),
+                  ),
+                ],
+              ),
+            );
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(result ?? 'Unknown error occurred.')),
+            );
+          }
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -37,15 +84,15 @@ class _TeacherLessonPlanningTabState extends State<TeacherLessonPlanningTab> {
               AppButton.primary(
                 label: 'Generate New Lesson Plan',
                 icon: Icons.auto_awesome,
-                onPressed: () {
-                  // TO DO: AI Lesson Generator API implementation
-                },
+                onPressed: _openGenerateModal,
               ),
             ],
           ),
           const SizedBox(height: 16),
           Expanded(
-            child: ListView.separated(
+            child: widget.lessonPlans.isEmpty
+                ? const Center(child: Text("No lesson plans generated yet. Click the button above to start."))
+                : ListView.separated(
               itemCount: widget.lessonPlans.length,
               separatorBuilder: (_, _) => const SizedBox(height: 12),
               itemBuilder: (ctx, i) {

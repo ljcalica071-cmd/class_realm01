@@ -61,6 +61,8 @@ dependencies:
   lottie: ^3.6.1
   flutter_web_plugins:
     sdk: flutter
+  google_generative_ai: ^0.4.7
+  archive: any
 dev_dependencies:
   flutter_test:
     sdk: flutter

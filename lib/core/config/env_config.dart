@@ -31,5 +31,7 @@ class EnvConfig {
 
   static String get firebaseServiceAccountEmail => dotenv.env['FIREBASE_SERVICE_ACCOUNT_EMAIL'] ?? '';
   static String get firebaseServiceAccountPrivateKey => dotenv.env['FIREBASE_SERVICE_ACCOUNT_PRIVATE_KEY'] ?? '';
+  
+  static String get geminiApiKey => dotenv.env['GEMINI_API_KEY'] ?? '';
 }
 

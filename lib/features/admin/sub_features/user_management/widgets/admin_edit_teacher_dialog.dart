@@ -9,6 +9,9 @@ import 'package:class_realm/widgets/common/app_modals.dart';
 import 'package:class_realm/widgets/common/app_text_field.dart';
 import 'package:class_realm/widgets/common/app_date_picker_field.dart';
 
+import 'package:class_realm/core/theme/app_theme.dart';
+import 'package:class_realm/features/admin/sub_features/user_management/widgets/admin_teacher_recovery_dialog.dart';
+
 class AdminEditTeacherDialog extends StatefulWidget {
   final UserModel teacher;
   final VoidCallback onTeacherUpdated;
@@ -285,6 +288,69 @@ class _AdminEditTeacherDialogState extends State<AdminEditTeacherDialog> {
                         ),
                       ),
                     ],
+                  ),
+                  const SizedBox(height: 24),
+                  
+                  // Security & Credentials
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.error.withValues(alpha: 0.05),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: theme.colorScheme.error.withValues(alpha: 0.2)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Security & Credentials',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                            color: theme.colorScheme.error,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: AppButton.outline(
+                                label: 'Update Email Only',
+                                icon: LucideIcons.mail,
+                                onPressed: _isSaving ? null : () async {
+                                  final success = await AdminTeacherRecoveryDialog.show(
+                                    context, 
+                                    widget.teacher,
+                                    isEmailUpdateOnly: true,
+                                  );
+                                  if (success == true && mounted) {
+                                    Navigator.pop(context, true);
+                                  }
+                                },
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: AppButton.primary(
+                                label: 'Reset & Recover Account',
+                                icon: LucideIcons.key,
+                                backgroundColor: AppTheme.catRed,
+                                onPressed: _isSaving ? null : () async {
+                                  final success = await AdminTeacherRecoveryDialog.show(
+                                    context, 
+                                    widget.teacher,
+                                    isEmailUpdateOnly: false,
+                                  );
+                                  if (success == true && mounted) {
+                                    Navigator.pop(context, true);
+                                  }
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                   const SizedBox(height: 24),
 

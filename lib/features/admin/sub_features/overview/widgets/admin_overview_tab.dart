@@ -7,6 +7,7 @@ import 'package:class_realm/data/repositories/admin_repository.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/core/services/rate_limit_service.dart';
 import 'package:loading_animation_widget/loading_animation_widget.dart';
+import 'package:class_realm/shared/widgets/shimmer_loading.dart';
 
 class AdminOverviewTab extends StatefulWidget {
   final List<UserModel> teachers;
@@ -649,62 +650,91 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
             ),
 
           // 4 REFINED SUMMARY KPI CARDS
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final columns = constraints.maxWidth >= 1050
-                  ? 4
-                  : constraints.maxWidth >= 600
-                      ? 2
-                      : 1;
+          if (_isLoadingKpis)
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final columns = constraints.maxWidth >= 1050
+                    ? 4
+                    : constraints.maxWidth >= 600
+                        ? 2
+                        : 1;
 
-              return GridView.count(
-                crossAxisCount: columns,
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                crossAxisSpacing: 16,
-                mainAxisSpacing: 16,
-                childAspectRatio: columns == 1 ? 2.8 : 1.6,
-                children: [
-                  // Card 1: Teachers
-                  _buildKpiCard(
-                    title: 'Total Teachers',
-                    value: '$activeTeachers / $totalTeachers',
-                    subtext: 'Active / Total Teachers',
-                    icon: Icons.person_pin,
-                    color: theme.colorScheme.primary,
-                  ),
-                  // Card 2: Students
-                  _buildKpiCard(
-                    title: 'Total Students',
-                    value: '$activeStudents / $totalStudents',
-                    subtext: 'Active / Total Students',
-                    icon: Icons.groups_rounded,
-                    color: theme.colorScheme.primary,
-                  ),
-                  // Card 3: Parents
-                  _buildKpiCard(
-                    title: 'Total Parents',
-                    value: '$activeParents / $totalParents',
-                    subtext: 'Active / Total Parents',
-                    icon: Icons.family_restroom_rounded,
-                    color: theme.colorScheme.primary,
-                  ),
-                  // Card 4: Pending First Login
-                  _buildKpiCard(
-                    title: 'Pending First Login',
-                    value: '$pendingTotal',
-                    subtext: 'Tr: $pendingTr | St: $pendingSt | Pt: $pendingPt',
-                    icon: Icons.lock_clock_outlined,
-                    color: AppTheme.catOrange,
-                  ),
-                ],
-              );
-            },
-          ),
+                return GridView.count(
+                  crossAxisCount: columns,
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  crossAxisSpacing: 16,
+                  mainAxisSpacing: 16,
+                  childAspectRatio: columns == 1 ? 2.8 : 1.6,
+                  children: const [
+                    ShimmerKpiCard(),
+                    ShimmerKpiCard(),
+                    ShimmerKpiCard(),
+                    ShimmerKpiCard(),
+                  ],
+                );
+              },
+            )
+          else
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final columns = constraints.maxWidth >= 1050
+                    ? 4
+                    : constraints.maxWidth >= 600
+                        ? 2
+                        : 1;
+
+                return GridView.count(
+                  crossAxisCount: columns,
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  crossAxisSpacing: 16,
+                  mainAxisSpacing: 16,
+                  childAspectRatio: columns == 1 ? 2.8 : 1.6,
+                  children: [
+                    // Card 1: Teachers
+                    _buildKpiCard(
+                      title: 'Total Teachers',
+                      value: '$activeTeachers / $totalTeachers',
+                      subtext: 'Active / Total Teachers',
+                      icon: Icons.person_pin,
+                      color: theme.colorScheme.primary,
+                    ),
+                    // Card 2: Students
+                    _buildKpiCard(
+                      title: 'Total Students',
+                      value: '$activeStudents / $totalStudents',
+                      subtext: 'Active / Total Students',
+                      icon: Icons.groups_rounded,
+                      color: theme.colorScheme.primary,
+                    ),
+                    // Card 3: Parents
+                    _buildKpiCard(
+                      title: 'Total Parents',
+                      value: '$activeParents / $totalParents',
+                      subtext: 'Active / Total Parents',
+                      icon: Icons.family_restroom_rounded,
+                      color: theme.colorScheme.primary,
+                    ),
+                    // Card 4: Pending First Login
+                    _buildKpiCard(
+                      title: 'Pending First Login',
+                      value: '$pendingTotal',
+                      subtext: 'Tr: $pendingTr | St: $pendingSt | Pt: $pendingPt',
+                      icon: Icons.lock_clock_outlined,
+                      color: AppTheme.catOrange,
+                    ),
+                  ],
+                );
+              },
+            ),
           const SizedBox(height: 28),
 
           // SCHOOL YEAR CONFIGURATION & ARCHIVING CARD
-          Container(
+          if (_isLoadingSchoolYears)
+            const ShimmerAcademicCard()
+          else
+            Container(
             padding: const EdgeInsets.all(22),
             decoration: BoxDecoration(
               color: isDark ? theme.colorScheme.surface : Colors.white,
