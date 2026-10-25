@@ -16,6 +16,7 @@ import 'package:class_realm/data/repositories/supabase_student_repository.dart';
 import 'package:class_realm/data/repositories/supabase_parent_repository.dart';
 import 'package:class_realm/core/services/local_storage_service.dart';
 import 'package:class_realm/core/utils/parent_credential_helper.dart';
+import 'package:class_realm/shared/widgets/shimmer_loading.dart';
 
 class TeacherParentManagementTab extends StatefulWidget {
   final List<UserModel>? parents;
@@ -616,13 +617,15 @@ class _TeacherParentManagementTabState
 
                 // Table Container
                 Expanded(
-                  child: Stack(
-                    children: [
-                      Container(
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.surface,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: tableBorderColor),
+                  child: (_isLoading && _activeParents.isEmpty && _archivedParents.isEmpty)
+                      ? const ShimmerManagementTable(rowCount: 8)
+                      : Stack(
+                          children: [
+                            Container(
+                              decoration: BoxDecoration(
+                                color: theme.colorScheme.surface,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: tableBorderColor),
                           boxShadow: [
                             BoxShadow(
                               color: Colors.black.withValues(alpha: 0.03),

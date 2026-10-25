@@ -8,7 +8,7 @@ import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/data/repositories/supabase_schedule_repository.dart';
 import 'package:class_realm/data/repositories/subject_repository.dart';
 import 'package:class_realm/features/teacher/widgets/timetable_grid_widget.dart';
-import 'package:loading_animation_widget/loading_animation_widget.dart';
+import 'package:class_realm/shared/widgets/shimmer_loading.dart';
 
 class TeacherScheduleTab extends StatefulWidget {
   const TeacherScheduleTab({super.key});
@@ -319,10 +319,57 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
           // Body Content (Timetable Grid or List View)
           Expanded(
             child: _isLoading
-                ? Center(
-                    child: LoadingAnimationWidget.staggeredDotsWave(
-                      color: theme.colorScheme.primary,
-                      size: 40,
+                ? ShimmerLoading(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.surface,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: theme.colorScheme.onSurface.withValues(alpha: 0.1),
+                        ),
+                      ),
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        children: [
+                          Row(
+                            children: const [
+                              ShimmerBox(width: 80, height: 32, borderRadius: 6),
+                              SizedBox(width: 12),
+                              Expanded(child: ShimmerBox(height: 32, borderRadius: 6)),
+                              SizedBox(width: 12),
+                              Expanded(child: ShimmerBox(height: 32, borderRadius: 6)),
+                              SizedBox(width: 12),
+                              Expanded(child: ShimmerBox(height: 32, borderRadius: 6)),
+                              SizedBox(width: 12),
+                              Expanded(child: ShimmerBox(height: 32, borderRadius: 6)),
+                              SizedBox(width: 12),
+                              Expanded(child: ShimmerBox(height: 32, borderRadius: 6)),
+                            ],
+                          ),
+                          const SizedBox(height: 16),
+                          Expanded(
+                            child: ListView.separated(
+                              itemCount: 6,
+                              separatorBuilder: (_, _) => const SizedBox(height: 12),
+                              itemBuilder: (_, _) => Row(
+                                children: const [
+                                  ShimmerBox(width: 80, height: 48, borderRadius: 8),
+                                  SizedBox(width: 12),
+                                  Expanded(child: ShimmerBox(height: 48, borderRadius: 8)),
+                                  SizedBox(width: 12),
+                                  Expanded(child: ShimmerBox(height: 48, borderRadius: 8)),
+                                  SizedBox(width: 12),
+                                  Expanded(child: ShimmerBox(height: 48, borderRadius: 8)),
+                                  SizedBox(width: 12),
+                                  Expanded(child: ShimmerBox(height: 48, borderRadius: 8)),
+                                  SizedBox(width: 12),
+                                  Expanded(child: ShimmerBox(height: 48, borderRadius: 8)),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   )
                 : _liveSchedules.isEmpty

@@ -150,22 +150,30 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
       records.map((r) => r.toJson()).toList(),
     );
 
-    // 2. Pure Dart Supabase Direct Upsert
+    // 2. Pure Dart Supabase Direct Save
     try {
-      final rowsToUpsert = records.map((r) => {
-        'student_id': r.studentId,
-        'subject_offering_id': subjectOfferingId,
-        'attendance_date': dateStr,
-        'status': r.status.name,
-        'remarks': r.remarks,
-        'recorded_by': user?.uid,
-      }).toList();
+      if (records.isNotEmpty) {
+        // Since we might not have a composite unique constraint explicitly setup yet,
+        // we can safely delete existing records for these students on this date and re-insert.
+        final studentIds = records.map((r) => r.studentId).toList();
+        
+        await _client
+            .from('attendance_records')
+            .delete()
+            .eq('subject_offering_id', subjectOfferingId)
+            .eq('attendance_date', dateStr)
+            .inFilter('student_id', studentIds);
 
-      if (rowsToUpsert.isNotEmpty) {
-        await _client.from('attendance_records').upsert(
-          rowsToUpsert,
-          onConflict: 'student_id,subject_offering_id,attendance_date',
-        );
+        final rowsToInsert = records.map((r) => {
+          'student_id': r.studentId,
+          'subject_offering_id': subjectOfferingId,
+          'attendance_date': dateStr,
+          'status': r.status.name,
+          'remarks': r.remarks,
+          'recorded_by': user?.uid,
+        }).toList();
+
+        await _client.from('attendance_records').insert(rowsToInsert);
       }
     } catch (e) {
       debugPrint('Pure Dart attendance save offline fallback, queuing: $e');

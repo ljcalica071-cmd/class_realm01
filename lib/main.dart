@@ -310,7 +310,7 @@ class _ClassRealmAppState extends State<ClassRealmApp> {
                   right: 0,
                   child: GlobalTopLoadingBar(),
                 ),
-                if (!_isBootstrapped)
+                if (!_isBootstrapped && !widget.isWarmBoot)
                   Positioned.fill(
                     child: AppLifecycleLoadingScreen(
                       initializationTask: _bootstrapClassRealmServices,

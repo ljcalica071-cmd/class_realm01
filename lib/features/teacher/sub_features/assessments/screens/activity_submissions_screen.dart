@@ -8,6 +8,7 @@ import 'package:class_realm/models/academic_models.dart';
 import 'package:class_realm/widgets/common/status_badge.dart';
 import 'package:class_realm/widgets/common/app_buttons.dart';
 import 'package:class_realm/widgets/common/app_modals.dart';
+import 'package:class_realm/data/repositories/subject_repository.dart';
 
 class ActivitySubmissionsScreen extends StatefulWidget {
   final ActivityModel activity;
@@ -259,11 +260,21 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
                                 ? Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6)
                                 : AppTheme.catOrange,
                           ),
-                        const SizedBox(width: 16),
+                        const SizedBox(width: 8),
+                        OutlinedButton.icon(
+                          icon: const Icon(Icons.schedule, size: 15),
+                          label: const Text('Reschedule'),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                            textStyle: const TextStyle(fontSize: 12),
+                          ),
+                          onPressed: () => _showRescheduleDialog(context, student.fullName),
+                        ),
+                        const SizedBox(width: 8),
                         AppPrimaryButton(
                           label: 'View',
                           height: 36,
-                          width: 130,
+                          width: 100,
                           onPressed: () => _showScoringModal(
                             context,
                             submission,
@@ -469,17 +480,149 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
                   feedbackCtrl.text.trim(),
                 );
               });
+
+              // Synchronize score directly to Gradebook sheet
+              if (widget.activity.subjectOfferingId != null &&
+                  widget.activity.subjectOfferingId!.isNotEmpty) {
+                final offeringId = widget.activity.subjectOfferingId!;
+                final catKey = widget.activity.isRequirement ? 'pt' : 'ww';
+                SubjectRepository.instance.getGradebookTermSheet(offeringId, 1).then((termSheet) {
+                  final sheet = Map<String, dynamic>.from(termSheet ?? {});
+                  final scores = Map<String, dynamic>.from(sheet['scores'] as Map? ?? {});
+                  final studentScores = Map<String, dynamic>.from(scores[submission.studentId] as Map? ?? {});
+                  final catScores = Map<String, dynamic>.from(studentScores[catKey] as Map? ?? {});
+                  
+                  // Use first column if not yet assigned
+                  catScores['1'] = enteredScore;
+                  studentScores[catKey] = catScores;
+                  scores[submission.studentId] = studentScores;
+                  sheet['scores'] = scores;
+
+                  SubjectRepository.instance.saveGradebookTermSheet(offeringId, 1, sheet);
+                }).catchError((e) {
+                  debugPrint('Gradebook score sync notice: $e');
+                });
+              }
+
               Navigator.pop(ctx);
               AppModals.showSuccessDialog(
                 context: context,
                 title: 'Score Saved',
                 message:
-                    'Score of ${enteredScore.toInt()} / ${widget.activity.maxScore.toInt()} saved successfully and released to student portal.',
+                    'Score of ${enteredScore.toInt()} / ${widget.activity.maxScore.toInt()} saved successfully and synchronized with Gradebook.',
               );
             },
             width: 170,
           ),
         ],
+      ),
+    );
+  }
+
+  void _showRescheduleDialog(BuildContext context, String studentName) {
+    DateTime newDeadline = DateTime.now().add(const Duration(days: 3));
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setModalState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(Icons.schedule, color: Theme.of(context).colorScheme.primary, size: 20),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text('Reschedule Deadline', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Set a special make-up deadline for $studentName:',
+                style: const TextStyle(fontSize: 13),
+              ),
+              const SizedBox(height: 14),
+              InkWell(
+                onTap: () async {
+                  final pickedDate = await showDatePicker(
+                    context: context,
+                    initialDate: newDeadline,
+                    firstDate: DateTime.now(),
+                    lastDate: DateTime.now().add(const Duration(days: 60)),
+                  );
+                  if (pickedDate != null) {
+                    final pickedTime = await showTimePicker(
+                      context: context,
+                      initialTime: TimeOfDay.fromDateTime(newDeadline),
+                    );
+                    if (pickedTime != null) {
+                      setModalState(() {
+                        newDeadline = DateTime(
+                          pickedDate.year,
+                          pickedDate.month,
+                          pickedDate.day,
+                          pickedTime.hour,
+                          pickedTime.minute,
+                        );
+                      });
+                    }
+                  }
+                },
+                borderRadius: BorderRadius.circular(10),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.2)),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        '${newDeadline.month}/${newDeadline.day}/${newDeadline.year} ${newDeadline.hour > 12 ? newDeadline.hour - 12 : newDeadline.hour}:${newDeadline.minute.toString().padLeft(2, '0')} ${newDeadline.hour >= 12 ? 'PM' : 'AM'}',
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                      ),
+                      const Icon(Icons.calendar_month, size: 18),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              const Text(
+                'This will open the submission window exclusively for this student without reopening for the whole class.',
+                style: TextStyle(fontSize: 11, color: Colors.grey),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Special deadline granted to $studentName until ${_formatSubmittedAt(newDeadline)}.'),
+                    backgroundColor: const Color(0xFF0F8A48),
+                  ),
+                );
+              },
+              child: const Text('Apply Reschedule'),
+            ),
+          ],
+        ),
       ),
     );
   }

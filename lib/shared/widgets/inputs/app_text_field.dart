@@ -64,6 +64,7 @@ class AppTextField extends StatelessWidget {
           style: TextStyle(fontSize: 14, color: theme.colorScheme.onSurface),
           decoration: InputDecoration(
             hintText: hint,
+            errorMaxLines: 3,
             prefixIcon: prefixIcon != null ? Icon(prefixIcon, size: 20, color: theme.colorScheme.onSurface.withValues(alpha: 0.6)) : null,
             suffixIcon: suffixIcon,
             errorBorder: OutlineInputBorder(

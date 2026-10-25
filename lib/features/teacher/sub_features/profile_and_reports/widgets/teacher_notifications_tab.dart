@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:class_realm/models/academic_models.dart';
 import 'package:class_realm/widgets/common/expandable_notification_card.dart';
+import 'package:class_realm/shared/widgets/shimmer_loading.dart';
 
 /// Real-Time Paginated Teacher Notifications Tab (Edge Cases #8, #9, #10)
 /// - Loads 20 items per page with scroll-driven lazy loading
@@ -117,7 +118,12 @@ class _TeacherNotificationsTabState extends State<TeacherNotificationsTab> {
     final theme = Theme.of(context);
 
     if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
+      return ListView.separated(
+        padding: const EdgeInsets.all(24),
+        itemCount: 5,
+        separatorBuilder: (_, _) => const SizedBox(height: 12),
+        itemBuilder: (_, _) => const ShimmerBroadcastItem(),
+      );
     }
 
     if (_notifications.isEmpty) {
@@ -191,8 +197,8 @@ class _TeacherNotificationsTabState extends State<TeacherNotificationsTab> {
         itemBuilder: (context, index) {
           if (index == _notifications.length) {
             return const Padding(
-              padding: EdgeInsets.all(16),
-              child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+              padding: EdgeInsets.symmetric(vertical: 8),
+              child: ShimmerBroadcastItem(),
             );
           }
           final notification = _notifications[index];

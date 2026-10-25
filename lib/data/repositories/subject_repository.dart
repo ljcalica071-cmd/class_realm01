@@ -1033,7 +1033,7 @@ class SubjectRepository {
     final sy = await _client
         .from('school_years')
         .select('id')
-        .eq('year_name', schoolYear)
+        .eq('school_year', schoolYear)
         .maybeSingle();
     final schoolYearId = sy?['id']?.toString() ?? 'sy_default';
 
@@ -1041,8 +1041,10 @@ class SubjectRepository {
         .from('terms')
         .select('id')
         .eq('school_year_id', schoolYearId)
+        .order('term_number')
+        .limit(1)
         .maybeSingle();
-    final termId = termRow?['id']?.toString() ?? 'term_default';
+    final termId = termRow?['id']?.toString() ?? '1a66dbf9-7395-42df-960f-4e22c07e20d4';
 
     final resolvedTermBlock = termsTaught == 3
         ? '1ST, 2ND, 3RD'

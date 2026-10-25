@@ -564,8 +564,8 @@ class AuthRepository {
           final lastActiveTime = DateTime.parse(old['last_active_at'] ?? now.toIso8601String());
           final computedDuration = lastActiveTime.difference(loginTime).inSeconds.abs();
           
-          if (computedDuration < 2) {
-             // If they immediately refreshed (creating duplicate), delete the tiny ghost
+          if (computedDuration < 30) {
+             // Treat anything under 30 seconds as an accidental double-click / immediate refresh ghost session
              await _supabaseClient.from('user_session_logs').delete().eq('id', old['id']);
           } else {
              await _supabaseClient.from('user_session_logs').update({

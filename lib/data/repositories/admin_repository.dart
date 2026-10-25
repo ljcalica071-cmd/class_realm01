@@ -447,6 +447,37 @@ class AdminRepository {
     DateTime? endDate,
   }) async {
     try {
+      // 1. Proactively reconcile stale active sessions (no heartbeat in > 3 minutes)
+      final staleCutoff = DateTime.now().toUtc().subtract(const Duration(minutes: 3));
+      try {
+        final staleSessions = await _client
+            .from('user_session_logs')
+            .select('id, login_at, last_active_at')
+            .eq('is_active', true)
+            .lt('last_active_at', staleCutoff.toIso8601String());
+
+        for (final stale in (staleSessions as List)) {
+          final sId = stale['id']?.toString();
+          final lastActiveStr = stale['last_active_at']?.toString();
+          final loginAt = stale['login_at'] != null ? DateTime.tryParse(stale['login_at'].toString()) : null;
+          final lastActiveDt = lastActiveStr != null ? DateTime.tryParse(lastActiveStr) : null;
+          final dur = (loginAt != null && lastActiveDt != null)
+              ? lastActiveDt.difference(loginAt).inSeconds
+              : 0;
+
+          if (sId != null) {
+            await _client.from('user_session_logs').update({
+              'is_active': false,
+              'logout_at': lastActiveStr ?? DateTime.now().toUtc().toIso8601String(),
+              'logout_reason': 'terminated',
+              'duration_seconds': dur >= 0 ? dur : 0,
+            }).eq('id', sId);
+          }
+        }
+      } catch (staleErr) {
+        debugPrint('AdminRepository stale session reconcile notice: $staleErr');
+      }
+
       var filterQuery = _client
           .from('user_session_logs')
           .select()
@@ -489,14 +520,23 @@ class AdminRepository {
         nameMap[id] = raw.isNotEmpty ? '$prefix$raw' : 'Teacher';
       }
 
-      return rawLogs
+      final logs = rawLogs
         .map((r) {
           final uId = r['user_id']?.toString() ?? '';
           final teacherName = nameMap[uId] ?? 'Teacher';
           return UserSessionLog.fromJson(r as Map<String, dynamic>, teacherName: teacherName);
         })
-        .where((log) => log.isActive || log.durationSeconds > 0) // Hide zero-second dead sessions
+        .where((log) => log.isActive || log.durationSeconds > 30) // Hide micro/ghost sessions under 30 seconds
         .toList();
+
+      // Prioritize ongoing "Online Now" sessions at the very top (unahan), followed by latest sessions
+      logs.sort((a, b) {
+        if (a.isActive && !b.isActive) return -1;
+        if (!a.isActive && b.isActive) return 1;
+        return b.loginAt.compareTo(a.loginAt);
+      });
+
+      return logs;
     } catch (e) {
       debugPrint('AdminRepository getTeacherSessionLogs error: $e');
       return [];

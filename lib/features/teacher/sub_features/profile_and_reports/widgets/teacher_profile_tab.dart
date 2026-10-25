@@ -3,6 +3,7 @@ import 'package:class_realm/core/theme/app_theme.dart';
 import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/utils/formatters.dart';
+import 'package:class_realm/shared/widgets/shimmer_loading.dart';
 import 'package:flutter/services.dart';
 
 class TeacherProfileTab extends StatefulWidget {
@@ -15,6 +16,7 @@ class TeacherProfileTab extends StatefulWidget {
 class _TeacherProfileTabState extends State<TeacherProfileTab> {
   late UserModel _teacher;
   bool _isEditing = false;
+  final bool _isLoading = false;
 
   late TextEditingController _subjectSpecializationCtrl;
   late TextEditingController _facebookLinkCtrl;
@@ -89,6 +91,10 @@ class _TeacherProfileTabState extends State<TeacherProfileTab> {
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const ShimmerProfileSkeleton();
+    }
+
     final theme = Theme.of(context);
     
     // Facebook-style layout usually has a light grey background

@@ -5,7 +5,7 @@ import 'package:class_realm/models/academic_models.dart';
 import 'teacher_classwork_repository.dart';
 
 class SupabaseTeacherClassworkRepository implements TeacherClassworkRepository {
-  static const int maxFileSizeBytes = 5 * 1024 * 1024; // 5 MiB = 5,242,880 bytes
+  static const int maxFileSizeBytes = 10 * 1024 * 1024; // 10 MiB = 10,485,760 bytes
   static const List<String> allowedExtensions = ['.pdf', '.doc', '.docx'];
 
   final SupabaseClient _client;
@@ -25,7 +25,7 @@ class SupabaseTeacherClassworkRepository implements TeacherClassworkRepository {
   void _validateFile(String fileName, Uint8List fileBytes) {
     if (fileBytes.lengthInBytes > maxFileSizeBytes) {
       throw ArgumentError(
-        'File size exceeds the 5 MiB limit (${fileBytes.lengthInBytes} bytes > $maxFileSizeBytes bytes).',
+        'File size exceeds the 10 MiB limit (${fileBytes.lengthInBytes} bytes > $maxFileSizeBytes bytes).',
       );
     }
     final ext = _getFileExtension(fileName);

@@ -13,6 +13,7 @@ import 'package:class_realm/widgets/common/app_buttons.dart';
 import 'package:class_realm/widgets/common/app_modals.dart';
 import 'package:class_realm/widgets/common/app_text_field.dart';
 import 'package:class_realm/widgets/common/app_date_picker_field.dart';
+import 'package:class_realm/features/teacher/sub_features/assessments/quiz_exam_authoring/quiz_exam_authoring.dart';
 
 class CreateAssessmentFlowDialog extends StatefulWidget {
   final VoidCallback onAssessmentCreated;
@@ -25,22 +26,22 @@ class CreateAssessmentFlowDialog extends StatefulWidget {
     required this.onAssessmentCreated,
     this.initialSection = '',
     this.initialIsExam = false,
-    this.skipTypeSelection = false,
+    this.skipTypeSelection = true,
   });
 
   static Future<void> show(
     BuildContext context, {
     required VoidCallback onAssessmentCreated,
-    String initialSection = '',
+    String? initialSection,
     bool initialIsExam = false,
-    bool skipTypeSelection = false,
+    bool skipTypeSelection = true,
   }) {
     return showDialog(
       context: context,
       barrierDismissible: false,
       builder: (ctx) => CreateAssessmentFlowDialog(
         onAssessmentCreated: onAssessmentCreated,
-        initialSection: initialSection,
+        initialSection: initialSection ?? '',
         initialIsExam: initialIsExam,
         skipTypeSelection: skipTypeSelection,
       ),
@@ -55,9 +56,9 @@ class CreateAssessmentFlowDialog extends StatefulWidget {
 class _CreateAssessmentFlowDialogState
     extends State<CreateAssessmentFlowDialog> {
   // Steps:
-  // 0: Selection of Assessment Type (Quiz vs Periodical Examination)
   // 1: Configure & Add Questions / Details
-  int _currentStep = 0;
+  // 3: Question Builder
+  int _currentStep = 1;
   bool _isExam = false;
   String _examCategory = 'ST1';
   final Map<QuestionType, int> _questionCounts = {
@@ -85,8 +86,19 @@ class _CreateAssessmentFlowDialogState
   final Set<String> _selectedSections = {};
   final Map<String, DateTime> _sectionDeadlines = {};
   List<String> _availableSections = [];
+  List<Map<String, dynamic>> _teacherSubjects = [];
   String _subjectName = '';
   bool _isLoadingSections = true;
+
+  bool get _isZeroExamSubject {
+    if (_teacherSubjects.isEmpty) return false;
+    final match = _teacherSubjects.firstWhere(
+      (s) => _selectedSections.contains(s['section_name']),
+      orElse: () => _teacherSubjects.first,
+    );
+    final exWeight = (match['ex_weight'] as num?)?.toDouble() ?? 30.0;
+    return exWeight == 0.0;
+  }
 
   // Questions Builder
   final List<QuestionModel> _questions = [];
@@ -130,6 +142,7 @@ class _CreateAssessmentFlowDialogState
           : '';
       if (!mounted) return;
       setState(() {
+        _teacherSubjects = subjects;
         _availableSections = sections;
         _subjectName = sub;
         _isLoadingSections = false;
@@ -169,34 +182,42 @@ class _CreateAssessmentFlowDialogState
   }
 
   void _selectAssessmentType(bool isExam) {
+    if (isExam && _isZeroExamSubject) {
+      AppModals.showErrorDialog(
+        context: context,
+        title: 'Zero-Exam Subject',
+        message:
+            'This subject has no Examination component under DepEd Order No. 015, s. 2026. Initial Grades are computed 100% from Written Works and Performance Tasks.',
+      );
+      return;
+    }
     setState(() {
       _isExam = isExam;
       _currentStep = 1;
       _durationCtrl.text = isExam ? '60' : '30';
+      _titleCtrl.text = '';
+      _descCtrl.text = '';
       if (_isExam) {
         _setExamTitle('ST1');
-        _descCtrl.text = 'Comprehensive examination covering General Mathematics core competencies.';
-      } else {
-        _titleCtrl.text = 'Quiz: Rational Functions & Domain/Range';
-        _descCtrl.text =
-            'Formative quiz on composite functions and asymptote evaluations.';
       }
     });
   }
 
   Future<void> _selectAssessmentDeadline(String section) async {
     final current = _sectionDeadlines[section] ?? _scheduleDate;
+    final now = DateTime.now();
+    final initial = current.isBefore(now) ? now.add(const Duration(hours: 1)) : current;
     final date = await showAppDatePickerDialog(
       context,
-      initialDate: current,
-      firstDate: DateTime.now().subtract(const Duration(days: 1)),
+      initialDate: initial,
+      firstDate: DateTime(now.year, now.month, now.day),
       lastDate: DateTime(2100),
       title: 'Select Assessment Deadline',
     );
     if (!mounted || date == null) return;
     final time = await showTimePicker(
       context: context,
-      initialTime: TimeOfDay.fromDateTime(current),
+      initialTime: TimeOfDay.fromDateTime(initial),
     );
     if (!mounted || time == null) return;
     setState(() {
@@ -426,6 +447,43 @@ class _CreateAssessmentFlowDialogState
       return;
     }
 
+    // Strict EX (ST1, ST2, TE single slot) and WW (10 limit) validation
+    if (_isExam) {
+      if (_isZeroExamSubject) {
+        AppModals.showErrorDialog(
+          context: context,
+          title: 'Zero-Exam Subject',
+          message:
+              'This subject has no Examination component under DepEd Order No. 015, s. 2026. Initial Grades are computed 100% from Written Works and Performance Tasks.',
+        );
+        return;
+      }
+      final existingExams = MockDatabase.instance.quizzesAndExams.where(
+        (a) => a.isExam && a.title.contains(_examCategory),
+      );
+      if (existingExams.isNotEmpty) {
+        AppModals.showErrorDialog(
+          context: context,
+          title: 'Exam Slot Occupied',
+          message:
+              'You already have an existing $_examCategory scheduled for this subject. In accordance with DepEd guidelines, only one ST1, one ST2, and one TE are allowed per term.',
+        );
+        return;
+      }
+    } else {
+      final existingQuizzes = MockDatabase.instance.quizzesAndExams.where((a) => !a.isExam).length;
+      final existingActivities = MockDatabase.instance.activities.where((a) => !a.isRequirement).length;
+      if (existingQuizzes + existingActivities >= 10) {
+        AppModals.showErrorDialog(
+          context: context,
+          title: 'Maximum Limit Reached',
+          message:
+              'Maximum limit reached: You have already assigned all 10 WW columns for this Term.',
+        );
+        return;
+      }
+    }
+
     final newAssessment = QuizOrExamModel(
       id: '${_isExam ? "exam" : "quiz"}_${DateTime.now().millisecondsSinceEpoch}',
       title: _titleCtrl.text.trim(),
@@ -444,6 +502,41 @@ class _CreateAssessmentFlowDialogState
     );
 
     MockDatabase.instance.addQuizOrExam(newAssessment);
+
+    // Synchronize Quiz or Exam HPS into Gradebook sheet for the assigned sections
+    try {
+      final categoryKey = _isExam ? 'ex' : 'ww';
+      final hpsSlotKey = _isExam ? _examCategory.toLowerCase() : '1';
+
+      final user = AuthRepository.instance.currentUser;
+      if (user != null) {
+        SubjectRepository.instance.getTeacherSubjects(user.id).then((offerings) {
+          for (final section in _selectedSections) {
+            final match = offerings.firstWhere(
+              (o) => o['section_name']?.toString() == section,
+              orElse: () => <String, dynamic>{},
+            );
+            final offeringId = match['id']?.toString();
+            if (offeringId != null) {
+              SubjectRepository.instance.getGradebookTermSheet(offeringId, 1).then((termSheet) {
+                final sheet = Map<String, dynamic>.from(termSheet ?? {});
+                final hps = Map<String, dynamic>.from(sheet['hps'] as Map? ?? {});
+                final catMap = Map<String, dynamic>.from(hps[categoryKey] as Map? ?? {});
+
+                catMap[hpsSlotKey] = totalPoints;
+                hps[categoryKey] = catMap;
+                sheet['hps'] = hps;
+
+                SubjectRepository.instance.saveGradebookTermSheet(offeringId, 1, sheet);
+              }).catchError((e) {
+                debugPrint('Assessment HPS sync notice: $e');
+              });
+            }
+          }
+        });
+      }
+    } catch (_) {}
+
     widget.onAssessmentCreated();
     Navigator.of(context).pop();
 
@@ -498,9 +591,7 @@ class _CreateAssessmentFlowDialogState
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          _currentStep == 0
-                              ? 'Create New Assessment'
-                              : _isExam
+                          _isExam
                               ? 'Configure Periodical Examination'
                               : 'Configure Unit Quiz',
                           style: TextStyle(
@@ -510,12 +601,8 @@ class _CreateAssessmentFlowDialogState
                           ),
                         ),
                         Text(
-                          _currentStep == 0
-                              ? 'Choose the assessment category for Senior High School'
-                              : _currentStep == 1
+                          _currentStep == 1
                               ? 'Set title, section, duration, and instructions'
-                              : _currentStep == 2
-                              ? 'Set details and question distribution'
                               : 'Add questions and answer keys',
                           style: TextStyle(
                             fontSize: 12,
@@ -538,9 +625,7 @@ class _CreateAssessmentFlowDialogState
 
             // Content Body
             Expanded(
-              child: _currentStep == 0
-                  ? _buildTypeSelectionView()
-                  : _currentStep == 1
+              child: _currentStep == 1
                   ? _buildBasicDetailsView()
                   : _buildQuestionBuilderView(),
             ),
@@ -559,19 +644,11 @@ class _CreateAssessmentFlowDialogState
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  if (_currentStep > 0)
+                  if (_currentStep == 3)
                     TextButton.icon(
-                      icon: Icon(Icons.arrow_back, size: 16),
-                      label: Text(
-                        _currentStep == 3
-                            ? 'Back to Details'
-                            : 'Back to Type Selection',
-                      ),
-                      onPressed: () => setState(
-                        () => _currentStep = _currentStep == 3
-                            ? 1
-                            : _currentStep - 1,
-                      ),
+                      icon: const Icon(Icons.arrow_back, size: 16),
+                      label: const Text('Back to Details'),
+                      onPressed: () => setState(() => _currentStep = 1),
                     )
                   else
                     const SizedBox.shrink(),
@@ -617,11 +694,89 @@ class _CreateAssessmentFlowDialogState
   }
 
   Widget _buildBasicDetailsView() {
+    final theme = Theme.of(context);
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Upfront AI Generation Card (Prominently placed at the front/top of the modal)
+          Container(
+            margin: const EdgeInsets.only(bottom: 22),
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  AppTheme.catPurple.withValues(alpha: 0.12),
+                  theme.colorScheme.primary.withValues(alpha: 0.08),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: AppTheme.catPurple.withValues(alpha: 0.28)),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: AppTheme.catPurple.withValues(alpha: 0.15),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.auto_awesome, color: AppTheme.catPurple, size: 22),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Text(
+                            _isExam ? 'Generate Examination with Gemini AI' : 'Generate Quiz with Gemini AI',
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                          ),
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: AppTheme.catPurple.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: const Text(
+                              'AI POWERED',
+                              style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.catPurple),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        'Upload syllabus files (.pdf, .docx, .txt) or enter topics to auto-generate questions, choices, and answer keys.',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                ElevatedButton.icon(
+                  icon: const Icon(Icons.auto_awesome, size: 15),
+                  label: const Text('Generate with AI'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.catPurple,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  onPressed: _openAiGeneration,
+                ),
+              ],
+            ),
+          ),
+
           if (_isExam)
             DropdownButtonFormField<String>(
               initialValue: _examCategory,
@@ -648,7 +803,11 @@ class _CreateAssessmentFlowDialogState
               },
             )
           else
-            AppTextField(label: 'Quiz Title', controller: _titleCtrl),
+            AppTextField(
+              label: 'Quiz Title',
+              hint: 'e.g., Short Quiz on Piecewise Functions',
+              controller: _titleCtrl,
+            ),
           const SizedBox(height: 16),
           Row(
             children: [
@@ -897,6 +1056,26 @@ class _CreateAssessmentFlowDialogState
     });
   }
 
+  void _openAiGeneration() {
+    AiGenerationModal.show(
+      context,
+      isExam: _isExam,
+      subjectName: _subjectName,
+      onQuestionsGenerated: (generated) {
+        setState(() {
+          _questions.addAll(generated);
+          _currentStep = 3;
+        });
+        AppModals.showSuccessDialog(
+          context: context,
+          title: 'Questions Generated with Gemini AI',
+          message:
+              '${generated.length} questions were successfully generated. Please review each question, verify answer keys, and adjust points before publishing.',
+        );
+      },
+    );
+  }
+
   Widget _buildQuestionPlanView() {
     final labels = {
       QuestionType.multipleChoice: 'Multiple Choices',
@@ -909,11 +1088,70 @@ class _CreateAssessmentFlowDialogState
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // AI Generation Prompt Card
+          Container(
+            margin: const EdgeInsets.only(bottom: 20),
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  AppTheme.catPurple.withValues(alpha: 0.1),
+                  AppTheme.catBlue.withValues(alpha: 0.08),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppTheme.catPurple.withValues(alpha: 0.3)),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppTheme.catPurple.withValues(alpha: 0.15),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.auto_awesome, color: AppTheme.catPurple, size: 22),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Generate Assessment with Gemini AI',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Upload a reference document (.pdf, .docx, .txt) to automatically create questions grounded on your syllabus.',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 10),
+                ElevatedButton.icon(
+                  icon: const Icon(Icons.auto_awesome, size: 14),
+                  label: const Text('Auto-Generate'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.catPurple,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  onPressed: _openAiGeneration,
+                ),
+              ],
+            ),
+          ),
           Text(
             _isExam
                 ? 'Set Examination Question Distribution'
                 : 'Set Quiz Question Distribution',
-            style: TextStyle(fontSize: 19, fontWeight: FontWeight.bold),
+            style: const TextStyle(fontSize: 19, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 6),
           Text(
@@ -974,212 +1212,6 @@ class _CreateAssessmentFlowDialogState
   }
 
   // ==========================================
-  // STEP 0: TYPE SELECTION (QUIZ VS EXAM)
-  // ==========================================
-  Widget _buildTypeSelectionView() {
-    return Padding(
-      padding: const EdgeInsets.all(32),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Select Assessment Category',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: Theme.of(context).colorScheme.onSurface,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'Quizzes and Examinations follow distinct academic grading weights and timing rules.',
-            style: TextStyle(fontSize: 13, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6)),
-          ),
-          const SizedBox(height: 28),
-
-          Expanded(
-            child: Row(
-              children: [
-                // Option 1: UNIT QUIZ
-                Expanded(
-                  child: _buildTypeCard(
-                    title: 'Unit / Formative Quiz',
-                    badge: 'FORMATIVE (15-20% WEIGHT)',
-                    badgeColor: AppTheme.catBlue.withValues(alpha: 0.1),
-                    badgeTextColor: AppTheme.catBlue,
-                    description: 'Short assessment to evaluate student mastery of specific mathematical competencies, piecewise functions, or subtopics.',
-                    icon: Icons.quiz_outlined,
-                    iconColor: Theme.of(context).colorScheme.primary,
-                    iconBgColor: const Color(0xFFEFF6FF),
-                    features: [
-                      'Typical duration: 15 - 45 mins',
-                      'Rapid formative feedback',
-                      'Multiple choice & short identification',
-                      'Immediate or scheduled score release',
-                    ],
-                    onTap: () => _selectAssessmentType(false),
-                  ),
-                ),
-                const SizedBox(width: 24),
-
-                // Option 2: PERIODICAL EXAMINATION
-                Expanded(
-                  child: _buildTypeCard(
-                    title: 'Quarterly Periodical Examination',
-                    badge: 'SUMMATIVE (30-40% WEIGHT)',
-                    badgeColor: AppTheme.catRed.withValues(alpha: 0.1),
-                    badgeTextColor: AppTheme.catRed,
-                    description: 'Official institutional quarterly or midterm examination. Integrated with answer keys and auto-checking.',
-                    icon: Icons.description_outlined,
-                    iconColor: AppTheme.catRed,
-                    iconBgColor: const Color(0xFFFEF2F2),
-                    features: [
-                      'Typical duration: 60 - 120 mins',
-                      'Requires official schedule date',
-                      'Automated answer key matching',
-                    ],
-                    onTap: () => _selectAssessmentType(true),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTypeCard({
-    required String title,
-    required String badge,
-    required Color badgeColor,
-    required Color badgeTextColor,
-    required String description,
-    required IconData icon,
-    required Color iconColor,
-    required Color iconBgColor,
-    required List<String> features,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
-        padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.12), width: 1.5),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.03),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: iconBgColor,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Icon(icon, color: iconColor, size: 28),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 5,
-                  ),
-                  decoration: BoxDecoration(
-                    color: badgeColor,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    badge,
-                    style: TextStyle(
-                      color: badgeTextColor,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 10,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 18),
-            Text(
-              title,
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: Theme.of(context).colorScheme.onSurface,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              description,
-              style: TextStyle(
-                fontSize: 12,
-                color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
-                height: 1.4,
-              ),
-            ),
-            const SizedBox(height: 16),
-            const Divider(),
-            const SizedBox(height: 12),
-            ...features.map(
-              (f) => Padding(
-                padding: const EdgeInsets.only(bottom: 6),
-                child: Row(
-                  children: [
-                    Icon(Icons.check, size: 14, color: AppTheme.catGreen),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        f,
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: Theme.of(context).colorScheme.onSurface,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const Spacer(),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton(
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: iconColor,
-                  side: BorderSide(color: iconColor.withValues(alpha: 0.5)),
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                ),
-                onPressed: onTap,
-                child: Text(
-                  'Create ${title.split(" ")[0]}',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 13,
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // ==========================================
   // STEP 3: BUILD QUESTIONS
   // ==========================================
   Widget _buildQuestionBuilderView() {
@@ -1219,13 +1251,29 @@ class _CreateAssessmentFlowDialogState
                         color: Theme.of(context).colorScheme.onSurface,
                       ),
                     ),
-                    Text(
-                      'Added: ${_questions.length} question(s)',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
+                    Row(
+                      children: [
+                        ElevatedButton.icon(
+                          icon: const Icon(Icons.auto_awesome, size: 14),
+                          label: const Text('Generate with AI'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppTheme.catPurple,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                          onPressed: _openAiGeneration,
+                        ),
+                        const SizedBox(width: 10),
+                        Text(
+                          'Added: ${_questions.length} question(s)',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),

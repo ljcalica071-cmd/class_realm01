@@ -10,6 +10,7 @@ import 'package:class_realm/shared/widgets/shared_widgets.dart';
 import 'package:class_realm/features/teacher/sub_features/setup/widgets/teacher_classroom_setup_templates.dart';
 import 'package:class_realm/core/theme/subject_palette.dart';
 import 'package:loading_animation_widget/loading_animation_widget.dart';
+import 'package:class_realm/shared/widgets/shimmer_loading.dart';
 
 /// A section the teacher handles for a subject.
 class _ClassSection {
@@ -292,8 +293,12 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
                       ),
                       if (!_isViewingArchived)
                         AppButton.primary(
-                          icon: _showAddForm ? LucideIcons.x : LucideIcons.plus,
-                          label: _showAddForm ? 'Close Form' : 'Add Subject',
+                          icon: _showAddForm
+                              ? LucideIcons.x
+                              : LucideIcons.plus,
+                          label: _showAddForm
+                              ? (_editingSubject != null ? 'Close Edit' : 'Close Form')
+                              : 'Add Subject',
                           onPressed: _handleAddSubjectClick,
                         ),
                     ],
@@ -368,14 +373,22 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
 
           // ── Main Content Area ──
           _isLoadingSubjects
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(48.0),
-                    child: LoadingAnimationWidget.staggeredDotsWave(
-                      color: Theme.of(context).colorScheme.primary,
-                      size: 40,
-                    ),
-                  ),
+              ? LayoutBuilder(
+                  builder: (context, constraints) {
+                    final crossAxisCount = constraints.maxWidth >= 950 ? 2 : 1;
+                    return GridView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: crossAxisCount,
+                        crossAxisSpacing: 16,
+                        mainAxisSpacing: 16,
+                        mainAxisExtent: 340,
+                      ),
+                      itemCount: 4,
+                      itemBuilder: (_, _) => const ShimmerTeacherSubjectCard(),
+                    );
+                  },
                 )
               : _isViewingArchived
               ? _buildArchivedView()
@@ -960,6 +973,7 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
       _st1Weight = subject.st1Weight;
       _st2Weight = subject.st2Weight;
       _teWeight = subject.teWeight;
+      _editingSubject = subject;
       _showAddForm = true;
       _submitted = false;
       _subjectError = null;
@@ -1107,14 +1121,16 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
     final muted = theme.colorScheme.onSurface.withValues(alpha: 0.6);
     final isTotalValid = _isWeightValid;
 
+    final isEditing = _editingSubject != null;
     final templateField = _buildLabeledField(
       label: 'Template',
       field: InkWell(
-        onTap: _showTemplateModal,
+        onTap: isEditing ? null : _showTemplateModal,
         borderRadius: BorderRadius.circular(12),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           decoration: BoxDecoration(
+            color: isEditing ? theme.colorScheme.onSurface.withValues(alpha: 0.04) : null,
             border: Border.all(
               color: theme.colorScheme.outline.withValues(alpha: 0.4),
             ),
@@ -1127,10 +1143,17 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
                 child: Text(
                   _selectedTemplate?.name ?? 'Custom / Manual Entry',
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 13),
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: isEditing ? theme.colorScheme.onSurface.withValues(alpha: 0.6) : null,
+                  ),
                 ),
               ),
-              const Icon(LucideIcons.chevronDown, size: 18),
+              Icon(
+                isEditing ? LucideIcons.lock : LucideIcons.chevronDown,
+                size: isEditing ? 15 : 18,
+                color: isEditing ? theme.colorScheme.primary : null,
+              ),
             ],
           ),
         ),
@@ -1495,25 +1518,71 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
         color: Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: theme.colorScheme.outline.withValues(alpha: 0.3),
+          color: isEditing
+              ? theme.colorScheme.primary.withValues(alpha: 0.5)
+              : theme.colorScheme.outline.withValues(alpha: 0.3),
+          width: isEditing ? 1.5 : 1.0,
         ),
+        boxShadow: isEditing
+            ? [
+                BoxShadow(
+                  color: theme.colorScheme.primary.withValues(alpha: 0.08),
+                  blurRadius: 16,
+                  offset: const Offset(0, 4),
+                ),
+              ]
+            : null,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Text(
-                _editingSubject != null
-                    ? 'Edit Subject & Sections'
-                    : 'Add Subject & Sections',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: theme.colorScheme.onSurface,
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: (isEditing ? theme.colorScheme.primary : theme.colorScheme.secondary)
+                      .withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(
+                  isEditing ? LucideIcons.pencil : LucideIcons.plusCircle,
+                  size: 20,
+                  color: isEditing ? theme.colorScheme.primary : theme.colorScheme.secondary,
                 ),
               ),
-              const Spacer(),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      isEditing
+                          ? 'Edit Subject: ${_editingSubject!.name}'
+                          : 'Add New Subject & Sections',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: theme.colorScheme.onSurface,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      isEditing
+                          ? (isTemplateLocked
+                              ? 'Template-backed: Grade level & sections are editable. Term block editable if 1-term.'
+                              : 'Custom subject: All fields and sections can be edited freely.')
+                          : 'Configure subject details, grading weights, and create sections.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
               IconButton(
                 visualDensity: VisualDensity.compact,
                 icon: const Icon(LucideIcons.x, size: 18),
@@ -2041,10 +2110,10 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
         );
       }
 
+      final isEdit = _editingSubject != null;
       await _loadSubjects();
 
       if (mounted) {
-        final isEdit = _editingSubject != null;
         _resetForm(close: true);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -2053,15 +2122,22 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
                   ? 'Subject and sections updated successfully!'
                   : 'Subject and sections saved successfully!',
             ),
+            backgroundColor: AppTheme.catGreen,
           ),
         );
       }
     } catch (e) {
       debugPrint('Error saving subject: $e');
       if (mounted) {
+        final friendlyMsg = e.toString().contains('PostgrestException') || e.toString().contains('406')
+            ? 'Unable to save subject changes. Please try again.'
+            : 'Failed to save subject: ${e.toString().replaceAll(RegExp(r'PostgrestException.*'), 'Database sync issue. Please try again.')}';
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('Failed to save subject: $e')));
+        ).showSnackBar(SnackBar(
+          content: Text(friendlyMsg),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ));
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);

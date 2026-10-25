@@ -4,6 +4,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:class_realm/core/theme/app_theme.dart';
 import 'package:class_realm/models/attendance_workspace_models.dart';
 import 'package:class_realm/shared/widgets/shared_widgets.dart';
+import 'package:class_realm/shared/widgets/shimmer_loading.dart';
 
 class AttendanceRosterList extends StatefulWidget {
   final List<AttendanceRosterStudent> students;
@@ -65,11 +66,41 @@ class _AttendanceRosterListState extends State<AttendanceRosterList> {
     final theme = Theme.of(context);
 
     if (widget.isLoading) {
-      return Padding(
-        padding: const EdgeInsets.all(40),
-        child: Center(
-          child: CircularProgressIndicator(
-            color: theme.colorScheme.primary,
+      return ShimmerLoading(
+        child: Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surface,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.08),
+            ),
+          ),
+          child: Column(
+            children: List.generate(
+              5,
+              (i) => Padding(
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                child: Row(
+                  children: const [
+                    ShimmerBox(width: 24, height: 14, borderRadius: 4),
+                    SizedBox(width: 14),
+                    ShimmerBox(width: 38, height: 38, borderRadius: 19),
+                    SizedBox(width: 14),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        ShimmerBox(width: 160, height: 14, borderRadius: 4),
+                        SizedBox(height: 6),
+                        ShimmerBox(width: 90, height: 12, borderRadius: 4),
+                      ],
+                    ),
+                    Spacer(),
+                    ShimmerBox(width: 160, height: 36, borderRadius: 8),
+                  ],
+                ),
+              ),
+            ),
           ),
         ),
       );
@@ -379,10 +410,8 @@ class _AttendanceRosterListState extends State<AttendanceRosterList> {
     required AttendanceStatus? currentStatus,
   }) {
     final theme = Theme.of(context);
-    final initials = (student.firstName.isNotEmpty
-            ? student.firstName[0].toUpperCase()
-            : '') +
-        (student.lastName.isNotEmpty ? student.lastName[0].toUpperCase() : '');
+    final initials = (student.lastName.isNotEmpty ? student.lastName[0].toUpperCase() : '') +
+        (student.firstName.isNotEmpty ? student.firstName[0].toUpperCase() : '');
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -420,72 +449,13 @@ class _AttendanceRosterListState extends State<AttendanceRosterList> {
           ),
           const SizedBox(width: 12),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  student.displayName,
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                    color: theme.colorScheme.onSurface,
-                  ),
-                ),
-                Row(
-                  children: [
-                    if (currentStatus == null)
-                      Text(
-                        'Unmarked',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
-                        ),
-                      )
-                    else if (currentStatus == AttendanceStatus.absent &&
-                        (widget.remarks?[student.studentId]?.toLowerCase().contains('auto') == true))
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF6366F1).withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(4),
-                          border: Border.all(
-                            color: const Color(0xFF6366F1).withValues(alpha: 0.25),
-                          ),
-                        ),
-                        child: const Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(LucideIcons.clockAlert, size: 10, color: Color(0xFF6366F1)),
-                            SizedBox(width: 4),
-                            Text(
-                              'Auto-Absent',
-                              style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFF6366F1),
-                              ),
-                            ),
-                          ],
-                        ),
-                      )
-                    else
-                      Text(
-                        'Marked ${currentStatus.name.toUpperCase()}',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: currentStatus == AttendanceStatus.present
-                              ? AppTheme.catGreen
-                              : currentStatus == AttendanceStatus.absent
-                              ? AppTheme.catRed
-                              : currentStatus == AttendanceStatus.late
-                              ? AppTheme.catOrange
-                              : AppTheme.catSlate,
-                        ),
-                      ),
-                  ],
-                ),
-              ],
+            child: Text(
+              student.displayName,
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 14,
+                color: theme.colorScheme.onSurface,
+              ),
             ),
           ),
           Row(

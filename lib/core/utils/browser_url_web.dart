@@ -1,5 +1,6 @@
 // ignore: avoid_web_libraries_in_flutter
 import 'dart:html' as html;
+import 'dart:typed_data';
 
 void updateBrowserUrlPath(String path) {
   try {
@@ -98,4 +99,45 @@ void registerWebLifecycleListenersPlatform({
     html.window.addEventListener('beforeunload', (_) => onUnload());
     html.window.addEventListener('pagehide', (_) => onUnload());
   } catch (_) {}
+}
+
+void downloadFileBytesWeb({
+  required List<int> bytes,
+  required String fileName,
+  required String mimeType,
+}) {
+  try {
+    final u8 = bytes is Uint8List ? bytes : Uint8List.fromList(bytes);
+    final blob = html.Blob([u8.buffer], mimeType);
+    final url = html.Url.createObjectUrlFromBlob(blob);
+    final anchor = html.AnchorElement(href: url)
+      ..target = 'blank'
+      ..download = fileName;
+    html.document.body?.append(anchor);
+    anchor.click();
+    anchor.remove();
+    html.Url.revokeObjectUrl(url);
+  } catch (e) {
+    throw Exception('Browser download failed: $e');
+  }
+}
+
+void downloadFileStringWeb({
+  required String content,
+  required String fileName,
+  String mimeType = 'text/csv;charset=utf-8',
+}) {
+  try {
+    final blob = html.Blob([content], mimeType);
+    final url = html.Url.createObjectUrlFromBlob(blob);
+    final anchor = html.AnchorElement(href: url)
+      ..target = 'blank'
+      ..download = fileName;
+    html.document.body?.append(anchor);
+    anchor.click();
+    anchor.remove();
+    html.Url.revokeObjectUrl(url);
+  } catch (e) {
+    throw Exception('Browser download string failed: $e');
+  }
 }

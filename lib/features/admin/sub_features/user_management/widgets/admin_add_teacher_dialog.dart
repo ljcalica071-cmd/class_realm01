@@ -386,11 +386,12 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog>
         });
       }
       if (!_isLockedOut) {
-        _selectedIndex = (_otpController.text.length - 1).clamp(0, 5);
-        _otpController.selection =
-            TextSelection.collapsed(offset: _otpController.text.length);
-        Future.delayed(const Duration(milliseconds: 50), () {
-          if (mounted) _otpFocusNode.requestFocus();
+        _selectedIndex = 5;
+        _otpController.selection = TextSelection.collapsed(offset: 6);
+        Future.delayed(const Duration(milliseconds: 100), () {
+          if (mounted) {
+            FocusScope.of(context).requestFocus(_otpFocusNode);
+          }
         });
       }
     } finally {

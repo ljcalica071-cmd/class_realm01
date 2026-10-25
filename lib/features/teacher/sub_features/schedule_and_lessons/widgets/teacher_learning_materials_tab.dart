@@ -8,6 +8,7 @@ import 'package:class_realm/data/repositories/subject_repository.dart';
 import 'package:class_realm/data/repositories/learning_material_repository.dart';
 import 'package:class_realm/data/repositories/supabase_learning_material_repository.dart';
 import 'teacher_material_viewer_modal.dart';
+import 'package:class_realm/shared/widgets/shimmer_loading.dart';
 
 class TeacherLearningMaterialsTab extends StatefulWidget {
   final List<LearningMaterialModel>? materials;
@@ -51,7 +52,7 @@ class _TeacherLearningMaterialsTabState
   List<ClassRealmMaterial> _materials = [];
 
   // View state
-  bool _isGridView = true;
+  bool _isGridView = false;
   String _searchQuery = '';
   String _selectedTypeFilter = 'ALL'; // 'ALL', 'PDF', 'WORD', 'SLIDES'
 
@@ -1167,7 +1168,60 @@ class _TeacherLearningMaterialsTabState
     }
 
     if (_isLoading && (_offerings.isEmpty)) {
-      return const Center(child: CircularProgressIndicator());
+      return Padding(
+        padding: const EdgeInsets.all(24),
+        child: ShimmerLoading(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Top filter bar skeleton
+              Row(
+                children: const [
+                  ShimmerBox(width: 100, height: 38, borderRadius: 8),
+                  SizedBox(width: 10),
+                  ShimmerBox(width: 220, height: 38, borderRadius: 8),
+                  SizedBox(width: 10),
+                  ShimmerBox(width: 140, height: 38, borderRadius: 8),
+                ],
+              ),
+              const SizedBox(height: 24),
+              // List items skeleton
+              Expanded(
+                child: ListView.separated(
+                  itemCount: 4,
+                  separatorBuilder: (_, _) => const SizedBox(height: 12),
+                  itemBuilder: (_, _) => Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.surface,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: theme.colorScheme.onSurface.withValues(alpha: 0.08),
+                      ),
+                    ),
+                    child: Row(
+                      children: const [
+                        ShimmerBox(width: 32, height: 32, borderRadius: 8),
+                        SizedBox(width: 14),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            ShimmerBox(width: 200, height: 16, borderRadius: 4),
+                            SizedBox(height: 6),
+                            ShimmerBox(width: 80, height: 12, borderRadius: 4),
+                          ],
+                        ),
+                        Spacer(),
+                        ShimmerBox(width: 24, height: 24, borderRadius: 6),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
     }
 
     if (_offerings.isEmpty) {
@@ -1240,7 +1294,41 @@ class _TeacherLearningMaterialsTabState
           // Main Drive Browser Area
           Expanded(
             child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
+                ? ShimmerLoading(
+                    child: ListView.separated(
+                      padding: const EdgeInsets.only(top: 8),
+                      itemCount: 4,
+                      separatorBuilder: (_, _) => const SizedBox(height: 12),
+                      itemBuilder: (_, _) => Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.surface,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: theme.colorScheme.onSurface.withValues(alpha: 0.08),
+                          ),
+                        ),
+                        child: Row(
+                          children: const [
+                            ShimmerBox(width: 32, height: 32, borderRadius: 8),
+                            SizedBox(width: 14),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                ShimmerBox(width: 180, height: 16, borderRadius: 4),
+                                SizedBox(height: 6),
+                                ShimmerBox(width: 80, height: 12, borderRadius: 4),
+                              ],
+                            ),
+                            Spacer(),
+                            ShimmerBox(width: 24, height: 24, borderRadius: 6),
+                            SizedBox(width: 10),
+                            ShimmerBox(width: 24, height: 24, borderRadius: 6),
+                          ],
+                        ),
+                      ),
+                    ),
+                  )
                 : RefreshIndicator(
                     onRefresh: _loadFolderContents,
                     child: _isViewingArchived
@@ -1363,7 +1451,8 @@ class _TeacherLearningMaterialsTabState
 
           // 3. Section Dropdown
           if (availableSections.isNotEmpty) ...[
-            Expanded(
+            SizedBox(
+              width: 170,
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
                 decoration: BoxDecoration(
@@ -1401,6 +1490,7 @@ class _TeacherLearningMaterialsTabState
                 ),
               ),
             ),
+            const Spacer(),
           ] else ...[
             const Spacer(),
           ],
@@ -1944,18 +2034,7 @@ class _TeacherLearningMaterialsTabState
                 ],
               ),
             ),
-            // Archive folder action
-            IconButton(
-              icon: const Icon(Icons.archive_outlined, size: 18, color: Colors.grey),
-              tooltip: 'Archive Folder',
-              onPressed: () => _archiveFolderConfirm(folder),
-            ),
-            // Delete folder permanently action
-            IconButton(
-              icon: const Icon(Icons.delete_outline, size: 18, color: Colors.redAccent),
-              tooltip: 'Delete Folder Permanently',
-              onPressed: () => _deleteFolderPermanentlyConfirm(folder),
-            ),
+            const Icon(Icons.chevron_right, size: 20, color: Colors.grey),
           ],
         ),
       ),
@@ -1979,24 +2058,7 @@ class _TeacherLearningMaterialsTabState
         leading: const Icon(Icons.folder, color: Colors.amber, size: 28),
         title: Text(folder.folderName, style: const TextStyle(fontWeight: FontWeight.bold)),
         subtitle: Text('${folder.fileCount} items ${folder.isVisibleToStudents ? "" : "• Hidden from students"}'),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Archive action
-            IconButton(
-              icon: const Icon(Icons.archive_outlined, color: Colors.grey, size: 20),
-              tooltip: 'Archive Folder',
-              onPressed: () => _archiveFolderConfirm(folder),
-            ),
-            // Delete action
-            IconButton(
-              icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
-              tooltip: 'Delete Folder Permanently',
-              onPressed: () => _deleteFolderPermanentlyConfirm(folder),
-            ),
-            const Icon(Icons.chevron_right),
-          ],
-        ),
+        trailing: const Icon(Icons.chevron_right),
         onTap: () => _navigateToFolder(folder),
       ),
     );

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import 'package:class_realm/core/theme/app_theme.dart';
@@ -7,14 +8,12 @@ import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/data/repositories/subject_repository.dart';
 import 'package:class_realm/data/repositories/attendance_repository.dart';
 import 'package:class_realm/data/repositories/supabase_attendance_repository.dart';
-import 'package:class_realm/data/mock_database.dart';
-import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/shared/widgets/shared_widgets.dart';
 import 'package:class_realm/features/teacher/sub_features/attendance/widgets/attendance_roster_list.dart';
 import 'package:class_realm/features/teacher/sub_features/attendance/widgets/attendance_history_analytics_view.dart';
 import 'package:class_realm/widgets/common/app_date_picker_field.dart';
 import 'package:class_realm/core/services/local_storage_service.dart';
-import 'package:loading_animation_widget/loading_animation_widget.dart';
+import 'package:class_realm/shared/widgets/shimmer_loading.dart';
 
 class TeacherAttendanceTab extends StatefulWidget {
   final AttendanceRepository? repository;
@@ -32,6 +31,10 @@ class TeacherAttendanceTab extends StatefulWidget {
 
 class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
   late final AttendanceRepository _repository;
+  
+  // RFID Scanner Hardware Focus
+  final FocusNode _scannerFocusNode = FocusNode();
+  String _rfidBuffer = '';
 
   List<Map<String, dynamic>> _teacherSubjects = [];
   String? _selectedGradeLevel;
@@ -60,6 +63,12 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
   void initState() {
     super.initState();
     _repository = widget.repository ?? SupabaseAttendanceRepository.instance;
+    
+    // Auto-focus keyboard listener for RFID
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _scannerFocusNode.requestFocus();
+    });
+    
     if (widget.initialSubjects != null) {
       _teacherSubjects = widget.initialSubjects!;
       _syncFilterSelection();
@@ -70,6 +79,12 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
     } else {
       _loadSubjects();
     }
+  }
+
+  @override
+  void dispose() {
+    _scannerFocusNode.dispose();
+    super.dispose();
   }
 
   bool get _isDirty {
@@ -288,28 +303,9 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
       }
 
       var students = result.students;
-      if (students.isEmpty) {
-        final currentSectionName =
-            _currentOffering?['section_name']?.toString() ?? '';
-        final fallbackStudents = MockDatabase.instance.users
-            .where((u) =>
-                u.role == UserRole.student &&
-                !u.isArchived &&
-                (u.departmentOrSection?.toLowerCase().trim() ==
-                        currentSectionName.toLowerCase().trim() ||
-                    currentSectionName.isEmpty))
-            .map((u) => AttendanceRosterStudent(
-                  studentId: u.id,
-                  firstName: u.firstName ?? '',
-                  middleName: u.middleName,
-                  lastName: u.lastName ?? '',
-                  gender: u.gender ?? 'unspecified',
-                ))
-            .toList();
-        if (fallbackStudents.isNotEmpty) {
-          students = fallbackStudents;
-        }
-      }
+      
+      // Removed MockDatabase fallback to ensure Unbroken End-to-End Database flow.
+      // If students is empty, it truly means the teacher has not enrolled any students yet.
 
       // 8:00 PM Auto-Absent cutoff: if viewing past date or today past 8:00 PM
       final now = DateTime.now();
@@ -527,6 +523,62 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
     ].join(' • ');
   }
 
+  // =========================================================================
+  // RFID Scanner Hardware Logic
+  // =========================================================================
+  
+  void _handleHardwareKey(KeyEvent event) {
+    if (_selectedSubjectId == null || _rosterStudents.isEmpty) return;
+    if (_selectedAttendanceView != 'Take Attendance') return;
+
+    if (event is KeyDownEvent) {
+      if (event.logicalKey == LogicalKeyboardKey.enter) {
+        if (_rfidBuffer.isNotEmpty) {
+          _processScannedRfid(_rfidBuffer);
+          _rfidBuffer = '';
+        }
+      } else {
+        // Build buffer if it's a character (usually numeric for RFID/LRN)
+        final char = event.character;
+        if (char != null && char.isNotEmpty) {
+          _rfidBuffer += char;
+        }
+      }
+    }
+  }
+
+  void _processScannedRfid(String scannedId) {
+    final cleanId = scannedId.trim().toLowerCase();
+    
+    final studentIndex = _rosterStudents.indexWhere(
+      (s) => s.studentId.toLowerCase() == cleanId || 
+             (s.studentId.contains(cleanId) && cleanId.length > 5) // Fallback LRN matching
+    );
+
+    if (studentIndex >= 0) {
+      final student = _rosterStudents[studentIndex];
+      setState(() {
+        _tempAttendanceStates[student.studentId] = AttendanceStatus.present;
+        _tempAttendanceRemarks[student.studentId] = 'RFID Check-in';
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('${student.firstName} ${student.lastName} marked Present.'),
+          backgroundColor: AppTheme.catGreen,
+          duration: const Duration(milliseconds: 1500),
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('ID $scannedId not found in this class.'),
+          backgroundColor: AppTheme.catRed,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
   String get _selectedSubjectLabel {
     final current = _currentOffering;
     if (current == null) return 'No subject or section selected';
@@ -728,13 +780,16 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
         .length;
     final totalCount = _rosterStudents.length;
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header & View Switcher Card
-          Container(
+    return KeyboardListener(
+      focusNode: _scannerFocusNode,
+      onKeyEvent: _handleHardwareKey,
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header & View Switcher Card
+            Container(
             width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
             decoration: BoxDecoration(
@@ -841,15 +896,7 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
           const SizedBox(height: 16),
 
           if (_isLoadingSubjects && _teacherSubjects.isEmpty)
-            Padding(
-              padding: const EdgeInsets.all(32),
-              child: Center(
-                child: LoadingAnimationWidget.staggeredDotsWave(
-                  color: theme.colorScheme.primary,
-                  size: 40,
-                ),
-              ),
-            )
+            const ShimmerAttendanceSkeleton()
           else if (_subjectsLoadError != null && _teacherSubjects.isEmpty)
             _buildErrorContainer(theme, _subjectsLoadError!, onRetry: _loadSubjects)
           else if (_teacherSubjects.isEmpty)
@@ -935,7 +982,7 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
           ],
         ],
       ),
-    );
+    ));
   }
 
   Widget _buildTakeAttendanceControls(
@@ -1240,12 +1287,6 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
                   }
                 }),
               ),
-              AppButton.outline(
-                label: 'Auto-Absent Unmarked ($unmarkedCount)',
-                icon: LucideIcons.clockAlert,
-                isSmall: true,
-                onPressed: unmarkedCount > 0 ? _autoAbsentUnmarked : null,
-              ),
               AppButton.danger(
                 label: 'Mark All Absent',
                 icon: LucideIcons.userX,
@@ -1257,14 +1298,10 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
                 }),
               ),
               AppButton.outline(
-                label: 'Holiday / Suspension',
-                icon: LucideIcons.calendarOff,
+                label: 'Auto-Absent Unmarked ($unmarkedCount)',
+                icon: LucideIcons.clockAlert,
                 isSmall: true,
-                onPressed: () => setState(() {
-                  for (final s in _rosterStudents) {
-                    _tempAttendanceStates[s.studentId] = AttendanceStatus.excused;
-                  }
-                }),
+                onPressed: unmarkedCount > 0 ? _autoAbsentUnmarked : null,
               ),
             ],
           ),
@@ -1579,3 +1616,4 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
     );
   }
 }
+

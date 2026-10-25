@@ -12,8 +12,8 @@ import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/data/repositories/subject_repository.dart';
 import 'package:class_realm/data/repositories/supabase_student_repository.dart';
 import 'package:class_realm/core/services/local_storage_service.dart';
-
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:class_realm/shared/widgets/shimmer_loading.dart';
 
 class TeacherStudentManagementTab extends StatefulWidget {
   const TeacherStudentManagementTab({super.key});
@@ -84,7 +84,9 @@ class _TeacherStudentManagementTabState
   Future<void> _loadFilters() async {
     final sub = LocalStorageService.getString('student_management_subject');
     final sec = LocalStorageService.getString('student_management_section');
-    if (sub != null) _selectedSubjectFilter = sub;
+    if (sub != null && sub != '— All Subjects —' && sub.isNotEmpty) {
+      _selectedSubjectFilter = sub;
+    }
     if (sec != null) _selectedSectionFilter = sec;
   }
 
@@ -144,6 +146,12 @@ class _TeacherStudentManagementTabState
           _activeStudents = active;
           // Filter archived so it doesn't duplicate ones in active
           _archivedStudents = archived.where((s) => s.isArchived).toList();
+
+          if ((_selectedSubjectFilter == '— All Subjects —' || !_teacherSubjects.contains(_selectedSubjectFilter)) &&
+              _teacherSubjects.isNotEmpty) {
+            _selectedSubjectFilter = _teacherSubjects.first;
+          }
+
           _isLoading = false;
         });
       }
@@ -224,12 +232,14 @@ class _TeacherStudentManagementTabState
                     _studentSearchQuery.toLowerCase(),
                   ) ??
                   false);
-          final matchesSubject =
-              _selectedSubjectFilter == '— All Subjects —' ||
-              (s.enrolledSubjectName == _selectedSubjectFilter);
+          final effectiveSubject = _teacherSubjects.contains(_selectedSubjectFilter)
+              ? _selectedSubjectFilter
+              : (_teacherSubjects.isNotEmpty ? _teacherSubjects.first : null);
+          final matchesSubject = effectiveSubject == null ||
+              (s.enrolledSubjectName?.trim().toLowerCase() == effectiveSubject.trim().toLowerCase());
           final matchesSection =
               _selectedSectionFilter == '— All Sections —' ||
-              (s.departmentOrSection == _selectedSectionFilter);
+              (s.departmentOrSection?.trim().toLowerCase() == _selectedSectionFilter.trim().toLowerCase());
           return matchesSearch && matchesSubject && matchesSection;
         }).toList();
 
@@ -378,18 +388,24 @@ class _TeacherStudentManagementTabState
                           ),
                           child: DropdownButtonHideUnderline(
                             child: DropdownButton<String>(
-                              value: _selectedSubjectFilter,
+                              value: _teacherSubjects.contains(_selectedSubjectFilter)
+                                  ? _selectedSubjectFilter
+                                  : (_teacherSubjects.isNotEmpty ? _teacherSubjects.first : null),
                               dropdownColor: theme.colorScheme.surface,
                               style: TextStyle(
                                 color: theme.colorScheme.onSurface,
                               ),
-                              items: ['— All Subjects —', ..._teacherSubjects]
+                              hint: Text(
+                                _teacherSubjects.isEmpty ? 'No Subjects' : 'Select Subject',
+                                style: const TextStyle(fontSize: 13),
+                              ),
+                              items: _teacherSubjects
                                   .map(
                                     (sub) => DropdownMenuItem(
                                       value: sub,
                                       child: Text(
                                         sub,
-                                        style: TextStyle(fontSize: 13),
+                                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
                                       ),
                                     ),
                                   )
@@ -592,13 +608,15 @@ class _TeacherStudentManagementTabState
                 ),
                 const SizedBox(height: 16),
                 Expanded(
-                  child: Stack(
-                    children: [
-                      Container(
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.surface,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: tableBorderColor),
+                  child: (_isLoading && _activeStudents.isEmpty && _archivedStudents.isEmpty)
+                      ? const ShimmerManagementTable(rowCount: 8)
+                      : Stack(
+                          children: [
+                            Container(
+                              decoration: BoxDecoration(
+                                color: theme.colorScheme.surface,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: tableBorderColor),
                           boxShadow: [
                             BoxShadow(
                               color: Colors.black.withValues(alpha: 0.03),
@@ -727,7 +745,7 @@ class _TeacherStudentManagementTabState
                                                 Text(
                                                   _showArchivedStudents
                                                       ? 'No archived students found.'
-                                                      : 'No students found for $_selectedSubjectFilter in $_selectedSectionFilter.',
+                                                      : 'No students found for ${_teacherSubjects.contains(_selectedSubjectFilter) ? _selectedSubjectFilter : (_teacherSubjects.isNotEmpty ? _teacherSubjects.first : "this subject")} in $_selectedSectionFilter.',
                                                   textAlign: TextAlign.center,
                                                   style: TextStyle(
                                                     fontSize: 16,

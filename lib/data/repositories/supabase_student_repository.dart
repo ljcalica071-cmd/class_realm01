@@ -106,7 +106,7 @@ class SupabaseStudentRepository implements StudentRepository {
             id, status, created_at,
             student_profiles!inner ( 
               student_id, lrn, first_name, middle_name, last_name, gender, birthday,
-              users!inner ( email, status, is_archived )
+              users ( email, is_archived )
             ),
             subject_offerings!inner ( 
               id, teacher_id,
@@ -286,6 +286,7 @@ class SupabaseStudentRepository implements StudentRepository {
     required String email,
     required String gender,
     required String subjectId,
+    bool skipEmail = false,
   }) async {
     final cleanEmail = email.trim().toLowerCase();
     final bdayStr =
@@ -298,6 +299,74 @@ class SupabaseStudentRepository implements StudentRepository {
         .where((s) => s.isNotEmpty)
         .join(' ');
 
+    // 0. Check if student already exists globally by LRN (ClassRealm Cross-Teacher Reuse)
+    String? existingStudentId;
+    try {
+      final existingProfile = await _client
+          .from('student_profiles')
+          .select('student_id, first_name, last_name, lrn')
+          .eq('lrn', lrn)
+          .maybeSingle();
+
+      if (existingProfile != null && existingProfile['student_id'] != null) {
+        final existingFirst = (existingProfile['first_name'] ?? '').toString().trim().toLowerCase();
+        final existingLast = (existingProfile['last_name'] ?? '').toString().trim().toLowerCase();
+        final inputFirst = firstName.trim().toLowerCase();
+        final inputLast = lastName.trim().toLowerCase();
+
+        // Security / Data Integrity: If LRN exists but name does not match, reject as conflict
+        if (existingFirst != inputFirst || existingLast != inputLast) {
+          final registeredName = '${existingProfile['first_name']} ${existingProfile['last_name']}'.trim();
+          throw Exception(
+            'LRN Conflict: LRN $lrn is already registered to "$registeredName". '
+            'You cannot register this LRN with a different name ("$studentFullName"). '
+            'Please verify the student\'s LRN with the school registrar or previous teacher.'
+          );
+        }
+
+        existingStudentId = existingProfile['student_id'].toString();
+      }
+    } catch (e) {
+      if (e.toString().contains('LRN Conflict')) rethrow;
+      debugPrint('LRN lookup notice: $e');
+    }
+
+    if (existingStudentId != null && existingStudentId.isNotEmpty) {
+      // Re-use global identity without touching credentials or recreating auth
+      try {
+        await _client.from('student_enrollments').upsert({
+          'student_id': existingStudentId,
+          'subject_offering_id': subjectId,
+          'status': 'enrolled',
+        });
+      } catch (e) {
+        debugPrint('Cross-teacher enrollment error: $e');
+      }
+
+      // Persist locally to Drift SQLite
+      try {
+        await AppDatabase.instance
+            .into(AppDatabase.instance.localStudents)
+            .insertOnConflictUpdate(
+              LocalStudentsCompanion.insert(
+                studentId: existingStudentId,
+                lrn: Value(lrn),
+                firstName: firstName,
+                middleName: Value(middleName),
+                lastName: lastName,
+                gender: Value(gender),
+              ),
+            );
+      } catch (_) {}
+
+      return StudentEnrollmentResult(
+        studentId: existingStudentId,
+        createdAccount: false,
+        tempPassword: null,
+      );
+    }
+
+    // New student candidate
     String? fbUid;
     try {
       fbUid = await FirebaseAuthAdminService.createUser(
@@ -317,7 +386,6 @@ class SupabaseStudentRepository implements StudentRepository {
         'id': studentId,
         'email': cleanEmail,
         'role': 'student',
-        'status': 'pending_first_login',
         'is_archived': false,
       });
 
@@ -342,7 +410,32 @@ class SupabaseStudentRepository implements StudentRepository {
         'status': 'enrolled',
       });
     } catch (e) {
-      debugPrint('Pure Dart enroll notice (saving locally): $e');
+      debugPrint('Pure Dart enroll notice: $e');
+      // Concurrency / Race Condition Handler:
+      // If another teacher registered this student at the exact same millisecond,
+      // re-query student_profiles by LRN to recover their global student_id and enroll.
+      try {
+        final doubleCheck = await _client
+            .from('student_profiles')
+            .select('student_id')
+            .eq('lrn', lrn)
+            .maybeSingle();
+        if (doubleCheck != null && doubleCheck['student_id'] != null) {
+          final winnerId = doubleCheck['student_id'].toString();
+          await _client.from('student_enrollments').upsert({
+            'student_id': winnerId,
+            'subject_offering_id': subjectId,
+            'status': 'enrolled',
+          });
+          return StudentEnrollmentResult(
+            studentId: winnerId,
+            createdAccount: false,
+            tempPassword: null,
+          );
+        }
+      } catch (raceErr) {
+        debugPrint('Race condition resolution error: $raceErr');
+      }
     }
 
     // 2. Persist locally to Drift SQLite and MockDatabase
@@ -377,15 +470,17 @@ class SupabaseStudentRepository implements StudentRepository {
     );
     MockDatabase.instance.users.add(newStudentModel);
 
-    // Send welcome email with student credentials
-    try {
-      await EmailService.instance.sendStudentWelcomeEmail(
-        recipientEmail: cleanEmail,
-        studentName: studentFullName,
-        tempPassword: tempPassword,
-      );
-    } catch (e) {
-      debugPrint('[SupabaseStudentRepository] Student welcome email error: $e');
+    // Send welcome email with student credentials if not skipped (e.g. In bulk queues)
+    if (!skipEmail) {
+      try {
+        await EmailService.instance.sendStudentWelcomeEmail(
+          recipientEmail: cleanEmail,
+          studentName: studentFullName,
+          tempPassword: tempPassword,
+        );
+      } catch (e) {
+        debugPrint('[SupabaseStudentRepository] Student welcome email error: $e');
+      }
     }
 
     return StudentEnrollmentResult(

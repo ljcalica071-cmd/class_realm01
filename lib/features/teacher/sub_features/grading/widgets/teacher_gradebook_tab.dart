@@ -10,6 +10,7 @@ import 'package:class_realm/data/repositories/subject_repository.dart';
 import 'package:class_realm/data/repositories/supabase_student_repository.dart';
 import 'package:class_realm/features/teacher/sub_features/grading/widgets/gradebook_grid_cell.dart';
 import 'package:class_realm/models/subject_catalog_model.dart';
+import 'package:class_realm/shared/widgets/shimmer_loading.dart';
 
 /// DepEd-style Strengthened SHS Class Record (Gradebook).
 /// Mirrors the official DepEd grading spreadsheet layout with
@@ -701,15 +702,17 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
 
                   // Spreadsheet content
                   Expanded(
-                    child: Stack(
-                      children: [
-                        if (_selectedTerm == 0)
-                          _buildFinalGradesView(theme, isDark, borderColor)
-                        else
-                          Column(
+                    child: (_isLoadingSubjects || (_isLoadingStudents && _students.isEmpty))
+                        ? _buildGradebookSkeleton(theme, isDark, borderColor)
+                        : Stack(
                             children: [
-                              if (!_isSelectedTermActive)
-                                _buildInactiveTermBanner(theme),
+                              if (_selectedTerm == 0)
+                                _buildFinalGradesView(theme, isDark, borderColor)
+                              else
+                                Column(
+                                  children: [
+                                    if (!_isSelectedTermActive)
+                                      _buildInactiveTermBanner(theme),
                               if (_studentLoadError != null)
                                 MaterialBanner(
                                   content: Text(_studentLoadError!),
@@ -980,6 +983,74 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
                   // Term Tabs at the bottom
                   _buildTermTabs(theme, isDark, borderColor),
                 ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGradebookSkeleton(ThemeData theme, bool isDark, Color borderColor) {
+    return ShimmerLoading(
+      child: Column(
+        children: [
+          // Header Bar Skeleton
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            color: isDark ? Colors.white.withValues(alpha: 0.04) : const Color(0xFFF1F5F9),
+            child: Row(
+              children: const [
+                ShimmerBox(width: 200, height: 16, borderRadius: 4),
+                Spacer(),
+                ShimmerBox(width: 100, height: 14, borderRadius: 4),
+              ],
+            ),
+          ),
+          Divider(height: 1, color: borderColor),
+          // Sub-headers Row
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            color: isDark ? Colors.white.withValues(alpha: 0.02) : const Color(0xFFF8FAFC),
+            child: Row(
+              children: const [
+                ShimmerBox(width: 180, height: 14, borderRadius: 4),
+                SizedBox(width: 24),
+                ShimmerBox(width: 140, height: 14, borderRadius: 4),
+                SizedBox(width: 24),
+                ShimmerBox(width: 140, height: 14, borderRadius: 4),
+                SizedBox(width: 24),
+                ShimmerBox(width: 120, height: 14, borderRadius: 4),
+              ],
+            ),
+          ),
+          Divider(height: 1, color: borderColor),
+          // Skeleton Student Rows
+          Expanded(
+            child: ListView.separated(
+              itemCount: 12,
+              separatorBuilder: (_, _) => Divider(height: 1, color: borderColor.withValues(alpha: 0.5)),
+              itemBuilder: (_, _) => Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                child: Row(
+                  children: const [
+                    ShimmerBox(width: 28, height: 12, borderRadius: 4),
+                    SizedBox(width: 16),
+                    ShimmerBox(width: 160, height: 14, borderRadius: 4),
+                    SizedBox(width: 32),
+                    ShimmerBox(width: 45, height: 14, borderRadius: 4),
+                    SizedBox(width: 14),
+                    ShimmerBox(width: 45, height: 14, borderRadius: 4),
+                    SizedBox(width: 14),
+                    ShimmerBox(width: 45, height: 14, borderRadius: 4),
+                    SizedBox(width: 32),
+                    ShimmerBox(width: 45, height: 14, borderRadius: 4),
+                    SizedBox(width: 14),
+                    ShimmerBox(width: 45, height: 14, borderRadius: 4),
+                    Spacer(),
+                    ShimmerBox(width: 60, height: 16, borderRadius: 6),
+                  ],
+                ),
               ),
             ),
           ),

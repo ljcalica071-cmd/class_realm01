@@ -22,8 +22,19 @@ class EmailService {
     required String to,
     required String subject,
     required String html,
+    bool skipBounceCheck = false,
   }) async {
     final cleanRecipient = to.trim();
+    final lower = cleanRecipient.toLowerCase();
+
+    // Handle test/example addresses gracefully
+    if (lower.endsWith('@example.com') ||
+        lower.endsWith('@test.com') ||
+        lower.endsWith('@sample.com') ||
+        lower == 'example@gmail.com') {
+      debugPrint('[EmailService] Test/example recipient ($cleanRecipient) - delivery simulated successfully.');
+      return true;
+    }
 
     // 1. Dispatch via Supabase send-email Edge Function (Nodemailer Gmail SMTP)
     final supabaseUrl = EnvConfig.supabaseUrl;
@@ -52,6 +63,7 @@ class EmailService {
             'html': html,
             'smtp_user': smtpUser,
             'smtp_pass': smtpPass,
+            'skip_bounce_check': skipBounceCheck,
           }),
         );
 
@@ -227,6 +239,7 @@ class EmailService {
     required String recipientEmail,
     required String studentName,
     required String tempPassword,
+    bool skipBounceCheck = true,
   }) async {
     final cleanRecipient = recipientEmail.trim();
     final String htmlTemplate = '''
@@ -265,6 +278,7 @@ class EmailService {
       to: cleanRecipient,
       subject: 'Welcome to ClassRealm - Student Account Credentials',
       html: htmlTemplate,
+      skipBounceCheck: skipBounceCheck,
     );
   }
 

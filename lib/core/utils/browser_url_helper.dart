@@ -55,3 +55,29 @@ void registerWebLifecycleListeners({
     onUnload: onUnload,
   );
 }
+
+/// Triggers a direct download of file bytes in the browser.
+void downloadFileBytes({
+  required List<int> bytes,
+  required String fileName,
+  String mimeType = 'application/octet-stream',
+}) {
+  downloadFileBytesWeb(
+    bytes: bytes,
+    fileName: fileName,
+    mimeType: mimeType,
+  );
+}
+
+/// Triggers a direct download of string content (CSV, text, JSON) in the browser.
+void downloadFileString({
+  required String content,
+  required String fileName,
+  String mimeType = 'text/csv;charset=utf-8',
+}) {
+  downloadFileStringWeb(
+    content: content,
+    fileName: fileName,
+    mimeType: mimeType,
+  );
+}

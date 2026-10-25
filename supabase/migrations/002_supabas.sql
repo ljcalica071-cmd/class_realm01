@@ -183,9 +183,8 @@ CREATE TABLE public.attendance_records (
   CONSTRAINT attendance_records_pkey PRIMARY KEY (id),
   CONSTRAINT attendance_records_student_id_fkey FOREIGN KEY (student_id) REFERENCES public.student_profiles(student_id),
   CONSTRAINT attendance_records_subject_offering_id_fkey FOREIGN KEY (subject_offering_id) REFERENCES public.subject_offerings(id),
-  CONSTRAINT attendance_records_student_offering_fkey FOREIGN KEY (student_id) REFERENCES public.student_enrollments(student_id),
-  CONSTRAINT attendance_records_student_offering_fkey FOREIGN KEY (subject_offering_id) REFERENCES public.student_enrollments(subject_offering_id),
-  CONSTRAINT attendance_records_recorded_by_fkey FOREIGN KEY (recorded_by) REFERENCES public.users(id)
+  CONSTRAINT attendance_records_recorded_by_fkey FOREIGN KEY (recorded_by) REFERENCES public.users(id),
+  CONSTRAINT attendance_records_unique_record UNIQUE (student_id, subject_offering_id, attendance_date)
 );
 CREATE TABLE public.classwork_items (
   id uuid NOT NULL DEFAULT gen_random_uuid(),

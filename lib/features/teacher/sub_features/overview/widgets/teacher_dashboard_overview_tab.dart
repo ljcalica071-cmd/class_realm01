@@ -9,7 +9,7 @@ import 'package:class_realm/features/teacher/shared/widgets/teacher_top_summary_
 import 'package:class_realm/data/repositories/subject_repository.dart';
 import 'package:class_realm/data/repositories/supabase_schedule_repository.dart';
 import 'package:class_realm/data/repositories/supabase_student_repository.dart';
-import 'package:loading_animation_widget/loading_animation_widget.dart';
+import 'package:class_realm/shared/widgets/shimmer_loading.dart';
 
 class TeacherDashboardOverviewTab extends StatefulWidget {
   final List<UserModel> activeStudents;
@@ -259,8 +259,29 @@ class _TeacherDashboardOverviewTabState
           ),
           const SizedBox(height: 24),
 
-          // 3 TOP STAT CARDS
-          if (MediaQuery.of(context).size.width < 900)
+          // 3 TOP STAT CARDS (Skeleton Shimmer while loading)
+          if (isLoadingStats)
+            if (MediaQuery.of(context).size.width < 900)
+              Column(
+                children: const [
+                  ShimmerTeacherStatCard(),
+                  SizedBox(height: 16),
+                  ShimmerTeacherStatCard(),
+                  SizedBox(height: 16),
+                  ShimmerTeacherStatCard(),
+                ],
+              )
+            else
+              Row(
+                children: const [
+                  Expanded(child: ShimmerTeacherStatCard()),
+                  SizedBox(width: 20),
+                  Expanded(child: ShimmerTeacherStatCard()),
+                  SizedBox(width: 20),
+                  Expanded(child: ShimmerTeacherStatCard()),
+                ],
+              )
+          else if (MediaQuery.of(context).size.width < 900)
             Column(
               children: [
                 TeacherTopSummaryCard(
@@ -361,11 +382,41 @@ class _TeacherDashboardOverviewTabState
                         ),
                         if (isLoadingStats)
                           Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 24),
-                            child: Center(
-                              child: LoadingAnimationWidget.staggeredDotsWave(
-                                color: theme.colorScheme.primary,
-                                size: 36,
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            child: ShimmerLoading(
+                              child: Column(
+                                children: List.generate(
+                                  3,
+                                  (_) => Padding(
+                                    padding: const EdgeInsets.only(top: 10),
+                                    child: Container(
+                                      padding: const EdgeInsets.all(14),
+                                      decoration: BoxDecoration(
+                                        color: theme.scaffoldBackgroundColor,
+                                        borderRadius: BorderRadius.circular(12),
+                                        border: Border.all(
+                                          color: theme.colorScheme.onSurface.withValues(alpha: 0.05),
+                                        ),
+                                      ),
+                                      child: Row(
+                                        children: const [
+                                          ShimmerBox(width: 36, height: 36, borderRadius: 10),
+                                          SizedBox(width: 14),
+                                          Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              ShimmerBox(width: 160, height: 14, borderRadius: 4),
+                                              SizedBox(height: 6),
+                                              ShimmerBox(width: 110, height: 12, borderRadius: 4),
+                                            ],
+                                          ),
+                                          Spacer(),
+                                          ShimmerBox(width: 80, height: 14, borderRadius: 4),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
                               ),
                             ),
                           )

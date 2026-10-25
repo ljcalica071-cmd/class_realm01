@@ -31,3 +31,19 @@ void registerWebLifecycleListenersPlatform({
 }) {
   // Handled by WidgetsBindingObserver on non-web platforms.
 }
+
+void downloadFileBytesWeb({
+  required List<int> bytes,
+  required String fileName,
+  required String mimeType,
+}) {
+  // No-op or throw on non-web if invoked directly without platform check.
+}
+
+void downloadFileStringWeb({
+  required String content,
+  required String fileName,
+  String mimeType = 'text/csv;charset=utf-8',
+}) {
+  // No-op on non-web platforms.
+}

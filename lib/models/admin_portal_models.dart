@@ -79,7 +79,37 @@ class UserSessionLog {
     required this.durationSeconds,
   });
 
+  DateTime get effectiveLogoutAt {
+    if (logoutAt != null) {
+      // Guard against erroneous logoutAt == loginAt when durationSeconds > 0
+      if (logoutAt!.isAtSameMomentAs(loginAt) && durationSeconds > 0) {
+        if (lastActiveAt.isAfter(loginAt)) return lastActiveAt;
+        return loginAt.add(Duration(seconds: durationSeconds));
+      }
+      return logoutAt!;
+    }
+    if (!isActive && lastActiveAt.isAfter(loginAt)) {
+      return lastActiveAt;
+    }
+    return loginAt.add(Duration(seconds: durationSeconds));
+  }
+
   factory UserSessionLog.fromJson(Map<String, dynamic> json, {String? teacherName}) {
+    final rawActive = json['is_active'] == true;
+    final lastActive = json['last_active_at'] != null
+        ? DateTime.tryParse(json['last_active_at'].toString())?.toLocal() ?? DateTime.now()
+        : DateTime.now();
+
+    // Heartbeat Staleness Guard:
+    // If a session has had NO heartbeat recorded in the last 3 minutes,
+    // the teacher has closed their browser or lost connection.
+    final isStale = DateTime.now().difference(lastActive).inMinutes >= 3;
+    final effectiveIsActive = rawActive && !isStale;
+
+    final parsedLogout = json['logout_at'] != null
+        ? DateTime.tryParse(json['logout_at'].toString())?.toLocal()
+        : (!effectiveIsActive && rawActive ? lastActive : null);
+
     return UserSessionLog(
       id: json['id']?.toString() ?? '',
       userId: json['user_id']?.toString() ?? '',
@@ -91,14 +121,10 @@ class UserSessionLog {
       loginAt: json['login_at'] != null
           ? DateTime.tryParse(json['login_at'].toString())?.toLocal() ?? DateTime.now()
           : DateTime.now(),
-      lastActiveAt: json['last_active_at'] != null
-          ? DateTime.tryParse(json['last_active_at'].toString())?.toLocal() ?? DateTime.now()
-          : DateTime.now(),
-      logoutAt: json['logout_at'] != null
-          ? DateTime.tryParse(json['logout_at'].toString())?.toLocal()
-          : null,
-      logoutReason: json['logout_reason']?.toString(),
-      isActive: json['is_active'] == true,
+      lastActiveAt: lastActive,
+      logoutAt: parsedLogout,
+      logoutReason: json['logout_reason']?.toString() ?? (!effectiveIsActive && rawActive ? 'terminated' : null),
+      isActive: effectiveIsActive,
       durationSeconds: (json['duration_seconds'] as num?)?.toInt() ?? 0,
     );
   }

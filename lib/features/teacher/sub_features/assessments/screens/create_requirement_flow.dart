@@ -32,7 +32,7 @@ class CreateRequirementFlowDialog extends StatefulWidget {
   static Future<void> show(
     BuildContext context, {
     required VoidCallback onRequirementCreated,
-    String initialSection = '',
+    String? initialSection,
     ActivityModel? existingTask,
     bool isPerformanceTask = true,
     TeacherClassworkRepository? repository,
@@ -42,7 +42,7 @@ class CreateRequirementFlowDialog extends StatefulWidget {
       barrierDismissible: false,
       builder: (ctx) => CreateRequirementFlowDialog(
         onRequirementCreated: onRequirementCreated,
-        initialSection: initialSection,
+        initialSection: initialSection ?? '',
         existingTask: existingTask,
         isPerformanceTask: isPerformanceTask,
         repository: repository,
@@ -63,6 +63,8 @@ class _CreateRequirementFlowDialogState
   final _maxScoreCtrl = TextEditingController(text: '100');
 
   String? _selectedOfferingId;
+  String? _selectedGrade;
+  String? _selectedSubject;
   DateTime _deadline = DateTime.now().add(const Duration(days: 7));
   List<Map<String, dynamic>> _offerings = [];
   bool _isLoadingOfferings = true;
@@ -80,6 +82,7 @@ class _CreateRequirementFlowDialogState
   bool _isSubmitting = false;
   String? _fileError;
   String? _offeringError;
+  String? _deadlineError;
   String? _formSubmitError;
 
   @override
@@ -105,17 +108,76 @@ class _CreateRequirementFlowDialogState
     }
   }
 
+  int _parseGrade(dynamic g) {
+    if (g is int) return g;
+    return int.tryParse(g?.toString() ?? '') ?? 11;
+  }
+
+  List<String> get _availableGrades {
+    if (_offerings.isEmpty) return [];
+    final set = <String>{};
+    for (final o in _offerings) {
+      final g = o['grade_level']?.toString().trim();
+      if (g != null && g.isNotEmpty) {
+        set.add(g.startsWith('Grade') ? g : 'Grade $g');
+      }
+    }
+    final list = set.toList()..sort();
+    return list;
+  }
+
+  List<String> get _availableSubjects {
+    if (_offerings.isEmpty) return [];
+    final set = <String>{};
+    for (final o in _offerings) {
+      final g = o['grade_level']?.toString().trim();
+      final gradeLabel = g != null && g.startsWith('Grade') ? g : 'Grade $g';
+      if (_selectedGrade == null || gradeLabel == _selectedGrade) {
+        final sub = o['subject_name']?.toString().trim();
+        if (sub != null && sub.isNotEmpty) {
+          set.add(sub);
+        }
+      }
+    }
+    final list = set.toList()..sort();
+    return list;
+  }
+
+  List<Map<String, dynamic>> get _availableSections {
+    if (_offerings.isEmpty) return [];
+    return _offerings.where((o) {
+      final g = o['grade_level']?.toString().trim();
+      final gradeLabel = g != null && g.startsWith('Grade') ? g : 'Grade $g';
+      final matchesGrade = _selectedGrade == null || gradeLabel == _selectedGrade;
+      final matchesSub = _selectedSubject == null || o['subject_name']?.toString().trim() == _selectedSubject;
+      return matchesGrade && matchesSub;
+    }).toList();
+  }
+
   void _initializeSelectedOffering() {
-    if (_selectedOfferingId == null && _offerings.isNotEmpty) {
+    if (_offerings.isEmpty) return;
+
+    if (_selectedOfferingId != null) {
+      final match = _offerings.firstWhere(
+        (o) => o['id']?.toString() == _selectedOfferingId,
+        orElse: () => _offerings.first,
+      );
+      final g = match['grade_level']?.toString().trim();
+      _selectedGrade = g != null && g.startsWith('Grade') ? g : 'Grade $g';
+      _selectedSubject = match['subject_name']?.toString().trim();
+      _selectedOfferingId = match['id']?.toString();
+    } else {
+      Map<String, dynamic> match = _offerings.first;
       if (widget.initialSection.isNotEmpty) {
-        final match = _offerings.firstWhere(
+        match = _offerings.firstWhere(
           (o) => o['section_name']?.toString() == widget.initialSection,
           orElse: () => _offerings.first,
         );
-        _selectedOfferingId = match['id']?.toString();
-      } else {
-        _selectedOfferingId = _offerings.first['id']?.toString();
       }
+      final g = match['grade_level']?.toString().trim();
+      _selectedGrade = g != null && g.startsWith('Grade') ? g : 'Grade $g';
+      _selectedSubject = match['subject_name']?.toString().trim();
+      _selectedOfferingId = match['id']?.toString();
     }
   }
 
@@ -170,10 +232,10 @@ class _CreateRequirementFlowDialogState
         return;
       }
 
-      if (file.size > 5 * 1024 * 1024) {
+      if (file.size > 10 * 1024 * 1024) {
         setState(() {
           _fileError =
-              'File size exceeds the 5 MiB limit (${(file.size / (1024 * 1024)).toStringAsFixed(2)} MiB > 5 MiB).';
+              'File size exceeds the 10 MiB limit (${(file.size / (1024 * 1024)).toStringAsFixed(2)} MiB > 10 MiB).';
         });
         return;
       }
@@ -224,10 +286,12 @@ class _CreateRequirementFlowDialogState
   }
 
   Future<void> _selectDeadline() async {
+    final now = DateTime.now();
+    final initial = _deadline.isBefore(now) ? now.add(const Duration(days: 1)) : _deadline;
     final date = await showAppDatePickerDialog(
       context,
-      initialDate: _deadline,
-      firstDate: DateTime(2020),
+      initialDate: initial,
+      firstDate: DateTime(now.year, now.month, now.day),
       lastDate: DateTime(2100),
       title: 'Select Due Date',
     );
@@ -235,7 +299,7 @@ class _CreateRequirementFlowDialogState
 
     final time = await showTimePicker(
       context: context,
-      initialTime: TimeOfDay.fromDateTime(_deadline),
+      initialTime: TimeOfDay.fromDateTime(initial),
     );
     if (!mounted || time == null) return;
 
@@ -247,6 +311,9 @@ class _CreateRequirementFlowDialogState
         time.hour,
         time.minute,
       );
+      if (_deadline.isAfter(DateTime.now())) {
+        _deadlineError = null;
+      }
     });
   }
 
@@ -283,7 +350,13 @@ class _CreateRequirementFlowDialogState
       setState(() => _offeringError = null);
     }
 
-    if (!formValid || !offeringValid || _fileError != null) {
+    if (widget.existingTask == null && _deadline.isBefore(DateTime.now())) {
+      setState(() => _deadlineError = 'Due date must be in the future.');
+    } else {
+      setState(() => _deadlineError = null);
+    }
+
+    if (!formValid || !offeringValid || _fileError != null || _deadlineError != null) {
       return;
     }
 
@@ -297,30 +370,45 @@ class _CreateRequirementFlowDialogState
     final sectionName = selectedOffering['section_name']?.toString() ?? 'General Section';
     final gradeLevel = selectedOffering['grade_level']?.toString() ?? 'Grade 11';
 
-    final task = ActivityModel(
-      id: widget.existingTask?.id ?? '',
-      title: _titleCtrl.text.trim(),
-      description: '',
-      instructions: _instructionsCtrl.text.trim(),
-      subject: subjectName,
-      gradeLevel: gradeLevel,
-      section: sectionName,
-      deadline: _deadline,
-      maxScore: maxScore,
-      isPublished: true,
-      isRequirement: widget.isPerformanceTask,
-      subjectOfferingId: _selectedOfferingId,
-      attachmentName: _attachmentName,
-      storagePath: widget.existingTask?.storagePath,
-      mimeType: widget.existingTask?.mimeType,
-      fileSizeBytes: widget.existingTask?.fileSizeBytes,
-    );
+    final categoryKey = widget.isPerformanceTask ? 'pt' : 'ww';
+    final categoryLabel = widget.isPerformanceTask ? 'PT' : 'WW';
 
     setState(() => _isSubmitting = true);
 
-    final repo = widget.repository ?? SupabaseTeacherClassworkRepository.instance;
     try {
-      await repo.saveActivity(
+      // 1. Gradebook 10-column ceiling check
+      if (widget.existingTask == null) {
+        final termSheet = await SubjectRepository.instance.getGradebookTermSheet(_selectedOfferingId!, 1);
+        final hpsMap = (termSheet?['hps'] as Map<String, dynamic>?)?[categoryKey] as Map<String, dynamic>? ?? {};
+        
+        if (hpsMap.length >= 10) {
+          throw Exception(
+            'Maximum limit reached: You have already assigned all 10 $categoryLabel columns for this Term.',
+          );
+        }
+      }
+
+      final task = ActivityModel(
+        id: widget.existingTask?.id ?? '',
+        title: _titleCtrl.text.trim(),
+        description: '',
+        instructions: _instructionsCtrl.text.trim(),
+        subject: subjectName,
+        gradeLevel: gradeLevel,
+        section: sectionName,
+        deadline: _deadline,
+        maxScore: maxScore,
+        isPublished: true,
+        isRequirement: widget.isPerformanceTask,
+        subjectOfferingId: _selectedOfferingId,
+        attachmentName: _attachmentName,
+        storagePath: widget.existingTask?.storagePath,
+        mimeType: widget.existingTask?.mimeType,
+        fileSizeBytes: widget.existingTask?.fileSizeBytes,
+      );
+
+      final repo = widget.repository ?? SupabaseTeacherClassworkRepository.instance;
+      final savedActivity = await repo.saveActivity(
         activity: task,
         subjectOfferingId: _selectedOfferingId!,
         fileBytes: _pickedFileBytes,
@@ -328,6 +416,32 @@ class _CreateRequirementFlowDialogState
         mimeType: _pickedFileMimeType,
         removeExistingAttachment: _removeExistingAttachment,
       );
+
+      // 2. Synchronize HPS into Gradebook column for this offering
+      try {
+        final termSheet = await SubjectRepository.instance.getGradebookTermSheet(_selectedOfferingId!, 1) ?? {};
+        final hps = Map<String, dynamic>.from(termSheet['hps'] as Map? ?? {});
+        final catMap = Map<String, dynamic>.from(hps[categoryKey] as Map? ?? {});
+
+        // Find existing column key or assign next available 1..10
+        String? targetKey;
+        for (int i = 1; i <= 10; i++) {
+          final k = i.toString();
+          if (!catMap.containsKey(k)) {
+            targetKey = k;
+            break;
+          }
+        }
+
+        if (targetKey != null) {
+          catMap[targetKey] = maxScore;
+          hps[categoryKey] = catMap;
+          termSheet['hps'] = hps;
+          await SubjectRepository.instance.saveGradebookTermSheet(_selectedOfferingId!, 1, termSheet);
+        }
+      } catch (gbErr) {
+        debugPrint('Gradebook HPS sync notice: $gbErr');
+      }
 
       widget.onRequirementCreated();
       if (mounted) Navigator.of(context).pop();
@@ -455,9 +569,251 @@ class _CreateRequirementFlowDialogState
                       ),
                       const SizedBox(height: 16),
 
-                      // 2. Subject Offering & Due Date Selector
+                      // 2. ENROLLMENT TARGET Card (Grade Level, Subject, Section)
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.primary.withValues(alpha: 0.03),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: _offeringError != null
+                                ? const Color(0xFFEF4444)
+                                : theme.colorScheme.primary.withValues(alpha: 0.15),
+                          ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(
+                                  Icons.school_outlined,
+                                  size: 16,
+                                  color: theme.colorScheme.primary,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'ENROLLMENT TARGET',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    letterSpacing: 0.8,
+                                    color: theme.colorScheme.primary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            if (_isLoadingOfferings)
+                              const Padding(
+                                padding: EdgeInsets.symmetric(vertical: 12),
+                                child: Center(
+                                  child: SizedBox(
+                                    width: 24,
+                                    height: 24,
+                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                  ),
+                                ),
+                              )
+                            else if (_offerings.isEmpty)
+                              const Text(
+                                'No active subject offerings available. Please set up your classes first.',
+                                style: TextStyle(
+                                  color: Color(0xFFEF4444),
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              )
+                            else
+                              Row(
+                                children: [
+                                  // Grade Level Dropdown
+                                  Expanded(
+                                    flex: 3,
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        const Text(
+                                          'Grade Level',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 6),
+                                        DropdownButtonFormField<String>(
+                                          initialValue: _availableGrades.contains(_selectedGrade)
+                                              ? _selectedGrade
+                                              : (_availableGrades.isNotEmpty ? _availableGrades.first : null),
+                                          isExpanded: true,
+                                          decoration: InputDecoration(
+                                            contentPadding: const EdgeInsets.symmetric(
+                                              horizontal: 12,
+                                              vertical: 10,
+                                            ),
+                                            border: OutlineInputBorder(
+                                              borderRadius: BorderRadius.circular(8),
+                                            ),
+                                          ),
+                                          items: _availableGrades.map((g) {
+                                            return DropdownMenuItem(
+                                              value: g,
+                                              child: Text(g, style: const TextStyle(fontSize: 12)),
+                                            );
+                                          }).toList(),
+                                          onChanged: (val) {
+                                            if (val != null) {
+                                              setState(() {
+                                                _selectedGrade = val;
+                                                final subs = _availableSubjects;
+                                                _selectedSubject = subs.isNotEmpty ? subs.first : null;
+                                                final secs = _availableSections;
+                                                _selectedOfferingId = secs.isNotEmpty
+                                                    ? secs.first['id']?.toString()
+                                                    : null;
+                                                _offeringError = null;
+                                              });
+                                            }
+                                          },
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+
+                                  // Subject Dropdown
+                                  Expanded(
+                                    flex: 5,
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        const Text(
+                                          'Subject',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 6),
+                                        DropdownButtonFormField<String>(
+                                          initialValue: _availableSubjects.contains(_selectedSubject)
+                                              ? _selectedSubject
+                                              : (_availableSubjects.isNotEmpty ? _availableSubjects.first : null),
+                                          isExpanded: true,
+                                          decoration: InputDecoration(
+                                            contentPadding: const EdgeInsets.symmetric(
+                                              horizontal: 12,
+                                              vertical: 10,
+                                            ),
+                                            border: OutlineInputBorder(
+                                              borderRadius: BorderRadius.circular(8),
+                                            ),
+                                          ),
+                                          items: _availableSubjects.map((sub) {
+                                            return DropdownMenuItem(
+                                              value: sub,
+                                              child: Text(
+                                                sub,
+                                                style: const TextStyle(fontSize: 12),
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            );
+                                          }).toList(),
+                                          onChanged: (val) {
+                                            if (val != null) {
+                                              setState(() {
+                                                _selectedSubject = val;
+                                                final secs = _availableSections;
+                                                _selectedOfferingId = secs.isNotEmpty
+                                                    ? secs.first['id']?.toString()
+                                                    : null;
+                                                _offeringError = null;
+                                              });
+                                            }
+                                          },
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+
+                                  // Section Dropdown
+                                  Expanded(
+                                    flex: 4,
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        const Text(
+                                          'Section',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 6),
+                                        DropdownButtonFormField<String>(
+                                          initialValue: _availableSections.any((s) => s['id']?.toString() == _selectedOfferingId)
+                                              ? _selectedOfferingId
+                                              : (_availableSections.isNotEmpty ? _availableSections.first['id']?.toString() : null),
+                                          isExpanded: true,
+                                          decoration: InputDecoration(
+                                            contentPadding: const EdgeInsets.symmetric(
+                                              horizontal: 12,
+                                              vertical: 10,
+                                            ),
+                                            border: OutlineInputBorder(
+                                              borderRadius: BorderRadius.circular(8),
+                                            ),
+                                          ),
+                                          items: _availableSections.map((sec) {
+                                            final id = sec['id']?.toString() ?? '';
+                                            final secName = sec['section_name']?.toString() ?? 'Section';
+                                            return DropdownMenuItem(
+                                              value: id,
+                                              child: Text(
+                                                secName,
+                                                style: const TextStyle(
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            );
+                                          }).toList(),
+                                          onChanged: (val) {
+                                            if (val != null) {
+                                              setState(() {
+                                                _selectedOfferingId = val;
+                                                _offeringError = null;
+                                              });
+                                            }
+                                          },
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            if (_offeringError != null)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 8, left: 4),
+                                child: Text(
+                                  _offeringError!,
+                                  style: const TextStyle(
+                                    color: Color(0xFFEF4444),
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Due Date & Time Picker
                       Text(
-                        'Assigned Subject Offering & Due Date / Time *',
+                        'Submission Deadline / Due Date *',
                         style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
@@ -465,149 +821,70 @@ class _CreateRequirementFlowDialogState
                         ),
                       ),
                       const SizedBox(height: 6),
-
-                      if (_isLoadingOfferings)
-                        const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 12),
-                          child: Center(
-                            child: SizedBox(
-                              width: 24,
-                              height: 24,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            ),
+                      InkWell(
+                        onTap: _selectDeadline,
+                        borderRadius: BorderRadius.circular(10),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 14,
                           ),
-                        )
-                      else if (_offerings.isEmpty)
-                        Container(
-                          padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: const Color(0xFFFEF2F2),
+                            color: Colors.white,
                             borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: const Color(0xFFEF4444)),
-                          ),
-                          child: const Text(
-                            'No active subject offerings available. Please set up your classes first.',
-                            style: TextStyle(
-                              color: Color(0xFFEF4444),
-                              fontSize: 13,
-                              fontWeight: FontWeight.w500,
+                            border: Border.all(
+                              color: _deadlineError != null
+                                  ? const Color(0xFFEF4444)
+                                  : theme.colorScheme.onSurface.withValues(alpha: 0.15),
                             ),
                           ),
-                        )
-                      else
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            // Offering Dropdown
-                            Expanded(
-                              flex: 3,
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  DropdownButtonFormField<String>(
-                                    isExpanded: true,
-                                    initialValue: _selectedOfferingId,
-                                    decoration: InputDecoration(
-                                      contentPadding:
-                                          const EdgeInsets.symmetric(
-                                        horizontal: 14,
-                                        vertical: 12,
-                                      ),
-                                      border: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(10),
-                                      ),
-                                      errorBorder: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(10),
-                                        borderSide: const BorderSide(
-                                          color: Color(0xFFEF4444),
-                                          width: 1.5,
-                                        ),
-                                      ),
-                                    ),
-                                    items: _offerings.map((offering) {
-                                      final id = offering['id']?.toString() ?? '';
-                                      final sub = offering['subject_name'] ?? '';
-                                      final sec = offering['section_name'] ?? '';
-                                      final grade = offering['grade_level'] != null
-                                          ? ' (Grade ${offering['grade_level']})'
-                                          : '';
-                                      return DropdownMenuItem<String>(
-                                        value: id,
-                                        child: Text(
-                                          '$sub - $sec$grade',
-                                          overflow: TextOverflow.ellipsis,
-                                          style: const TextStyle(fontSize: 13),
-                                        ),
-                                      );
-                                    }).toList(),
-                                    onChanged: (val) {
-                                      setState(() {
-                                        _selectedOfferingId = val;
-                                        _offeringError = null;
-                                      });
-                                    },
-                                  ),
-                                  if (_offeringError != null)
-                                    Padding(
-                                      padding: const EdgeInsets.only(
-                                        top: 4,
-                                        left: 12,
-                                      ),
-                                      child: Text(
-                                        _offeringError!,
-                                        style: const TextStyle(
-                                          color: Color(0xFFEF4444),
-                                          fontSize: 12,
-                                        ),
-                                      ),
-                                    ),
-                                ],
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.calendar_month_outlined,
+                                size: 18,
+                                color: theme.colorScheme.primary,
                               ),
-                            ),
-                            const SizedBox(width: 12),
-
-                            // Due Date Button
-                            Expanded(
-                              flex: 2,
-                              child: InkWell(
-                                onTap: _selectDeadline,
-                                borderRadius: BorderRadius.circular(10),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                    vertical: 14,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white,
-                                    borderRadius: BorderRadius.circular(10),
-                                    border: Border.all(
-                                      color: theme.colorScheme.onSurface
-                                          .withValues(alpha: 0.12),
-                                    ),
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      Expanded(
-                                        child: Text(
-                                          _formatDeadline(_deadline),
-                                          style: TextStyle(
-                                            fontSize: 13,
-                                            color: theme.colorScheme.onSurface,
-                                          ),
-                                        ),
-                                      ),
-                                      Icon(
-                                        Icons.calendar_month_outlined,
-                                        size: 18,
-                                        color: theme.colorScheme.onSurface
-                                            .withValues(alpha: 0.6),
-                                      ),
-                                    ],
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  _formatDeadline(_deadline),
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                    color: theme.colorScheme.onSurface,
                                   ),
                                 ),
                               ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: theme.colorScheme.primary.withValues(alpha: 0.08),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  'Change Deadline',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    color: theme.colorScheme.primary,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      if (_deadlineError != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 6, left: 4),
+                          child: Text(
+                            _deadlineError!,
+                            style: const TextStyle(
+                              color: Color(0xFFEF4444),
+                              fontSize: 12,
                             ),
-                          ],
+                          ),
                         ),
                       const SizedBox(height: 16),
 

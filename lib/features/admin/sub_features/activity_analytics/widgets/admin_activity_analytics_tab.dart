@@ -2005,11 +2005,9 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
                                             ),
                                           )
                                         : Text(
-                                            log.logoutAt != null
-                                                ? _formatTimestamp(
-                                                    log.logoutAt!,
-                                                  )
-                                                : 'Ended',
+                                            _formatTimestamp(
+                                                    log.effectiveLogoutAt,
+                                                  ),
                                             style: const TextStyle(
                                               fontSize: 12.5,
                                             ),
@@ -2698,11 +2696,10 @@ class _CurveChartPainter extends CustomPainter {
     this.lineColor = AppTheme.catGreen,
     this.seriesList = const [],
     this.activeFilter = 'today',
-    this.hoveredIndex,
     this.hoveredPointIndex,
     this.hoveredSeriesIndex,
     this.hoverAnimValue = 0.0,
-  }) : points = const [];
+  }) : hoveredIndex = null, points = const [];
 
   @override
   void paint(Canvas canvas, Size size) {
