@@ -158,6 +158,10 @@ class LocalStorageService {
     await prefs.remove('session.active_id');
     await prefs.remove('session.last_interaction');
     await prefs.remove('session.last_active_route');
+    await prefs.remove('session.tab_teacher');
+    await prefs.remove('session.tab_admin');
+    await prefs.remove('session.tab_student');
+    await prefs.remove('session.tab_parent');
     await _ensureSaved(await prefs.remove(keyRememberMe));
     await _ensureSaved(await prefs.remove(keySavedEmail));
     await _ensureSaved(await prefs.remove(keySavedPassword));

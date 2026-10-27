@@ -206,23 +206,34 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!mounted) return;
       setState(() => _isLoading = false);
 
+      LocalStorageService.saveActiveDashboardTab('admin', 0);
+      LocalStorageService.saveActiveDashboardTab('teacher', 0);
+      LocalStorageService.saveActiveDashboardTab('student', 0);
+      LocalStorageService.saveActiveDashboardTab('parent', 0);
+
       if (email == 'student') {
         if (user != null) {
           final isUserDark = LocalStorageService.isUserDarkMode(user.id, email: user.email);
           AppTheme.themeModeNotifier.value = isUserDark ? ThemeMode.dark : ThemeMode.light;
         }
+        LocalStorageService.saveLastActiveRoute(AppRoutes.studentHome);
+        updateBrowserUrl(AppRoutes.studentHome);
         Navigator.pushReplacementNamed(context, AppRoutes.studentHome);
       } else if (email == 'parent') {
         if (user != null) {
           final isUserDark = LocalStorageService.isUserDarkMode(user.id, email: user.email);
           AppTheme.themeModeNotifier.value = isUserDark ? ThemeMode.dark : ThemeMode.light;
         }
+        LocalStorageService.saveLastActiveRoute(AppRoutes.parentHome);
+        updateBrowserUrl(AppRoutes.parentHome);
         Navigator.pushReplacementNamed(context, AppRoutes.parentHome);
       } else if (email == 'teacher') {
         if (user != null) {
           final isUserDark = LocalStorageService.isUserDarkMode(user.id, email: user.email);
           AppTheme.themeModeNotifier.value = isUserDark ? ThemeMode.dark : ThemeMode.light;
         }
+        LocalStorageService.saveLastActiveRoute(AppRoutes.teacherDashboard);
+        updateBrowserUrl(AppRoutes.teacherDashboard);
         Navigator.pushReplacementNamed(context, AppRoutes.teacherDashboard);
       }
       return;
@@ -421,6 +432,15 @@ class _LoginScreenState extends State<LoginScreen> {
     // Mark session warm and persist UserModel snapshot for instant zero-logout F5 reload
     markWarmSession();
     LocalStorageService.saveUser(user);
+
+    // Fresh login: Always direct user to their primary role Dashboard (Tab 0)
+    LocalStorageService.saveActiveDashboardTab('admin', 0);
+    LocalStorageService.saveActiveDashboardTab('teacher', 0);
+    LocalStorageService.saveActiveDashboardTab('student', 0);
+    LocalStorageService.saveActiveDashboardTab('parent', 0);
+    final dashboardRoute = AppRoutes.getDashboardRouteForRole(user.role);
+    LocalStorageService.saveLastActiveRoute(dashboardRoute);
+    updateBrowserUrl(dashboardRoute);
 
     switch (user.role) {
       case UserRole.admin:

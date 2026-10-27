@@ -18,8 +18,15 @@ class _ClassSection {
   final String name;
   int studentCount;
 
-  _ClassSection({required this.id, required this.name}) : studentCount = 0;
+  _ClassSection({
+    required this.id,
+    required this.name,
+    this.studentCount = 0,
+  });
 }
+
+/// Classroom Setup View Mode
+enum _ClassroomViewMode { active, archivedSubjects, archivedSections }
 
 /// A subject the teacher teaches, with grading config and sections.
 class _SubjectClass {
@@ -93,11 +100,14 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
   final String _currentSchoolYear = '2026-2027';
 
   bool _showAddForm = false;
-  bool _isViewingArchived = false;
+  _ClassroomViewMode _viewMode = _ClassroomViewMode.active;
+  bool get _isViewingArchived => _viewMode != _ClassroomViewMode.active;
   _SubjectClass? _editingSubject;
 
   final List<_SubjectClass> _subjects = [];
   final List<_SubjectClass> _archivedSubjects = [];
+  final List<_SubjectClass> _archivedSectionsSubjects = [];
+  int _archivedSectionsCount = 0;
 
   // ── Form state ──
   SubjectTemplate? _selectedTemplate;
@@ -327,40 +337,134 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
           const SizedBox(height: 20),
 
           // ── Section Title Bar ──
-          Row(
-            children: [
-              Icon(
-                _isViewingArchived ? LucideIcons.archive : LucideIcons.bookOpen,
-                size: 18,
-                color: theme.colorScheme.primary,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                _isViewingArchived ? 'ARCHIVED SUBJECTS' : 'ACTIVE SUBJECTS',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 1.0,
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
-                ),
-              ),
-              const Spacer(),
-              AppButton.outline(
-                icon: _isViewingArchived
-                    ? LucideIcons.bookOpen
-                    : LucideIcons.archive,
-                label: _isViewingArchived
-                    ? 'Active Subjects (${_subjects.length})'
-                    : 'Archived Subjects (${_archivedSubjects.length})',
-                onPressed: () {
-                  setState(() {
-                    _isViewingArchived = !_isViewingArchived;
-                    _showAddForm = false;
-                    _editingSubject = null;
-                  });
-                },
-              ),
-            ],
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final isNarrow = constraints.maxWidth < 720;
+
+              final titleWidget = Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    _viewMode == _ClassroomViewMode.active
+                        ? LucideIcons.bookOpen
+                        : (_viewMode == _ClassroomViewMode.archivedSubjects
+                            ? LucideIcons.archive
+                            : LucideIcons.layers),
+                    size: 18,
+                    color: theme.colorScheme.primary,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    _viewMode == _ClassroomViewMode.active
+                        ? 'ACTIVE SUBJECTS'
+                        : (_viewMode == _ClassroomViewMode.archivedSubjects
+                            ? 'ARCHIVED SUBJECTS'
+                            : 'ARCHIVED SECTIONS'),
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1.0,
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                    ),
+                  ),
+                ],
+              );
+
+              final actionButtons = Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                alignment: WrapAlignment.end,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  if (_viewMode == _ClassroomViewMode.active) ...[
+                    AppButton.outline(
+                      icon: LucideIcons.archive,
+                      label: 'Archived Subjects (${_archivedSubjects.length})',
+                      onPressed: () {
+                        setState(() {
+                          _viewMode = _ClassroomViewMode.archivedSubjects;
+                          _showAddForm = false;
+                          _editingSubject = null;
+                        });
+                      },
+                    ),
+                    AppButton.outline(
+                      icon: LucideIcons.layers,
+                      label: 'Archived Sections ($_archivedSectionsCount)',
+                      onPressed: () {
+                        setState(() {
+                          _viewMode = _ClassroomViewMode.archivedSections;
+                          _showAddForm = false;
+                          _editingSubject = null;
+                        });
+                      },
+                    ),
+                  ] else if (_viewMode == _ClassroomViewMode.archivedSubjects) ...[
+                    AppButton.outline(
+                      icon: LucideIcons.bookOpen,
+                      label: 'Active Subjects (${_subjects.length})',
+                      onPressed: () {
+                        setState(() {
+                          _viewMode = _ClassroomViewMode.active;
+                          _showAddForm = false;
+                          _editingSubject = null;
+                        });
+                      },
+                    ),
+                    AppButton.outline(
+                      icon: LucideIcons.layers,
+                      label: 'Archived Sections ($_archivedSectionsCount)',
+                      onPressed: () {
+                        setState(() {
+                          _viewMode = _ClassroomViewMode.archivedSections;
+                          _showAddForm = false;
+                          _editingSubject = null;
+                        });
+                      },
+                    ),
+                  ] else ...[
+                    AppButton.outline(
+                      icon: LucideIcons.bookOpen,
+                      label: 'Active Subjects (${_subjects.length})',
+                      onPressed: () {
+                        setState(() {
+                          _viewMode = _ClassroomViewMode.active;
+                          _showAddForm = false;
+                          _editingSubject = null;
+                        });
+                      },
+                    ),
+                    AppButton.outline(
+                      icon: LucideIcons.archive,
+                      label: 'Archived Subjects (${_archivedSubjects.length})',
+                      onPressed: () {
+                        setState(() {
+                          _viewMode = _ClassroomViewMode.archivedSubjects;
+                          _showAddForm = false;
+                          _editingSubject = null;
+                        });
+                      },
+                    ),
+                  ],
+                ],
+              );
+
+              if (isNarrow) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    titleWidget,
+                    const SizedBox(height: 10),
+                    actionButtons,
+                  ],
+                );
+              }
+
+              return Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [titleWidget, actionButtons],
+              );
+            },
           ),
 
           const SizedBox(height: 14),
@@ -390,8 +494,10 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
                     );
                   },
                 )
-              : _isViewingArchived
+              : _viewMode == _ClassroomViewMode.archivedSubjects
               ? _buildArchivedView()
+              : _viewMode == _ClassroomViewMode.archivedSections
+              ? _buildArchivedSectionsView()
               : _buildActiveView(),
         ],
       ),
@@ -986,7 +1092,24 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
     });
   }
 
-  Future<bool> _confirmDeleteSection(String sectionName) async {
+  /// Universal, DRY confirmation dialog for Archive, Restore, and Delete actions
+  Future<bool> _showActionConfirmationDialog({
+    required String title,
+    required String message,
+    required String confirmLabel,
+    required IconData icon,
+    Color? iconColor,
+    Color? confirmButtonColor,
+    Widget? detailsWidget,
+    bool isDestructive = false,
+  }) async {
+    final theme = Theme.of(context);
+    final primaryColor = theme.colorScheme.primary;
+    final effectiveIconColor = iconColor ??
+        (isDestructive ? theme.colorScheme.error : primaryColor);
+    final effectiveBtnColor = confirmButtonColor ??
+        (isDestructive ? theme.colorScheme.error : primaryColor);
+
     final result = await _showConstrainedDialog<bool>(
       context: context,
       maxWidth: 440,
@@ -997,38 +1120,39 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.all(8),
+                padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.error
-                      .withValues(alpha: 0.12),
+                  color: effectiveIconColor.withValues(alpha: 0.12),
                   shape: BoxShape.circle,
                 ),
-                child: Icon(
-                  LucideIcons.alertTriangle,
-                  size: 20,
-                  color: Theme.of(context).colorScheme.error,
-                ),
+                child: Icon(icon, size: 22, color: effectiveIconColor),
               ),
-              const SizedBox(width: 12),
-              const Expanded(
+              const SizedBox(width: 14),
+              Expanded(
                 child: Text(
-                  'Remove Section?',
-                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+                  title,
+                  style: const TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 16),
           Text(
-            'Removing "$sectionName" will permanently delete that section\'s offering records (student enrollments, attendance, gradebook scores, schedules, and classwork for that section).',
+            message,
             style: TextStyle(
               fontSize: 13,
               height: 1.45,
-              color: Theme.of(context).colorScheme.onSurface
-                  .withValues(alpha: 0.85),
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.85),
             ),
           ),
-          const SizedBox(height: 20),
+          if (detailsWidget != null) ...[
+            const SizedBox(height: 12),
+            detailsWidget,
+          ],
+          const SizedBox(height: 22),
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
@@ -1037,14 +1161,30 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
                 child: const Text('Cancel'),
               ),
               const SizedBox(width: 8),
-              ElevatedButton(
+              ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Theme.of(context).colorScheme.error,
-                  foregroundColor: Theme.of(context).colorScheme.onError,
+                  backgroundColor: effectiveBtnColor,
+                  foregroundColor: isDestructive
+                      ? theme.colorScheme.onError
+                      : theme.colorScheme.onPrimary,
                   elevation: 0,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 11,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                icon: Icon(icon, size: 16),
+                label: Text(
+                  confirmLabel,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                  ),
                 ),
                 onPressed: () => Navigator.pop(context, true),
-                child: const Text('Remove Section'),
               ),
             ],
           ),
@@ -1052,6 +1192,103 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
       ),
     );
     return result ?? false;
+  }
+
+  /// Informative blocking dialog when academic records prevent permanent deletion
+  void _showAcademicRecordsBlockedDialog({
+    required String itemName,
+    required bool isSection,
+  }) {
+    _showConstrainedDialog(
+      context: context,
+      maxWidth: 440,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.amber.withValues(alpha: 0.15),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  LucideIcons.shieldAlert,
+                  size: 22,
+                  color: Colors.amber,
+                ),
+              ),
+              const SizedBox(width: 14),
+              const Expanded(
+                child: Text(
+                  'Cannot Permanently Delete',
+                  style: TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'The ${isSection ? "section" : "subject"} "$itemName" contains existing student grades, scores, or classwork submissions.',
+            style: TextStyle(
+              fontSize: 13.5,
+              fontWeight: FontWeight.w600,
+              height: 1.4,
+              color: Theme.of(context).colorScheme.onSurface,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surfaceContainerHighest
+                  .withValues(alpha: 0.35),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: Theme.of(context).colorScheme.outline
+                    .withValues(alpha: 0.2),
+              ),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(
+                  LucideIcons.info,
+                  size: 16,
+                  color: Color(0xFF487898),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'To protect historical student records and grading accuracy, items with academic activity cannot be deleted. '
+                    'They will remain safely stored in your Archive.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      height: 1.45,
+                      color: Theme.of(context).colorScheme.onSurface
+                          .withValues(alpha: 0.8),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 22),
+          Align(
+            alignment: Alignment.centerRight,
+            child: AppButton.primary(
+              label: 'Understood',
+              onPressed: () => Navigator.pop(context),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   void _openEnrollmentDialog({
@@ -1863,20 +2100,28 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
     if (_sectionRows.length <= 1) return;
 
     if (row.isExisting && _editingSubject != null) {
-      final confirmed = await _confirmDeleteSection(row.nameCtrl.text);
+      final confirmed = await _showActionConfirmationDialog(
+        title: 'Archive Section?',
+        message:
+            'Are you sure you want to archive section "${row.nameCtrl.text}"? '
+            'It will be safely moved to Archived Sections and can be restored anytime.',
+        confirmLabel: 'Archive Section',
+        icon: LucideIcons.archive,
+      );
       if (!confirmed) return;
 
       try {
-        await SubjectRepository.instance.deleteSingleOffering(row.id);
+        await SubjectRepository.instance.archiveSingleOffering(row.id);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Section "${row.nameCtrl.text}" removed.')),
+            SnackBar(content: Text('Section "${row.nameCtrl.text}" archived.')),
           );
         }
+        await _loadSubjects();
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Failed to remove section: $e')),
+            SnackBar(content: Text('Failed to archive section: $e')),
           );
         }
         return;
@@ -1973,8 +2218,20 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
             teacherId,
             schoolYear: _currentSchoolYear,
           );
+      final archivedSectionRows = await SubjectRepository.instance
+          .getTeacherArchivedSections(
+            teacherId,
+            schoolYear: _currentSchoolYear,
+          );
 
-      Map<String, _SubjectClass> parseGrouped(List<Map<String, dynamic>> rows) {
+      final activeIds = activeRows.map((r) => r['id'].toString()).toList();
+      final activeStudentCounts = await SubjectRepository.instance
+          .getOfferingStudentCounts(activeIds);
+
+      Map<String, _SubjectClass> parseGrouped(
+        List<Map<String, dynamic>> rows, {
+        Map<String, int>? studentCounts,
+      }) {
         final Map<String, _SubjectClass> grouped = {};
         for (var row in rows) {
           final id = row['id'].toString();
@@ -1983,6 +2240,9 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
           final glInt = row['grade_level'];
           final gl = 'Grade $glInt';
           final secName = row['section_name'] ?? 'Section';
+          final studentCount = studentCounts?[id] ??
+              (row['student_count'] as num?)?.toInt() ??
+              0;
           final ww = (row['ww_weight'] as num?)?.toInt() ?? 20;
           final pt = (row['pt_weight'] as num?)?.toInt() ?? 50;
           final ex = (row['ex_weight'] as num?)?.toInt() ?? 30;
@@ -2013,13 +2273,23 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
               sections: [],
             );
           }
-          grouped[key]!.sections.add(_ClassSection(id: id, name: secName));
+          grouped[key]!.sections.add(
+            _ClassSection(
+              id: id,
+              name: secName,
+              studentCount: studentCount,
+            ),
+          );
         }
         return grouped;
       }
 
-      final activeGrouped = parseGrouped(activeRows);
+      final activeGrouped = parseGrouped(
+        activeRows,
+        studentCounts: activeStudentCounts,
+      );
       final archivedGrouped = parseGrouped(archivedRows);
+      final archivedSectionsGrouped = parseGrouped(archivedSectionRows);
 
       if (mounted) {
         setState(() {
@@ -2027,6 +2297,9 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
           _subjects.addAll(activeGrouped.values);
           _archivedSubjects.clear();
           _archivedSubjects.addAll(archivedGrouped.values);
+          _archivedSectionsSubjects.clear();
+          _archivedSectionsSubjects.addAll(archivedSectionsGrouped.values);
+          _archivedSectionsCount = archivedSectionRows.length;
         });
       }
     } catch (e) {
@@ -2224,123 +2497,60 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
   // ─────────────────────────────────────────────────────────────────────────
   // Archive Modal (Constrained Max Width 440px)
   // ─────────────────────────────────────────────────────────────────────────
-  void _confirmArchive(_SubjectClass subject) {
-    _showConstrainedDialog(
-      context: context,
-      maxWidth: 440,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.primary
-                      .withValues(alpha: 0.12),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  LucideIcons.archive,
-                  size: 20,
-                  color: Theme.of(context).colorScheme.primary,
-                ),
+  // ─────────────────────────────────────────────────────────────────────────
+  // Archive Modal (Uses DRY _showActionConfirmationDialog)
+  // ─────────────────────────────────────────────────────────────────────────
+  void _confirmArchive(_SubjectClass subject) async {
+    final confirmed = await _showActionConfirmationDialog(
+      title: 'Archive Subject?',
+      message:
+          'Are you sure you want to archive "${subject.name}" (${subject.gradeLevel})? '
+          'It will be hidden from your active classroom views.',
+      confirmLabel: 'Archive Subject',
+      icon: LucideIcons.archive,
+      detailsWidget: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surfaceContainerHighest
+              .withValues(alpha: 0.3),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: const Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(LucideIcons.info, size: 16, color: Color(0xFF487898)),
+            SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Sections, learning materials, and grading records are kept safely. You can restore this subject anytime from the Archived Subjects view.',
+                style: TextStyle(fontSize: 12, height: 1.4),
               ),
-              const SizedBox(width: 12),
-              const Expanded(
-                child: Text(
-                  'Archive Subject?',
-                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'Archiving "${subject.name}" will hide it from your active classroom views.',
-            style: TextStyle(
-              fontSize: 13,
-              height: 1.4,
-              color: Theme.of(context).colorScheme.onSurface
-                  .withValues(alpha: 0.85),
             ),
-          ),
-          const SizedBox(height: 10),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surfaceContainerHighest
-                  .withValues(alpha: 0.3),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Icon(
-                  LucideIcons.info,
-                  size: 16,
-                  color: Colors.blueAccent,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Sections, learning materials, and grading records are kept safely. You can restore this subject anytime from the Archived Subjects view.',
-                    style: TextStyle(
-                      fontSize: 12,
-                      height: 1.4,
-                      color: Theme.of(context).colorScheme.onSurface
-                          .withValues(alpha: 0.75),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 22),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Cancel'),
-              ),
-              const SizedBox(width: 8),
-              AppButton.primary(
-                label: 'Archive',
-                onPressed: () async {
-                  Navigator.pop(context);
-                  final teacherId = AuthRepository.instance.currentUser?.id;
-                  if (teacherId != null) {
-                    await SubjectRepository.instance.archiveSubjectOffering(
-                      teacherId: teacherId,
-                      subjectId: subject.subjectId,
-                    );
-                  }
-                  setState(() {
-                    _subjects.remove(subject);
-                    _archivedSubjects.add(subject);
-                  });
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          '${subject.name} moved to archived subjects.',
-                        ),
-                      ),
-                    );
-                  }
-                },
-              ),
-            ],
-          ),
-        ],
+          ],
+        ),
       ),
     );
+
+    if (!confirmed) return;
+
+    final teacherId = AuthRepository.instance.currentUser?.id;
+    if (teacherId != null) {
+      await SubjectRepository.instance.archiveSubjectOffering(
+        teacherId: teacherId,
+        subjectId: subject.subjectId,
+      );
+    }
+    await _loadSubjects();
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${subject.name} moved to archived subjects.')),
+      );
+    }
   }
 
   // ─────────────────────────────────────────────────────────────────────────
-  // Restore Subject (Checks Active Limit of 10)
+  // Restore Subject (Checks Active Limit of 10 and Asks Confirmation)
   // ─────────────────────────────────────────────────────────────────────────
   void _restoreSubject(_SubjectClass subject) async {
     if (_subjects.length >= _maxSubjects) {
@@ -2353,6 +2563,15 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
       return;
     }
 
+    final confirmed = await _showActionConfirmationDialog(
+      title: 'Restore Subject?',
+      message:
+          'Are you sure you want to restore "${subject.name}" (${subject.gradeLevel}) back to your active classroom?',
+      confirmLabel: 'Restore Subject',
+      icon: LucideIcons.rotateCcw,
+    );
+    if (!confirmed) return;
+
     final teacherId = AuthRepository.instance.currentUser?.id;
     if (teacherId != null) {
       await SubjectRepository.instance.restoreSubjectOffering(
@@ -2361,188 +2580,521 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
       );
     }
 
-    setState(() {
-      _archivedSubjects.remove(subject);
-      _subjects.add(subject);
-    });
+    await _loadSubjects();
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${subject.name} restored to active classroom.')),
+      );
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Permanent Delete Modal (Guarded by Academic Records Check)
+  // ─────────────────────────────────────────────────────────────────────────
+  void _confirmPermanentDelete(_SubjectClass subject) async {
+    final teacherId = AuthRepository.instance.currentUser?.id;
+    if (teacherId == null) return;
+
+    // 1. Guard against academic records
+    final hasRecords = await SubjectRepository.instance.hasSubjectAcademicRecords(
+      teacherId,
+      subject.subjectId,
+    );
+
+    if (hasRecords) {
+      if (mounted) {
+        _showAcademicRecordsBlockedDialog(
+          itemName: subject.name,
+          isSection: false,
+        );
+      }
+      return;
+    }
+
+    // 2. Ask confirmation if no academic records exist
+    final confirmed = await _showActionConfirmationDialog(
+      title: 'Permanently Delete Subject?',
+      message:
+          'Are you sure you want to permanently delete "${subject.name}" (${subject.gradeLevel})? '
+          'This action cannot be undone.',
+      confirmLabel: 'Delete Permanently',
+      icon: LucideIcons.trash2,
+      isDestructive: true,
+      detailsWidget: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.green.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
+        ),
+        child: const Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(LucideIcons.shieldCheck, size: 16, color: Colors.green),
+            SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Student Accounts Are Safe: Deleting this subject will NOT delete student user accounts. '
+                'Enrolled students will remain fully active in the system.',
+                style: TextStyle(fontSize: 12, height: 1.4),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (!confirmed) return;
+
+    await SubjectRepository.instance.deleteSubjectOffering(
+      teacherId: teacherId,
+      subjectId: subject.subjectId,
+    );
+
+    await _loadSubjects();
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${subject.name} permanently deleted.')),
+      );
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Restore Single Section
+  // ─────────────────────────────────────────────────────────────────────────
+  void _restoreSection(_ClassSection sec, _SubjectClass parentSubject) async {
+    final confirmed = await _showActionConfirmationDialog(
+      title: 'Restore Section?',
+      message:
+          'Are you sure you want to restore section "${sec.name}" back to "${parentSubject.name}"?',
+      confirmLabel: 'Restore Section',
+      icon: LucideIcons.rotateCcw,
+    );
+    if (!confirmed) return;
+
+    await SubjectRepository.instance.restoreSingleOffering(sec.id);
+    await _loadSubjects();
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('${subject.name} restored to active classroom.'),
+          content: Text('Section "${sec.name}" restored to active classroom.'),
         ),
       );
     }
   }
 
   // ─────────────────────────────────────────────────────────────────────────
-  // Permanent Delete Modal (Constrained Max Width 480px with Student Reassurance)
+  // Permanent Delete Single Archived Section (Guarded by Academic Records)
   // ─────────────────────────────────────────────────────────────────────────
-  void _confirmPermanentDelete(_SubjectClass subject) {
-    _showConstrainedDialog(
-      context: context,
-      maxWidth: 480,
+  void _confirmDeleteArchivedSection(
+    _ClassSection sec,
+    _SubjectClass parentSubject,
+  ) async {
+    // 1. Guard against academic records
+    final hasRecords =
+        await SubjectRepository.instance.hasAcademicRecords(sec.id);
+    if (hasRecords) {
+      if (mounted) {
+        _showAcademicRecordsBlockedDialog(itemName: sec.name, isSection: true);
+      }
+      return;
+    }
+
+    // 2. Ask confirmation if no academic records exist
+    final confirmed = await _showActionConfirmationDialog(
+      title: 'Permanently Delete Section?',
+      message:
+          'Are you sure you want to permanently delete section "${sec.name}" from "${parentSubject.name}"? '
+          'This action cannot be undone.',
+      confirmLabel: 'Delete Permanently',
+      icon: LucideIcons.trash2,
+      isDestructive: true,
+      detailsWidget: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.green.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
+        ),
+        child: const Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(LucideIcons.shieldCheck, size: 16, color: Colors.green),
+            SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Student Accounts Are Safe: Deleting this section will NOT delete student user accounts.',
+                style: TextStyle(fontSize: 12, height: 1.4),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (!confirmed) return;
+
+    await SubjectRepository.instance.deleteSingleOffering(sec.id);
+    await _loadSubjects();
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Section "${sec.name}" permanently deleted.')),
+      );
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Archived Sections View & Empty State
+  // ─────────────────────────────────────────────────────────────────────────
+  Widget _buildArchivedSectionsView() {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    if (_archivedSectionsSubjects.isEmpty) {
+      return Container(
+        height: 260,
+        alignment: Alignment.center,
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: isDark
+              ? theme.colorScheme.surface
+              : theme.colorScheme.surfaceContainerHighest.withValues(
+                  alpha: 0.3,
+                ),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: theme.colorScheme.outline.withValues(
+              alpha: isDark ? 0.2 : 0.3,
+            ),
+          ),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.primary.withValues(alpha: 0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                LucideIcons.layers,
+                size: 32,
+                color: theme.colorScheme.primary,
+              ),
+            ),
+            const SizedBox(height: 14),
+            Text(
+              'No Archived Sections',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: theme.colorScheme.onSurface,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Sections you archive will be stored here under their respective subjects.\nYou can restore individual sections back to their active subjects anytime.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 13,
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                height: 1.4,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final crossAxisCount = constraints.maxWidth >= 950 ? 2 : 1;
+        return GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: crossAxisCount,
+            crossAxisSpacing: 16,
+            mainAxisSpacing: 16,
+            mainAxisExtent: 340,
+          ),
+          itemCount: _archivedSectionsSubjects.length,
+          itemBuilder: (context, index) {
+            return _buildArchivedSectionSubjectCard(
+              _archivedSectionsSubjects[index],
+              index: index,
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Archived Section Subject Card
+  // ─────────────────────────────────────────────────────────────────────────
+  Widget _buildArchivedSectionSubjectCard(
+    _SubjectClass subject, {
+    int index = 0,
+  }) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final muted = theme.colorScheme.onSurface.withValues(alpha: 0.6);
+    final sectionCount = subject.sections.length;
+
+    final cardAccentColor = SubjectPalette.getColorForSubject(
+      subject.name,
+      teacherSubjectNames:
+          _archivedSectionsSubjects.map((s) => s.name).toList(),
+      index: index,
+    );
+
+    return Container(
+      decoration: BoxDecoration(
+        color: isDark
+            ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.2)
+            : const Color(0xFFF8F9FA),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: theme.colorScheme.outline.withValues(alpha: 0.2),
+          width: 1.2,
+        ),
+      ),
+      padding: const EdgeInsets.all(18),
       child: Column(
-        mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // ── Header: Grade badge, Archived Section Tag, Subject Name ──
           Row(
             children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.error
-                      .withValues(alpha: 0.12),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  LucideIcons.alertTriangle,
-                  size: 20,
-                  color: Theme.of(context).colorScheme.error,
+              _buildBadge(subject.gradeLevel, isPrimary: true, compact: true),
+              const SizedBox(width: 6),
+              _buildBadge('Archived Sections', subtle: true, compact: true),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            subject.name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: theme.colorScheme.onSurface,
+            ),
+          ),
+          const SizedBox(height: 10),
+
+          // ── Stats Row ──
+          Row(
+            children: [
+              Icon(LucideIcons.layers, size: 13, color: muted),
+              const SizedBox(width: 4),
+              Text(
+                '$sectionCount ${sectionCount == 1 ? 'archived section' : 'archived sections'}',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: muted,
                 ),
               ),
               const SizedBox(width: 12),
-              const Expanded(
-                child: Text(
-                  'Permanently Delete Subject?',
-                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+              Icon(LucideIcons.users, size: 13, color: muted),
+              const SizedBox(width: 4),
+              Text(
+                '${subject.studentCount} enrolled students',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: muted,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 16),
-          Text(
-            'Are you sure you want to permanently delete "${subject.name}" (${subject.gradeLevel})?',
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: Theme.of(context).colorScheme.onSurface,
-            ),
-          ),
-          const SizedBox(height: 12),
-          // Warning breakdown
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.error
-                  .withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(
-                color: Theme.of(context).colorScheme.error
-                    .withValues(alpha: 0.25),
-              ),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(
-                      LucideIcons.alertCircle,
-                      size: 15,
-                      color: Theme.of(context).colorScheme.error,
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      'What will be deleted:',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: Theme.of(context).colorScheme.error,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  '• Subject offering and all assigned sections\n'
-                  '• Classwork, digital assessments, and quiz records for this subject\n'
-                  '• Gradebook scores and teacher learning materials for this subject\n'
-                  '• This action is permanent and cannot be undone.',
-                  style: TextStyle(
-                    fontSize: 12,
-                    height: 1.45,
-                    color: Theme.of(context).colorScheme.onSurface
-                        .withValues(alpha: 0.8),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
-          // Student Account Safety Reassurance Box
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.green.withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Icon(
-                  LucideIcons.shieldCheck,
-                  size: 16,
-                  color: Colors.green,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Student Accounts Are Safe: Deleting this subject will NOT delete student user accounts. '
-                    'Enrolled students will remain fully active in the system and in their other teachers\' subjects.',
-                    style: TextStyle(
-                      fontSize: 12,
-                      height: 1.4,
-                      color: Theme.of(context).colorScheme.onSurface
-                          .withValues(alpha: 0.85),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 22),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
+
+          const SizedBox(height: 8),
+
+          // ── Weights Badges ──
+          Wrap(
+            spacing: 6,
+            runSpacing: 4,
             children: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Cancel'),
+              _buildBadge(
+                'WW ${subject.wwWeight}%',
+                isPrimary: true,
+                compact: true,
               ),
-              const SizedBox(width: 8),
-              ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Theme.of(context).colorScheme.error,
-                  foregroundColor: Theme.of(context).colorScheme.onError,
-                  elevation: 0,
+              _buildBadge(
+                'PT ${subject.ptWeight}%',
+                isPrimary: true,
+                compact: true,
+              ),
+              _buildBadge(
+                subject.exWeight == 0 ? 'NO EXAM' : 'EX ${subject.exWeight}%',
+                isPrimary: true,
+                compact: true,
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 10),
+          Divider(
+            height: 1,
+            color: theme.colorScheme.outline.withValues(alpha: 0.18),
+          ),
+          const SizedBox(height: 8),
+
+          // ── Archived Sections List ──
+          Expanded(
+            child: ListView.separated(
+              padding: EdgeInsets.zero,
+              itemCount: subject.sections.length,
+              separatorBuilder: (_, _) => const SizedBox(height: 6),
+              itemBuilder: (context, idx) {
+                final sec = subject.sections[idx];
+                return Container(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 12,
+                    horizontal: 10,
+                    vertical: 7,
+                  ),
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? theme.colorScheme.surfaceContainerHighest.withValues(
+                            alpha: 0.25,
+                          )
+                        : Colors.white,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: theme.colorScheme.outline.withValues(
+                        alpha: isDark ? 0.15 : 0.2,
+                      ),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          color: cardAccentColor.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Icon(
+                          LucideIcons.users,
+                          size: 12,
+                          color: cardAccentColor,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          sec.name,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: theme.colorScheme.onSurface,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      // Enrolled Student Count Badge
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.primary.withValues(
+                            alpha: 0.08,
+                          ),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          '${sec.studentCount} ${sec.studentCount == 1 ? "student" : "students"}',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                            color: theme.colorScheme.primary,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      // Restore Section Button
+                      OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          visualDensity: VisualDensity.compact,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 3,
+                          ),
+                          side: BorderSide(
+                            color: theme.colorScheme.primary.withValues(
+                              alpha: 0.6,
+                            ),
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                        ),
+                        icon: const Icon(LucideIcons.rotateCcw, size: 12),
+                        label: const Text(
+                          'Restore',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        onPressed: () => _restoreSection(sec, subject),
+                      ),
+                      const SizedBox(width: 4),
+                      // Section Permanent Delete Button
+                      IconButton(
+                        tooltip: 'Delete section permanently',
+                        visualDensity: VisualDensity.compact,
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(
+                          minWidth: 26,
+                          minHeight: 26,
+                        ),
+                        icon: Icon(
+                          LucideIcons.trash2,
+                          size: 14,
+                          color: theme.colorScheme.error.withValues(alpha: 0.7),
+                        ),
+                        onPressed: () =>
+                            _confirmDeleteArchivedSection(sec, subject),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+
+          const SizedBox(height: 8),
+          Divider(
+            height: 1,
+            color: theme.colorScheme.outline.withValues(alpha: 0.18),
+          ),
+          const SizedBox(height: 8),
+
+          // ── Card Footer Note ──
+          Row(
+            children: [
+              const Icon(LucideIcons.info, size: 13, color: Color(0xFF487898)),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  'Restore sections back to this subject anytime.',
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    color: muted,
                   ),
                 ),
-                icon: const Icon(LucideIcons.trash2, size: 16),
-                label: const Text('Delete Permanently'),
-                onPressed: () async {
-                  Navigator.pop(context);
-                  final teacherId = AuthRepository.instance.currentUser?.id;
-                  if (teacherId != null) {
-                    await SubjectRepository.instance.deleteSubjectOffering(
-                      teacherId: teacherId,
-                      subjectId: subject.subjectId,
-                    );
-                  }
-                  setState(() {
-                    _archivedSubjects.remove(subject);
-                  });
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('${subject.name} permanently deleted.'),
-                      ),
-                    );
-                  }
-                },
               ),
             ],
           ),

@@ -447,8 +447,8 @@ class AdminRepository {
     DateTime? endDate,
   }) async {
     try {
-      // 1. Proactively reconcile stale active sessions (no heartbeat in > 3 minutes)
-      final staleCutoff = DateTime.now().toUtc().subtract(const Duration(minutes: 3));
+      // 1. Proactively reconcile stale active sessions (no heartbeat in > 5 minutes)
+      final staleCutoff = DateTime.now().toUtc().subtract(const Duration(minutes: 5));
       try {
         final staleSessions = await _client
             .from('user_session_logs')
@@ -471,7 +471,7 @@ class AdminRepository {
               'logout_at': lastActiveStr ?? DateTime.now().toUtc().toIso8601String(),
               'logout_reason': 'terminated',
               'duration_seconds': dur >= 0 ? dur : 0,
-            }).eq('id', sId);
+            }).eq('id', sId).eq('is_active', true);
           }
         }
       } catch (staleErr) {
@@ -529,14 +529,36 @@ class AdminRepository {
         .where((log) => log.isActive || log.durationSeconds > 30) // Hide micro/ghost sessions under 30 seconds
         .toList();
 
+      // Deduplicate overlapping or parallel twin sessions for the same user within 60 seconds
+      final deduplicatedLogs = <UserSessionLog>[];
+      for (final log in logs) {
+        final existingIndex = deduplicatedLogs.indexWhere((existing) =>
+            existing.userId == log.userId &&
+            existing.loginAt.difference(log.loginAt).inSeconds.abs() <= 60);
+
+        if (existingIndex == -1) {
+          deduplicatedLogs.add(log);
+        } else {
+          final existing = deduplicatedLogs[existingIndex];
+          // Keep the primary/accurate record:
+          // Prefer active sessions, then prefer 'manual' logout, then highest duration
+          final preferNew = (log.isActive && !existing.isActive) ||
+              (!existing.isActive && !log.isActive && log.logoutReason == 'manual' && existing.logoutReason != 'manual') ||
+              (log.durationSeconds > existing.durationSeconds);
+          if (preferNew) {
+            deduplicatedLogs[existingIndex] = log;
+          }
+        }
+      }
+
       // Prioritize ongoing "Online Now" sessions at the very top (unahan), followed by latest sessions
-      logs.sort((a, b) {
+      deduplicatedLogs.sort((a, b) {
         if (a.isActive && !b.isActive) return -1;
         if (!a.isActive && b.isActive) return 1;
         return b.loginAt.compareTo(a.loginAt);
       });
 
-      return logs;
+      return deduplicatedLogs;
     } catch (e) {
       debugPrint('AdminRepository getTeacherSessionLogs error: $e');
       return [];

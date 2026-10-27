@@ -9,8 +9,6 @@ import 'package:class_realm/widgets/common/app_modals.dart';
 import 'package:class_realm/widgets/common/app_text_field.dart';
 import 'package:class_realm/widgets/common/app_date_picker_field.dart';
 
-import 'package:class_realm/core/theme/app_theme.dart';
-import 'package:class_realm/features/admin/sub_features/user_management/widgets/admin_teacher_recovery_dialog.dart';
 
 class AdminEditTeacherDialog extends StatefulWidget {
   final UserModel teacher;
@@ -61,6 +59,11 @@ class _AdminEditTeacherDialogState extends State<AdminEditTeacherDialog> {
     _emailCtrl = TextEditingController(text: t.email);
     _gender = (t.gender == 'Male' || t.gender == 'Female') ? t.gender : 'Male';
     _birthday = t.birthday;
+
+    _firstNameCtrl.addListener(() => setState(() {}));
+    _middleNameCtrl.addListener(() => setState(() {}));
+    _lastNameCtrl.addListener(() => setState(() {}));
+    _emailCtrl.addListener(() => setState(() {}));
   }
 
   @override
@@ -72,8 +75,25 @@ class _AdminEditTeacherDialogState extends State<AdminEditTeacherDialog> {
     super.dispose();
   }
 
+  bool get _isDirty {
+    final t = widget.teacher;
+    if (_firstNameCtrl.text.trim() != (t.firstName?.trim() ?? '')) return true;
+    if (_middleNameCtrl.text.trim() != (t.middleName?.trim() ?? '')) return true;
+    if (_lastNameCtrl.text.trim() != (t.lastName?.trim() ?? '')) return true;
+    if (_emailCtrl.text.trim().toLowerCase() != t.email.trim().toLowerCase()) return true;
+    final origGender = (t.gender == 'Male' || t.gender == 'Female') ? t.gender : 'Male';
+    if (_gender != origGender) return true;
+    if (_birthday != t.birthday) return true;
+
+    return false;
+  }
+
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
+    if (!_isDirty) {
+      Navigator.of(context).pop(false);
+      return;
+    }
     if (_birthday == null) {
       AppModals.showErrorDialog(
         context: context,
@@ -87,6 +107,7 @@ class _AdminEditTeacherDialogState extends State<AdminEditTeacherDialog> {
     try {
       final success = await AuthRepository.instance.updateTeacherProfile(
         teacherId: widget.teacher.id,
+        email: _emailCtrl.text.trim(),
         firstName: _firstNameCtrl.text.trim(),
         middleName: _middleNameCtrl.text.trim(),
         lastName: _lastNameCtrl.text.trim(),
@@ -181,13 +202,15 @@ class _AdminEditTeacherDialogState extends State<AdminEditTeacherDialog> {
                   ),
                   const SizedBox(height: 20),
 
-                  // Email (Read-Only)
+                  // Editable Email
                   AppTextField(
-                    label: 'Email Address (Account ID)',
+                    label: 'Email Address (Account ID) *',
                     controller: _emailCtrl,
-                    readOnly: true,
-                    enabled: false,
-                    hint: 'Email address',
+                    keyboardType: TextInputType.emailAddress,
+                    inputFormatters: AppValidators.emailFormatters,
+                    autovalidateMode: AutovalidateMode.onUserInteraction,
+                    validator: AppValidators.validateEmail,
+                    hint: 'e.g. teacher@gmail.com',
                   ),
                   const SizedBox(height: 14),
 
@@ -290,69 +313,6 @@ class _AdminEditTeacherDialogState extends State<AdminEditTeacherDialog> {
                     ],
                   ),
                   const SizedBox(height: 24),
-                  
-                  // Security & Credentials
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.error.withValues(alpha: 0.05),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: theme.colorScheme.error.withValues(alpha: 0.2)),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Security & Credentials',
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.bold,
-                            color: theme.colorScheme.error,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: AppButton.outline(
-                                label: 'Update Email Only',
-                                icon: LucideIcons.mail,
-                                onPressed: _isSaving ? null : () async {
-                                  final success = await AdminTeacherRecoveryDialog.show(
-                                    context, 
-                                    widget.teacher,
-                                    isEmailUpdateOnly: true,
-                                  );
-                                  if (success == true && mounted) {
-                                    Navigator.pop(context, true);
-                                  }
-                                },
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: AppButton.primary(
-                                label: 'Reset & Recover Account',
-                                icon: LucideIcons.key,
-                                backgroundColor: AppTheme.catRed,
-                                onPressed: _isSaving ? null : () async {
-                                  final success = await AdminTeacherRecoveryDialog.show(
-                                    context, 
-                                    widget.teacher,
-                                    isEmailUpdateOnly: false,
-                                  );
-                                  if (success == true && mounted) {
-                                    Navigator.pop(context, true);
-                                  }
-                                },
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 24),
 
                   // Actions
                   Row(
@@ -366,7 +326,7 @@ class _AdminEditTeacherDialogState extends State<AdminEditTeacherDialog> {
                       AppButton.primary(
                         label: 'Save Changes',
                         isLoading: _isSaving,
-                        onPressed: _submit,
+                        onPressed: _isDirty && !_isSaving ? _submit : null,
                       ),
                     ],
                   ),

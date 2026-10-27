@@ -267,12 +267,18 @@ class _AddStudentDialogState extends State<AddStudentDialog> {
                     Expanded(
                       flex: 2,
                       child: AppTextField(
-                        label: 'Middle Name',
+                        label: 'Middle Initial (Optional)',
                         controller: _middleNameCtrl,
                         inputFormatters: [
-                          ...AppValidators.nameFormatters,
-                          LengthLimitingTextInputFormatter(30),
+                          FilteringTextInputFormatter.allow(RegExp(r"[a-zA-Z]")),
+                          LengthLimitingTextInputFormatter(1),
                         ],
+                        validator: (v) {
+                          if (v != null && v.trim().length > 1) {
+                            return 'Max 1 character';
+                          }
+                          return null;
+                        },
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -326,22 +332,10 @@ class _AddStudentDialogState extends State<AddStudentDialog> {
                       child: AppDatePickerField(
                         label: 'Birthday *',
                         initialDate: _birthday,
-                        firstDate: BirthdayValidator.getMinDate(),
+                        firstDate: BirthdayValidator.getMinDate('student'),
                         lastDate: BirthdayValidator.getMaxDate('student'),
                         onDateSelected: (d) => setState(() => _birthday = d),
-                        validator: (d) {
-                          if (d == null) return 'Birthday is required';
-                          final now = DateTime.now();
-                          int age = now.year - d.year;
-                          if (now.month < d.month ||
-                              (now.month == d.month && now.day < d.day)) {
-                            age--;
-                          }
-                          if (age < 10) {
-                            return 'Student must be at least 10 years old.';
-                          }
-                          return null;
-                        },
+                        validator: (d) => BirthdayValidator.validateBirthday(d, 'student'),
                       ),
                     ),
                     const SizedBox(width: 12),

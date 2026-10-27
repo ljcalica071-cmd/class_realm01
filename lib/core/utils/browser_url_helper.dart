@@ -81,3 +81,17 @@ void downloadFileString({
     mimeType: mimeType,
   );
 }
+
+/// Registers an OS-level file drag-and-drop listener on the browser window.
+void registerWebDrop({
+  required void Function(dynamic bytes, String fileName, int size) onFileDropped,
+}) {
+  registerWebFileDropListener((bytes, fileName, size) {
+    onFileDropped(bytes, fileName, size);
+  });
+}
+
+/// Unregisters OS-level file drag-and-drop listener.
+void unregisterWebDrop() {
+  unregisterWebFileDropListener();
+}

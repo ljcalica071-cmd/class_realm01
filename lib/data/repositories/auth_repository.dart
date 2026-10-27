@@ -76,7 +76,14 @@ class AuthRepository {
 
   custom.UserModel? _currentUser;
   custom.UserModel? get currentUser =>
-      _currentUser ?? MockDatabase.instance.currentUser ?? LocalStorageService.getCachedUser();
+      _currentUser ??
+      MockDatabase.instance.currentUser ??
+      LocalStorageService.getCachedUser();
+
+  String? _activeSessionId;
+  String? get activeSessionId => _activeSessionId ?? LocalStorageService.getActiveSessionId();
+  Future<String?>? _inFlightSessionFuture;
+  bool _isLoggingOut = false;
 
   void setCurrentUser(custom.UserModel user) {
     _currentUser = user;
@@ -166,7 +173,8 @@ class AuthRepository {
             "Firebase login succeeded, but user data was not found in Supabase Database. Please contact administrator.",
           );
         }
-        if (_currentUser!.isArchived || _currentUser!.status == custom.AccountStatus.archived) {
+        if (_currentUser!.isArchived ||
+            _currentUser!.status == custom.AccountStatus.archived) {
           await _firebaseAuth.signOut();
           await LocalStorageService.clearAuth();
           _currentUser = null;
@@ -177,14 +185,18 @@ class AuthRepository {
         }
 
         // Authentication succeeded! Reset failed attempt counters on this device
-        unawaited(RateLimitService.instance.clearRateLimit(
-          feature: 'login_account',
-          targetIdentifier: cleanEmail,
-        ));
-        unawaited(RateLimitService.instance.clearRateLimit(
-          feature: 'login_device',
-          targetIdentifier: 'device_only',
-        ));
+        unawaited(
+          RateLimitService.instance.clearRateLimit(
+            feature: 'login_account',
+            targetIdentifier: cleanEmail,
+          ),
+        );
+        unawaited(
+          RateLimitService.instance.clearRateLimit(
+            feature: 'login_device',
+            targetIdentifier: 'device_only',
+          ),
+        );
 
         await LocalStorageService.saveUser(_currentUser!);
         MockDatabase.instance.currentUser = _currentUser;
@@ -517,30 +529,55 @@ class AuthRepository {
 
   // Logout
   Future<void> logout([String? reason]) async {
-    final userToLogOut = _currentUser;
-    final sessionId = LocalStorageService.getActiveSessionId();
-    await endSession(reason ?? 'manual', userToLogOut, sessionId);
-    _currentUser = null;
-    await LocalStorageService.clearAuth();
-    clearWarmSession();
-    AppDataCache.instance.clearAll();
-    // Attempt to sign out of Firebase
+    final userToLogOut = currentUser;
+    final sessionId = activeSessionId;
+    _isLoggingOut = true;
     try {
-      await _firebaseAuth.signOut();
-    } catch (_) {}
+      await endSession(reason ?? 'manual', userToLogOut, sessionId);
+    } finally {
+      _currentUser = null;
+      _activeSessionId = null;
+      await LocalStorageService.clearAuth();
+      clearWarmSession();
+      AppDataCache.instance.clearAll();
+      _isLoggingOut = false;
+      // Attempt to sign out of Firebase
+      try {
+        await _firebaseAuth.signOut();
+      } catch (_) {}
 
-    // Also sign out of mock database just in case it was a student/parent
-    MockDatabase.instance.logout();
+      // Also sign out of mock database just in case it was a student/parent
+      MockDatabase.instance.logout();
+    }
   }
 
   // =========================================================================
   // Non-Blocking Session Logging for ALL Roles (Admin, Teacher, Student, Parent)
   // =========================================================================
 
-  Future<void> startSessionLog(custom.UserModel user) async {
+  Future<String?> startSessionLog(custom.UserModel user) async {
+    if (_inFlightSessionFuture != null) {
+      return _inFlightSessionFuture!;
+    }
+    _inFlightSessionFuture = _doStartSessionLog(user);
+    try {
+      return await _inFlightSessionFuture!;
+    } finally {
+      _inFlightSessionFuture = null;
+    }
+  }
+
+  Future<String?> _doStartSessionLog(custom.UserModel user) async {
     try {
       final now = DateTime.now().toUtc();
       final roleStr = user.role.name;
+
+      // Re-use active session if one already exists
+      final existingSessionId = LocalStorageService.getActiveSessionId() ?? _activeSessionId;
+      if (existingSessionId != null) {
+        _activeSessionId = existingSessionId;
+        return existingSessionId;
+      }
 
       // Close any previous open session for this user before starting new one
       try {
@@ -551,29 +588,40 @@ class AuthRepository {
             .eq('user_id', user.id)
             .eq('is_active', false)
             .eq('duration_seconds', 0);
-            
+
         // Find existing active sessions
         final oldSessions = await _supabaseClient
             .from('user_session_logs')
             .select('id, login_at, last_active_at')
             .eq('user_id', user.id)
             .eq('is_active', true);
-            
+
         for (var old in oldSessions) {
           final loginTime = DateTime.parse(old['login_at']);
-          final lastActiveTime = DateTime.parse(old['last_active_at'] ?? now.toIso8601String());
-          final computedDuration = lastActiveTime.difference(loginTime).inSeconds.abs();
-          
+          final lastActiveTime = DateTime.parse(
+            old['last_active_at'] ?? now.toIso8601String(),
+          );
+          final computedDuration = lastActiveTime
+              .difference(loginTime)
+              .inSeconds
+              .abs();
+
           if (computedDuration < 30) {
-             // Treat anything under 30 seconds as an accidental double-click / immediate refresh ghost session
-             await _supabaseClient.from('user_session_logs').delete().eq('id', old['id']);
+            // Treat anything under 30 seconds as an accidental double-click / immediate refresh ghost session
+            await _supabaseClient
+                .from('user_session_logs')
+                .delete()
+                .eq('id', old['id']);
           } else {
-             await _supabaseClient.from('user_session_logs').update({
-              'is_active': false,
-              'logout_at': lastActiveTime.toIso8601String(), // Use last known active time as logout
-              'logout_reason': 'terminated',
-              'duration_seconds': computedDuration,
-            }).eq('id', old['id']);
+            await _supabaseClient
+                .from('user_session_logs')
+                .update({
+                  'is_active': false,
+                  'logout_at': lastActiveTime.toIso8601String(), // Use last known active time as logout
+                  'logout_reason': 'terminated',
+                  'duration_seconds': computedDuration,
+                })
+                .eq('id', old['id']);
           }
         }
       } catch (_) {}
@@ -593,17 +641,20 @@ class AuthRepository {
           .single();
       final sessionLogId = res['id']?.toString();
       if (sessionLogId != null) {
+        _activeSessionId = sessionLogId;
         await LocalStorageService.saveActiveSessionId(sessionLogId);
       }
+      return sessionLogId;
     } catch (e) {
       debugPrint('AuthRepository startSessionLog notice: $e');
+      return null;
     }
   }
 
   Future<void> recordHeartbeat([String? sessionId]) async {
     final user = currentUser;
     if (user == null) return;
-    final id = sessionId ?? LocalStorageService.getActiveSessionId();
+    final id = sessionId ?? LocalStorageService.getActiveSessionId() ?? _activeSessionId;
     if (id == null) return;
     final now = DateTime.now().toUtc();
     try {
@@ -644,14 +695,21 @@ class AuthRepository {
     custom.UserModel? targetUser,
     String? targetSessionId,
   ]) async {
+    // If a manual or inactivity logout is already underway, ignore subsequent 'terminated' calls
+    if (reason == 'terminated' && _isLoggingOut) {
+      return;
+    }
+
     final now = DateTime.now().toUtc();
-    final cleanReason = (reason == null || reason.isEmpty || reason == 'manual_logout')
+    final cleanReason =
+        (reason == null || reason.isEmpty || reason == 'manual_logout')
         ? 'manual'
-        : (reason == 'session_superseded' || reason == 'app_closed'
-            ? 'terminated'
-            : (reason == 'inactivity_timeout' ? 'inactivity' : reason));
+        : (reason == 'inactivity' || reason == 'inactivity_timeout'
+              ? 'inactivity'
+              : 'terminated');
     try {
-      final sessionId = targetSessionId ?? LocalStorageService.getActiveSessionId();
+      final sessionId =
+          targetSessionId ?? LocalStorageService.getActiveSessionId() ?? _activeSessionId;
       final user = targetUser ?? currentUser;
 
       if (sessionId != null) {
@@ -659,9 +717,15 @@ class AuthRepository {
         try {
           final sRow = await _supabaseClient
               .from('user_session_logs')
-              .select('login_at')
+              .select('login_at, is_active, logout_reason')
               .eq('id', sessionId)
               .maybeSingle();
+
+          // If session is ALREADY closed, never overwrite its reason!
+          if (sRow != null && sRow['is_active'] == false) {
+            return;
+          }
+
           if (sRow != null && sRow['login_at'] != null) {
             final loginAt = DateTime.tryParse(sRow['login_at'].toString());
             if (loginAt != null) {
@@ -681,28 +745,33 @@ class AuthRepository {
           updatePayload['duration_seconds'] = computedDuration;
         }
 
+        // CRUCIAL: Only update if the session is currently ACTIVE
         await _supabaseClient
             .from('user_session_logs')
             .update(updatePayload)
-            .eq('id', sessionId);
+            .eq('id', sessionId)
+            .eq('is_active', true);
       }
 
       // FALLBACK & BULK CLEANUP:
       // Even if session ID is lost in local storage (due to hot reloads/tests),
       // force close ALL active sessions for this user to guarantee accuracy.
       if (user != null) {
-        await _supabaseClient.from('user_session_logs').update({
-          'logout_at': now.toIso8601String(),
-          'logout_reason': cleanReason,
-          'is_active': false,
-          'last_active_at': now.toIso8601String(),
-        })
-        .eq('user_id', user.id)
-        .eq('is_active', true);
+        await _supabaseClient
+            .from('user_session_logs')
+            .update({
+              'logout_at': now.toIso8601String(),
+              'logout_reason': cleanReason,
+              'is_active': false,
+              'last_active_at': now.toIso8601String(),
+            })
+            .eq('user_id', user.id)
+            .eq('is_active', true);
       }
     } catch (e) {
       debugPrint('AuthRepository endSession notice: $e');
     } finally {
+      _activeSessionId = null;
       await LocalStorageService.clearActiveSessionId();
     }
   }
@@ -739,7 +808,9 @@ class AuthRepository {
   int _firstLoginResendCount = 0;
   int _otpAttempts = 0;
 
-  Future<Map<String, dynamic>> sendFirstLoginOtp({bool isResend = false}) async {
+  Future<Map<String, dynamic>> sendFirstLoginOtp({
+    bool isResend = false,
+  }) async {
     final user = _firebaseAuth.currentUser;
     if (user == null || user.email == null) {
       throw Exception('A signed-in user session is required.');
@@ -768,10 +839,15 @@ class AuthRepository {
       if (_pendingOtpCode != null &&
           _pendingOtpExpiry != null &&
           now.isBefore(_pendingOtpExpiry!)) {
-        final remainingExpiresIn =
-            _pendingOtpExpiry!.difference(now).inSeconds.clamp(0, 300);
+        final remainingExpiresIn = _pendingOtpExpiry!
+            .difference(now)
+            .inSeconds
+            .clamp(0, 300);
         final remainingCooldown = _lastFirstLoginOtpSentAt != null
-            ? (60 - now.difference(_lastFirstLoginOtpSentAt!).inSeconds).clamp(0, 60)
+            ? (60 - now.difference(_lastFirstLoginOtpSentAt!).inSeconds).clamp(
+                0,
+                60,
+              )
             : 0;
 
         return {
@@ -794,17 +870,25 @@ class AuthRepository {
 
         if (existing != null && existing['is_verified'] != true) {
           final expStr = existing['expires_at']?.toString();
-          final expiresAt = expStr != null ? DateTime.tryParse(expStr)?.toUtc() : null;
+          final expiresAt = expStr != null
+              ? DateTime.tryParse(expStr)?.toUtc()
+              : null;
           if (expiresAt != null && now.isBefore(expiresAt)) {
             final sentStr = existing['last_sent_at']?.toString();
-            final lastSentAt = sentStr != null ? DateTime.tryParse(sentStr)?.toUtc() : null;
+            final lastSentAt = sentStr != null
+                ? DateTime.tryParse(sentStr)?.toUtc()
+                : null;
 
             _pendingOtpCode = existing['code_hash']?.toString();
             _pendingOtpExpiry = expiresAt;
             _lastFirstLoginOtpSentAt = lastSentAt ?? now;
-            _firstLoginResendCount = (existing['resend_count'] as num?)?.toInt() ?? 0;
+            _firstLoginResendCount =
+                (existing['resend_count'] as num?)?.toInt() ?? 0;
 
-            final remainingExpiresIn = expiresAt.difference(now).inSeconds.clamp(0, 300);
+            final remainingExpiresIn = expiresAt
+                .difference(now)
+                .inSeconds
+                .clamp(0, 300);
             final remainingCooldown = lastSentAt != null
                 ? (60 - now.difference(lastSentAt).inSeconds).clamp(0, 60)
                 : 0;
@@ -831,7 +915,8 @@ class AuthRepository {
         final remaining =
             60 - now.difference(_lastFirstLoginOtpSentAt!).inSeconds;
         throw Exception(
-            'Please wait $remaining seconds before requesting another code.');
+          'Please wait $remaining seconds before requesting another code.',
+        );
       }
 
       final resendStatus = await RateLimitService.instance.recordResend(
@@ -856,7 +941,9 @@ class AuthRepository {
     final random = Random.secure();
     final code = (100000 + random.nextInt(900000)).toString();
     _pendingOtpCode = code;
-    _pendingOtpExpiry = now.add(const Duration(minutes: 5)); // Exactly 5 minutes
+    _pendingOtpExpiry = now.add(
+      const Duration(minutes: 5),
+    ); // Exactly 5 minutes
     _lastFirstLoginOtpSentAt = now;
 
     debugPrint('========================================================');
@@ -931,7 +1018,9 @@ class AuthRepository {
             .maybeSingle();
         if (existing != null) {
           final expStr = existing['expires_at']?.toString();
-          final expiresAt = expStr != null ? DateTime.tryParse(expStr)?.toUtc() : null;
+          final expiresAt = expStr != null
+              ? DateTime.tryParse(expStr)?.toUtc()
+              : null;
           if (expiresAt != null && now.isBefore(expiresAt)) {
             _pendingOtpCode = existing['code_hash']?.toString();
             _pendingOtpExpiry = expiresAt;
@@ -997,10 +1086,7 @@ class AuthRepository {
     try {
       await _supabaseClient
           .from('first_login_otp_verifications')
-          .update({
-            'is_verified': true,
-            'updated_at': now.toIso8601String(),
-          })
+          .update({'is_verified': true, 'updated_at': now.toIso8601String()})
           .eq('user_id', user?.uid ?? '');
     } catch (_) {}
 
@@ -1039,7 +1125,8 @@ class AuthRepository {
           debugPrint('[AuthRepository] Password updated via client SDK.');
         } catch (clientErr) {
           debugPrint(
-              '[AuthRepository] Client updatePassword failed ($clientErr), falling back to Service Account Admin API...');
+            '[AuthRepository] Client updatePassword failed ($clientErr), falling back to Service Account Admin API...',
+          );
         }
       }
 
@@ -1052,7 +1139,8 @@ class AuthRepository {
         if (adminOk) {
           updated = true;
           debugPrint(
-              '[AuthRepository] Password updated via FirebaseAuthAdminService.');
+            '[AuthRepository] Password updated via FirebaseAuthAdminService.',
+          );
           try {
             await _firebaseAuth.currentUser?.reload();
           } catch (_) {}
@@ -1067,8 +1155,9 @@ class AuthRepository {
           final supabaseAnonKey = EnvConfig.supabaseAnonKey;
           if (supabaseUrl.isNotEmpty && supabaseAnonKey.isNotEmpty) {
             try {
-              final resetUrl =
-                  Uri.parse('$supabaseUrl/functions/v1/reset-password');
+              final resetUrl = Uri.parse(
+                '$supabaseUrl/functions/v1/reset-password',
+              );
               final resp = await http.post(
                 resetUrl,
                 headers: {
@@ -1081,16 +1170,17 @@ class AuthRepository {
                   'new_password': newPassword,
                 }),
               );
-              final respData =
-                  jsonDecode(resp.body) as Map<String, dynamic>?;
+              final respData = jsonDecode(resp.body) as Map<String, dynamic>?;
               if (resp.statusCode == 200 && respData?['success'] == true) {
                 updated = true;
                 debugPrint(
-                    '[AuthRepository] Password updated via reset-password edge function.');
+                  '[AuthRepository] Password updated via reset-password edge function.',
+                );
               }
             } catch (edgeErr) {
               debugPrint(
-                  '[AuthRepository] Edge function fallback notice: $edgeErr');
+                '[AuthRepository] Edge function fallback notice: $edgeErr',
+              );
             }
           }
         }
@@ -1100,34 +1190,55 @@ class AuthRepository {
         return "Security check failed due to an inactive session. Please click 'Back to Login', re-enter your temporary credentials, and try setting your new password again.";
       }
 
-      // Direct Pure Dart Supabase profile updates
-      try {
-        await _supabaseClient
-            .from('users')
-            .update({'status': 'active'})
-            .eq('id', userId);
-      } catch (_) {}
+      final role = currentAppUser?.role;
+      if (role == null) {
+        return 'Could not determine the account type to activate. Please log in again.';
+      }
 
-      try {
-        await _supabaseClient
-            .from('student_settings')
-            .update({'status': 'active'})
-            .eq('student_id', userId);
-      } catch (_) {}
+      final String settingsTable;
+      final String idColumn;
+      switch (role) {
+        case custom.UserRole.student:
+          settingsTable = 'student_settings';
+          idColumn = 'student_id';
+          break;
+        case custom.UserRole.teacher:
+          settingsTable = 'teacher_settings';
+          idColumn = 'teacher_id';
+          break;
+        case custom.UserRole.parent:
+          settingsTable = 'parent_profiles';
+          idColumn = 'parent_id';
+          break;
+        case custom.UserRole.admin:
+          return 'Administrator accounts cannot use first-login activation.';
+      }
 
-      try {
-        await _supabaseClient
-            .from('teacher_settings')
-            .update({'status': 'active'})
-            .eq('teacher_id', userId);
-      } catch (_) {}
+      final statusRow = await _supabaseClient
+          .from(settingsTable)
+          .select('status')
+          .eq(idColumn, userId)
+          .maybeSingle();
+      if (statusRow == null) {
+        return 'Your account password was changed, but its status record could not be found. Please contact your administrator.';
+      }
 
-      try {
-        await _supabaseClient
-            .from('parent_profiles')
+      final currentStatus = statusRow['status']?.toString();
+      if (currentStatus == 'archived') {
+        return 'Your password was changed, but this account is archived. Please contact your administrator.';
+      }
+      if (currentStatus != 'active') {
+        final activatedRow = await _supabaseClient
+            .from(settingsTable)
             .update({'status': 'active'})
-            .eq('parent_id', userId);
-      } catch (_) {}
+            .eq(idColumn, userId)
+            .eq('status', 'pending_first_login')
+            .select(idColumn)
+            .maybeSingle();
+        if (activatedRow == null) {
+          return 'Your password was changed, but your account could not be activated. Please try again or contact your administrator.';
+        }
+      }
 
       // Clean up single-use OTP verification record from Supabase after successful completion
       try {
@@ -1217,9 +1328,14 @@ class AuthRepository {
     }
 
     // Strict email check
-    final verifyResult = await EmailVerificationService.instance.verifyEmail(cleanEmail);
+    final verifyResult = await EmailVerificationService.instance.verifyEmail(
+      cleanEmail,
+    );
     if (!verifyResult.isValid) {
-      throw Exception(verifyResult.reason ?? 'Please provide a valid deliverable email address.');
+      throw Exception(
+        verifyResult.reason ??
+            'Please provide a valid deliverable email address.',
+      );
     }
 
     // Verify user exists
@@ -1244,10 +1360,13 @@ class AuthRepository {
           _forgotPasswordEmail == cleanEmail &&
           _forgotPasswordOtpExpiry != null &&
           now.isBefore(_forgotPasswordOtpExpiry!)) {
-        final remainingExpiresIn =
-            _forgotPasswordOtpExpiry!.difference(now).inSeconds.clamp(0, 300);
+        final remainingExpiresIn = _forgotPasswordOtpExpiry!
+            .difference(now)
+            .inSeconds
+            .clamp(0, 300);
         final remainingCooldown = _lastForgotPasswordOtpSentAt != null
-            ? (60 - now.difference(_lastForgotPasswordOtpSentAt!).inSeconds).clamp(0, 60)
+            ? (60 - now.difference(_lastForgotPasswordOtpSentAt!).inSeconds)
+                  .clamp(0, 60)
             : 0;
 
         return {
@@ -1270,18 +1389,26 @@ class AuthRepository {
 
         if (existing != null && existing['is_verified'] != true) {
           final expStr = existing['expires_at']?.toString();
-          final expiresAt = expStr != null ? DateTime.tryParse(expStr)?.toUtc() : null;
+          final expiresAt = expStr != null
+              ? DateTime.tryParse(expStr)?.toUtc()
+              : null;
           if (expiresAt != null && now.isBefore(expiresAt)) {
             final sentStr = existing['last_sent_at']?.toString();
-            final lastSentAt = sentStr != null ? DateTime.tryParse(sentStr)?.toUtc() : null;
+            final lastSentAt = sentStr != null
+                ? DateTime.tryParse(sentStr)?.toUtc()
+                : null;
 
             _forgotPasswordOtpCode = existing['code_hash']?.toString();
             _forgotPasswordOtpExpiry = expiresAt;
             _lastForgotPasswordOtpSentAt = lastSentAt ?? now;
             _forgotPasswordEmail = cleanEmail;
-            _forgotPasswordResendCount = (existing['resend_count'] as num?)?.toInt() ?? 0;
+            _forgotPasswordResendCount =
+                (existing['resend_count'] as num?)?.toInt() ?? 0;
 
-            final remainingExpiresIn = expiresAt.difference(now).inSeconds.clamp(0, 300);
+            final remainingExpiresIn = expiresAt
+                .difference(now)
+                .inSeconds
+                .clamp(0, 300);
             final remainingCooldown = lastSentAt != null
                 ? (60 - now.difference(lastSentAt).inSeconds).clamp(0, 60)
                 : 0;
@@ -1297,7 +1424,9 @@ class AuthRepository {
           }
         }
       } catch (e) {
-        debugPrint('[ForgotPasswordOTP] Supabase active session lookup notice: $e');
+        debugPrint(
+          '[ForgotPasswordOTP] Supabase active session lookup notice: $e',
+        );
       }
     }
 
@@ -1307,7 +1436,8 @@ class AuthRepository {
         final remaining =
             60 - now.difference(_lastForgotPasswordOtpSentAt!).inSeconds;
         throw Exception(
-            'Please wait $remaining seconds before requesting another code.');
+          'Please wait $remaining seconds before requesting another code.',
+        );
       }
 
       final resendStatus = await RateLimitService.instance.recordResend(
@@ -1332,7 +1462,9 @@ class AuthRepository {
     final random = Random.secure();
     final code = (100000 + random.nextInt(900000)).toString();
     _forgotPasswordOtpCode = code;
-    _forgotPasswordOtpExpiry = now.add(const Duration(minutes: 5)); // Exactly 5 minutes
+    _forgotPasswordOtpExpiry = now.add(
+      const Duration(minutes: 5),
+    ); // Exactly 5 minutes
     _lastForgotPasswordOtpSentAt = now;
     _forgotPasswordEmail = cleanEmail;
     _forgotPasswordVerified = false;
@@ -1412,7 +1544,9 @@ class AuthRepository {
             .maybeSingle();
         if (existing != null) {
           final expStr = existing['expires_at']?.toString();
-          final expiresAt = expStr != null ? DateTime.tryParse(expStr)?.toUtc() : null;
+          final expiresAt = expStr != null
+              ? DateTime.tryParse(expStr)?.toUtc()
+              : null;
           if (expiresAt != null && now.isBefore(expiresAt)) {
             _forgotPasswordOtpCode = existing['code_hash']?.toString();
             _forgotPasswordOtpExpiry = expiresAt;
@@ -1478,10 +1612,7 @@ class AuthRepository {
     try {
       await _supabaseClient
           .from('password_reset_otps')
-          .update({
-            'is_verified': true,
-            'updated_at': now.toIso8601String(),
-          })
+          .update({'is_verified': true, 'updated_at': now.toIso8601String()})
           .eq('email', email);
     } catch (_) {}
 
@@ -1506,7 +1637,8 @@ class AuthRepository {
     final cleanEmail = email.trim().toLowerCase();
 
     // Verify through Supabase password_reset_otps or in-memory gate
-    bool isAuthorized = _forgotPasswordVerified && _forgotPasswordEmail == cleanEmail;
+    bool isAuthorized =
+        _forgotPasswordVerified && _forgotPasswordEmail == cleanEmail;
     if (!isAuthorized) {
       try {
         final existing = await _supabaseClient
@@ -1516,7 +1648,9 @@ class AuthRepository {
             .maybeSingle();
         if (existing != null && existing['is_verified'] == true) {
           final expStr = existing['expires_at']?.toString();
-          final expiresAt = expStr != null ? DateTime.tryParse(expStr)?.toUtc() : null;
+          final expiresAt = expStr != null
+              ? DateTime.tryParse(expStr)?.toUtc()
+              : null;
           if (expiresAt != null && DateTime.now().toUtc().isBefore(expiresAt)) {
             isAuthorized = true;
           }
@@ -1553,17 +1687,16 @@ class AuthRepository {
             'apikey': supabaseAnonKey,
             'Authorization': 'Bearer $supabaseAnonKey',
           },
-          body: jsonEncode({
-            'email': cleanEmail,
-            'new_password': newPassword,
-          }),
+          body: jsonEncode({'email': cleanEmail, 'new_password': newPassword}),
         );
 
         final respData = jsonDecode(resp.body) as Map<String, dynamic>?;
         if (resp.statusCode == 200 && respData?['success'] == true) {
           updated = true;
         } else {
-          final err = respData?['error'] ?? 'Failed to update password in Firebase Auth.';
+          final err =
+              respData?['error'] ??
+              'Failed to update password in Firebase Auth.';
           debugPrint('[AuthRepository] reset-password failed: $err');
           return err.toString();
         }
@@ -1593,7 +1726,10 @@ class AuthRepository {
 
       // 3. Clear verified OTP record after successful password change
       try {
-        await _supabaseClient.from('password_reset_otps').delete().eq('email', cleanEmail);
+        await _supabaseClient
+            .from('password_reset_otps')
+            .delete()
+            .eq('email', cleanEmail);
       } catch (_) {}
 
       // 4. Update local session or mock database if applicable
@@ -1662,72 +1798,14 @@ class AuthRepository {
                 : null,
             isSetupComplete: info['is_setup_complete'] ?? false,
             status: _parseStatus(info['status'] ?? 'pending_first_login'),
-            isArchived: (u['is_archived'] == true) || (info['status'] == 'archived'),
+            isArchived:
+                (u['is_archived'] == true) || (info['status'] == 'archived'),
           ),
         );
       }
       return teachers;
     } catch (e) {
       return [];
-    }
-  }
-
-  // =========================================================================
-  // Admin: Account Recovery and Email Fixes
-  // =========================================================================
-
-  /// Action A: Update Email Only (For fixing typos, doesn't reset password)
-  Future<void> updateTeacherEmailOnly({required String teacherId, required String newEmail}) async {
-    final cleanEmail = newEmail.trim().toLowerCase();
-    
-    // 1. Verify if email exists
-    final exists = await _supabaseClient.from('users').select('id').eq('email', cleanEmail).maybeSingle();
-    if (exists != null && exists['id'] != teacherId) {
-      throw Exception('This email is already in use by another account.');
-    }
-
-    // 2. Try updating Firebase Auth Email via Edge Function or Admin SDK
-    final adminOk = await FirebaseAuthAdminService.updateUserEmail(uid: teacherId, newEmail: cleanEmail);
-    if (!adminOk) {
-      throw Exception('Failed to update email in Firebase Authentication. Check service account permissions.');
-    }
-
-    // 3. Update Supabase Database Email
-    await _supabaseClient.from('users').update({'email': cleanEmail, 'updated_at': DateTime.now().toIso8601String()}).eq('id', teacherId);
-  }
-
-  /// Action B: Full Reset & Recover Account (Updates Email, Generates Temp Password, Forces First Login)
-  Future<void> recoverTeacherAccount({required String teacherId, required String newEmail}) async {
-    final cleanEmail = newEmail.trim().toLowerCase();
-    
-    // 1. Verify if email exists
-    final exists = await _supabaseClient.from('users').select('id').eq('email', cleanEmail).maybeSingle();
-    if (exists != null && exists['id'] != teacherId) {
-      throw Exception('This email is already in use by another account.');
-    }
-
-    // 2. Generate a secure temporary password
-    final tempPassword = 'Realm-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}x';
-
-    // 3. Update Firebase Auth (Email and Password)
-    final emailOk = await FirebaseAuthAdminService.updateUserEmail(uid: teacherId, newEmail: cleanEmail);
-    final passOk = await FirebaseAuthAdminService.updateUserPassword(uid: teacherId, newPassword: tempPassword);
-
-    if (!emailOk || !passOk) {
-      throw Exception('Failed to recover account in Firebase Authentication.');
-    }
-
-    // 4. Reset Supabase Status to pending_first_login
-    await _supabaseClient.from('users').update({'email': cleanEmail, 'status': 'pending_first_login', 'updated_at': DateTime.now().toIso8601String()}).eq('id', teacherId);
-    await _supabaseClient.from('teacher_settings').update({'status': 'pending_first_login'}).eq('teacher_id', teacherId);
-
-    // 5. Send Email with the new credentials
-    try {
-      final res = await _supabaseClient.from('teacher_profiles').select('first_name').eq('teacher_id', teacherId).maybeSingle();
-      final name = res?['first_name']?.toString() ?? 'Teacher';
-      await EmailService.instance.sendTeacherWelcomeEmail(recipientEmail: cleanEmail, teacherName: name, tempPassword: tempPassword);
-    } catch (e) {
-      debugPrint('Warning: Recovery completed but failed to send email: $e');
     }
   }
 
@@ -1747,7 +1825,8 @@ class AuthRepository {
               .eq('teacher_id', uid)
               .maybeSingle();
           final currentStatus = cur?['status']?.toString();
-          final statusToSave = (currentStatus != null &&
+          final statusToSave =
+              (currentStatus != null &&
                   currentStatus.isNotEmpty &&
                   currentStatus != 'archived')
               ? currentStatus
@@ -1767,7 +1846,10 @@ class AuthRepository {
 
         // Disable account in Firebase Auth so they cannot log in
         try {
-          await FirebaseAuthAdminService.setUserDisabled(uid: uid, disabled: true);
+          await FirebaseAuthAdminService.setUserDisabled(
+            uid: uid,
+            disabled: true,
+          );
         } catch (_) {}
 
         // Soft-archive subject offerings taught by this teacher (without touching students or parents)
@@ -1795,7 +1877,8 @@ class AuthRepository {
           final prev = settings?['previous_status']?.toString();
           // STRICT RULE: Restore the exact previous status (e.g. active).
           // Default to 'active'. NEVER revert to pending_first_login unless it was genuinely pending_first_login!
-          final targetStatus = (prev != null && prev.isNotEmpty && prev != 'archived')
+          final targetStatus =
+              (prev != null && prev.isNotEmpty && prev != 'archived')
               ? prev
               : 'active';
 
@@ -1806,7 +1889,10 @@ class AuthRepository {
 
           // Re-enable account in Firebase Auth
           try {
-            await FirebaseAuthAdminService.setUserDisabled(uid: uid, disabled: false);
+            await FirebaseAuthAdminService.setUserDisabled(
+              uid: uid,
+              disabled: false,
+            );
           } catch (_) {}
         } catch (_) {}
 
@@ -2061,10 +2147,7 @@ class AuthRepository {
       } catch (_) {}
 
       try {
-        await _supabaseClient
-            .from('users')
-            .delete()
-            .eq('id', teacherId);
+        await _supabaseClient.from('users').delete().eq('id', teacherId);
       } catch (_) {}
 
       // Delete from Firebase Authentication
@@ -2074,7 +2157,9 @@ class AuthRepository {
           email: teacherEmail,
         );
       } catch (fbErr) {
-        debugPrint('Firebase Auth deletion notice for teacher $teacherId: $fbErr');
+        debugPrint(
+          'Firebase Auth deletion notice for teacher $teacherId: $fbErr',
+        );
       }
 
       return true;
@@ -2087,6 +2172,7 @@ class AuthRepository {
   // Admin: Update Teacher Profile Details
   Future<bool> updateTeacherProfile({
     required String teacherId,
+    required String email,
     required String firstName,
     String? middleName,
     required String lastName,
@@ -2094,21 +2180,65 @@ class AuthRepository {
     required DateTime birthday,
   }) async {
     try {
+      final cleanEmail = email.trim().toLowerCase();
+
+      // Check if email changed in DB (to avoid unnecessary Firebase API calls)
+      final currentUserData = await _supabaseClient
+          .from('users')
+          .select('email')
+          .eq('id', teacherId)
+          .maybeSingle();
+      final currentEmail = currentUserData?['email']?.toString();
+
+      if (currentEmail != cleanEmail) {
+        // 1. Verify if new email exists
+        final exists = await _supabaseClient
+            .from('users')
+            .select('id')
+            .eq('email', cleanEmail)
+            .maybeSingle();
+        if (exists != null && exists['id'] != teacherId) {
+          throw Exception('This email is already in use by another account.');
+        }
+
+        // 2. Try updating Firebase Auth Email via Admin SDK
+        final adminOk = await FirebaseAuthAdminService.updateUserEmail(
+          uid: teacherId,
+          newEmail: cleanEmail,
+        );
+        if (!adminOk) {
+          throw Exception('Failed to update email in Firebase Authentication.');
+        }
+
+        // 3. Update Supabase Database Email
+        await _supabaseClient
+            .from('users')
+            .update({
+              'email': cleanEmail,
+              'updated_at': DateTime.now().toIso8601String(),
+            })
+            .eq('id', teacherId);
+      }
+
+      // Update basic profile details
       final bdayStr =
           '${birthday.year.toString().padLeft(4, '0')}-${birthday.month.toString().padLeft(2, '0')}-${birthday.day.toString().padLeft(2, '0')}';
-      await _supabaseClient.from('teacher_profiles').update({
-        'first_name': firstName.trim(),
-        'middle_name': (middleName == null || middleName.trim().isEmpty)
-            ? null
-            : middleName.trim(),
-        'last_name': lastName.trim(),
-        'gender': gender,
-        'birthday': bdayStr,
-      }).eq('teacher_id', teacherId);
+      await _supabaseClient
+          .from('teacher_profiles')
+          .update({
+            'first_name': firstName.trim(),
+            'middle_name': (middleName == null || middleName.trim().isEmpty)
+                ? null
+                : middleName.trim(),
+            'last_name': lastName.trim(),
+            'gender': gender,
+            'birthday': bdayStr,
+          })
+          .eq('teacher_id', teacherId);
       return true;
     } catch (e) {
       debugPrint('Error updating teacher profile: $e');
-      return false;
+      throw Exception(e.toString().replaceAll('Exception: ', ''));
     }
   }
 
@@ -2124,12 +2254,12 @@ class AuthRepository {
     final cleanEmail = email.trim().toLowerCase();
 
     // 0. Verify domain deliverability (Ensure domain exists and can receive email)
-    final deliverability =
-        await AppValidators.checkDomainDeliverability(cleanEmail);
+    final deliverability = await AppValidators.checkDomainDeliverability(
+      cleanEmail,
+    );
     if (!deliverability.isDeliverable) {
       throw AdminTeacherException(
-        deliverability.error ??
-            "The email domain is undeliverable (Address not found). Please verify the email address.",
+        deliverability.error ?? "The email domain is undeliverable (Address not found). Please verify the email address.",
       );
     }
 
@@ -2185,8 +2315,9 @@ class AuthRepository {
       final priorFailedAttempts = rateStatus.failedAttempts;
 
       final lastSentAtStr = priorChallenge['last_sent_at']?.toString();
-      final lastSentAt =
-          lastSentAtStr != null ? DateTime.tryParse(lastSentAtStr)?.toUtc() : null;
+      final lastSentAt = lastSentAtStr != null
+          ? DateTime.tryParse(lastSentAtStr)?.toUtc()
+          : null;
 
       // Accurately compute seconds since last sent in UTC
       int secondsSinceLastSent = 999;
@@ -2198,8 +2329,9 @@ class AuthRepository {
       }
 
       final expiresAtStr = priorChallenge['expires_at']?.toString();
-      final priorExpiresAt =
-          expiresAtStr != null ? DateTime.tryParse(expiresAtStr)?.toUtc() : null;
+      final priorExpiresAt = expiresAtStr != null
+          ? DateTime.tryParse(expiresAtStr)?.toUtc()
+          : null;
       final isChallengeStillValid =
           priorExpiresAt != null && now.isBefore(priorExpiresAt);
 
@@ -2220,14 +2352,17 @@ class AuthRepository {
         if (secondsSinceLastSent < 60) {
           final waitSec = (60 - secondsSinceLastSent).clamp(1, 60);
           throw AdminTeacherException(
-              'Please wait ${waitSec}s before requesting another code.');
+            'Please wait ${waitSec}s before requesting another code.',
+          );
         }
       } else {
         // Anti-spam / Anti-F5: If user navigates Back and clicks Send again while an active code is still valid within 5 minutes:
         if (isChallengeStillValid) {
           final remainingCooldown = (60 - secondsSinceLastSent).clamp(0, 60);
-          final remainingOtpSeconds =
-              priorExpiresAt.difference(now).inSeconds.clamp(0, 300);
+          final remainingOtpSeconds = priorExpiresAt
+              .difference(now)
+              .inSeconds
+              .clamp(0, 300);
           return {
             'sent': false,
             'reused': true,
@@ -2252,13 +2387,16 @@ class AuthRepository {
 
     debugPrint('========================================================');
     debugPrint(
-        '[ClassRealm Teacher OTP] Code for $cleanEmail: $code (Valid for 5 mins)');
+      '[ClassRealm Teacher OTP] Code for $cleanEmail: $code (Valid for 5 mins)',
+    );
     debugPrint('========================================================');
 
     // 5. Dispatch verification code via EmailService
-    final fullName = [firstName.trim(), middleName.trim(), lastName.trim()]
-        .where((s) => s.isNotEmpty)
-        .join(' ');
+    final fullName = [
+      firstName.trim(),
+      middleName.trim(),
+      lastName.trim(),
+    ].where((s) => s.isNotEmpty).join(' ');
     try {
       await EmailService.instance.sendTeacherVerificationCode(
         recipientEmail: cleanEmail,
@@ -2324,16 +2462,15 @@ class AuthRepository {
     required String gender,
     required DateTime birthday,
     bool isResend = false,
-  }) =>
-      sendAdminTeacherVerification(
-        email: email,
-        firstName: firstName,
-        middleName: middleName,
-        lastName: lastName,
-        gender: gender,
-        birthday: birthday,
-        isResend: isResend,
-      );
+  }) => sendAdminTeacherVerification(
+    email: email,
+    firstName: firstName,
+    middleName: middleName,
+    lastName: lastName,
+    gender: gender,
+    birthday: birthday,
+    isResend: isResend,
+  );
 
   Future<Map<String, dynamic>> createTeacherDirectlyByAdmin({
     required String email,
@@ -2422,8 +2559,9 @@ class AuthRepository {
 
     // 3. Check expiration (5 minutes / 300 seconds)
     final expiresAtStr = challenge['expires_at']?.toString();
-    final expiresAt =
-        expiresAtStr != null ? DateTime.tryParse(expiresAtStr)?.toUtc() : null;
+    final expiresAt = expiresAtStr != null
+        ? DateTime.tryParse(expiresAtStr)?.toUtc()
+        : null;
     if (expiresAt == null || now.isAfter(expiresAt)) {
       throw const AdminTeacherException(
         'The verification code has expired (valid for 5 minutes). Please click Resend.',
@@ -2442,9 +2580,7 @@ class AuthRepository {
       try {
         await _supabaseClient
             .from('admin_teacher_email_challenges')
-            .update({
-              'failed_attempts': failStatus.failedAttempts,
-            })
+            .update({'failed_attempts': failStatus.failedAttempts})
             .eq('email', cleanEmail);
       } catch (e) {
         debugPrint('Supabase failed attempts update notice: $e');
@@ -2467,10 +2603,12 @@ class AuthRepository {
     }
 
     // Code is valid! Clear rate limit for this email
-    unawaited(RateLimitService.instance.clearRateLimit(
-      feature: 'admin_add_teacher_otp',
-      targetIdentifier: cleanEmail,
-    ));
+    unawaited(
+      RateLimitService.instance.clearRateLimit(
+        feature: 'admin_add_teacher_otp',
+        targetIdentifier: cleanEmail,
+      ),
+    );
 
     // 5. Code is VALID! Extract details and create teacher account
     final firstName = challenge['first_name']?.toString() ?? '';
@@ -2481,7 +2619,7 @@ class AuthRepository {
     final fullName = [
       firstName,
       if (middleName != null && middleName.isNotEmpty) middleName,
-      lastName
+      lastName,
     ].join(' ');
 
     // Temporary password: lastname + birthdate digits (e.g. yuri19990101)
@@ -2521,8 +2659,9 @@ class AuthRepository {
     await _supabaseClient.from('teacher_profiles').upsert({
       'teacher_id': teacherId,
       'first_name': firstName,
-      'middle_name':
-          (middleName == null || middleName.isEmpty) ? null : middleName,
+      'middle_name': (middleName == null || middleName.isEmpty)
+          ? null
+          : middleName,
       'last_name': lastName,
       'gender': gender,
       'birthday': birthdayStr,

@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:csv/csv.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:archive/archive.dart';
 
@@ -19,6 +18,7 @@ import 'package:class_realm/widgets/common/app_text_field.dart';
 import 'package:class_realm/widgets/common/app_date_picker_field.dart';
 import 'package:class_realm/core/utils/validators.dart';
 import 'package:class_realm/core/utils/browser_url_helper.dart';
+import 'package:class_realm/core/utils/excel_template_generator.dart';
 
 /// Unified dialog that enables teachers to enroll students either one-by-one or via Excel/CSV import.
 /// Allows selecting Grade Level -> Subject -> Section, and supports pre-selection when triggered
@@ -89,6 +89,20 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
 
   // Resumable Batch Import Session State
   Map<String, dynamic>? _resumableBatch;
+
+  // Batch In-Box Progress & Preview State
+  String? _batchFileName;
+  int? _batchFileSize;
+  bool _isProcessingBatch = false;
+  double _batchProgress = 0.0;
+  String _batchPhase = '';
+  String _batchActiveRecord = '';
+  String? _batchWarningTitle;
+  String? _batchWarningMessage;
+  List<_ParsedStudentRow> _eligibleNewStudents = [];
+  List<_ParsedStudentRow> _eligibleExistingStudents = [];
+  List<_ParsedStudentRow> _alreadyEnrolledStudents = [];
+  List<_InvalidStudentRow> _detectedInvalidRows = [];
 
   int? get _calculatedAge {
     if (_birthday == null) return null;
@@ -224,6 +238,21 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
 
     _initCascadingSelections();
     _checkResumableBatch();
+
+    if (kIsWeb) {
+      registerWebDrop(
+        onFileDropped: (bytes, fileName, size) {
+          if (!mounted) return;
+          final Uint8List u8 = bytes is Uint8List
+              ? bytes
+              : Uint8List.fromList(bytes as List<int>);
+          if (_tabController.index != 1) {
+            _tabController.animateTo(1);
+          }
+          _handleBatchFileBytes(u8, fileName, size);
+        },
+      );
+    }
   }
 
   void _initCascadingSelections() {
@@ -301,6 +330,9 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
 
   @override
   void dispose() {
+    if (kIsWeb) {
+      unregisterWebDrop();
+    }
     _tabController.dispose();
     _firstNameCtrl.dispose();
     _middleNameCtrl.dispose();
@@ -467,83 +499,44 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
 
   String? _parseGender(String raw) {
     final clean = raw.trim().toLowerCase();
-    if (clean == 'male' || clean == 'm' || clean == 'lalaki') {
+    if (clean == 'male' || clean == 'm') {
       return 'Male';
     }
-    if (clean == 'female' || clean == 'f' || clean == 'babae') {
+    if (clean == 'female' || clean == 'f') {
       return 'Female';
     }
     return null;
   }
 
-  String _generateTemplateCsv() {
-    final headers = [
-      'lrn',
-      'email',
-      'lastname',
-      'firstname',
-      'middlename (optional)',
-      'gender',
-      'birthday',
-    ];
-    final sampleRows = [
-      [
-        '123456789012',
-        'example@gmail.com',
-        'Juana',
-        'Rexsa',
-        'G',
-        'Female',
-        '2011-01-01',
-      ],
-      [
-        '101234567890',
-        'juan.delacruz@gmail.com',
-        'Dela Cruz',
-        'Juan',
-        'Protacio',
-        'Male',
-        '2007-06-19',
-      ],
-      [
-        '101234567891',
-        'maria.santos@gmail.com',
-        'Santos',
-        'Maria',
-        'Clara',
-        'Female',
-        '2007-11-03',
-      ],
-    ];
-
-    return const ListToCsvConverter().convert([
-      headers,
-      ...sampleRows,
-    ]);
+  String _toTitleCase(String text) {
+    final clean = text.trim();
+    if (clean.isEmpty) return '';
+    return clean.split(RegExp(r'\s+')).map((word) {
+      if (word.isEmpty) return '';
+      if (word.length == 1) return word.toUpperCase();
+      return word[0].toUpperCase() + word.substring(1).toLowerCase();
+    }).join(' ');
   }
 
   Future<void> _downloadOfficialTemplate() async {
     try {
-      final csvData = _generateTemplateCsv();
-      // Prepend UTF-8 BOM so Excel & WPS open the file with correct column formatting and encoding
-      final bytes = Uint8List.fromList([0xEF, 0xBB, 0xBF, ...utf8.encode(csvData)]);
-
+      final bytes = ExcelTemplateGenerator.generateStudentTemplateBytes();
       String? selectedPath;
 
       if (kIsWeb) {
-        downloadFileString(
-          content: '\uFEFF$csvData',
-          fileName: 'classrealm_student_template.csv',
-          mimeType: 'text/csv;charset=utf-8',
+        downloadFileBytes(
+          bytes: bytes,
+          fileName: 'classrealm_student_template.xlsx',
+          mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         );
-        selectedPath = 'Downloaded via Browser (Downloads/classrealm_student_template.csv)';
+        selectedPath = 'Downloaded via Browser (Downloads/classrealm_student_template.xlsx)';
       } else {
         try {
           selectedPath = await FilePicker.platform.saveFile(
             dialogTitle: 'Save Student Enrollment Template',
-            fileName: 'classrealm_student_template.csv',
+            fileName: 'classrealm_student_template.xlsx',
             type: FileType.custom,
-            allowedExtensions: ['csv'],
+            allowedExtensions: ['xlsx'],
             bytes: bytes,
           );
         } catch (_) {
@@ -558,7 +551,7 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
           if (userProfile != null) {
             final downloadsDir = Directory('$userProfile\\Downloads');
             if (downloadsDir.existsSync()) {
-              final target = File('${downloadsDir.path}\\classrealm_student_template.csv');
+              final target = File('${downloadsDir.path}\\classrealm_student_template.xlsx');
               await target.writeAsBytes(bytes);
               selectedPath = target.path;
             }
@@ -571,91 +564,162 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
       if (selectedPath != null && selectedPath.isNotEmpty) {
         await showDialog(
           context: context,
-          builder: (ctx) => AlertDialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            title: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF0F8A48).withValues(alpha: 0.1),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(LucideIcons.fileSpreadsheet, color: Color(0xFF0F8A48), size: 24),
-                ),
-                const SizedBox(width: 12),
-                const Text('Template Ready', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-              ],
-            ),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  kIsWeb
-                      ? 'The official Student Enrollment Template has been downloaded to your browser\'s Downloads:'
-                      : 'The official Student Enrollment Template has been saved successfully:',
-                  style: const TextStyle(fontSize: 13),
-                ),
-                const SizedBox(height: 10),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
-                    ),
-                  ),
-                  child: SelectableText(
-                    selectedPath!,
-                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, fontFamily: 'monospace'),
-                  ),
-                ),
-                const SizedBox(height: 14),
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: Colors.amber.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.amber.withValues(alpha: 0.3)),
-                  ),
-                  child: const Row(
+          builder: (ctx) {
+            final theme = Theme.of(ctx);
+            return Dialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 440),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 20),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Icon(LucideIcons.lock, size: 16, color: Colors.amber),
-                      SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'Important: Do NOT modify or rename the header row (Row 1). The system validates exact column names.',
-                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.black87),
+                      // Header Row
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: theme.colorScheme.primary.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Icon(LucideIcons.fileSpreadsheet, color: theme.colorScheme.primary, size: 24),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Official Template Ready',
+                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  kIsWeb ? 'Saved to Downloads folder' : 'Saved to computer successfully',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(LucideIcons.x, size: 18),
+                            onPressed: () => Navigator.pop(ctx),
+                            visualDensity: VisualDensity.compact,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Step-by-Step Instructions
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.25),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: theme.colorScheme.outline.withValues(alpha: 0.15),
+                          ),
+                        ),
+                        child: Column(
+                          children: [
+                            _buildTemplateStepItem(
+                               stepNum: '1',
+                               title: 'Download Template',
+                               subtitle: 'classrealm_student_template.xlsx',
+                               isDone: true,
+                               theme: theme,
+                             ),
+                             const Divider(height: 14, thickness: 0.8),
+                             _buildTemplateStepItem(
+                               stepNum: '2',
+                               title: 'Enter Students (Row 3 onwards)',
+                               subtitle: 'Row 1 is headers; Row 2 sample is skipped',
+                               isDone: false,
+                               theme: theme,
+                             ),
+                             const Divider(height: 14, thickness: 0.8),
+                             _buildTemplateStepItem(
+                               stepNum: '3',
+                               title: 'Upload File to ClassRealm',
+                               subtitle: 'Instant validation with real-time feedback',
+                               isDone: false,
+                               theme: theme,
+                             ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+
+                      // Column Requirements Quick Pill Card
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.primary.withValues(alpha: 0.06),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: theme.colorScheme.primary.withValues(alpha: 0.2),
+                          ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(LucideIcons.shieldCheck, size: 14, color: theme.colorScheme.primary),
+                                const SizedBox(width: 6),
+                                const Text(
+                                  'Required Field Formats',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFF0F8A48),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Wrap(
+                              spacing: 6,
+                              runSpacing: 6,
+                              children: [
+                                _buildFormatChip('LRN: 12 numeric digits'),
+                                _buildFormatChip('Email: Valid address'),
+                                _buildFormatChip('Name: Letters only'),
+                                _buildFormatChip('M.I.: 1 char (optional)'),
+                                _buildFormatChip('Gender: Male / Female'),
+                                _buildFormatChip('Birthday: YYYY-MM-DD (Age 10-50)'),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 18),
+
+                      // Action Button
+                      SizedBox(
+                        width: double.infinity,
+                        height: 42,
+                        child: FilledButton(
+                          onPressed: () => Navigator.pop(ctx),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: const Color(0xFF0F8A48),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                          child: const Text('Got It, Proceed to Upload', style: TextStyle(fontWeight: FontWeight.w600)),
                         ),
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(height: 12),
-                const Text(
-                  'Format Columns (In Order):\n'
-                  '1. LRN — 12-digit Learner Reference Number\n'
-                  '2. Email — Valid student email address\n'
-                  '3. Last Name — Surname\n'
-                  '4. First Name — Given name\n'
-                  '5. Middle Name (optional) — Middle name\n'
-                  '6. Gender — Male or Female\n'
-                  '7. Birthday — YYYY-MM-DD (e.g. 2007-06-19)',
-                  style: TextStyle(fontSize: 12, height: 1.45),
-                ),
-              ],
-            ),
-            actions: [
-              FilledButton(
-                onPressed: () => Navigator.pop(ctx),
-                style: FilledButton.styleFrom(backgroundColor: const Color(0xFF0F8A48)),
-                child: const Text('OK'),
               ),
-            ],
-          ),
+            );
+          },
         );
       }
     } catch (e) {
@@ -667,6 +731,74 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
         );
       }
     }
+  }
+
+  Widget _buildTemplateStepItem({
+    required String stepNum,
+    required String title,
+    required String subtitle,
+    required bool isDone,
+    required ThemeData theme,
+  }) {
+    return Row(
+      children: [
+        Container(
+          width: 22,
+          height: 22,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: isDone
+                ? const Color(0xFF0F8A48)
+                : theme.colorScheme.primary.withValues(alpha: 0.15),
+            shape: BoxShape.circle,
+          ),
+          child: isDone
+              ? const Icon(LucideIcons.check, size: 13, color: Colors.white)
+              : Text(
+                  stepNum,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: theme.colorScheme.primary,
+                  ),
+                ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+              ),
+              Text(
+                subtitle,
+                style: TextStyle(
+                  fontSize: 11,
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildFormatChip(String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.9),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: const Color(0xFF0F8A48).withValues(alpha: 0.25)),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: Color(0xFF0F8A48)),
+      ),
+    );
   }
 
   Future<void> _processBatchImport() async {
@@ -682,33 +814,15 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
     try {
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
-        allowedExtensions: ['csv', 'xlsx', 'xls'],
+        allowedExtensions: ['xlsx'],
         withData: true,
       );
 
       if (result == null || result.files.isEmpty) return;
 
       final pickedFile = result.files.single;
-      final ext = (pickedFile.extension ?? '').toLowerCase();
-
-      // Format validation: CSV and Excel only
-      if (ext != 'csv' && ext != 'xlsx' && ext != 'xls') {
-        throw Exception(
-          'Unsupported file format (.${pickedFile.extension}). Please upload a valid CSV or Excel spreadsheet (.csv, .xlsx).'
-        );
-      }
-
-      // File size validation: max 10 MB
-      const maxBytes = 10 * 1024 * 1024;
-      if (pickedFile.size > maxBytes) {
-        final mb = (pickedFile.size / (1024 * 1024)).toStringAsFixed(1);
-        throw Exception(
-          'The selected file is $mb MB, which exceeds the 10 MB maximum limit. Please ensure your file is within 10 MB.'
-        );
-      }
-
       final Uint8List fileBytes;
-      if (pickedFile.bytes != null) {
+      if (pickedFile.bytes != null && pickedFile.bytes!.isNotEmpty) {
         fileBytes = pickedFile.bytes!;
       } else if (!kIsWeb && pickedFile.path != null) {
         final file = File(pickedFile.path!);
@@ -717,18 +831,90 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
         throw Exception('Unable to read selected file contents.');
       }
 
-      final List<List<dynamic>> rows;
-      if (ext == 'csv') {
-        final csvString = utf8.decode(fileBytes).replaceAll('\uFEFF', '');
-        rows = const CsvToListConverter(shouldParseNumbers: false).convert(csvString);
-      } else if (ext == 'xlsx') {
-        rows = _parseXlsxBytes(fileBytes);
-      } else {
-        throw Exception('Excel 97-2003 (.xls) format is deprecated. Please save your file as modern Excel (.xlsx) or CSV (.csv).');
+      await _handleBatchFileBytes(fileBytes, pickedFile.name, pickedFile.size);
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isProcessingBatch = false;
+          _batchWarningMessage = e.toString().replaceAll('Exception: ', '');
+        });
+        AppModals.showErrorDialog(
+          context: context,
+          title: 'Import Error',
+          message: e.toString().replaceAll('Exception: ', ''),
+        );
       }
+    }
+  }
+
+  Future<void> _handleBatchFileBytes(
+    Uint8List fileBytes,
+    String fileName,
+    int fileSize,
+  ) async {
+    if (_selectedOfferingId == null) {
+      AppModals.showErrorDialog(
+        context: context,
+        title: 'Section Required',
+        message: 'Please choose Grade Level, Subject, and Section target first before importing students.',
+      );
+      return;
+    }
+
+    String ext = fileName.contains('.') ? fileName.split('.').last.toLowerCase().trim() : '';
+
+    // Format validation: Modern Excel only (.xlsx)
+    if (ext != 'xlsx') {
+      setState(() {
+        _batchFileName = fileName;
+        _batchFileSize = fileSize;
+        _isProcessingBatch = false;
+        _batchWarningTitle = 'Invalid File Format';
+        _batchWarningMessage = 'Please upload a valid Excel spreadsheet (.xlsx). Other file formats are not supported.';
+      });
+      return;
+    }
+
+    // File size validation: max 10 MB
+    const maxBytes = 10 * 1024 * 1024;
+    if (fileSize > maxBytes) {
+      final mb = (fileSize / (1024 * 1024)).toStringAsFixed(1);
+      setState(() {
+        _batchFileName = fileName;
+        _batchFileSize = fileSize;
+        _isProcessingBatch = false;
+        _batchWarningMessage = 'The selected file is $mb MB, which exceeds the 10 MB maximum limit.';
+      });
+      return;
+    }
+
+    setState(() {
+      _batchFileName = fileName;
+      _batchFileSize = fileSize;
+      _isProcessingBatch = true;
+      _batchProgress = 0.05;
+      _batchPhase = 'Reading spreadsheet...';
+      _batchActiveRecord = 'Extracting data from $fileName';
+      _batchWarningTitle = null;
+      _batchWarningMessage = null;
+      _eligibleNewStudents = [];
+      _eligibleExistingStudents = [];
+      _alreadyEnrolledStudents = [];
+      _detectedInvalidRows = [];
+    });
+    await Future.delayed(const Duration(milliseconds: 60));
+
+    try {
+      final List<List<dynamic>> rows = _parseXlsxBytes(fileBytes);
 
       if (rows.isEmpty || rows.length <= 1) {
-        throw Exception('The spreadsheet file is empty or does not contain any student rows.');
+        setState(() {
+          _isProcessingBatch = false;
+          _batchProgress = 0.0;
+          _batchWarningTitle = 'No Student Records Found';
+          _batchWarningMessage = 'Please enter student details starting on Row 3 and re-upload.';
+        });
+        return;
       }
 
       final header = rows.first.map((e) => e.toString().replaceAll('\uFEFF', '').toLowerCase().trim()).toList();
@@ -736,7 +922,7 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
       final emailIndex = header.indexWhere((h) => h == 'email' || h.contains('email'));
       final lastNameIndex = header.indexWhere((h) => h == 'last name' || h == 'lastname' || h == 'last_name' || h == 'surname' || h.contains('last'));
       final firstNameIndex = header.indexWhere((h) => h == 'first name' || h == 'firstname' || h == 'first_name' || h.contains('first'));
-      final middleNameIndex = header.indexWhere((h) => h == 'middle name' || h == 'middlename' || h == 'middle_name' || h.contains('middle'));
+      final middleNameIndex = header.indexWhere((h) => h == 'middle name' || h == 'middlename' || h == 'middle_name' || h.contains('middle') || h.contains('initial') || h == 'mi' || h == 'm.i.');
       final genderIndex = header.indexWhere((h) => h == 'gender' || h == 'sex');
       final birthdayIndex = header.indexWhere((h) => h == 'birthday' || h == 'birthdate' || h == 'birth date' || h == 'dob' || h.contains('birth'));
 
@@ -749,116 +935,34 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
       if (birthdayIndex == -1) missingHeaders.add('birthday');
 
       if (missingHeaders.isNotEmpty) {
-        throw Exception(
-          'Missing required column headers: ${missingHeaders.join(', ')}.\n\n'
-          'Please ensure your file has: lrn, email, lastname, firstname, middlename (optional), gender, birthday. '
-          'Use "Download Official Template" to see the correct format.',
-        );
+        setState(() {
+          _isProcessingBatch = false;
+          _batchProgress = 0.0;
+          _batchWarningTitle = 'Invalid Spreadsheet Headers';
+          _batchWarningMessage = 'Please ensure your Excel file includes all required column headers: LRN, Email, Last Name, First Name, Middle Initial, Gender, and Birthday. Download the official template for the correct format.';
+        });
+        return;
       }
 
-      int validatedCount = 0;
       final totalDataRows = rows.length - 1;
-      String validationPhase = 'Validating records...';
-      String activeRecordName = '';
-      late StateSetter setValidationProgressState;
-
-      // Phase 1: Show Real-Time Validation Progress Dialog
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (_) => PopScope(
-          canPop: false,
-          child: StatefulBuilder(
-            builder: (ctx, setState) {
-              setValidationProgressState = setState;
-              final progress = totalDataRows <= 0 ? 0.0 : (validatedCount / totalDataRows).clamp(0.0, 1.0);
-              final percent = (progress * 100).toInt();
-
-              return AlertDialog(
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                title: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(
-                        LucideIcons.scanLine,
-                        color: Theme.of(context).colorScheme.primary,
-                        size: 20,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    const Text(
-                      'Validating Student Records...',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                    ),
-                  ],
-                ),
-                content: SizedBox(
-                  width: 400,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: LinearProgressIndicator(
-                          value: progress,
-                          minHeight: 8,
-                          backgroundColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.15),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Expanded(
-                            child: Text(
-                              '$validationPhase ($validatedCount of $totalDataRows)',
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          Text(
-                            '$percent%',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 13,
-                              color: Theme.of(context).colorScheme.primary,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        activeRecordName.isNotEmpty ? activeRecordName : 'Scanning student rows...',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            },
-          ),
-        ),
-      );
+      if (mounted) {
+        setState(() {
+          _batchProgress = 0.10;
+          _batchPhase = 'Found $totalDataRows records. Validating...';
+        });
+      }
 
       final candidateStudents = <_ParsedStudentRow>[];
       final invalidRows = <_InvalidStudentRow>[];
       final seenLrnsInFile = <String>{};
+      final seenEmailsInFile = <String>{};
+      final seenLrnRows = <String, int>{};
+      final seenEmailRows = <String, int>{};
       final now = DateTime.now();
 
       for (int i = 1; i < rows.length; i++) {
         final row = rows[i];
         final rowNum = i + 1;
-        validatedCount = i;
 
         if (row.isEmpty || row.every((c) => c.toString().trim().isEmpty)) {
           continue;
@@ -875,14 +979,36 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
         final cleanLrn = rawLrn.replaceAll(RegExp(r'\D'), '');
         final studentLabel = rawFirst.isNotEmpty ? '$rawFirst $rawLast' : (rawLrn.isNotEmpty ? 'LRN $rawLrn' : 'Row $rowNum');
 
+        // Live real-time in-card progress update
         if (mounted) {
-          setValidationProgressState(() {
-            validationPhase = 'Validating records';
-            activeRecordName = 'Row $rowNum: $studentLabel';
+          final rowProgress = ((i / totalDataRows) * 0.70).clamp(0.05, 0.70);
+          setState(() {
+            _batchProgress = rowProgress;
+            _batchPhase = 'Validating records... ($i of $totalDataRows)';
+            _batchActiveRecord = 'Row $rowNum: $studentLabel';
           });
         }
-        if (i % 2 == 0) {
-          await Future.delayed(Duration.zero);
+
+        // Micro-delay for visual responsiveness
+        if (totalDataRows <= 40) {
+          await Future.delayed(const Duration(milliseconds: 30));
+        } else if (i % 2 == 0) {
+          await Future.delayed(const Duration(milliseconds: 12));
+        }
+
+        // Check if row is template sample example (Row 2 in template)
+        // User directive: Sample row is for reference only; silently skip it (do NOT enroll, do NOT fail)
+        final isSampleRow = (cleanLrn == '123456789012' &&
+                (rawFirst.toLowerCase() == 'juana' ||
+                    rawFirst.toLowerCase() == 'rexsa' ||
+                    rawLast.toLowerCase().contains('dela cruz') ||
+                    rawEmail.contains('example@gmail.com') ||
+                    rawEmail.contains('juana.delacruz@gmail.com'))) ||
+            (rowNum == 2 && cleanLrn == '123456789012');
+
+        if (isSampleRow) {
+          // Silently skip template sample row without adding to errors or enrollment
+          continue;
         }
 
         // Validation 1: LRN length must be exactly 12 digits
@@ -891,112 +1017,233 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
             rowNumber: rowNum,
             identifier: studentLabel,
             fieldTag: 'LRN',
-            reason: 'Must be exactly 12 digits',
+            reason: cleanLrn.isEmpty ? 'LRN is required (12 digits).' : 'Must be exactly 12 digits (found ${cleanLrn.length}).',
+          ));
+          continue;
+        }
+
+        // Check repeating digits (e.g. 000000000000, 111111111111)
+        if (RegExp(r'^(\d)\1{11}$').hasMatch(cleanLrn)) {
+          invalidRows.add(_InvalidStudentRow(
+            rowNumber: rowNum,
+            identifier: studentLabel,
+            fieldTag: 'LRN',
+            reason: 'Invalid repeating LRN sequence.',
           ));
           continue;
         }
 
         // Validation 2: Duplicate LRN in file
         if (seenLrnsInFile.contains(cleanLrn)) {
+          final firstSeenRow = seenLrnRows[cleanLrn] ?? 0;
           invalidRows.add(_InvalidStudentRow(
             rowNumber: rowNum,
             identifier: '$studentLabel ($cleanLrn)',
             fieldTag: 'LRN',
-            reason: 'Duplicate LRN in this file',
+            reason: 'Duplicate LRN in this file (already defined in Row $firstSeenRow).',
           ));
           continue;
         }
 
-        // Validation 3: First name min 2 chars
-        if (rawFirst.length < 2) {
+        // Validation 3: First name (2-30 chars, letters/hyphens/periods/spaces only, no numbers)
+        if (rawFirst.length < 2 || rawFirst.length > 30) {
           invalidRows.add(_InvalidStudentRow(
             rowNumber: rowNum,
             identifier: cleanLrn,
             fieldTag: 'First Name',
-            reason: 'First name required (min 2 letters)',
+            reason: 'First name must be between 2 and 30 characters.',
+          ));
+          continue;
+        }
+        if (RegExp(r'[0-9]').hasMatch(rawFirst)) {
+          invalidRows.add(_InvalidStudentRow(
+            rowNumber: rowNum,
+            identifier: cleanLrn,
+            fieldTag: 'First Name',
+            reason: 'First name cannot contain numbers.',
+          ));
+          continue;
+        }
+        if (!RegExp(r"^[a-zA-Z\s\-\.]+$").hasMatch(rawFirst)) {
+          invalidRows.add(_InvalidStudentRow(
+            rowNumber: rowNum,
+            identifier: cleanLrn,
+            fieldTag: 'First Name',
+            reason: 'First name contains invalid characters.',
           ));
           continue;
         }
 
-        // Validation 4: Last name min 2 chars
-        if (rawLast.length < 2) {
+        // Validation 4: Last name (2-30 chars, letters/hyphens/periods/spaces only, no numbers)
+        if (rawLast.length < 2 || rawLast.length > 30) {
           invalidRows.add(_InvalidStudentRow(
             rowNumber: rowNum,
             identifier: '$rawFirst ($cleanLrn)',
             fieldTag: 'Last Name',
-            reason: 'Last name required (min 2 letters)',
+            reason: 'Last name must be between 2 and 30 characters.',
+          ));
+          continue;
+        }
+        if (RegExp(r'[0-9]').hasMatch(rawLast)) {
+          invalidRows.add(_InvalidStudentRow(
+            rowNumber: rowNum,
+            identifier: '$rawFirst ($cleanLrn)',
+            fieldTag: 'Last Name',
+            reason: 'Last name cannot contain numbers.',
+          ));
+          continue;
+        }
+        if (!RegExp(r"^[a-zA-Z\s\-\.]+$").hasMatch(rawLast)) {
+          invalidRows.add(_InvalidStudentRow(
+            rowNumber: rowNum,
+            identifier: '$rawFirst ($cleanLrn)',
+            fieldTag: 'Last Name',
+            reason: 'Last name contains invalid characters.',
           ));
           continue;
         }
 
-        // Validation 5: Gender
+        // Validation 5: Middle Initial (Optional, max 1 character, letters only)
+        String cleanMiddle = '';
+        if (rawMiddle.isNotEmpty) {
+          if (rawMiddle.length > 1) {
+            invalidRows.add(_InvalidStudentRow(
+              rowNumber: rowNum,
+              identifier: studentLabel,
+              fieldTag: 'Middle Initial',
+              reason: 'Must be a single letter or left blank (found ${rawMiddle.length} characters).',
+            ));
+            continue;
+          }
+          if (!RegExp(r'^[a-zA-Z]$').hasMatch(rawMiddle)) {
+            invalidRows.add(_InvalidStudentRow(
+              rowNumber: rowNum,
+              identifier: studentLabel,
+              fieldTag: 'Middle Initial',
+              reason: 'Middle initial must be a letter, numbers and symbols are not allowed.',
+            ));
+            continue;
+          }
+          cleanMiddle = rawMiddle.toUpperCase();
+        }
+
+        // Validation 6: Gender
         final parsedGender = _parseGender(rawGender);
         if (parsedGender == null) {
           invalidRows.add(_InvalidStudentRow(
             rowNumber: rowNum,
             identifier: studentLabel,
             fieldTag: 'Gender',
-            reason: 'Must be Male or Female',
+            reason: 'Must be Male or Female.',
           ));
           continue;
         }
 
-        // Validation 6: Birthday format & age range (10-25 years old)
+        // Validation 7: Birthday format & age range (10-50 years old)
         final parsedBday = _parseBirthday(rawBday);
         if (parsedBday == null) {
           invalidRows.add(_InvalidStudentRow(
             rowNumber: rowNum,
             identifier: studentLabel,
             fieldTag: 'Birthday',
-            reason: 'Invalid date (use YYYY-MM-DD)',
+            reason: 'Invalid date format (use YYYY-MM-DD).',
           ));
           continue;
         }
 
         final age = now.year - parsedBday.year - ((now.month < parsedBday.month || (now.month == parsedBday.month && now.day < parsedBday.day)) ? 1 : 0);
-        if (parsedBday.isAfter(now) || age < 10 || age > 25) {
+        if (parsedBday.isAfter(now) || age < 10 || age > 50) {
           invalidRows.add(_InvalidStudentRow(
             rowNumber: rowNum,
             identifier: studentLabel,
             fieldTag: 'Birthday',
-            reason: 'Age out of range (10–25 yrs old)',
+            reason: parsedBday.isAfter(now)
+                ? 'Birthday cannot be in the future.'
+                : 'Student age ($age yrs old) must be between 10 and 50 years old.',
           ));
           continue;
         }
 
-        // Validation 7: Email address
-        if (!RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(rawEmail)) {
+        // Validation 8: Email address
+        if (!RegExp(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$').hasMatch(rawEmail)) {
           invalidRows.add(_InvalidStudentRow(
             rowNumber: rowNum,
             identifier: studentLabel,
             fieldTag: 'Email',
-            reason: 'Invalid email address format',
+            reason: 'Invalid email address format.',
+          ));
+          continue;
+        }
+
+        // Check for placeholder / dummy emails
+        if (rawEmail == 'example@gmail.com' ||
+            rawEmail == 'test@test.com' ||
+            rawEmail == 'sample@gmail.com' ||
+            rawEmail == 'none@gmail.com' ||
+            rawEmail.startsWith('user@example') ||
+            rawEmail.endsWith('.test') ||
+            rawEmail.endsWith('.example')) {
+          invalidRows.add(_InvalidStudentRow(
+            rowNumber: rowNum,
+            identifier: studentLabel,
+            fieldTag: 'Email',
+            reason: 'Placeholder email detected ($rawEmail). Please provide a real email.',
+          ));
+          continue;
+        }
+
+        // Check duplicate email within file
+        if (seenEmailsInFile.contains(rawEmail)) {
+          final firstSeenRow = seenEmailRows[rawEmail] ?? 0;
+          invalidRows.add(_InvalidStudentRow(
+            rowNumber: rowNum,
+            identifier: studentLabel,
+            fieldTag: 'Email',
+            reason: 'Duplicate email in this file (already used on Row $firstSeenRow).',
           ));
           continue;
         }
 
         seenLrnsInFile.add(cleanLrn);
+        seenLrnRows[cleanLrn] = rowNum;
+        seenEmailsInFile.add(rawEmail);
+        seenEmailRows[rawEmail] = rowNum;
+
         candidateStudents.add(_ParsedStudentRow(
           rowNumber: rowNum,
           lrn: cleanLrn,
-          firstName: rawFirst,
-          middleName: rawMiddle,
-          lastName: rawLast,
+          firstName: _toTitleCase(rawFirst),
+          middleName: cleanMiddle,
+          lastName: _toTitleCase(rawLast),
           gender: parsedGender,
           birthday: parsedBday,
           email: rawEmail,
         ));
       }
 
-      if (candidateStudents.isNotEmpty && mounted) {
-        setValidationProgressState(() {
-          validationPhase = 'Verifying database...';
-          activeRecordName = 'Checking accounts and enrollments in Supabase';
-        });
-        await Future.delayed(Duration.zero);
+      // Check if NO student rows were entered starting from Row 3 (User issue case!)
+      if (candidateStudents.isEmpty && invalidRows.isEmpty) {
+        if (mounted) {
+          setState(() {
+            _isProcessingBatch = false;
+            _batchProgress = 0.0;
+            _batchWarningTitle = 'No Student Records Found';
+            _batchWarningMessage = 'Please enter student details starting on Row 3 and re-upload.';
+          });
+        }
+        return;
       }
 
-      // Supabase Pre-Check: Global identities and existing enrollments
+      if (candidateStudents.isNotEmpty && mounted) {
+        setState(() {
+          _batchProgress = 0.85;
+          _batchPhase = 'Verifying with database...';
+          _batchActiveRecord = 'Checking accounts and enrollments in Supabase';
+        });
+        await Future.delayed(const Duration(milliseconds: 100));
+      }
+
+      // Supabase Pre-Check: Global identities, email conflicts, section capacity, and existing enrollments
       final eligibleNewStudents = <_ParsedStudentRow>[];
       final eligibleExistingStudents = <_ParsedStudentRow>[];
       final alreadyEnrolledStudents = <_ParsedStudentRow>[];
@@ -1004,6 +1251,7 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
       if (candidateStudents.isNotEmpty) {
         final client = Supabase.instance.client;
         final cleanLrns = candidateStudents.map((s) => s.lrn).toList();
+        final cleanEmails = candidateStudents.map((s) => s.email).toList();
 
         // 1. Fetch matching student profiles
         final List<dynamic> profilesRes = await client
@@ -1022,7 +1270,19 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
           }
         }
 
-        // 2. Fetch existing enrollments for this class offering
+        // 2. Fetch users to detect email collisions
+        final List<dynamic> usersRes = await client
+            .from('users')
+            .select('id, email, role')
+            .filter('email', 'in', cleanEmails);
+
+        final userEmailMap = <String, Map<String, dynamic>>{};
+        for (final u in usersRes) {
+          final em = (u['email'] ?? '').toString().toLowerCase();
+          if (em.isNotEmpty) userEmailMap[em] = u as Map<String, dynamic>;
+        }
+
+        // 3. Fetch existing enrollments for this class offering
         final enrollmentMap = <String, String>{};
         if (studentIds.isNotEmpty && _selectedOfferingId != null) {
           final List<dynamic> enrollRes = await client
@@ -1040,10 +1300,74 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
           }
         }
 
-        // Classify each candidate
+        // 4. Fetch current enrolled counts by gender to enforce Section Capacity (Max 50 Male, Max 50 Female)
+        int currentMaleEnrolled = 0;
+        int currentFemaleEnrolled = 0;
+        try {
+          if (_selectedOfferingId != null) {
+            final List<dynamic> currentSectionStudents = await client
+                .from('student_enrollments')
+                .select('student_profiles!inner(gender)')
+                .eq('subject_offering_id', _selectedOfferingId!)
+                .ilike('status', 'enrolled');
+
+            for (final item in currentSectionStudents) {
+              final profile = item['student_profiles'] as Map<String, dynamic>?;
+              final g = profile?['gender']?.toString().toLowerCase();
+              if (g == 'male') currentMaleEnrolled++;
+              if (g == 'female') currentFemaleEnrolled++;
+            }
+          }
+        } catch (_) {}
+
+        // Classify each candidate with multi-factor conflict detection and capacity limits
         for (final s in candidateStudents) {
           final existingProfile = profileMap[s.lrn];
+
+          // Check Email Conflict against users table
+          final existingUser = userEmailMap[s.email];
+          if (existingUser != null) {
+            final existingUserId = existingUser['id']?.toString() ?? '';
+            final expectedStudentId = existingProfile?['student_id']?.toString() ?? '';
+
+            if (existingUserId != expectedStudentId) {
+              final role = (existingUser['role'] ?? 'user').toString();
+              invalidRows.add(_InvalidStudentRow(
+                rowNumber: s.rowNumber,
+                identifier: '${s.firstName} ${s.lastName} (${s.lrn})',
+                fieldTag: 'Email Conflict',
+                reason: 'Email "${s.email}" is already registered to another $role account in ClassRealm.',
+              ));
+              continue;
+            }
+          }
+
           if (existingProfile == null) {
+            // Check Section Capacity (Max 50 Male, Max 50 Female)
+            if (s.gender.toLowerCase() == 'male') {
+              if (currentMaleEnrolled >= 50) {
+                invalidRows.add(_InvalidStudentRow(
+                  rowNumber: s.rowNumber,
+                  identifier: '${s.firstName} ${s.lastName} (${s.lrn})',
+                  fieldTag: 'Capacity Exceeded',
+                  reason: 'Section capacity exceeded: Maximum 50 Male students allowed (Already $currentMaleEnrolled enrolled).',
+                ));
+                continue;
+              }
+              currentMaleEnrolled++;
+            } else if (s.gender.toLowerCase() == 'female') {
+              if (currentFemaleEnrolled >= 50) {
+                invalidRows.add(_InvalidStudentRow(
+                  rowNumber: s.rowNumber,
+                  identifier: '${s.firstName} ${s.lastName} (${s.lrn})',
+                  fieldTag: 'Capacity Exceeded',
+                  reason: 'Section capacity exceeded: Maximum 50 Female students allowed (Already $currentFemaleEnrolled enrolled).',
+                ));
+                continue;
+              }
+              currentFemaleEnrolled++;
+            }
+
             // Eligible New Student
             eligibleNewStudents.add(s);
           } else {
@@ -1059,7 +1383,7 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
                 rowNumber: s.rowNumber,
                 identifier: '${s.firstName} ${s.lastName} (${s.lrn})',
                 fieldTag: 'Class',
-                reason: 'Archived in this class (use Restore)',
+                reason: 'Archived in this class (use Restore in Manage Students).',
               ));
             } else {
               // Identity check against existing profile
@@ -1069,13 +1393,39 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
               final uploadLast = s.lastName.trim().toLowerCase();
 
               if (dbFirst != uploadFirst || dbLast != uploadLast) {
+                final registeredName = '${existingProfile['first_name']} ${existingProfile['last_name']}'.trim();
                 invalidRows.add(_InvalidStudentRow(
                   rowNumber: s.rowNumber,
                   identifier: '${s.firstName} ${s.lastName} (${s.lrn})',
-                  fieldTag: 'LRN',
-                  reason: 'Name mismatch with existing LRN record',
+                  fieldTag: 'LRN Conflict',
+                  reason: 'LRN is already registered to "$registeredName" under another teacher/class. Name does not match.',
                 ));
               } else {
+                // Check Section Capacity (Max 50 Male, Max 50 Female)
+                if (s.gender.toLowerCase() == 'male') {
+                  if (currentMaleEnrolled >= 50) {
+                    invalidRows.add(_InvalidStudentRow(
+                      rowNumber: s.rowNumber,
+                      identifier: '${s.firstName} ${s.lastName} (${s.lrn})',
+                      fieldTag: 'Capacity Exceeded',
+                      reason: 'Section capacity exceeded: Maximum 50 Male students allowed (Already $currentMaleEnrolled enrolled).',
+                    ));
+                    continue;
+                  }
+                  currentMaleEnrolled++;
+                } else if (s.gender.toLowerCase() == 'female') {
+                  if (currentFemaleEnrolled >= 50) {
+                    invalidRows.add(_InvalidStudentRow(
+                      rowNumber: s.rowNumber,
+                      identifier: '${s.firstName} ${s.lastName} (${s.lrn})',
+                      fieldTag: 'Capacity Exceeded',
+                      reason: 'Section capacity exceeded: Maximum 50 Female students allowed (Already $currentFemaleEnrolled enrolled).',
+                    ));
+                    continue;
+                  }
+                  currentFemaleEnrolled++;
+                }
+
                 // Eligible Existing Student from another class/teacher
                 eligibleExistingStudents.add(_ParsedStudentRow(
                   rowNumber: s.rowNumber,
@@ -1095,171 +1445,47 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
         }
       }
 
-      // Dismiss validation loading dialog
-      if (mounted) Navigator.of(context).pop();
-
-      if (!mounted) return;
-
       final allEligible = [...eligibleNewStudents, ...eligibleExistingStudents];
 
-      // Phase 2: Pre-Flight Review Modal
-      final shouldProceed = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.blue.withValues(alpha: 0.1),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(LucideIcons.listChecks, color: Colors.blue, size: 20),
-              ),
-              const SizedBox(width: 12),
-              const Text('Import Pre-Flight Review', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
-            ],
-          ),
-          content: SizedBox(
-            width: 520,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.2)),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(LucideIcons.graduationCap, size: 18, color: Theme.of(context).colorScheme.primary),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          'Target: $_selectedGradeLevel • $_selectedSubjectName',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            color: Theme.of(context).colorScheme.primary,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 14),
-                // 4 Metric Pills: New, Existing, Already Enrolled, Issues
-                Row(
-                  children: [
-                    _buildStatPill('New', eligibleNewStudents.length, const Color(0xFF0F8A48)),
-                    const SizedBox(width: 6),
-                    _buildStatPill('Existing', eligibleExistingStudents.length, Colors.blue),
-                    const SizedBox(width: 6),
-                    _buildStatPill('Enrolled', alreadyEnrolledStudents.length, Colors.grey),
-                    const SizedBox(width: 6),
-                    _buildStatPill('Issues', invalidRows.length, Colors.red),
-                  ],
-                ),
-                if (invalidRows.isNotEmpty) ...[
-                  const SizedBox(height: 14),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text('Issues Detected (Skipped):', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                      Text('${invalidRows.length} errors', style: const TextStyle(fontSize: 11, color: Colors.red, fontWeight: FontWeight.w600)),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  Container(
-                    constraints: const BoxConstraints(maxHeight: 140),
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: Colors.red.withValues(alpha: 0.05),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.red.withValues(alpha: 0.25)),
-                    ),
-                    child: ListView.builder(
-                      shrinkWrap: true,
-                      itemCount: invalidRows.length,
-                      itemBuilder: (_, idx) {
-                        final item = invalidRows[idx];
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 3),
-                          child: RichText(
-                            text: TextSpan(
-                              style: const TextStyle(fontSize: 11, color: Colors.black87),
-                              children: [
-                                TextSpan(
-                                  text: 'Row ${item.rowNumber} ',
-                                  style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.red),
-                                ),
-                                WidgetSpan(
-                                  alignment: PlaceholderAlignment.middle,
-                                  child: Container(
-                                    margin: const EdgeInsets.symmetric(horizontal: 4),
-                                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                                    decoration: BoxDecoration(
-                                      color: Colors.red.withValues(alpha: 0.15),
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
-                                    child: Text(
-                                      '[${item.fieldTag}]',
-                                      style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.red),
-                                    ),
-                                  ),
-                                ),
-                                TextSpan(text: '${item.identifier}: ${item.reason}'),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 14),
-                Text(
-                  allEligible.isNotEmpty
-                      ? 'Ready to enroll ${allEligible.length} student${allEligible.length > 1 ? 's' : ''} into this class roster.'
-                      : 'No eligible students to enroll. Please fix the issues in your spreadsheet.',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.8),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel'),
-            ),
-            if (allEligible.isNotEmpty)
-              FilledButton(
-                onPressed: () => Navigator.pop(ctx, true),
-                child: Text('Enroll ${allEligible.length} Eligible Students'),
-              ),
-          ],
-        ),
-      );
-
-      if (shouldProceed != true || !mounted) return;
-
-      await _executeBatchEnrollment(
-        allEligible,
-        fileName: pickedFile.name,
-      );
-    } catch (e) {
-      // In case validation dialog is still showing on unexpected error
-      try {
-        Navigator.of(context, rootNavigator: true).pop();
-      } catch (_) {}
       if (mounted) {
+        setState(() {
+          _batchProgress = 1.0;
+          _isProcessingBatch = false;
+          _eligibleNewStudents = eligibleNewStudents;
+          _eligibleExistingStudents = eligibleExistingStudents;
+          _alreadyEnrolledStudents = alreadyEnrolledStudents;
+          _detectedInvalidRows = invalidRows;
+        });
+      }
+
+      if (invalidRows.isNotEmpty) {
+        // Errors detected: Show the Issues Error Modal
+        if (mounted) {
+          setState(() {
+            _batchPhase = 'Validation Issues Found';
+            _batchActiveRecord = '${invalidRows.length} issue${invalidRows.length > 1 ? "s" : ""} detected in spreadsheet';
+          });
+        }
+        await _showIssuesErrorDialog();
+      } else if (allEligible.isNotEmpty) {
+        // 100% valid with 0 errors: Directly enroll into the database!
+        if (mounted) {
+          setState(() {
+            _batchPhase = 'Enrolling in Database...';
+            _batchActiveRecord = 'All ${allEligible.length} student${allEligible.length > 1 ? "s" : ""} valid. Writing to database...';
+          });
+        }
+        await _executeBatchEnrollment(
+          allEligible,
+          fileName: _batchFileName ?? 'Spreadsheet',
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isProcessingBatch = false;
+          _batchWarningMessage = e.toString().replaceAll('Exception: ', '');
+        });
         AppModals.showErrorDialog(
           context: context,
           title: 'Import Error',
@@ -1267,6 +1493,184 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
         );
       }
     }
+  }
+
+  Future<void> _showIssuesErrorDialog() async {
+    if (_detectedInvalidRows.isEmpty) return;
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.red.withValues(alpha: 0.1),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(LucideIcons.alertTriangle, color: Colors.red, size: 20),
+            ),
+            const SizedBox(width: 12),
+            const Text('Spreadsheet Issues Found', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
+          ],
+        ),
+        content: SizedBox(
+          width: 520,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.2)),
+                ),
+                child: Row(
+                  children: [
+                    Icon(LucideIcons.graduationCap, size: 18, color: Theme.of(context).colorScheme.primary),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Target: $_selectedGradeLevel • $_selectedSubjectName',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 14),
+              // 4 Metric Badges in exact order: Issues (X) | New Students (Y) | Existing (Z) | Enrolled (W)
+              Row(
+                children: [
+                  _buildStatPill('Issues', _detectedInvalidRows.length, Colors.red),
+                  const SizedBox(width: 6),
+                  _buildStatPill('New Students', _eligibleNewStudents.length, const Color(0xFF0F8A48)),
+                  const SizedBox(width: 6),
+                  _buildStatPill('Existing', _eligibleExistingStudents.length, Colors.blue),
+                  const SizedBox(width: 6),
+                  _buildStatPill('Enrolled', _alreadyEnrolledStudents.length, Colors.grey),
+                ],
+              ),
+              const SizedBox(height: 14),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Issues Detected (Upload Blocked):',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.red),
+                  ),
+                  Text(
+                    '${_detectedInvalidRows.length} error${_detectedInvalidRows.length > 1 ? "s" : ""}',
+                    style: const TextStyle(fontSize: 11, color: Colors.red, fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Container(
+                constraints: const BoxConstraints(maxHeight: 150),
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.red.withValues(alpha: 0.05),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.red.withValues(alpha: 0.25)),
+                ),
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: _detectedInvalidRows.length,
+                  itemBuilder: (_, idx) {
+                    final item = _detectedInvalidRows[idx];
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 3),
+                      child: RichText(
+                        text: TextSpan(
+                          style: const TextStyle(fontSize: 11, color: Colors.black87),
+                          children: [
+                            TextSpan(
+                              text: 'Row ${item.rowNumber} ',
+                              style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.red),
+                            ),
+                            WidgetSpan(
+                              alignment: PlaceholderAlignment.middle,
+                              child: Container(
+                                margin: const EdgeInsets.symmetric(horizontal: 4),
+                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                decoration: BoxDecoration(
+                                  color: Colors.red.withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  '[${item.fieldTag}]',
+                                  style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.red),
+                                ),
+                              ),
+                            ),
+                            TextSpan(text: '${item.identifier}: ${item.reason}'),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 10),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: Colors.orange.withValues(alpha: 0.25)),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(LucideIcons.alertCircle, size: 14, color: Colors.deepOrange),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Strict Policy: All issues must be corrected in your spreadsheet before enrolling.',
+                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.deepOrange),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Please fix all ${_detectedInvalidRows.length} issue${_detectedInvalidRows.length > 1 ? "s" : ""} in your spreadsheet and upload again to proceed.',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.8),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Close'),
+          ),
+          FilledButton.icon(
+            icon: const Icon(LucideIcons.folderOpen, size: 14),
+            label: const Text('Upload Fixed File'),
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.primary,
+            ),
+            onPressed: () {
+              Navigator.pop(ctx);
+              _processBatchImport();
+            },
+          ),
+        ],
+      ),
+    );
   }
 
   int _colLetterToIndex(String letters) {
@@ -1277,6 +1681,15 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
     return col - 1;
   }
 
+  String _decodeXmlEntities(String str) {
+    return str
+        .replaceAll('&amp;', '&')
+        .replaceAll('&lt;', '<')
+        .replaceAll('&gt;', '>')
+        .replaceAll('&quot;', '"')
+        .replaceAll('&apos;', "'");
+  }
+
   List<List<dynamic>> _parseXlsxBytes(Uint8List bytes) {
     try {
       final archive = ZipDecoder().decodeBytes(bytes);
@@ -1284,9 +1697,16 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
       final ssFile = archive.findFile('xl/sharedStrings.xml');
       if (ssFile != null) {
         final ssXml = utf8.decode(ssFile.content as List<int>);
-        final tMatches = RegExp(r'<t(?:\s[^>]*)?>([^<]*)<\/t>').allMatches(ssXml);
-        for (final m in tMatches) {
-          sharedStrings.add(m.group(1) ?? '');
+        // OpenXML shared strings are <si>...</si> entries with one or more <t> runs
+        final siMatches = RegExp(r'<si\b[^>]*>(.*?)<\/si>', dotAll: true).allMatches(ssXml);
+        for (final si in siMatches) {
+          final siContent = si.group(1) ?? '';
+          final tMatches = RegExp(r'<t(?:\s[^>]*)?>([^<]*)<\/t>').allMatches(siContent);
+          final buffer = StringBuffer();
+          for (final tm in tMatches) {
+            buffer.write(tm.group(1) ?? '');
+          }
+          sharedStrings.add(_decodeXmlEntities(buffer.toString()));
         }
       }
 
@@ -1305,33 +1725,54 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
       }
 
       final sheetXml = utf8.decode(sheetFile.content as List<int>);
-      final rowMatches = RegExp(r'<row[^>]*>(.*?)<\/row>').allMatches(sheetXml);
+      final rowMatches = RegExp(r'<row\b[^>]*>(.*?)<\/row>', dotAll: true).allMatches(sheetXml);
 
       final allRows = <List<dynamic>>[];
       for (final rm in rowMatches) {
         final rowXml = rm.group(1) ?? '';
-        final cellMatches = RegExp(r'<c\s+r="([A-Z]+)(\d+)"(?:\s+t="([a-z]+)")?[^>]*>(?:<v>([^<]*)<\/v>|<is><t>([^<]*)<\/t><\/is>)?<\/c>').allMatches(rowXml);
+        final cellTagMatches = RegExp(r'<c\b([^>]*)(?:\/>|>(.*?)<\/c>)', dotAll: true).allMatches(rowXml);
 
         final rowMap = <int, dynamic>{};
         int maxCol = -1;
-        for (final cm in cellMatches) {
-          final colLetters = cm.group(1) ?? 'A';
-          final colIdx = _colLetterToIndex(colLetters);
-          final type = cm.group(3);
-          final vVal = cm.group(4);
-          final isVal = cm.group(5);
-          final rawVal = vVal ?? isVal ?? '';
 
-          dynamic finalVal = rawVal;
-          if (type == 's' && int.tryParse(rawVal) != null) {
-            final sIdx = int.parse(rawVal);
-            finalVal = sIdx < sharedStrings.length ? sharedStrings[sIdx] : rawVal;
+        for (final cm in cellTagMatches) {
+          final attrs = cm.group(1) ?? '';
+          final body = cm.group(2) ?? '';
+
+          final rMatch = RegExp(r'\br="([A-Za-z]+)(\d+)"').firstMatch(attrs);
+          if (rMatch == null) continue;
+
+          final colLetters = rMatch.group(1)!.toUpperCase();
+          final colIdx = _colLetterToIndex(colLetters);
+
+          final tMatch = RegExp(r'\bt="([A-Za-z]+)"').firstMatch(attrs);
+          final cellType = (tMatch?.group(1) ?? '').toLowerCase();
+
+          String rawVal = '';
+          final vMatch = RegExp(r'<v\b[^>]*>([^<]*)<\/v>').firstMatch(body);
+          if (vMatch != null) {
+            rawVal = vMatch.group(1) ?? '';
+          } else {
+            final tMatchInBody = RegExp(r'<t\b[^>]*>([^<]*)<\/t>').firstMatch(body);
+            if (tMatchInBody != null) {
+              rawVal = tMatchInBody.group(1) ?? '';
+            }
           }
+
+          dynamic finalVal = _decodeXmlEntities(rawVal);
+          if (cellType == 's' && int.tryParse(rawVal) != null) {
+            final sIdx = int.parse(rawVal);
+            if (sIdx >= 0 && sIdx < sharedStrings.length) {
+              finalVal = sharedStrings[sIdx];
+            }
+          }
+
           if (colIdx >= 0) {
             rowMap[colIdx] = finalVal;
             if (colIdx > maxCol) maxCol = colIdx;
           }
         }
+
         if (maxCol >= 0) {
           final rowData = List<dynamic>.filled(maxCol + 1, '');
           rowMap.forEach((idx, val) {
@@ -1413,97 +1854,105 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
       }));
     } catch (_) {}
 
-    int currentIdx = 0;
-    String currentStudentName = '';
-    String progressPhase = 'Writing to database...';
-    late StateSetter setProgressState;
+    final enrollProgressNotifier = ValueNotifier<_EnrollmentProgressData>(
+      _EnrollmentProgressData(
+        phase: 'Writing to database...',
+        currentIdx: 0,
+        totalCount: students.length,
+        currentStudentName: 'Preparing student accounts...',
+      ),
+    );
 
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (dialogCtx) {
-        return StatefulBuilder(
-          builder: (context, setState) {
-            setProgressState = setState;
-            final progress = students.isEmpty ? 0.0 : (currentIdx / students.length);
-            final percent = (progress * 100).toInt();
-            return AlertDialog(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              title: Row(
-                children: [
-                  const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2.5),
-                  ),
-                  const SizedBox(width: 12),
-                  Text(
-                    isResumed ? 'Resuming Enrollment...' : 'Enrolling Students in Bulk...',
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                  ),
-                ],
-              ),
-              content: SizedBox(
-                width: 380,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
+        return PopScope(
+          canPop: false,
+          child: ValueListenableBuilder<_EnrollmentProgressData>(
+            valueListenable: enrollProgressNotifier,
+            builder: (context, prog, _) {
+              final progress = prog.progress;
+              final percent = prog.percent;
+              return AlertDialog(
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                title: Row(
                   children: [
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: LinearProgressIndicator(
-                        value: progress,
-                        minHeight: 8,
-                        backgroundColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.15),
-                      ),
+                    const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2.5),
                     ),
-                    const SizedBox(height: 12),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          '$progressPhase ($currentIdx of ${students.length})',
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                        ),
-                        Text(
-                          '$percent%',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 13,
-                            color: Theme.of(context).colorScheme.primary,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
+                    const SizedBox(width: 12),
                     Text(
-                      currentStudentName.isNotEmpty ? currentStudentName : 'Preparing student accounts...',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
-                      ),
-                      textAlign: TextAlign.center,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                      isResumed ? 'Resuming Enrollment...' : 'Enrolling Students in Bulk...',
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                     ),
                   ],
                 ),
-              ),
-            );
-          },
+                content: SizedBox(
+                  width: 380,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: LinearProgressIndicator(
+                          value: progress,
+                          minHeight: 8,
+                          backgroundColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.15),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            '${prog.phase} (${prog.currentIdx} of ${prog.totalCount})',
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                          ),
+                          Text(
+                            '$percent%',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        prog.currentStudentName.isNotEmpty ? prog.currentStudentName : 'Preparing student accounts...',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
+                        ),
+                        textAlign: TextAlign.center,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
         );
       },
     );
 
     // Phase A: Fast Database Enrollment Loop (Decoupled, skipEmail: true)
+    bool isNetworkLoss = false;
+
     for (int i = 0; i < students.length; i++) {
       final s = students[i];
-      if (mounted) {
-        setProgressState(() {
-          currentIdx = i + 1;
-          progressPhase = 'Enrolling in database';
-          currentStudentName = '${s.firstName} ${s.lastName} (LRN: ${s.lrn})';
-        });
-      }
+      enrollProgressNotifier.value = _EnrollmentProgressData(
+        phase: 'Enrolling in database',
+        currentIdx: i + 1,
+        totalCount: students.length,
+        currentStudentName: '${s.firstName} ${s.lastName} (LRN: ${s.lrn})',
+      );
 
       try {
         final result = await repo.enrollStudent(
@@ -1535,17 +1984,10 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
             });
           }
         }
-      } catch (e) {
-        failed.add({
-          'student': s,
-          'error': e.toString().replaceAll('Exception: ', '').trim(),
-        });
-      }
 
-      // Update persisted pending batch session on each row
-      if (prefs != null && sessionKey != null) {
+        // Update persisted pending batch session on each successful row
         pendingJson.removeWhere((item) => item['lrn'] == s.lrn);
-        if (pendingJson.isNotEmpty) {
+        if (prefs != null && sessionKey != null) {
           await prefs.setString(sessionKey, jsonEncode({
             'fileName': fileName,
             'offeringId': _selectedOfferingId,
@@ -1553,7 +1995,96 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
             'pending': pendingJson,
           }));
         }
+      } catch (e) {
+        final errLower = e.toString().toLowerCase();
+        final isNet = errLower.contains('socketexception') ||
+            errLower.contains('clientexception') ||
+            errLower.contains('network') ||
+            errLower.contains('failed host lookup') ||
+            errLower.contains('connection refused') ||
+            errLower.contains('connection timed out') ||
+            errLower.contains('xmlhttprequest') ||
+            errLower.contains('handshakeexception') ||
+            errLower.contains('timeout');
+
+        if (isNet) {
+          isNetworkLoss = true;
+          break; // Stop loop immediately to protect remaining un-enrolled students
+        } else {
+          failed.add({
+            'student': s,
+            'error': e.toString().replaceAll('Exception: ', '').trim(),
+          });
+          pendingJson.removeWhere((item) => item['lrn'] == s.lrn);
+          if (prefs != null && sessionKey != null) {
+            await prefs.setString(sessionKey, jsonEncode({
+              'fileName': fileName,
+              'offeringId': _selectedOfferingId,
+              'total': students.length,
+              'pending': pendingJson,
+            }));
+          }
+        }
       }
+    }
+
+    if (isNetworkLoss) {
+      if (mounted) {
+        Navigator.of(context).pop(); // dismiss progress dialog
+        enrollProgressNotifier.dispose();
+        await _checkResumableBatch();
+        widget.onStudentCreated(); // refresh dashboard roster with whatever succeeded
+
+        await showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.withValues(alpha: 0.15),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(LucideIcons.wifiOff, color: Colors.amber, size: 22),
+                ),
+                const SizedBox(width: 12),
+                const Text('Network Disconnected', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'The internet connection was interrupted during the upload process.\n\n'
+                  '• ${successful.length} student${successful.length != 1 ? "s were" : " was"} successfully enrolled.\n'
+                  '• ${pendingJson.length} student${pendingJson.length != 1 ? "s remain" : " remains"} in your upload session.\n\n'
+                  'ClassRealm saved your progress. When your internet is back, click "Resume Upload" to continue without starting over from the beginning.',
+                  style: const TextStyle(fontSize: 13, height: 1.45),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Close'),
+              ),
+              FilledButton.icon(
+                icon: const Icon(LucideIcons.refreshCw, size: 15),
+                label: const Text('Resume Upload Now'),
+                style: FilledButton.styleFrom(backgroundColor: const Color(0xFF0F8A48)),
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  _resumeBatchEnrollment();
+                },
+              ),
+            ],
+          ),
+        );
+      }
+      return;
     }
 
     // Phase B: Throttled Credential Email Queue (Decoupled background dispatch)
@@ -1561,12 +2092,12 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
     int emailFailedCount = 0;
 
     if (newlyCreatedStudents.isNotEmpty) {
-      if (mounted) {
-        setProgressState(() {
-          progressPhase = 'Sending welcome emails';
-          currentStudentName = 'Dispatching credentials securely in background...';
-        });
-      }
+      enrollProgressNotifier.value = _EnrollmentProgressData(
+        phase: 'Sending welcome emails',
+        currentIdx: newlyCreatedStudents.length,
+        totalCount: newlyCreatedStudents.length,
+        currentStudentName: 'Dispatching credentials securely in background...',
+      );
 
       const chunkSize = 4;
       for (int i = 0; i < newlyCreatedStudents.length; i += chunkSize) {
@@ -1605,6 +2136,7 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
 
     if (mounted) {
       Navigator.of(context).pop(); // dismiss progress dialog
+      enrollProgressNotifier.dispose();
       Navigator.of(context).pop(); // dismiss unified dialog
       widget.onStudentCreated(); // refresh dashboard roster
 
@@ -2026,7 +2558,7 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
                           children: [
                             Icon(LucideIcons.fileSpreadsheet, size: 16),
                             SizedBox(width: 8),
-                            Text('Import File (CSV/Excel)'),
+                            Text('Import Excel File'),
                           ],
                         ),
                       ),
@@ -2296,12 +2828,18 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
                 Expanded(
                   flex: 3,
                   child: AppTextField(
-                    label: 'Middle Name',
+                    label: 'Middle Initial',
                     controller: _middleNameCtrl,
                     inputFormatters: [
-                      ...AppValidators.nameFormatters,
-                      LengthLimitingTextInputFormatter(30),
+                      FilteringTextInputFormatter.allow(RegExp(r"[a-zA-Z]")),
+                      LengthLimitingTextInputFormatter(1),
                     ],
+                    validator: (v) {
+                      if (v != null && v.trim().length > 1) {
+                        return 'Max 1 character';
+                      }
+                      return null;
+                    },
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -2360,7 +2898,7 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
                       LengthLimitingTextInputFormatter(12),
                     ],
                     validator: (v) {
-                      if (v == null || v.isEmpty) return 'Required';
+                      if (v == null || v.isEmpty) return 'LRN is required';
                       if (v.length != 12 || int.tryParse(v) == null) {
                         return 'Must be exactly 12 digits';
                       }
@@ -2512,7 +3050,7 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          '${_resumableBatch!['pendingCount']} student(s) from "${_resumableBatch!['fileName']}" were not finished.',
+                          '${(_resumableBatch!['pending'] as List?)?.length ?? _resumableBatch!['pendingCount'] ?? 0} student(s) remaining from "${_resumableBatch!['fileName'] ?? 'Spreadsheet'}".',
                           style: TextStyle(
                             fontSize: 12,
                             color: theme.colorScheme.onSurface.withValues(alpha: 0.75),
@@ -2543,132 +3081,483 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
             const SizedBox(height: 14),
           ],
 
-          // ── Animated Marching Ants Drag & Drop / File Click Area ──
-          _AnimatedMarchingAntsBox(
-            onTap: _processBatchImport,
-            isDark: isDark,
-            child: Column(
+          // ── Step 1: Pre-download Banner Guide (Brand 60-30-10 Compliant) ──
+          Container(
+            width: double.infinity,
+            margin: const EdgeInsets.only(bottom: 16),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.primary.withValues(alpha: 0.06),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: theme.colorScheme.primary.withValues(alpha: 0.22)),
+            ),
+            child: Row(
               children: [
                 Container(
-                  padding: const EdgeInsets.all(14),
+                  padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: theme.colorScheme.primary.withValues(alpha: 0.1),
+                    color: theme.colorScheme.primary.withValues(alpha: 0.12),
                     shape: BoxShape.circle,
                   ),
-                  child: Icon(
-                    LucideIcons.fileSpreadsheet,
-                    size: 36,
-                    color: theme.colorScheme.primary,
-                  ),
+                  child: Icon(LucideIcons.fileSpreadsheet, color: theme.colorScheme.primary, size: 20),
                 ),
-                const SizedBox(height: 14),
-                const Text(
-                  'Click to upload or drag & drop Excel / CSV file',
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  'Supports Excel (.xlsx) and standard CSV (.csv) files up to 10 MB',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                  ),
-                ),
-                const SizedBox(height: 14),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.surface,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: theme.colorScheme.outline.withValues(alpha: 0.2),
-                    ),
-                  ),
-                  child: Row(
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(LucideIcons.info, size: 14, color: Colors.blue),
-                      const SizedBox(width: 8),
-                      Flexible(
-                        child: Text(
-                          'Required: LRN • Email • Last Name • First Name • Gender • Birthday (YYYY-MM-DD)',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: theme.colorScheme.onSurface.withValues(alpha: 0.85),
-                          ),
+                      Text(
+                        'Official Excel Template',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                          color: theme.colorScheme.primary,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Enter student records starting on Row 3, then upload below.',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
                         ),
                       ),
                     ],
                   ),
                 ),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 12),
-
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.primary.withValues(alpha: 0.05),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(
-                color: theme.colorScheme.primary.withValues(alpha: 0.15),
-              ),
-            ),
-            child: Row(
-              children: [
-                Icon(LucideIcons.lightbulb, size: 18, color: theme.colorScheme.primary),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    'Tip: Click "Download Official Template" below to get the pre-formatted Excel or CSV template. Keep the column headers unchanged when entering student details.',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.75),
-                      height: 1.35,
-                    ),
+                const SizedBox(width: 12),
+                FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: theme.colorScheme.primary,
+                    foregroundColor: theme.colorScheme.onPrimary,
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   ),
+                  icon: const Icon(LucideIcons.download, size: 14),
+                  label: const Text('Download .xlsx', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  onPressed: _downloadOfficialTemplate,
                 ),
               ],
             ),
           ),
 
-          const SizedBox(height: 18),
+          // ── Step 2 & 3: Animated Marching Ants Drag & Drop / File Click Area ──
+          _AnimatedMarchingAntsBox(
+            onTap: _isProcessingBatch ? () {} : _processBatchImport,
+            isDark: isDark,
+            child: _buildMarchingAntsContent(theme, isDark),
+          ),
+        ],
+      ),
+    );
+  }
 
+  Widget _buildMarchingAntsContent(ThemeData theme, bool isDark) {
+    // State 1: Active Validation Scanning
+    if (_isProcessingBatch) {
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.primary.withValues(alpha: 0.12),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              LucideIcons.scanLine,
+              size: 34,
+              color: theme.colorScheme.primary,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            _batchFileName ?? 'Validating Spreadsheet...',
+            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          if (_batchFileSize != null) ...[
+            const SizedBox(height: 2),
+            Text(
+              '${(_batchFileSize! / 1024).toStringAsFixed(1)} KB • In Progress',
+              style: TextStyle(
+                fontSize: 11,
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+              ),
+            ),
+          ],
+          const SizedBox(height: 16),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: LinearProgressIndicator(
+              value: _batchProgress,
+              minHeight: 10,
+              backgroundColor: theme.colorScheme.primary.withValues(alpha: 0.15),
+              valueColor: AlwaysStoppedAnimation<Color>(theme.colorScheme.primary),
+            ),
+          ),
+          const SizedBox(height: 10),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              OutlinedButton.icon(
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  side: BorderSide(
-                    color: const Color(0xFF0F8A48).withValues(alpha: 0.6),
-                  ),
-                  foregroundColor: const Color(0xFF0F8A48),
+              Expanded(
+                child: Text(
+                  _batchPhase.isNotEmpty ? _batchPhase : 'Scanning rows...',
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                  overflow: TextOverflow.ellipsis,
                 ),
-                icon: const Icon(LucideIcons.download, size: 16),
-                label: const Text('Download Official Template (Excel / CSV)'),
-                onPressed: _downloadOfficialTemplate,
               ),
               Text(
-                'Max file size: 10 MB',
+                '${(_batchProgress * 100).toInt()}%',
                 style: TextStyle(
-                  fontSize: 11,
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
-                  fontWeight: FontWeight.w500,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                  color: theme.colorScheme.primary,
                 ),
               ),
             ],
           ),
+          const SizedBox(height: 8),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surface,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: theme.colorScheme.outline.withValues(alpha: 0.2)),
+            ),
+            child: Row(
+              children: [
+                Icon(LucideIcons.userCheck, size: 14, color: theme.colorScheme.primary),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    _batchActiveRecord.isNotEmpty ? _batchActiveRecord : 'Scanning data rows...',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.85),
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
-      ),
+      );
+    }
+
+    // State 2: File Already Loaded / Scanned
+    if (_batchFileName != null) {
+      if (_batchWarningMessage != null) {
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.amber.withValues(alpha: 0.15),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                LucideIcons.triangleAlert,
+                size: 34,
+                color: Colors.amber,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              _batchWarningTitle ?? 'Spreadsheet Needs Attention',
+              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.amber),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _batchWarningMessage!,
+              style: TextStyle(
+                fontSize: 12,
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.85),
+                height: 1.4,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 18),
+            Wrap(
+              spacing: 10,
+              runSpacing: 8,
+              alignment: WrapAlignment.center,
+              children: [
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  icon: const Icon(LucideIcons.download, size: 14),
+                  label: const Text('Download Template', style: TextStyle(fontSize: 12)),
+                  onPressed: _downloadOfficialTemplate,
+                ),
+                FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: theme.colorScheme.primary,
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  icon: const Icon(LucideIcons.folderOpen, size: 14),
+                  label: const Text('Choose Another File', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  onPressed: _processBatchImport,
+                ),
+              ],
+            ),
+          ],
+        );
+      }
+
+      final totalEligible = _eligibleNewStudents.length + _eligibleExistingStudents.length;
+
+      // State 2A: Issues Detected
+      if (_detectedInvalidRows.isNotEmpty) {
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.red.withValues(alpha: 0.12),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                LucideIcons.alertTriangle,
+                size: 34,
+                color: Colors.red,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Spreadsheet Has ${_detectedInvalidRows.length} Issue${_detectedInvalidRows.length > 1 ? "s" : ""}',
+              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.red),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Please correct all detected errors in your spreadsheet and re-upload.',
+              style: TextStyle(
+                fontSize: 12,
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
+                height: 1.4,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 14),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: Colors.red.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
+                  ),
+                  child: Text(
+                    '✕ ${_detectedInvalidRows.length} Issues',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.red,
+                    ),
+                  ),
+                ),
+                if (totalEligible > 0) ...[
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0F8A48).withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: const Color(0xFF0F8A48).withValues(alpha: 0.3)),
+                    ),
+                    child: Text(
+                      '✓ $totalEligible Valid',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF0F8A48),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+            const SizedBox(height: 16),
+            Wrap(
+              spacing: 10,
+              runSpacing: 8,
+              alignment: WrapAlignment.center,
+              children: [
+                FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: Colors.red,
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  icon: const Icon(LucideIcons.listChecks, size: 14),
+                  label: Text('View Issues (${_detectedInvalidRows.length})', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  onPressed: _showIssuesErrorDialog,
+                ),
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  icon: const Icon(LucideIcons.refreshCw, size: 14),
+                  label: const Text('Upload Fixed File', style: TextStyle(fontSize: 12)),
+                  onPressed: _processBatchImport,
+                ),
+              ],
+            ),
+          ],
+        );
+      }
+
+      // State 2B: All Valid / Enrolled
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: const Color(0xFF0F8A48).withValues(alpha: 0.12),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              LucideIcons.checkCheck,
+              size: 34,
+              color: Color(0xFF0F8A48),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            _batchFileName!,
+            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          if (_batchFileSize != null) ...[
+            const SizedBox(height: 2),
+            Text(
+              '${(_batchFileSize! / 1024).toStringAsFixed(1)} KB • Enrollment Complete',
+              style: TextStyle(
+                fontSize: 11,
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+              ),
+            ),
+          ],
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: const Color(0xFF0F8A48).withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: const Color(0xFF0F8A48).withValues(alpha: 0.3)),
+            ),
+            child: Text(
+              '✓ $totalEligible Student${totalEligible > 1 ? "s" : ""} Enrolled',
+              style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF0F8A48),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            icon: const Icon(LucideIcons.plus, size: 14),
+            label: const Text('Upload Another File', style: TextStyle(fontSize: 12)),
+            onPressed: _processBatchImport,
+          ),
+        ],
+      );
+    }
+
+    // State 3: Idle Default (No file selected yet)
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.primary.withValues(alpha: 0.1),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(
+            LucideIcons.uploadCloud,
+            size: 36,
+            color: theme.colorScheme.primary,
+          ),
+        ),
+        const SizedBox(height: 14),
+        const Text(
+          'Click to upload or drag & drop completed file',
+          style: TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Supports official Excel spreadsheet (.xlsx) up to 10 MB',
+          style: TextStyle(
+            fontSize: 12,
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+          ),
+        ),
+        const SizedBox(height: 14),
+        FilledButton.icon(
+          style: FilledButton.styleFrom(
+            backgroundColor: theme.colorScheme.primary,
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+          icon: const Icon(LucideIcons.folderOpen, size: 16),
+          label: const Text('Browse Excel File', style: TextStyle(fontWeight: FontWeight.w600)),
+          onPressed: _processBatchImport,
+        ),
+        const SizedBox(height: 14),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surface,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: theme.colorScheme.outline.withValues(alpha: 0.2),
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(LucideIcons.shieldCheck, size: 14, color: theme.colorScheme.primary),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  'Strict Validation: LRN (12 digits) • Email • Name (letters) • M.I. (optional) • Gender • Birthday (Age 10-50)',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.85),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
@@ -2797,6 +3686,40 @@ class _InvalidStudentRow {
   });
 }
 
+class _ValidationProgressData {
+  final String phase;
+  final int validatedCount;
+  final int totalCount;
+  final String activeRecordName;
+
+  const _ValidationProgressData({
+    required this.phase,
+    required this.validatedCount,
+    required this.totalCount,
+    required this.activeRecordName,
+  });
+
+  double get progress => totalCount <= 0 ? 0.0 : (validatedCount / totalCount).clamp(0.0, 1.0);
+  int get percent => (progress * 100).toInt();
+}
+
+class _EnrollmentProgressData {
+  final String phase;
+  final int currentIdx;
+  final int totalCount;
+  final String currentStudentName;
+
+  const _EnrollmentProgressData({
+    required this.phase,
+    required this.currentIdx,
+    required this.totalCount,
+    required this.currentStudentName,
+  });
+
+  double get progress => totalCount <= 0 ? 0.0 : (currentIdx / totalCount).clamp(0.0, 1.0);
+  int get percent => (progress * 100).toInt();
+}
+
 class _AnimatedMarchingAntsBox extends StatefulWidget {
   final VoidCallback onTap;
   final bool isDark;
@@ -2854,6 +3777,7 @@ class _AnimatedMarchingAntsBoxState extends State<_AnimatedMarchingAntsBox>
       onEnter: (_) => _onHover(true),
       onExit: (_) => _onHover(false),
       child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
         onTap: widget.onTap,
         child: AnimatedBuilder(
           animation: _controller,
@@ -2945,4 +3869,3 @@ class _MarchingAntsPainter extends CustomPainter {
         oldDelegate.strokeWidth != strokeWidth;
   }
 }
-

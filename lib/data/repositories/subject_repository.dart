@@ -609,6 +609,37 @@ class SubjectRepository {
     }
   }
 
+  /// Fetches enrolled student counts for a list of offering IDs
+  Future<Map<String, int>> getOfferingStudentCounts(
+    List<String> offeringIds,
+  ) async {
+    if (offeringIds.isEmpty) return {};
+    try {
+      final res = await _client
+          .from('student_enrollments')
+          .select('subject_offering_id')
+          .inFilter('subject_offering_id', offeringIds)
+          .eq('status', 'enrolled');
+      final Map<String, int> counts = {for (final id in offeringIds) id: 0};
+      for (final row in (res as List)) {
+        final offId = row['subject_offering_id']?.toString();
+        if (offId != null && counts.containsKey(offId)) {
+          counts[offId] = counts[offId]! + 1;
+        }
+      }
+      return counts;
+    } catch (e) {
+      debugPrint('Error getting offering student counts: $e');
+      return {for (final id in offeringIds) id: 0};
+    }
+  }
+
+  /// Fetches enrolled student count for a single offering ID
+  Future<int> getOfferingEnrolledCount(String offeringId) async {
+    final counts = await getOfferingStudentCounts([offeringId]);
+    return counts[offeringId] ?? 0;
+  }
+
   /// Fetches archived subjects for a specific teacher.
   Future<List<Map<String, dynamic>>> getTeacherArchivedSubjects(
     String teacherId, {
@@ -632,16 +663,25 @@ class SubjectRepository {
         return [];
       }
 
-      return response.map<Map<String, dynamic>>((row) {
+      final rows = response as List;
+      final offeringIds = rows
+          .map((r) => r['id']?.toString())
+          .whereType<String>()
+          .toList();
+      final studentCounts = await getOfferingStudentCounts(offeringIds);
+
+      return rows.map<Map<String, dynamic>>((row) {
         final sub = row['subjects'] as Map<String, dynamic>? ?? {};
         final sec = row['sections'] as Map<String, dynamic>? ?? {};
+        final id = row['id']?.toString() ?? '';
         return {
-          'id': row['id']?.toString() ?? '',
+          'id': id,
           'subject_id': sub['id']?.toString() ?? '',
           'subject_name': sub['subject_name']?.toString() ?? 'Subject',
           'grade_level': sub['grade_level'] ?? sec['grade_level'] ?? 11,
           'section_id': sec['id']?.toString() ?? '',
           'section_name': sec['section_name']?.toString() ?? 'Section',
+          'student_count': studentCounts[id] ?? 0,
           'ww_weight': row['ww_weight'] ?? 20.0,
           'pt_weight': row['pt_weight'] ?? 50.0,
           'ex_weight': row['ex_weight'] ?? 30.0,
@@ -651,6 +691,233 @@ class SubjectRepository {
     } catch (e) {
       debugPrint('Error getting teacher archived subjects: $e');
       return [];
+    }
+  }
+
+  /// Fetches archived sections for a specific teacher.
+  Future<List<Map<String, dynamic>>> getTeacherArchivedSections(
+    String teacherId, {
+    String schoolYear = '2026-2027',
+  }) async {
+    try {
+      dynamic response;
+      try {
+        response = await _client
+            .from('subject_offerings')
+            .select('''
+              id,
+              ww_weight,
+              pt_weight,
+              ex_weight,
+              terms_taught,
+              term_block,
+              units_per_term,
+              st1_weight,
+              st2_weight,
+              te_weight,
+              subjects!inner ( id, subject_name, grade_level ),
+              sections!inner ( id, section_name, grade_level )
+            ''')
+            .eq('teacher_id', teacherId)
+            .eq('is_archived', true);
+      } catch (_) {
+        response = await _client
+            .from('subject_offerings')
+            .select('''
+              id,
+              ww_weight,
+              pt_weight,
+              ex_weight,
+              subjects!inner ( id, subject_name, grade_level ),
+              sections!inner ( id, section_name, grade_level )
+            ''')
+            .eq('teacher_id', teacherId)
+            .eq('is_archived', true);
+      }
+
+      final rows = response as List? ?? [];
+      if (rows.isEmpty) return [];
+
+      final offeringIds = rows
+          .map((r) => r['id']?.toString())
+          .whereType<String>()
+          .toList();
+      final studentCounts = await getOfferingStudentCounts(offeringIds);
+
+      return rows.map<Map<String, dynamic>>((row) {
+        final sub = row['subjects'] as Map<String, dynamic>? ?? {};
+        final sec = row['sections'] as Map<String, dynamic>? ?? {};
+        final id = row['id']?.toString() ?? '';
+        return {
+          'id': id,
+          'subject_id': sub['id']?.toString() ?? '',
+          'subject_name': sub['subject_name']?.toString() ?? 'Subject',
+          'grade_level': sub['grade_level'] ?? sec['grade_level'] ?? 11,
+          'section_id': sec['id']?.toString() ?? '',
+          'section_name': sec['section_name']?.toString() ?? 'Section',
+          'student_count': studentCounts[id] ?? 0,
+          'ww_weight': row['ww_weight'] ?? 20.0,
+          'pt_weight': row['pt_weight'] ?? 50.0,
+          'ex_weight': row['ex_weight'] ?? 30.0,
+          'terms_taught': row['terms_taught'] ?? 3,
+          'term_block': row['term_block'] ?? '1ST, 2ND, 3RD',
+          'units_per_term': (row['units_per_term'] as num?)?.toDouble() ?? 2.0,
+          'st1_weight': (row['st1_weight'] as num?)?.toDouble() ?? 30.0,
+          'st2_weight': (row['st2_weight'] as num?)?.toDouble() ?? 30.0,
+          'te_weight': (row['te_weight'] as num?)?.toDouble() ?? 40.0,
+          'school_year': schoolYear,
+        };
+      }).toList();
+    } catch (e) {
+      debugPrint('Error getting teacher archived sections: $e');
+      return [];
+    }
+  }
+
+  /// Checks if an offering contains any student academic records (grades, term sheets, or submissions)
+  Future<bool> hasAcademicRecords(String offeringId) async {
+    try {
+      // 1. Gradebook term sheets
+      final termSheets = await _client
+          .from('gradebook_term_sheets')
+          .select('id')
+          .eq('subject_offering_id', offeringId)
+          .limit(1);
+      if ((termSheets as List).isNotEmpty) return true;
+
+      // 2. Term grades
+      final termGrades = await _client
+          .from('term_grades')
+          .select('id')
+          .eq('subject_offering_id', offeringId)
+          .limit(1);
+      if ((termGrades as List).isNotEmpty) return true;
+
+      // 3. Classwork submissions
+      final cwItems = await _client
+          .from('classwork_items')
+          .select('id')
+          .eq('subject_offering_id', offeringId);
+      final cwIds = (cwItems as List)
+          .map((c) => c['id']?.toString())
+          .whereType<String>()
+          .toList();
+      if (cwIds.isNotEmpty) {
+        final subs = await _client
+            .from('student_classwork_submissions')
+            .select('id')
+            .inFilter('classwork_id', cwIds)
+            .limit(1);
+        if ((subs as List).isNotEmpty) return true;
+      }
+
+      // 4. Digital assessment attempts
+      final assessments = await _client
+          .from('digital_assessments')
+          .select('id')
+          .eq('subject_offering_id', offeringId);
+      final assessIds = (assessments as List)
+          .map((a) => a['id']?.toString())
+          .whereType<String>()
+          .toList();
+      if (assessIds.isNotEmpty) {
+        final attempts = await _client
+            .from('assessment_attempts')
+            .select('id')
+            .inFilter('assessment_id', assessIds)
+            .limit(1);
+        if ((attempts as List).isNotEmpty) return true;
+      }
+
+      return false;
+    } catch (e) {
+      debugPrint('Notice checking academic records for $offeringId: $e');
+      return false;
+    }
+  }
+
+  /// Checks if all offerings under a teacher's subject contain any academic records
+  Future<bool> hasSubjectAcademicRecords(
+    String teacherId,
+    String subjectId,
+  ) async {
+    try {
+      final offerings = await _client
+          .from('subject_offerings')
+          .select('id')
+          .eq('teacher_id', teacherId)
+          .eq('subject_id', subjectId);
+
+      for (final off in (offerings as List)) {
+        final offId = off['id']?.toString();
+        if (offId != null && await hasAcademicRecords(offId)) {
+          return true;
+        }
+      }
+      return false;
+    } catch (e) {
+      debugPrint('Notice checking subject academic records: $e');
+      return false;
+    }
+  }
+
+  /// Archives a single offering (soft-delete / archive section)
+  Future<void> archiveSingleOffering(String offeringId) async {
+    final offRow = await _client
+        .from('subject_offerings')
+        .select('id, teacher_id')
+        .eq('id', offeringId)
+        .maybeSingle();
+
+    await _client
+        .from('subject_offerings')
+        .update({'is_archived': true})
+        .eq('id', offeringId);
+
+    try {
+      await AppDatabase.instance.updateSingleOfferingArchivedStatus(
+        offeringId: offeringId,
+        isArchived: true,
+      );
+    } catch (e) {
+      debugPrint('Drift archive single offering notice: $e');
+    }
+
+    final teacherId = offRow?['teacher_id']?.toString();
+    if (teacherId != null) {
+      final currentCached = LocalStorageService.getTeacherSubjects(teacherId);
+      final updated = currentCached
+          .where((s) => s['id']?.toString() != offeringId)
+          .toList();
+      await LocalStorageService.saveTeacherSubjects(teacherId, updated);
+    }
+  }
+
+  /// Restores a single archived offering (restore section)
+  Future<void> restoreSingleOffering(String offeringId) async {
+    final offRow = await _client
+        .from('subject_offerings')
+        .select('id, teacher_id')
+        .eq('id', offeringId)
+        .maybeSingle();
+
+    await _client
+        .from('subject_offerings')
+        .update({'is_archived': false})
+        .eq('id', offeringId);
+
+    try {
+      await AppDatabase.instance.updateSingleOfferingArchivedStatus(
+        offeringId: offeringId,
+        isArchived: false,
+      );
+    } catch (e) {
+      debugPrint('Drift restore single offering notice: $e');
+    }
+
+    final teacherId = offRow?['teacher_id']?.toString();
+    if (teacherId != null) {
+      await _syncOfferingsFromCloud(teacherId, '2026-2027');
     }
   }
 

@@ -173,6 +173,7 @@ class UserSessionLog {
   }
 
   String get formattedLogoutReason {
+    if (isActive) return 'Online Now';
     switch (logoutReason) {
       case 'manual':
         return 'Manual Logout';
@@ -182,9 +183,8 @@ class UserSessionLog {
       case 'terminated':
       case 'app_closed':
       case 'session_superseded':
-        return 'Terminated';
       default:
-        return logoutReason ?? 'Active';
+        return 'Terminated';
     }
   }
 }

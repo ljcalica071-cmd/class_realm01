@@ -80,34 +80,19 @@ class _SessionActivityTrackerState extends State<SessionActivityTracker>
     final user = AuthRepository.instance.currentUser;
     if (user == null) return;
 
-    final existingSessionId = LocalStorageService.getActiveSessionId();
+    final existingSessionId =
+        LocalStorageService.getActiveSessionId() ?? AuthRepository.instance.activeSessionId;
     if (existingSessionId != null) {
       _activeSessionLogId = existingSessionId;
       return;
     }
 
     try {
-      final now = DateTime.now().toUtc();
       _sessionStart = DateTime.now();
-
-      final roleStr = user.role.name;
-      final res = await Supabase.instance.client
-          .from('user_session_logs')
-          .insert({
-            'user_id': user.id,
-            'role': roleStr,
-            'session_date': now.toIso8601String().split('T').first,
-            'login_at': now.toIso8601String(),
-            'last_active_at': now.toIso8601String(),
-            'is_active': true,
-            'duration_seconds': 0,
-          })
-          .select('id')
-          .single();
-
-      _activeSessionLogId = res['id']?.toString();
-      if (_activeSessionLogId != null) {
-        await LocalStorageService.saveActiveSessionId(_activeSessionLogId!);
+      // Delegate to AuthRepository to guarantee a single source of truth and zero duplicate inserts
+      final sId = await AuthRepository.instance.startSessionLog(user);
+      if (sId != null && mounted) {
+        _activeSessionLogId = sId;
       }
     } catch (e) {
       debugPrint('SessionActivityTracker init session notice: $e');

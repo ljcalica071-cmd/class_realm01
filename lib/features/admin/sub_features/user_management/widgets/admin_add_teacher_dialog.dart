@@ -79,6 +79,7 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog>
     });
 
     _otpFocusNode.onKeyEvent = (node, event) {
+      if (_otpSecondsRemaining <= 0) return KeyEventResult.handled;
       if (event is KeyDownEvent) {
         if (event.logicalKey == LogicalKeyboardKey.backspace) {
           _handleBackspaceKey();
@@ -129,7 +130,10 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog>
   void _startOtpExpiryTimer([int seconds = 300]) {
     _otpExpiryTimer?.cancel();
     setState(() => _otpSecondsRemaining = seconds);
-    if (seconds <= 0) return;
+    if (seconds <= 0) {
+      _expireOtp();
+      return;
+    }
     _otpExpiryTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (!mounted) {
         timer.cancel();
@@ -137,15 +141,23 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog>
       }
       if (_otpSecondsRemaining <= 1) {
         timer.cancel();
-        setState(() {
-          _otpSecondsRemaining = 0;
-          _error =
-              'The verification code has expired (5 minutes passed). Please click Resend.';
-        });
+        _expireOtp();
       } else {
         setState(() => _otpSecondsRemaining--);
       }
     });
+  }
+
+  void _expireOtp() {
+    if (!mounted) return;
+    setState(() {
+      _otpSecondsRemaining = 0;
+      _otpController.clear();
+      _selectedIndex = 0;
+      _error =
+          'The verification code has expired (5 minutes passed). Please click Resend.';
+    });
+    _otpFocusNode.unfocus();
   }
 
   void _startResendTimer([int seconds = 60]) {
@@ -400,7 +412,7 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog>
   }
 
   void _handleBackspaceKey() {
-    if (_isLockedOut || _isAnyBusy) return;
+    if (_isLockedOut || _isAnyBusy || _otpSecondsRemaining <= 0) return;
     final text = _otpController.text;
     if (text.isEmpty) {
       if (_error != null) setState(() => _error = null);
@@ -460,7 +472,7 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog>
   }
 
   void _onDigitBoxTapped(int index) {
-    if (_isLockedOut || _isAnyBusy) return;
+    if (_isLockedOut || _isAnyBusy || _otpSecondsRemaining <= 0) return;
     _otpFocusNode.requestFocus();
     final text = _otpController.text;
     setState(() {
@@ -499,7 +511,9 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog>
                   controller: _otpController,
                   focusNode: _otpFocusNode,
                   autofocus: true,
-                  enabled: !_isLockedOut && !_isAnyBusy,
+                  enabled: !_isLockedOut &&
+                      !_isAnyBusy &&
+                      _otpSecondsRemaining > 0,
                   keyboardType: TextInputType.number,
                   inputFormatters: [
                     FilteringTextInputFormatter.digitsOnly,
@@ -510,7 +524,10 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog>
                       if (!_isLockedOut) _error = null;
                       _selectedIndex = val.length.clamp(0, 5);
                     });
-                    if (val.length == 6 && !_isLockedOut && !_isAnyBusy) {
+                    if (val.length == 6 &&
+                        !_isLockedOut &&
+                        !_isAnyBusy &&
+                        _otpSecondsRemaining > 0) {
                       _verifyOtpAndCreate();
                     }
                   },
@@ -529,7 +546,9 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog>
                 final isNextEmpty = isFocused &&
                     (index == currentLength && currentLength < 6) &&
                     (_selectedIndex >= currentLength);
-                final isActive = (isSelected || isNextEmpty) && !_isLockedOut;
+                final isActive = (isSelected || isNextEmpty) &&
+                    !_isLockedOut &&
+                    _otpSecondsRemaining > 0;
 
                 Color borderColor;
                 double borderWidth = 1.0;
@@ -655,7 +674,10 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog>
         ),
 
         // Clear code action button
-        if (_otpController.text.isNotEmpty && !_isLockedOut && !_isAnyBusy) ...[
+        if (_otpController.text.isNotEmpty &&
+            !_isLockedOut &&
+            !_isAnyBusy &&
+            _otpSecondsRemaining > 0) ...[
           const SizedBox(height: 8),
           Center(
             child: TextButton.icon(

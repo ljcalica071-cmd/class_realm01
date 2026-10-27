@@ -102,6 +102,18 @@ class AppDatabase extends _$AppDatabase {
     ));
   }
 
+  /// Update archive status for a single offering by id
+  Future<void> updateSingleOfferingArchivedStatus({
+    required String offeringId,
+    required bool isArchived,
+  }) async {
+    await (update(localSubjectOfferings)
+          ..where((t) => t.id.equals(offeringId)))
+        .write(LocalSubjectOfferingsCompanion(
+      isArchived: Value(isArchived),
+    ));
+  }
+
   /// Delete offerings for a teacher and subject
   Future<void> deleteOfferingsForSubject({
     required String teacherId,

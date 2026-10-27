@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 void updateBrowserUrlPath(String path) {
   // No-op on mobile and desktop platforms.
 }
@@ -45,5 +47,13 @@ void downloadFileStringWeb({
   required String fileName,
   String mimeType = 'text/csv;charset=utf-8',
 }) {
+  // No-op on non-web platforms.
+}
+
+void registerWebFileDropListener(void Function(Uint8List bytes, String fileName, int size) onFileDropped) {
+  // No-op on non-web platforms.
+}
+
+void unregisterWebFileDropListener() {
   // No-op on non-web platforms.
 }

@@ -98,6 +98,78 @@ class AppModals {
       ),
     );
   }
+  /// Translates raw developer exceptions, database constraints, or runtime crashes
+  /// into polite, human-readable, and actionable messages suitable for teachers and end-users.
+  static String sanitizeErrorMessage(dynamic error) {
+    if (error == null) {
+      return 'An unexpected issue occurred. Please try again or contact support.';
+    }
+    final raw = error.toString().trim();
+    if (raw.isEmpty) {
+      return 'An unexpected issue occurred. Please try again.';
+    }
+
+    // 1. Flutter / Dart runtime crashes
+    if (raw.contains('LateInitializationError') ||
+        raw.contains('has not been initialized') ||
+        raw.contains('Null check operator') ||
+        raw.contains('NoSuchMethodError') ||
+        raw.contains('RangeError') ||
+        raw.contains('StateError') ||
+        raw.contains('Bad state')) {
+      return 'The system encountered a temporary processing issue while handling this data. Please verify your file and try again.';
+    }
+
+    // 2. Network / Socket / Connectivity failures
+    if (raw.contains('SocketException') ||
+        raw.contains('ClientException') ||
+        raw.contains('Failed host lookup') ||
+        raw.contains('connection refused') ||
+        raw.contains('NetworkImageLoadException') ||
+        raw.contains('wsarecv') ||
+        raw.contains('Software caused connection abort') ||
+        raw.contains('HandshakeException') ||
+        raw.contains('HttpException')) {
+      return 'Unable to reach the ClassRealm server. Please check your internet connection and try again.';
+    }
+
+    // 3. Timeout failures
+    if (raw.contains('TimeoutException') || raw.toLowerCase().contains('timed out')) {
+      return 'The operation took too long to complete. Please check your internet connection and try again.';
+    }
+
+    // 4. PostgreSQL / Supabase Unique Constraints (Code 23505)
+    if (raw.contains('23505') || raw.toLowerCase().contains('duplicate key value')) {
+      final lower = raw.toLowerCase();
+      if (lower.contains('lrn')) {
+        return 'A student with this LRN is already registered in the ClassRealm database.';
+      }
+      if (lower.contains('email')) {
+        return 'This email address is already linked to another registered account.';
+      }
+      return 'A record with matching information already exists in the system.';
+    }
+
+    // 5. Foreign Key Constraints (Code 23503)
+    if (raw.contains('23503') || raw.toLowerCase().contains('violates foreign key')) {
+      return 'The selected class section or subject offering could not be found. Please refresh and try again.';
+    }
+
+    // 6. Clean up prefixes & stack traces
+    var clean = raw;
+    if (clean.startsWith('Exception: ')) {
+      clean = clean.substring('Exception: '.length).trim();
+    }
+    if (clean.startsWith('Error: ')) {
+      clean = clean.substring('Error: '.length).trim();
+    }
+    if (clean.contains('#0 ') || clean.contains('dart:')) {
+      clean = clean.split(RegExp(r'#\d+')).first.trim();
+    }
+
+    return clean.isNotEmpty ? clean : 'An error occurred while processing your request. Please try again.';
+  }
+
   static Future<void> showErrorDialog({
     required BuildContext context,
     required String title,
@@ -105,6 +177,8 @@ class AppModals {
     VoidCallback? onConfirm,
   }) {
     final theme = Theme.of(context);
+    final userFriendlyMessage = sanitizeErrorMessage(message);
+
     return showDialog(
       context: context,
       builder: (ctx) => Theme(
@@ -114,7 +188,7 @@ class AppModals {
           elevation: 16,
           backgroundColor: theme.colorScheme.surface,
           child: Container(
-            constraints: const BoxConstraints(maxWidth: 420),
+            constraints: const BoxConstraints(maxWidth: 440),
             padding: const EdgeInsets.all(24),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -145,10 +219,10 @@ class AppModals {
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  message,
+                  userFriendlyMessage,
                   style: TextStyle(
                     fontSize: 14,
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.75),
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
                     height: 1.5,
                   ),
                 ),
@@ -156,13 +230,13 @@ class AppModals {
                 Align(
                   alignment: Alignment.centerRight,
                   child: AppPrimaryButton(
-                    label: 'OK',
+                    label: 'Understood',
                     backgroundColor: AppTheme.catRed,
                     onPressed: () {
                       Navigator.of(ctx).pop();
                       if (onConfirm != null) onConfirm();
                     },
-                    width: 100,
+                    width: 120,
                     height: 40,
                   ),
                 ),

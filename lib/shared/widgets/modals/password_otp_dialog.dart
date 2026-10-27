@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -39,7 +40,7 @@ class PasswordOtpDialog extends StatefulWidget {
 }
 
 class _PasswordOtpDialogState extends State<PasswordOtpDialog>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   final _otpController = TextEditingController();
   final FocusNode _focusNode = FocusNode();
   AnimationController? _cursorBlinkController;
@@ -53,11 +54,16 @@ class _PasswordOtpDialogState extends State<PasswordOtpDialog>
   Timer? _resendTimer;
   int _resendCooldown = 60;
   int _resendAttempts = 0;
+  Timer? _toastTimer;
+  OverlayEntry? _toastEntry;
 
   Timer? _inputTimer;
   int _inputCountdown = 600;
 
   bool _isResending = false;
+  late final AnimationController _toastAnimationController;
+
+  bool get _isCodeExpired => !_isLockedOut && _inputCountdown <= 0;
 
   @override
   void initState() {
@@ -81,6 +87,11 @@ class _PasswordOtpDialogState extends State<PasswordOtpDialog>
       vsync: this,
       duration: const Duration(milliseconds: 500),
     )..repeat(reverse: true);
+    _toastAnimationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 200),
+      reverseDuration: const Duration(milliseconds: 200),
+    );
 
     _focusNode.addListener(() {
       if (mounted) setState(() {});
@@ -93,18 +104,24 @@ class _PasswordOtpDialogState extends State<PasswordOtpDialog>
           return KeyEventResult.handled;
         } else if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
           setState(() {
-            _selectedIndex =
-                (_selectedIndex - 1).clamp(0, _otpController.text.length);
-            _otpController.selection =
-                TextSelection.collapsed(offset: _selectedIndex);
+            _selectedIndex = (_selectedIndex - 1).clamp(
+              0,
+              _otpController.text.length,
+            );
+            _otpController.selection = TextSelection.collapsed(
+              offset: _selectedIndex,
+            );
           });
           return KeyEventResult.handled;
         } else if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
           setState(() {
-            _selectedIndex =
-                (_selectedIndex + 1).clamp(0, _otpController.text.length);
-            _otpController.selection =
-                TextSelection.collapsed(offset: _selectedIndex);
+            _selectedIndex = (_selectedIndex + 1).clamp(
+              0,
+              _otpController.text.length,
+            );
+            _otpController.selection = TextSelection.collapsed(
+              offset: _selectedIndex,
+            );
           });
           return KeyEventResult.handled;
         }
@@ -145,13 +162,18 @@ class _PasswordOtpDialogState extends State<PasswordOtpDialog>
         setState(() {
           _isLockedOut = false;
           _failedAttempts = 0;
-          _error = 'Lockout period ended. Please request a new verification code.';
+          _error =
+              'Lockout period ended. Please request a new verification code.';
         });
         timer.cancel();
       } else {
         setState(() {
-          _error = 'The verification code has expired. Please request a new code.';
+          _otpController.clear();
+          _selectedIndex = 0;
+          _error =
+              'The verification code has expired. Please request a new code.';
         });
+        _focusNode.unfocus();
         timer.cancel();
       }
     });
@@ -164,7 +186,7 @@ class _PasswordOtpDialogState extends State<PasswordOtpDialog>
   }
 
   void _handleBackspaceKey() {
-    if (_isLockedOut || _isVerifying) return;
+    if (_isLockedOut || _isCodeExpired || _isVerifying) return;
     final text = _otpController.text;
     if (text.isEmpty) {
       if (_error != null) setState(() => _error = null);
@@ -224,7 +246,7 @@ class _PasswordOtpDialogState extends State<PasswordOtpDialog>
   }
 
   void _onDigitBoxTapped(int index) {
-    if (_isLockedOut || _isVerifying) return;
+    if (_isLockedOut || _isCodeExpired || _isVerifying) return;
     _focusNode.requestFocus();
     final text = _otpController.text;
     setState(() {
@@ -237,69 +259,118 @@ class _PasswordOtpDialogState extends State<PasswordOtpDialog>
         );
       } else {
         _selectedIndex = text.length.clamp(0, 5);
-        _otpController.selection = TextSelection.collapsed(
-          offset: text.length,
-        );
+        _otpController.selection = TextSelection.collapsed(offset: text.length);
       }
     });
   }
 
-  void _showResendSuccessToast(String message) {
-    final overlay = Overlay.of(context, rootOverlay: true);
-    late OverlayEntry overlayEntry;
+  void _clearCode() {
+    if (_isLockedOut || _isVerifying) return;
 
-    overlayEntry = OverlayEntry(
-      builder: (context) => Positioned(
-        top: MediaQuery.of(context).padding.top + 20,
-        left: 0,
-        right: 0,
-        child: Material(
-          color: Colors.transparent,
-          child: Center(
-            child: Container(
-              margin: const EdgeInsets.symmetric(horizontal: 24),
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-              decoration: BoxDecoration(
-                color: const Color(0xFF16A34A),
-                borderRadius: BorderRadius.circular(10),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Colors.black26,
-                    blurRadius: 16,
-                    offset: Offset(0, 4),
-                  )
-                ],
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(
-                    LucideIcons.checkCircle2,
-                    color: Colors.white,
-                    size: 20,
-                  ),
-                  const SizedBox(width: 10),
-                  Flexible(
-                    child: Text(
-                      message,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 14,
-                      ),
+    setState(() {
+      _otpController.value = const TextEditingValue(
+        text: '',
+        selection: TextSelection.collapsed(offset: 0),
+      );
+      _selectedIndex = 0;
+      _error = null;
+    });
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _isLockedOut || _isVerifying) return;
+      _focusNode.requestFocus();
+      _otpController.selection = const TextSelection.collapsed(offset: 0);
+    });
+  }
+
+  void _showResendSuccessToast(String message) {
+    _toastTimer?.cancel();
+    _toastEntry?.remove();
+    _toastEntry = null;
+
+    final overlay = Overlay.of(context, rootOverlay: true);
+    _toastAnimationController.value = 0;
+    final entry = OverlayEntry(
+      builder: (context) {
+        final top = MediaQuery.of(context).padding.top + 16;
+        return Positioned(
+          top: top,
+          left: 0,
+          right: 0,
+          child: FadeTransition(
+            opacity: CurvedAnimation(
+              parent: _toastAnimationController,
+              curve: Curves.easeOut,
+            ),
+            child: SlideTransition(
+              position:
+                  Tween<Offset>(
+                    begin: const Offset(0, -0.18),
+                    end: Offset.zero,
+                  ).animate(
+                    CurvedAnimation(
+                      parent: _toastAnimationController,
+                      curve: Curves.easeOutCubic,
                     ),
                   ),
-                ],
+              child: Material(
+                color: Colors.transparent,
+                child: Center(
+                  child: Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 24),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 14,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF16A34A),
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: const [
+                        BoxShadow(
+                          color: Colors.black26,
+                          blurRadius: 16,
+                          offset: Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          LucideIcons.checkCircle2,
+                          color: Colors.white,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 10),
+                        Flexible(
+                          child: Text(
+                            message,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               ),
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
 
-    overlay.insert(overlayEntry);
-    Future.delayed(const Duration(seconds: 3), () {
-      if (overlayEntry.mounted) overlayEntry.remove();
+    _toastEntry = entry;
+    overlay.insert(entry);
+    _toastAnimationController.forward();
+    _toastTimer = Timer(const Duration(milliseconds: 1800), () async {
+      if (!mounted || !entry.mounted) return;
+      await _toastAnimationController.reverse();
+      if (entry.mounted) entry.remove();
+      if (identical(_toastEntry, entry)) _toastEntry = null;
     });
   }
 
@@ -307,7 +378,10 @@ class _PasswordOtpDialogState extends State<PasswordOtpDialog>
     final lockout = LocalStorageService.getOtpLockoutRemaining(widget.email);
     if (lockout != null && lockout.inSeconds > 0) {
       final mins = (lockout.inSeconds / 60).ceil();
-      setState(() => _error = 'Too many incorrect attempts. Please try again after $mins minute(s).');
+      setState(
+        () => _error =
+            'Too many incorrect attempts. Please try again after $mins minute(s).',
+      );
       return;
     }
 
@@ -334,8 +408,9 @@ class _PasswordOtpDialogState extends State<PasswordOtpDialog>
       if (widget.onResend != null) {
         result = await widget.onResend!();
       } else {
-        result =
-            await AuthRepository.instance.sendFirstLoginOtp(isResend: true);
+        result = await AuthRepository.instance.sendFirstLoginOtp(
+          isResend: true,
+        );
       }
 
       if (!mounted) return;
@@ -365,7 +440,9 @@ class _PasswordOtpDialogState extends State<PasswordOtpDialog>
 
   Future<void> _verify() async {
     final code = _otpController.text.trim();
-    if (_isVerifying || _isLockedOut || code.length != 6) return;
+    if (_isVerifying || _isLockedOut || _isCodeExpired || code.length != 6) {
+      return;
+    }
 
     setState(() {
       _isVerifying = true;
@@ -458,6 +535,10 @@ class _PasswordOtpDialogState extends State<PasswordOtpDialog>
   void dispose() {
     _cursorBlinkController?.dispose();
     _cursorBlinkController = null;
+    _toastTimer?.cancel();
+    _toastEntry?.remove();
+    _toastEntry = null;
+    _toastAnimationController.dispose();
     _otpController.dispose();
     _focusNode.dispose();
     _resendTimer?.cancel();
@@ -468,7 +549,7 @@ class _PasswordOtpDialogState extends State<PasswordOtpDialog>
   Widget _buildOtpDigitBoxes(ThemeData theme) {
     final hasError = _error != null;
     final currentLength = _otpController.text.length;
-    final isFocused = _focusNode.hasFocus;
+    final isFocused = _focusNode.hasFocus && !_isCodeExpired;
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -484,7 +565,11 @@ class _PasswordOtpDialogState extends State<PasswordOtpDialog>
                   controller: _otpController,
                   focusNode: _focusNode,
                   autofocus: true,
-                  enabled: !_isLockedOut && !_isVerifying,
+                  enabled:
+                      !_isLockedOut &&
+                      !_isCodeExpired &&
+                      !_isResending &&
+                      !_isVerifying,
                   keyboardType: TextInputType.number,
                   inputFormatters: [
                     FilteringTextInputFormatter.digitsOnly,
@@ -492,7 +577,7 @@ class _PasswordOtpDialogState extends State<PasswordOtpDialog>
                   ],
                   onChanged: (val) {
                     setState(() {
-                      if (!_isLockedOut) _error = null;
+                      if (!_isLockedOut && !_isCodeExpired) _error = null;
                       _selectedIndex = val.length.clamp(0, 5);
                     });
                     if (val.length == 6 && !_isLockedOut && !_isVerifying) {
@@ -511,7 +596,8 @@ class _PasswordOtpDialogState extends State<PasswordOtpDialog>
                 final digit = isFilled ? _otpController.text[index] : '';
 
                 final isSelected = isFocused && (_selectedIndex == index);
-                final isNextEmpty = isFocused &&
+                final isNextEmpty =
+                    isFocused &&
                     (index == currentLength && currentLength < 6) &&
                     (_selectedIndex >= currentLength);
                 final isActive = (isSelected || isNextEmpty) && !_isLockedOut;
@@ -635,17 +721,11 @@ class _PasswordOtpDialogState extends State<PasswordOtpDialog>
         // Clear code action button
         if (_otpController.text.isNotEmpty &&
             !_isLockedOut &&
+            !_isCodeExpired &&
             !_isVerifying) ...[
           const SizedBox(height: 8),
           GestureDetector(
-            onTap: () {
-              setState(() {
-                _otpController.clear();
-                _selectedIndex = 0;
-                _error = null;
-              });
-              _focusNode.requestFocus();
-            },
+            onTap: _clearCode,
             child: const Text(
               'Clear code',
               style: TextStyle(
@@ -673,7 +753,10 @@ class _PasswordOtpDialogState extends State<PasswordOtpDialog>
           borderRadius: BorderRadius.circular(24),
           side: const BorderSide(color: Color(0xFFE2E8F0), width: 1.5),
         ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 28,
+          vertical: 24,
+        ),
         title: null,
         content: SizedBox(
           width: 380,
@@ -685,10 +768,16 @@ class _PasswordOtpDialogState extends State<PasswordOtpDialog>
                 top: -12,
                 right: -12,
                 child: IconButton(
-                  icon: const Icon(LucideIcons.x, size: 20, color: Color(0xFF64748B)),
+                  icon: const Icon(
+                    LucideIcons.x,
+                    size: 20,
+                    color: Color(0xFF64748B),
+                  ),
                   splashRadius: 20,
                   tooltip: 'Close',
-                  onPressed: _isVerifying ? null : () => Navigator.pop(context, false),
+                  onPressed: _isVerifying
+                      ? null
+                      : () => Navigator.pop(context, false),
                 ),
               ),
 
@@ -774,8 +863,8 @@ class _PasswordOtpDialogState extends State<PasswordOtpDialog>
                           _isLockedOut
                               ? 'Locked: try again in ${_formatOtpTimer(_inputCountdown)}'
                               : _inputCountdown > 0
-                                  ? 'Expires in ${_formatOtpTimer(_inputCountdown)}'
-                                  : 'Code expired (time passed)',
+                              ? 'Expires in ${_formatOtpTimer(_inputCountdown)}'
+                              : 'Code expired (time passed)',
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
@@ -817,7 +906,8 @@ class _PasswordOtpDialogState extends State<PasswordOtpDialog>
                     width: double.infinity,
                     height: 50,
                     child: ElevatedButton(
-                      onPressed: _inputCountdown > 0 &&
+                      onPressed:
+                          _inputCountdown > 0 &&
                               !_isLockedOut &&
                               !_isVerifying &&
                               _otpController.text.length == 6
@@ -852,11 +942,14 @@ class _PasswordOtpDialogState extends State<PasswordOtpDialog>
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Text(
-                        "Didn't receive the code? ",
-                        style: TextStyle(
-                          color: Color(0xFF64748B),
-                          fontSize: 13,
+                      const Flexible(
+                        child: Text(
+                          "Didn't receive the code? ",
+                          textAlign: TextAlign.end,
+                          style: TextStyle(
+                            color: Color(0xFF64748B),
+                            fontSize: 13,
+                          ),
                         ),
                       ),
                       _isResending
@@ -865,15 +958,17 @@ class _PasswordOtpDialogState extends State<PasswordOtpDialog>
                               size: 16,
                             )
                           : OutlinedButton(
-                              onPressed: !_isLockedOut &&
+                              onPressed:
+                                  !_isLockedOut &&
                                       _resendCooldown == 0 &&
                                       _resendAttempts < 4
                                   ? _handleResend
                                   : null,
                               style: OutlinedButton.styleFrom(
                                 backgroundColor: const Color(0xFFF8FAFC),
-                                side:
-                                    const BorderSide(color: Color(0xFFCBD5E1)),
+                                side: const BorderSide(
+                                  color: Color(0xFFCBD5E1),
+                                ),
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 10,
                                   vertical: 6,
@@ -886,16 +981,16 @@ class _PasswordOtpDialogState extends State<PasswordOtpDialog>
                                 _resendAttempts >= 4
                                     ? 'Limit Reached'
                                     : _resendCooldown > 0
-                                        ? 'Resend in ${_resendCooldown}s'
-                                        : 'Resend',
+                                    ? 'Resend in ${_resendCooldown}s'
+                                    : 'Resend',
                                 style: TextStyle(
                                   fontWeight: FontWeight.bold,
                                   fontSize: 13,
                                   color: _resendAttempts >= 4
                                       ? const Color(0xFFDC2626)
                                       : _resendCooldown > 0
-                                          ? const Color(0xFF64748B)
-                                          : const Color(0xFF2563EB),
+                                      ? const Color(0xFF64748B)
+                                      : const Color(0xFF2563EB),
                                 ),
                               ),
                             ),

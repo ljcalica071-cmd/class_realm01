@@ -1875,11 +1875,12 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
                       builder: (context, currentNow, _) {
                         return Table(
                           columnWidths: const {
-                            0: FlexColumnWidth(2.2),
-                            1: FlexColumnWidth(1.2),
-                            2: FlexColumnWidth(1.5),
-                            3: FlexColumnWidth(1.5),
-                            4: FlexColumnWidth(2.0),
+                            0: FlexColumnWidth(2.0),
+                            1: FlexColumnWidth(1.1),
+                            2: FlexColumnWidth(1.3),
+                            3: FlexColumnWidth(1.3),
+                            4: FlexColumnWidth(1.6),
+                            5: FlexColumnWidth(1.7),
                           },
                           children: [
                             // Header Row
@@ -1894,6 +1895,7 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
                                 _TableHeaderCell('Date'),
                                 _TableHeaderCell('Time In'),
                                 _TableHeaderCell('Time Out'),
+                                _TableHeaderCell('Logout Method'),
                                 _TableHeaderCell('Time Spent in System'),
                               ],
                             ),
@@ -1984,24 +1986,14 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
                                       vertical: 12,
                                     ),
                                     child: isLive
-                                        ? Container(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 8,
-                                              vertical: 2,
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color: AppTheme.catGreen
-                                                  .withValues(alpha: 0.12),
-                                              borderRadius:
-                                                  BorderRadius.circular(6),
-                                            ),
-                                            child: const Text(
-                                              'Online Now',
-                                              style: TextStyle(
-                                                fontSize: 11,
-                                                fontWeight: FontWeight.bold,
-                                                color: AppTheme.catGreen,
-                                              ),
+                                        ? Text(
+                                            '—',
+                                            style: TextStyle(
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.w600,
+                                              color: isDark
+                                                  ? Colors.white38
+                                                  : const Color(0xFF94A3B8),
                                             ),
                                           )
                                         : Text(
@@ -2011,6 +2003,52 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
                                             style: const TextStyle(
                                               fontSize: 12.5,
                                             ),
+                                          ),
+                                  ),
+                                  // Logout Method
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                      vertical: 10,
+                                    ),
+                                    child: isLive
+                                        ? Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 8,
+                                              vertical: 4,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: AppTheme.catGreen
+                                                  .withValues(alpha: 0.12),
+                                              borderRadius:
+                                                  BorderRadius.circular(6),
+                                            ),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Container(
+                                                  width: 6,
+                                                  height: 6,
+                                                  decoration: const BoxDecoration(
+                                                    color: AppTheme.catGreen,
+                                                    shape: BoxShape.circle,
+                                                  ),
+                                                ),
+                                                SizedBox(width: 6),
+                                                Text(
+                                                  'Online Now',
+                                                  style: TextStyle(
+                                                    fontSize: 11,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: AppTheme.catGreen,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          )
+                                        : _buildLogoutReasonBadge(
+                                            log.logoutReason,
+                                            isDark,
                                           ),
                                   ),
                                   // Duration Ticker
@@ -2152,6 +2190,67 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
                 : theme.colorScheme.onSurface.withValues(alpha: 0.3),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildLogoutReasonBadge(String? reason, bool isDark) {
+    Color bg;
+    Color fg;
+    IconData icon;
+    String label;
+
+    switch (reason) {
+      case 'manual':
+        bg = isDark
+            ? const Color(0xFF1E3A8A).withValues(alpha: 0.35)
+            : const Color(0xFFDBEAFE);
+        fg = isDark ? const Color(0xFF93C5FD) : const Color(0xFF1D4ED8);
+        icon = LucideIcons.logOut;
+        label = 'Manual Logout';
+        break;
+      case 'inactivity':
+      case 'inactivity_timeout':
+        bg = isDark
+            ? const Color(0xFF78350F).withValues(alpha: 0.35)
+            : const Color(0xFFFEF3C7);
+        fg = isDark ? const Color(0xFFFCD34D) : const Color(0xFFB45309);
+        icon = LucideIcons.clock;
+        label = 'Inactivity';
+        break;
+      case 'terminated':
+      case 'app_closed':
+      case 'session_superseded':
+      default:
+        bg = isDark
+            ? const Color(0xFF334155).withValues(alpha: 0.4)
+            : const Color(0xFFF1F5F9);
+        fg = isDark ? const Color(0xFF94A3B8) : const Color(0xFF475569);
+        icon = LucideIcons.power;
+        label = 'Terminated';
+        break;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 12, color: fg),
+          const SizedBox(width: 5),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: fg,
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -141,3 +141,57 @@ void downloadFileStringWeb({
     throw Exception('Browser download string failed: $e');
   }
 }
+
+html.EventListener? _webDragOverListener;
+html.EventListener? _webDropListener;
+
+void registerWebFileDropListener(void Function(Uint8List bytes, String fileName, int size) onFileDropped) {
+  try {
+    unregisterWebFileDropListener();
+
+    _webDragOverListener = (html.Event e) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (e is html.MouseEvent && (e as dynamic).dataTransfer != null) {
+        try {
+          (e as dynamic).dataTransfer.dropEffect = 'copy';
+        } catch (_) {}
+      }
+    };
+
+    _webDropListener = (html.Event e) {
+      e.preventDefault();
+      e.stopPropagation();
+      final dt = (e as dynamic).dataTransfer;
+      if (dt != null && dt.files != null && dt.files.length > 0) {
+        final file = dt.files[0];
+        final reader = html.FileReader();
+        reader.readAsArrayBuffer(file);
+        reader.onLoadEnd.listen((_) {
+          final res = reader.result;
+          if (res is Uint8List) {
+            onFileDropped(res, file.name ?? 'dropped_file.xlsx', file.size ?? res.length);
+          } else if (res is ByteBuffer) {
+            onFileDropped(res.asUint8List(), file.name ?? 'dropped_file.xlsx', file.size ?? res.lengthInBytes);
+          }
+        });
+      }
+    };
+
+    html.window.addEventListener('dragover', _webDragOverListener!);
+    html.window.addEventListener('drop', _webDropListener!);
+  } catch (_) {}
+}
+
+void unregisterWebFileDropListener() {
+  try {
+    if (_webDragOverListener != null) {
+      html.window.removeEventListener('dragover', _webDragOverListener!);
+      _webDragOverListener = null;
+    }
+    if (_webDropListener != null) {
+      html.window.removeEventListener('drop', _webDropListener!);
+      _webDropListener = null;
+    }
+  } catch (_) {}
+}

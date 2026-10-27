@@ -91,10 +91,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   @override
   void initState() {
     super.initState();
-    final savedTab = LocalStorageService.getActiveDashboardTab('teacher');
-    if (widget.initialSelectedIndex == 0) {
-      _selectedIndex = savedTab;
-    }
+    _selectedIndex = widget.initialSelectedIndex;
     final currentRoute = _routeForIndex(_selectedIndex);
     LocalStorageService.saveLastActiveRoute(currentRoute);
     updateBrowserUrl(currentRoute);

@@ -342,7 +342,7 @@ class _ClassRealmAppState extends State<ClassRealmApp> {
                   case UserRole.teacher:
                     return const AuthGuard(
                       allowedRoles: [UserRole.teacher],
-                      child: TeacherDashboardScreen(),
+                      child: TeacherDashboardScreen(initialSelectedIndex: 0),
                     );
                   case UserRole.student:
                     return const AuthGuard(
