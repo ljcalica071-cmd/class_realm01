@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -7,6 +8,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:archive/archive.dart';
+import 'package:csv/csv.dart';
 
 import 'package:class_realm/core/theme/app_theme.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -171,6 +173,23 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
     );
   }
 
+  Timer? _autoResumeTimer;
+
+  void _startAutoResumeListener() {
+    _autoResumeTimer?.cancel();
+    _autoResumeTimer = Timer.periodic(const Duration(seconds: 5), (_) async {
+      if (!mounted || _resumableBatch == null || _isSubmitting || _isProcessingBatch) return;
+      try {
+        await Supabase.instance.client.from('users').select('id').limit(1);
+        if (mounted && _resumableBatch != null && !_isSubmitting && !_isProcessingBatch) {
+          _autoResumeTimer?.cancel();
+          _autoResumeTimer = null;
+          await _resumeBatchEnrollment();
+        }
+      } catch (_) {}
+    });
+  }
+
   Future<void> _checkResumableBatch() async {
     if (_selectedOfferingId == null) {
       if (_resumableBatch != null && mounted) {
@@ -186,6 +205,7 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
         final pending = decoded['pending'] as List<dynamic>?;
         if (pending != null && pending.isNotEmpty && mounted) {
           setState(() => _resumableBatch = decoded);
+          _startAutoResumeListener();
           return;
         }
       }
@@ -196,6 +216,8 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
   }
 
   Future<void> _discardResumableBatch() async {
+    _autoResumeTimer?.cancel();
+    _autoResumeTimer = null;
     if (_selectedOfferingId == null) return;
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -206,6 +228,8 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
 
   Future<void> _resumeBatchEnrollment() async {
     if (_resumableBatch == null) return;
+    _autoResumeTimer?.cancel();
+    _autoResumeTimer = null;
     final pendingList = _resumableBatch!['pending'] as List<dynamic>;
     final fileName = _resumableBatch!['fileName']?.toString() ?? 'Spreadsheet';
     final students = pendingList.map((m) {
@@ -330,6 +354,7 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
 
   @override
   void dispose() {
+    _autoResumeTimer?.cancel();
     if (kIsWeb) {
       unregisterWebDrop();
     }
@@ -471,10 +496,20 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
   DateTime? _parseBirthday(String raw) {
     final clean = raw.trim();
     if (clean.isEmpty) return null;
+    if (RegExp(r'[a-zA-Z]').hasMatch(clean)) return null;
 
+    // 1. Handle Excel serial date integers/floats (e.g. 40544 for 2011-01-01)
+    final numVal = double.tryParse(clean);
+    if (numVal != null && numVal >= 1000 && numVal <= 100000) {
+      // Excel 1900 date system epoch base
+      return DateTime(1899, 12, 30).add(Duration(days: numVal.floor()));
+    }
+
+    // 2. ISO-8601 (YYYY-MM-DD)
     final iso = DateTime.tryParse(clean);
     if (iso != null) return iso;
 
+    // 3. YYYY/MM/DD or YYYY-MM-DD
     final slashYmd = RegExp(r'^(\d{4})[/-](\d{1,2})[/-](\d{1,2})$').firstMatch(clean);
     if (slashYmd != null) {
       final y = int.parse(slashYmd.group(1)!);
@@ -483,6 +518,7 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
       return DateTime(y, m, d);
     }
 
+    // 4. MM/DD/YYYY or DD/MM/YYYY
     final slashMdy = RegExp(r'^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$').firstMatch(clean);
     if (slashMdy != null) {
       final p1 = int.parse(slashMdy.group(1)!);
@@ -814,7 +850,7 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
     try {
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
-        allowedExtensions: ['xlsx'],
+        allowedExtensions: ['xlsx', 'xls', 'csv'],
         withData: true,
       );
 
@@ -863,15 +899,36 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
 
     String ext = fileName.contains('.') ? fileName.split('.').last.toLowerCase().trim() : '';
 
-    // Format validation: Modern Excel only (.xlsx)
-    if (ext != 'xlsx') {
+    // File Format check
+    if (ext != 'xlsx' && ext != 'xls' && ext != 'csv') {
       setState(() {
         _batchFileName = fileName;
         _batchFileSize = fileSize;
         _isProcessingBatch = false;
         _batchWarningTitle = 'Invalid File Format';
-        _batchWarningMessage = 'Please upload a valid Excel spreadsheet (.xlsx). Other file formats are not supported.';
+        _batchWarningMessage = 'Invalid file format. Please use the official downloaded template.';
       });
+      AppModals.showErrorDialog(
+        context: context,
+        title: 'Invalid File Format',
+        message: 'Invalid file format. Please use the official downloaded template.',
+      );
+      return;
+    }
+
+    if (ext == 'xls') {
+      setState(() {
+        _batchFileName = fileName;
+        _batchFileSize = fileSize;
+        _isProcessingBatch = false;
+        _batchWarningTitle = 'Invalid File Format';
+        _batchWarningMessage = 'Legacy Excel (.xls) is not supported. Please use the official .xlsx template.';
+      });
+      AppModals.showErrorDialog(
+        context: context,
+        title: 'Invalid File Format',
+        message: 'Invalid file format. Please use the official downloaded template.',
+      );
       return;
     }
 
@@ -905,15 +962,27 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
     await Future.delayed(const Duration(milliseconds: 60));
 
     try {
-      final List<List<dynamic>> rows = _parseXlsxBytes(fileBytes);
+      final List<List<dynamic>> rows;
+      if (ext == 'csv') {
+        final csvString = utf8.decode(fileBytes);
+        rows = const CsvToListConverter().convert(csvString);
+      } else {
+        rows = _parseXlsxBytes(fileBytes);
+      }
 
+      // Check 2: Blank File / No Data (Empty file)
       if (rows.isEmpty || rows.length <= 1) {
         setState(() {
           _isProcessingBatch = false;
           _batchProgress = 0.0;
-          _batchWarningTitle = 'No Student Records Found';
-          _batchWarningMessage = 'Please enter student details starting on Row 3 and re-upload.';
+          _batchWarningTitle = 'Empty File';
+          _batchWarningMessage = 'The uploaded file is empty. Please fill in the student data before uploading.';
         });
+        AppModals.showErrorDialog(
+          context: context,
+          title: 'Empty File',
+          message: 'The uploaded file is empty. Please fill in the student data before uploading.',
+        );
         return;
       }
 
@@ -926,21 +995,26 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
       final genderIndex = header.indexWhere((h) => h == 'gender' || h == 'sex');
       final birthdayIndex = header.indexWhere((h) => h == 'birthday' || h == 'birthdate' || h == 'birth date' || h == 'dob' || h.contains('birth'));
 
-      final missingHeaders = <String>[];
-      if (lrnIndex == -1) missingHeaders.add('lrn');
-      if (emailIndex == -1) missingHeaders.add('email');
-      if (lastNameIndex == -1) missingHeaders.add('lastname');
-      if (firstNameIndex == -1) missingHeaders.add('firstname');
-      if (genderIndex == -1) missingHeaders.add('gender');
-      if (birthdayIndex == -1) missingHeaders.add('birthday');
+      // Check 1: Wrong File Uploaded (Required headers match)
+      final hasRequiredHeaders = lrnIndex != -1 &&
+          emailIndex != -1 &&
+          lastNameIndex != -1 &&
+          firstNameIndex != -1 &&
+          genderIndex != -1 &&
+          birthdayIndex != -1;
 
-      if (missingHeaders.isNotEmpty) {
+      if (!hasRequiredHeaders) {
         setState(() {
           _isProcessingBatch = false;
           _batchProgress = 0.0;
-          _batchWarningTitle = 'Invalid Spreadsheet Headers';
-          _batchWarningMessage = 'Please ensure your Excel file includes all required column headers: LRN, Email, Last Name, First Name, Middle Initial, Gender, and Birthday. Download the official template for the correct format.';
+          _batchWarningTitle = 'Invalid File Format';
+          _batchWarningMessage = 'Invalid file format. Please use the official downloaded template.';
         });
+        AppModals.showErrorDialog(
+          context: context,
+          title: 'Invalid File Format',
+          message: 'Invalid file format. Please use the official downloaded template.',
+        );
         return;
       }
 
@@ -956,9 +1030,18 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
       final invalidRows = <_InvalidStudentRow>[];
       final seenLrnsInFile = <String>{};
       final seenEmailsInFile = <String>{};
-      final seenLrnRows = <String, int>{};
-      final seenEmailRows = <String, int>{};
       final now = DateTime.now();
+
+      // Allowed domains whitelist
+      const allowedEmailDomains = [
+        '@gmail.com',
+        '@yahoo.com',
+        '@outlook.com',
+        '@hotmail.com',
+        '@deped.gov.ph',
+        '@lu.edu.ph',
+      ];
+      final emailStrictRegex = RegExp(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$');
 
       for (int i = 1; i < rows.length; i++) {
         final row = rows[i];
@@ -991,223 +1074,232 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
 
         // Micro-delay for visual responsiveness
         if (totalDataRows <= 40) {
-          await Future.delayed(const Duration(milliseconds: 30));
+          await Future.delayed(const Duration(milliseconds: 25));
         } else if (i % 2 == 0) {
-          await Future.delayed(const Duration(milliseconds: 12));
+          await Future.delayed(const Duration(milliseconds: 10));
         }
 
-        // Check if row is template sample example (Row 2 in template)
-        // User directive: Sample row is for reference only; silently skip it (do NOT enroll, do NOT fail)
+        // Silently skip sample row (Row 2 in template)
         final isSampleRow = (cleanLrn == '123456789012' &&
                 (rawFirst.toLowerCase() == 'juana' ||
                     rawFirst.toLowerCase() == 'rexsa' ||
                     rawLast.toLowerCase().contains('dela cruz') ||
                     rawEmail.contains('example@gmail.com') ||
-                    rawEmail.contains('juana.delacruz@gmail.com'))) ||
+                    rawEmail.contains('juana.rexsa@gmail.com'))) ||
             (rowNum == 2 && cleanLrn == '123456789012');
 
         if (isSampleRow) {
-          // Silently skip template sample row without adding to errors or enrollment
           continue;
         }
 
-        // Validation 1: LRN length must be exactly 12 digits
-        if (cleanLrn.length != 12) {
+        // 3. LRN Format Check (Contains letters/symbols, length != 12, starts with 0, or repeating digits)
+        final isPureDigits = RegExp(r'^\d+$').hasMatch(rawLrn);
+        final startsWithZero = rawLrn.startsWith('0');
+        final isRepeatingDigits = RegExp(r'^(\d)\1{11}$').hasMatch(rawLrn);
+        if (rawLrn.isEmpty || !isPureDigits || rawLrn.length != 12 || startsWithZero || isRepeatingDigits) {
           invalidRows.add(_InvalidStudentRow(
             rowNumber: rowNum,
-            identifier: studentLabel,
             fieldTag: 'LRN',
-            reason: cleanLrn.isEmpty ? 'LRN is required (12 digits).' : 'Must be exactly 12 digits (found ${cleanLrn.length}).',
+            identifier: rawLrn.isEmpty ? 'Empty' : rawLrn,
+            reason: 'Must be exactly 12 digits.',
           ));
           continue;
         }
 
-        // Check repeating digits (e.g. 000000000000, 111111111111)
-        if (RegExp(r'^(\d)\1{11}$').hasMatch(cleanLrn)) {
-          invalidRows.add(_InvalidStudentRow(
-            rowNumber: rowNum,
-            identifier: studentLabel,
-            fieldTag: 'LRN',
-            reason: 'Invalid repeating LRN sequence.',
-          ));
-          continue;
-        }
-
-        // Validation 2: Duplicate LRN in file
+        // 4. Duplicate LRN (In File)
         if (seenLrnsInFile.contains(cleanLrn)) {
-          final firstSeenRow = seenLrnRows[cleanLrn] ?? 0;
           invalidRows.add(_InvalidStudentRow(
             rowNumber: rowNum,
-            identifier: '$studentLabel ($cleanLrn)',
             fieldTag: 'LRN',
-            reason: 'Duplicate LRN in this file (already defined in Row $firstSeenRow).',
+            identifier: cleanLrn,
+            reason: 'Duplicate LRN in file.',
+          ));
+          continue;
+        }
+        seenLrnsInFile.add(cleanLrn);
+
+        // 5. Email Strict Format / Domain Check
+        final hasAllowedDomain = allowedEmailDomains.any((d) => rawEmail.endsWith(d));
+        final isTypoOrDummy = rawEmail == 'example@gmail.com' ||
+            rawEmail == 'sample@gmail.com' ||
+            rawEmail == 'test@test.com' ||
+            rawEmail == 'none@gmail.com' ||
+            rawEmail.contains('@gamil.') ||
+            rawEmail.contains('@yaho.') ||
+            rawEmail.contains('@gmal.') ||
+            rawEmail.endsWith('.con') ||
+            rawEmail.endsWith('.test');
+
+        if (!emailStrictRegex.hasMatch(rawEmail) || !hasAllowedDomain || isTypoOrDummy) {
+          invalidRows.add(_InvalidStudentRow(
+            rowNumber: rowNum,
+            fieldTag: 'Email',
+            identifier: rawEmail.isEmpty ? 'Empty' : rawEmail,
+            reason: 'Invalid email address.',
           ));
           continue;
         }
 
-        // Validation 3: First name (2-30 chars, letters/hyphens/periods/spaces only, no numbers)
-        if (rawFirst.length < 2 || rawFirst.length > 30) {
+        // Duplicate Email within file
+        if (seenEmailsInFile.contains(rawEmail)) {
           invalidRows.add(_InvalidStudentRow(
             rowNumber: rowNum,
-            identifier: cleanLrn,
+            fieldTag: 'Email',
+            identifier: rawEmail,
+            reason: 'Duplicate email in file.',
+          ));
+          continue;
+        }
+        seenEmailsInFile.add(rawEmail);
+
+        // 7. Name Format (First, Middle, Last)
+        // First Name
+        if (rawFirst.isEmpty) {
+          invalidRows.add(_InvalidStudentRow(
+            rowNumber: rowNum,
             fieldTag: 'First Name',
-            reason: 'First name must be between 2 and 30 characters.',
+            identifier: 'Empty',
+            reason: 'First name is required.',
           ));
           continue;
         }
         if (RegExp(r'[0-9]').hasMatch(rawFirst)) {
           invalidRows.add(_InvalidStudentRow(
             rowNumber: rowNum,
-            identifier: cleanLrn,
             fieldTag: 'First Name',
-            reason: 'First name cannot contain numbers.',
+            identifier: rawFirst,
+            reason: 'Cannot contain numbers.',
           ));
           continue;
         }
-        if (!RegExp(r"^[a-zA-Z\s\-\.]+$").hasMatch(rawFirst)) {
+        if (!RegExp(r"^[a-zA-Z\s\-\.\'ñÑ]+$").hasMatch(rawFirst)) {
           invalidRows.add(_InvalidStudentRow(
             rowNumber: rowNum,
-            identifier: cleanLrn,
             fieldTag: 'First Name',
-            reason: 'First name contains invalid characters.',
+            identifier: rawFirst,
+            reason: 'Invalid special characters.',
+          ));
+          continue;
+        }
+        if (rawFirst.length < 2 || rawFirst.length > 30) {
+          invalidRows.add(_InvalidStudentRow(
+            rowNumber: rowNum,
+            fieldTag: 'First Name',
+            identifier: rawFirst,
+            reason: 'First name must be between 2 and 30 characters.',
           ));
           continue;
         }
 
-        // Validation 4: Last name (2-30 chars, letters/hyphens/periods/spaces only, no numbers)
-        if (rawLast.length < 2 || rawLast.length > 30) {
+        // Last Name
+        if (rawLast.isEmpty) {
           invalidRows.add(_InvalidStudentRow(
             rowNumber: rowNum,
-            identifier: '$rawFirst ($cleanLrn)',
             fieldTag: 'Last Name',
-            reason: 'Last name must be between 2 and 30 characters.',
+            identifier: 'Empty',
+            reason: 'Last name is required.',
           ));
           continue;
         }
         if (RegExp(r'[0-9]').hasMatch(rawLast)) {
           invalidRows.add(_InvalidStudentRow(
             rowNumber: rowNum,
-            identifier: '$rawFirst ($cleanLrn)',
             fieldTag: 'Last Name',
-            reason: 'Last name cannot contain numbers.',
+            identifier: rawLast,
+            reason: 'Cannot contain numbers.',
           ));
           continue;
         }
-        if (!RegExp(r"^[a-zA-Z\s\-\.]+$").hasMatch(rawLast)) {
+        if (!RegExp(r"^[a-zA-Z\s\-\.\'ñÑ]+$").hasMatch(rawLast)) {
           invalidRows.add(_InvalidStudentRow(
             rowNumber: rowNum,
-            identifier: '$rawFirst ($cleanLrn)',
             fieldTag: 'Last Name',
-            reason: 'Last name contains invalid characters.',
+            identifier: rawLast,
+            reason: 'Invalid special characters.',
+          ));
+          continue;
+        }
+        if (rawLast.length < 2 || rawLast.length > 30) {
+          invalidRows.add(_InvalidStudentRow(
+            rowNumber: rowNum,
+            fieldTag: 'Last Name',
+            identifier: rawLast,
+            reason: 'Last name must be between 2 and 30 characters.',
           ));
           continue;
         }
 
-        // Validation 5: Middle Initial (Optional, max 1 character, letters only)
+        // Middle Initial (Optional, max 1 character, no numbers)
         String cleanMiddle = '';
         if (rawMiddle.isNotEmpty) {
-          if (rawMiddle.length > 1) {
+          if (RegExp(r'[0-9]').hasMatch(rawMiddle)) {
             invalidRows.add(_InvalidStudentRow(
               rowNumber: rowNum,
-              identifier: studentLabel,
               fieldTag: 'Middle Initial',
-              reason: 'Must be a single letter or left blank (found ${rawMiddle.length} characters).',
+              identifier: rawMiddle,
+              reason: 'Cannot contain numbers.',
             ));
             continue;
           }
-          if (!RegExp(r'^[a-zA-Z]$').hasMatch(rawMiddle)) {
+          if (!RegExp(r"^[a-zA-Z\s\-\.\'ñÑ]+$").hasMatch(rawMiddle)) {
             invalidRows.add(_InvalidStudentRow(
               rowNumber: rowNum,
-              identifier: studentLabel,
               fieldTag: 'Middle Initial',
-              reason: 'Middle initial must be a letter, numbers and symbols are not allowed.',
+              identifier: rawMiddle,
+              reason: 'Invalid special characters.',
+            ));
+            continue;
+          }
+          if (rawMiddle.length > 1) {
+            invalidRows.add(_InvalidStudentRow(
+              rowNumber: rowNum,
+              fieldTag: 'Middle Initial',
+              identifier: rawMiddle,
+              reason: 'Must be 1 letter only.',
             ));
             continue;
           }
           cleanMiddle = rawMiddle.toUpperCase();
         }
 
-        // Validation 6: Gender
+        // Gender Check
         final parsedGender = _parseGender(rawGender);
         if (parsedGender == null) {
           invalidRows.add(_InvalidStudentRow(
             rowNumber: rowNum,
-            identifier: studentLabel,
             fieldTag: 'Gender',
+            identifier: rawGender.isEmpty ? 'Empty' : rawGender,
             reason: 'Must be Male or Female.',
           ));
           continue;
         }
 
-        // Validation 7: Birthday format & age range (10-50 years old)
+        // 8. Birthday Parsing (Handles YYYY-MM-DD and Excel serial date)
         final parsedBday = _parseBirthday(rawBday);
-        if (parsedBday == null) {
+        if (parsedBday == null || RegExp(r'[a-zA-Z]').hasMatch(rawBday)) {
           invalidRows.add(_InvalidStudentRow(
             rowNumber: rowNum,
-            identifier: studentLabel,
             fieldTag: 'Birthday',
-            reason: 'Invalid date format (use YYYY-MM-DD).',
+            identifier: rawBday.isEmpty ? 'Empty' : rawBday,
+            reason: 'Use YYYY-MM-DD format.',
           ));
           continue;
         }
 
-        final age = now.year - parsedBday.year - ((now.month < parsedBday.month || (now.month == parsedBday.month && now.day < parsedBday.day)) ? 1 : 0);
+        // 9. Age Limits Check (10 - 50 years old)
+        int age = now.year - parsedBday.year;
+        if (now.month < parsedBday.month || (now.month == parsedBday.month && now.day < parsedBday.day)) {
+          age--;
+        }
         if (parsedBday.isAfter(now) || age < 10 || age > 50) {
           invalidRows.add(_InvalidStudentRow(
             rowNumber: rowNum,
-            identifier: studentLabel,
             fieldTag: 'Birthday',
-            reason: parsedBday.isAfter(now)
-                ? 'Birthday cannot be in the future.'
-                : 'Student age ($age yrs old) must be between 10 and 50 years old.',
+            identifier: rawBday,
+            reason: 'Must be 10-50 years old.',
           ));
           continue;
         }
-
-        // Validation 8: Email address
-        if (!RegExp(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$').hasMatch(rawEmail)) {
-          invalidRows.add(_InvalidStudentRow(
-            rowNumber: rowNum,
-            identifier: studentLabel,
-            fieldTag: 'Email',
-            reason: 'Invalid email address format.',
-          ));
-          continue;
-        }
-
-        // Check for placeholder / dummy emails
-        if (rawEmail == 'example@gmail.com' ||
-            rawEmail == 'test@test.com' ||
-            rawEmail == 'sample@gmail.com' ||
-            rawEmail == 'none@gmail.com' ||
-            rawEmail.startsWith('user@example') ||
-            rawEmail.endsWith('.test') ||
-            rawEmail.endsWith('.example')) {
-          invalidRows.add(_InvalidStudentRow(
-            rowNumber: rowNum,
-            identifier: studentLabel,
-            fieldTag: 'Email',
-            reason: 'Placeholder email detected ($rawEmail). Please provide a real email.',
-          ));
-          continue;
-        }
-
-        // Check duplicate email within file
-        if (seenEmailsInFile.contains(rawEmail)) {
-          final firstSeenRow = seenEmailRows[rawEmail] ?? 0;
-          invalidRows.add(_InvalidStudentRow(
-            rowNumber: rowNum,
-            identifier: studentLabel,
-            fieldTag: 'Email',
-            reason: 'Duplicate email in this file (already used on Row $firstSeenRow).',
-          ));
-          continue;
-        }
-
-        seenLrnsInFile.add(cleanLrn);
-        seenLrnRows[cleanLrn] = rowNum;
-        seenEmailsInFile.add(rawEmail);
-        seenEmailRows[rawEmail] = rowNum;
 
         candidateStudents.add(_ParsedStudentRow(
           rowNumber: rowNum,
@@ -1221,15 +1313,20 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
         ));
       }
 
-      // Check if NO student rows were entered starting from Row 3 (User issue case!)
+      // Check 2: Blank File / No Data (Valid headers, but 0 data rows found)
       if (candidateStudents.isEmpty && invalidRows.isEmpty) {
         if (mounted) {
           setState(() {
             _isProcessingBatch = false;
             _batchProgress = 0.0;
-            _batchWarningTitle = 'No Student Records Found';
-            _batchWarningMessage = 'Please enter student details starting on Row 3 and re-upload.';
+            _batchWarningTitle = 'Empty File';
+            _batchWarningMessage = 'The uploaded file is empty. Please fill in the student data before uploading.';
           });
+          AppModals.showErrorDialog(
+            context: context,
+            title: 'Empty File',
+            message: 'The uploaded file is empty. Please fill in the student data before uploading.',
+          );
         }
         return;
       }
@@ -1240,10 +1337,10 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
           _batchPhase = 'Verifying with database...';
           _batchActiveRecord = 'Checking accounts and enrollments in Supabase';
         });
-        await Future.delayed(const Duration(milliseconds: 100));
+        await Future.delayed(const Duration(milliseconds: 80));
       }
 
-      // Supabase Pre-Check: Global identities, email conflicts, section capacity, and existing enrollments
+      // Supabase Database Checks (Checks 6, 10, 11, 12)
       final eligibleNewStudents = <_ParsedStudentRow>[];
       final eligibleExistingStudents = <_ParsedStudentRow>[];
       final alreadyEnrolledStudents = <_ParsedStudentRow>[];
@@ -1253,7 +1350,7 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
         final cleanLrns = candidateStudents.map((s) => s.lrn).toList();
         final cleanEmails = candidateStudents.map((s) => s.email).toList();
 
-        // 1. Fetch matching student profiles
+        // Fetch matching student profiles
         final List<dynamic> profilesRes = await client
             .from('student_profiles')
             .select('student_id, lrn, first_name, last_name')
@@ -1270,7 +1367,7 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
           }
         }
 
-        // 2. Fetch users to detect email collisions
+        // Fetch users to detect email collisions
         final List<dynamic> usersRes = await client
             .from('users')
             .select('id, email, role')
@@ -1282,7 +1379,7 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
           if (em.isNotEmpty) userEmailMap[em] = u as Map<String, dynamic>;
         }
 
-        // 3. Fetch existing enrollments for this class offering
+        // Fetch existing enrollments for this class offering
         final enrollmentMap = <String, String>{};
         if (studentIds.isNotEmpty && _selectedOfferingId != null) {
           final List<dynamic> enrollRes = await client
@@ -1300,7 +1397,7 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
           }
         }
 
-        // 4. Fetch current enrolled counts by gender to enforce Section Capacity (Max 50 Male, Max 50 Female)
+        // Fetch current enrolled counts by gender to enforce Section Capacity (Max 50 Male, Max 50 Female)
         int currentMaleEnrolled = 0;
         int currentFemaleEnrolled = 0;
         try {
@@ -1320,37 +1417,36 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
           }
         } catch (_) {}
 
-        // Classify each candidate with multi-factor conflict detection and capacity limits
+        // Evaluate candidate rows against DB records
         for (final s in candidateStudents) {
           final existingProfile = profileMap[s.lrn];
 
-          // Check Email Conflict against users table
+          // 6. Duplicate Email (In Database)
           final existingUser = userEmailMap[s.email];
           if (existingUser != null) {
             final existingUserId = existingUser['id']?.toString() ?? '';
             final expectedStudentId = existingProfile?['student_id']?.toString() ?? '';
 
             if (existingUserId != expectedStudentId) {
-              final role = (existingUser['role'] ?? 'user').toString();
               invalidRows.add(_InvalidStudentRow(
                 rowNumber: s.rowNumber,
-                identifier: '${s.firstName} ${s.lastName} (${s.lrn})',
-                fieldTag: 'Email Conflict',
-                reason: 'Email "${s.email}" is already registered to another $role account in ClassRealm.',
+                fieldTag: 'Email',
+                identifier: s.email,
+                reason: 'Email already in use.',
               ));
               continue;
             }
           }
 
           if (existingProfile == null) {
-            // Check Section Capacity (Max 50 Male, Max 50 Female)
+            // 12. Section Capacity Limit (New Student)
             if (s.gender.toLowerCase() == 'male') {
               if (currentMaleEnrolled >= 50) {
                 invalidRows.add(_InvalidStudentRow(
                   rowNumber: s.rowNumber,
-                  identifier: '${s.firstName} ${s.lastName} (${s.lrn})',
-                  fieldTag: 'Capacity Exceeded',
-                  reason: 'Section capacity exceeded: Maximum 50 Male students allowed (Already $currentMaleEnrolled enrolled).',
+                  fieldTag: 'Capacity',
+                  identifier: s.gender,
+                  reason: 'Capacity exceeded. Max 50 per gender. (Found: Male (${currentMaleEnrolled + 1})).',
                 ));
                 continue;
               }
@@ -1359,9 +1455,9 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
               if (currentFemaleEnrolled >= 50) {
                 invalidRows.add(_InvalidStudentRow(
                   rowNumber: s.rowNumber,
-                  identifier: '${s.firstName} ${s.lastName} (${s.lrn})',
-                  fieldTag: 'Capacity Exceeded',
-                  reason: 'Section capacity exceeded: Maximum 50 Female students allowed (Already $currentFemaleEnrolled enrolled).',
+                  fieldTag: 'Capacity',
+                  identifier: s.gender,
+                  reason: 'Capacity exceeded. Max 50 per gender. (Found: Female (${currentFemaleEnrolled + 1})).',
                 ));
                 continue;
               }
@@ -1371,76 +1467,78 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
             // Eligible New Student
             eligibleNewStudents.add(s);
           } else {
+            // 10. Duplicate LRN (In Database) - Check name match
+            final dbFirst = (existingProfile['first_name'] ?? '').toString().trim().toLowerCase();
+            final dbLast = (existingProfile['last_name'] ?? '').toString().trim().toLowerCase();
+            final uploadFirst = s.firstName.trim().toLowerCase();
+            final uploadLast = s.lastName.trim().toLowerCase();
+
+            if (dbFirst != uploadFirst || dbLast != uploadLast) {
+              invalidRows.add(_InvalidStudentRow(
+                rowNumber: s.rowNumber,
+                fieldTag: 'LRN',
+                identifier: s.lrn,
+                reason: 'LRN already registered.',
+              ));
+              continue;
+            }
+
+            // 11. Already Enrolled in class: Skip re-enrolling, but continue with remaining students!
             final existingStudentId = (existingProfile['student_id'] ?? '').toString();
             final enrollStatus = enrollmentMap[existingStudentId];
 
             if (enrollStatus == 'enrolled') {
-              // Already enrolled in this section
               alreadyEnrolledStudents.add(s);
+              // Safely skipped: student is already enrolled in this class, continue with remaining records
+              continue;
             } else if (enrollStatus == 'archived') {
-              // Previously archived in this section
               invalidRows.add(_InvalidStudentRow(
                 rowNumber: s.rowNumber,
-                identifier: '${s.firstName} ${s.lastName} (${s.lrn})',
                 fieldTag: 'Class',
+                identifier: s.lrn,
                 reason: 'Archived in this class (use Restore in Manage Students).',
               ));
-            } else {
-              // Identity check against existing profile
-              final dbFirst = (existingProfile['first_name'] ?? '').toString().trim().toLowerCase();
-              final dbLast = (existingProfile['last_name'] ?? '').toString().trim().toLowerCase();
-              final uploadFirst = s.firstName.trim().toLowerCase();
-              final uploadLast = s.lastName.trim().toLowerCase();
+              continue;
+            }
 
-              if (dbFirst != uploadFirst || dbLast != uploadLast) {
-                final registeredName = '${existingProfile['first_name']} ${existingProfile['last_name']}'.trim();
+            // 12. Section Capacity Limit (Existing Student from another class)
+            if (s.gender.toLowerCase() == 'male') {
+              if (currentMaleEnrolled >= 50) {
                 invalidRows.add(_InvalidStudentRow(
                   rowNumber: s.rowNumber,
-                  identifier: '${s.firstName} ${s.lastName} (${s.lrn})',
-                  fieldTag: 'LRN Conflict',
-                  reason: 'LRN is already registered to "$registeredName" under another teacher/class. Name does not match.',
+                  fieldTag: 'Capacity',
+                  identifier: s.gender,
+                  reason: 'Capacity exceeded. Max 50 per gender. (Found: Male (${currentMaleEnrolled + 1})).',
                 ));
-              } else {
-                // Check Section Capacity (Max 50 Male, Max 50 Female)
-                if (s.gender.toLowerCase() == 'male') {
-                  if (currentMaleEnrolled >= 50) {
-                    invalidRows.add(_InvalidStudentRow(
-                      rowNumber: s.rowNumber,
-                      identifier: '${s.firstName} ${s.lastName} (${s.lrn})',
-                      fieldTag: 'Capacity Exceeded',
-                      reason: 'Section capacity exceeded: Maximum 50 Male students allowed (Already $currentMaleEnrolled enrolled).',
-                    ));
-                    continue;
-                  }
-                  currentMaleEnrolled++;
-                } else if (s.gender.toLowerCase() == 'female') {
-                  if (currentFemaleEnrolled >= 50) {
-                    invalidRows.add(_InvalidStudentRow(
-                      rowNumber: s.rowNumber,
-                      identifier: '${s.firstName} ${s.lastName} (${s.lrn})',
-                      fieldTag: 'Capacity Exceeded',
-                      reason: 'Section capacity exceeded: Maximum 50 Female students allowed (Already $currentFemaleEnrolled enrolled).',
-                    ));
-                    continue;
-                  }
-                  currentFemaleEnrolled++;
-                }
-
-                // Eligible Existing Student from another class/teacher
-                eligibleExistingStudents.add(_ParsedStudentRow(
-                  rowNumber: s.rowNumber,
-                  lrn: s.lrn,
-                  firstName: s.firstName,
-                  middleName: s.middleName,
-                  lastName: s.lastName,
-                  gender: s.gender,
-                  birthday: s.birthday,
-                  email: s.email,
-                  isExistingGlobalStudent: true,
-                  existingStudentId: existingStudentId,
-                ));
+                continue;
               }
+              currentMaleEnrolled++;
+            } else if (s.gender.toLowerCase() == 'female') {
+              if (currentFemaleEnrolled >= 50) {
+                invalidRows.add(_InvalidStudentRow(
+                  rowNumber: s.rowNumber,
+                  fieldTag: 'Capacity',
+                  identifier: s.gender,
+                  reason: 'Capacity exceeded. Max 50 per gender. (Found: Female (${currentFemaleEnrolled + 1})).',
+                ));
+                continue;
+              }
+              currentFemaleEnrolled++;
             }
+
+            // Eligible Existing Student
+            eligibleExistingStudents.add(_ParsedStudentRow(
+              rowNumber: s.rowNumber,
+              lrn: s.lrn,
+              firstName: s.firstName,
+              middleName: s.middleName,
+              lastName: s.lastName,
+              gender: s.gender,
+              birthday: s.birthday,
+              email: s.email,
+              isExistingGlobalStudent: true,
+              existingStudentId: existingStudentId,
+            ));
           }
         }
       }
@@ -1468,7 +1566,7 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
         }
         await _showIssuesErrorDialog();
       } else if (allEligible.isNotEmpty) {
-        // 100% valid with 0 errors: Directly enroll into the database!
+        // Valid students ready for enrollment: Directly enroll into the database!
         if (mounted) {
           setState(() {
             _batchPhase = 'Enrolling in Database...';
@@ -1479,6 +1577,19 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
           allEligible,
           fileName: _batchFileName ?? 'Spreadsheet',
         );
+      } else if (alreadyEnrolledStudents.isNotEmpty) {
+        // All students were already enrolled
+        if (mounted) {
+          setState(() {
+            _batchPhase = 'Upload Complete';
+            _batchActiveRecord = 'All ${alreadyEnrolledStudents.length} student(s) already enrolled.';
+          });
+          AppModals.showSuccessDialog(
+            context: context,
+            title: 'Already Enrolled',
+            message: 'All ${alreadyEnrolledStudents.length} student(s) in this file are already enrolled in this class. No duplicate enrollments were made.',
+          );
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -1591,28 +1702,20 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
                       padding: const EdgeInsets.symmetric(vertical: 3),
                       child: RichText(
                         text: TextSpan(
-                          style: const TextStyle(fontSize: 11, color: Colors.black87),
+                          style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurface),
                           children: [
                             TextSpan(
                               text: 'Row ${item.rowNumber} ',
                               style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.red),
                             ),
-                            WidgetSpan(
-                              alignment: PlaceholderAlignment.middle,
-                              child: Container(
-                                margin: const EdgeInsets.symmetric(horizontal: 4),
-                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                                decoration: BoxDecoration(
-                                  color: Colors.red.withValues(alpha: 0.15),
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: Text(
-                                  '[${item.fieldTag}]',
-                                  style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.red),
-                                ),
-                              ),
+                            TextSpan(
+                              text: '(${item.fieldTag}: ${item.identifier}): ',
+                              style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.red),
                             ),
-                            TextSpan(text: '${item.identifier}: ${item.reason}'),
+                            TextSpan(
+                              text: item.reason,
+                              style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.85)),
+                            ),
                           ],
                         ),
                       ),
@@ -1809,6 +1912,25 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
               textAlign: TextAlign.center,
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCardBadge(String label, int count, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Text(
+        '$label ($count)',
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.bold,
+          color: color,
         ),
       ),
     );
@@ -3045,15 +3167,15 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const Text(
-                          'Interrupted Session Found',
+                          'Upload Paused (Offline Resilience)',
                           style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          '${(_resumableBatch!['pending'] as List?)?.length ?? _resumableBatch!['pendingCount'] ?? 0} student(s) remaining from "${_resumableBatch!['fileName'] ?? 'Spreadsheet'}".',
+                          'Connection lost. Upload paused (${(_resumableBatch!['pending'] as List?)?.length ?? 0} students remaining). Will resume automatically when online.',
                           style: TextStyle(
                             fontSize: 12,
-                            color: theme.colorScheme.onSurface.withValues(alpha: 0.75),
+                            color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
                           ),
                         ),
                       ],
@@ -3071,8 +3193,8 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                     ),
-                    icon: const Icon(LucideIcons.play, size: 14),
-                    label: const Text('Resume', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                    icon: const Icon(LucideIcons.refreshCw, size: 14),
+                    label: const Text('Resume Now', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                     onPressed: _resumeBatchEnrollment,
                   ),
                 ],
@@ -3351,44 +3473,15 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 14),
-            Row(
-              mainAxisSize: MainAxisSize.min,
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              alignment: WrapAlignment.center,
               children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                  decoration: BoxDecoration(
-                    color: Colors.red.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
-                  ),
-                  child: Text(
-                    '✕ ${_detectedInvalidRows.length} Issues',
-                    style: const TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.red,
-                    ),
-                  ),
-                ),
-                if (totalEligible > 0) ...[
-                  const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF0F8A48).withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(color: const Color(0xFF0F8A48).withValues(alpha: 0.3)),
-                    ),
-                    child: Text(
-                      '✓ $totalEligible Valid',
-                      style: const TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF0F8A48),
-                      ),
-                    ),
-                  ),
-                ],
+                _buildCardBadge('Issues', _detectedInvalidRows.length, Colors.red),
+                _buildCardBadge('New Students', _eligibleNewStudents.length, const Color(0xFF0F8A48)),
+                _buildCardBadge('Existing', _eligibleExistingStudents.length, Colors.blue),
+                _buildCardBadge('Enrolled', _alreadyEnrolledStudents.length, Colors.grey),
               ],
             ),
             const SizedBox(height: 16),
@@ -3457,21 +3550,45 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
             ),
           ],
           const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-            decoration: BoxDecoration(
-              color: const Color(0xFF0F8A48).withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: const Color(0xFF0F8A48).withValues(alpha: 0.3)),
-            ),
-            child: Text(
-              '✓ $totalEligible Student${totalEligible > 1 ? "s" : ""} Enrolled',
-              style: const TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF0F8A48),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            alignment: WrapAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0F8A48).withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: const Color(0xFF0F8A48).withValues(alpha: 0.3)),
+                ),
+                child: Text(
+                  '✓ $totalEligible Student${totalEligible > 1 ? "s" : ""} Enrolled',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF0F8A48),
+                  ),
+                ),
               ),
-            ),
+              if (_alreadyEnrolledStudents.isNotEmpty)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: Colors.grey.withValues(alpha: 0.3)),
+                  ),
+                  child: Text(
+                    '• ${_alreadyEnrolledStudents.length} Already Enrolled (Skipped)',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey,
+                    ),
+                  ),
+                ),
+            ],
           ),
           const SizedBox(height: 16),
           OutlinedButton.icon(
@@ -3674,16 +3791,18 @@ class _ParsedStudentRow {
 
 class _InvalidStudentRow {
   final int rowNumber;
+  final String fieldTag;
   final String identifier;
   final String reason;
-  final String fieldTag;
 
   _InvalidStudentRow({
     required this.rowNumber,
+    required this.fieldTag,
     required this.identifier,
     required this.reason,
-    this.fieldTag = 'General',
   });
+
+  String get formattedMessage => 'Row $rowNumber ($fieldTag: $identifier): $reason';
 }
 
 class _ValidationProgressData {

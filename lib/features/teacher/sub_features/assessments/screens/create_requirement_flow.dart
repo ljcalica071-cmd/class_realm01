@@ -69,6 +69,11 @@ class _CreateRequirementFlowDialogState
   List<Map<String, dynamic>> _offerings = [];
   bool _isLoadingOfferings = true;
 
+  // New Fields for Database Modifications
+  String _completionMode = 'online'; // 'online' or 'in_person'
+  int _termNumber = 1;
+  int? _gradebookColumnIndex;
+
   // Attachment state
   String? _attachmentName;
   Uint8List? _pickedFileBytes;
@@ -84,6 +89,7 @@ class _CreateRequirementFlowDialogState
   String? _offeringError;
   String? _deadlineError;
   String? _formSubmitError;
+  String? _columnError;
 
   @override
   void initState() {
@@ -94,9 +100,13 @@ class _CreateRequirementFlowDialogState
     _maxScoreCtrl.text = task?.maxScore.toInt().toString() ?? '100';
     _attachmentName = task?.attachmentName;
     _pickedFileSizeBytes = task?.fileSizeBytes;
+    
     if (task != null) {
       _deadline = task.deadline;
       _selectedOfferingId = task.subjectOfferingId;
+      _termNumber = task.termNumber;
+      _gradebookColumnIndex = task.gradebookColumnIndex;
+      _completionMode = task.completionMode;
     }
 
     if (widget.initialOfferings != null) {
@@ -169,10 +179,11 @@ class _CreateRequirementFlowDialogState
     } else {
       Map<String, dynamic> match = _offerings.first;
       if (widget.initialSection.isNotEmpty) {
-        match = _offerings.firstWhere(
-          (o) => o['section_name']?.toString() == widget.initialSection,
-          orElse: () => _offerings.first,
-        );
+        try {
+          match = _offerings.firstWhere(
+            (o) => o['section_name']?.toString().trim() == widget.initialSection,
+          );
+        } catch (_) {}
       }
       final g = match['grade_level']?.toString().trim();
       _selectedGrade = g != null && g.startsWith('Grade') ? g : 'Grade $g';
@@ -343,6 +354,7 @@ class _CreateRequirementFlowDialogState
     final formValid = _formKey.currentState?.validate() ?? false;
     final offeringValid = _selectedOfferingId != null &&
         _selectedOfferingId!.trim().isNotEmpty;
+    final columnValid = _gradebookColumnIndex != null;
 
     if (!offeringValid) {
       setState(() => _offeringError = 'Select a subject offering.');
@@ -350,13 +362,19 @@ class _CreateRequirementFlowDialogState
       setState(() => _offeringError = null);
     }
 
-    if (widget.existingTask == null && _deadline.isBefore(DateTime.now())) {
+    if (!columnValid) {
+      setState(() => _columnError = 'Select a gradebook column.');
+    } else {
+      setState(() => _columnError = null);
+    }
+
+    if (_completionMode == 'online' && widget.existingTask == null && _deadline.isBefore(DateTime.now())) {
       setState(() => _deadlineError = 'Due date must be in the future.');
     } else {
       setState(() => _deadlineError = null);
     }
 
-    if (!formValid || !offeringValid || _fileError != null || _deadlineError != null) {
+    if (!formValid || !offeringValid || !columnValid || _fileError != null || _deadlineError != null) {
       return;
     }
 
@@ -376,16 +394,21 @@ class _CreateRequirementFlowDialogState
     setState(() => _isSubmitting = true);
 
     try {
-      // 1. Gradebook 10-column ceiling check
-      if (widget.existingTask == null) {
-        final termSheet = await SubjectRepository.instance.getGradebookTermSheet(_selectedOfferingId!, 1);
-        final hpsMap = (termSheet?['hps'] as Map<String, dynamic>?)?[categoryKey] as Map<String, dynamic>? ?? {};
-        
-        if (hpsMap.length >= 10) {
-          throw Exception(
-            'Maximum limit reached: You have already assigned all 10 $categoryLabel columns for this Term.',
-          );
-        }
+      final repo = widget.repository ?? SupabaseTeacherClassworkRepository.instance;
+      
+      // Gradebook Slot Conflict Check
+      final isOccupied = await repo.isGradebookSlotOccupied(
+        subjectOfferingId: _selectedOfferingId!,
+        gradingCategory: categoryKey,
+        termNumber: _termNumber,
+        gradebookColumnIndex: _gradebookColumnIndex!,
+        excludeClassworkId: widget.existingTask?.id,
+      );
+      
+      if (isOccupied) {
+        throw Exception(
+          'Slot Occupied: Gradebook column $categoryLabel $_gradebookColumnIndex is already in use for Term $_termNumber. Please select an empty slot.',
+        );
       }
 
       final task = ActivityModel(
@@ -405,9 +428,11 @@ class _CreateRequirementFlowDialogState
         storagePath: widget.existingTask?.storagePath,
         mimeType: widget.existingTask?.mimeType,
         fileSizeBytes: widget.existingTask?.fileSizeBytes,
+        completionMode: _completionMode,
+        termNumber: _termNumber,
+        gradebookColumnIndex: _gradebookColumnIndex,
       );
 
-      final repo = widget.repository ?? SupabaseTeacherClassworkRepository.instance;
       final savedActivity = await repo.saveActivity(
         activity: task,
         subjectOfferingId: _selectedOfferingId!,
@@ -417,28 +442,18 @@ class _CreateRequirementFlowDialogState
         removeExistingAttachment: _removeExistingAttachment,
       );
 
-      // 2. Synchronize HPS into Gradebook column for this offering
+      // We skip the legacy gradebook HPS sync for this phase, since 
+      // the new gradebook will fetch HPS directly from classwork_items!
+      // But just to keep old UI from crashing if it reads HPS:
       try {
-        final termSheet = await SubjectRepository.instance.getGradebookTermSheet(_selectedOfferingId!, 1) ?? {};
+        final termSheet = await SubjectRepository.instance.getGradebookTermSheet(_selectedOfferingId!, _termNumber) ?? {};
         final hps = Map<String, dynamic>.from(termSheet['hps'] as Map? ?? {});
         final catMap = Map<String, dynamic>.from(hps[categoryKey] as Map? ?? {});
 
-        // Find existing column key or assign next available 1..10
-        String? targetKey;
-        for (int i = 1; i <= 10; i++) {
-          final k = i.toString();
-          if (!catMap.containsKey(k)) {
-            targetKey = k;
-            break;
-          }
-        }
-
-        if (targetKey != null) {
-          catMap[targetKey] = maxScore;
-          hps[categoryKey] = catMap;
-          termSheet['hps'] = hps;
-          await SubjectRepository.instance.saveGradebookTermSheet(_selectedOfferingId!, 1, termSheet);
-        }
+        catMap[_gradebookColumnIndex.toString()] = maxScore;
+        hps[categoryKey] = catMap;
+        termSheet['hps'] = hps;
+        await SubjectRepository.instance.saveGradebookTermSheet(_selectedOfferingId!, _termNumber, termSheet);
       } catch (gbErr) {
         debugPrint('Gradebook HPS sync notice: $gbErr');
       }
@@ -547,483 +562,368 @@ class _CreateRequirementFlowDialogState
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // 1. Title *
-                      AppTextField(
-                        label: widget.isPerformanceTask
-                            ? 'Performance Task Title *'
-                            : 'Activity / Assignment Title *',
-                        hint: widget.isPerformanceTask
-                            ? 'e.g. Mathematical Modeling Portfolio'
-                            : 'e.g. Rational Functions Problem Set',
-                        controller: _titleCtrl,
-                        validator: (value) {
-                          final text = (value ?? '').trim();
-                          if (text.isEmpty) {
-                            return 'Title is required.';
-                          }
-                          if (text.length > 100) {
-                            return 'Title must not exceed 100 characters.';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 16),
-
-                      // 2. ENROLLMENT TARGET Card (Grade Level, Subject, Section)
+                      // A. Mode Slider (Top Navigation)
                       Container(
-                        padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
-                          color: theme.colorScheme.primary.withValues(alpha: 0.03),
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(
-                            color: _offeringError != null
-                                ? const Color(0xFFEF4444)
-                                : theme.colorScheme.primary.withValues(alpha: 0.15),
-                          ),
+                          color: const Color(0xFFF1F5F9), // 60-30-10: 30% background for field
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFFE2E8F0)),
                         ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                        padding: const EdgeInsets.all(4),
+                        child: Row(
                           children: [
-                            Row(
-                              children: [
-                                Icon(
-                                  Icons.school_outlined,
-                                  size: 16,
-                                  color: theme.colorScheme.primary,
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  'ENROLLMENT TARGET',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.bold,
-                                    letterSpacing: 0.8,
-                                    color: theme.colorScheme.primary,
+                            Expanded(
+                              child: GestureDetector(
+                                onTap: () => setState(() => _completionMode = 'online'),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(vertical: 10),
+                                  decoration: BoxDecoration(
+                                    color: _completionMode == 'online' ? Colors.white : Colors.transparent,
+                                    borderRadius: BorderRadius.circular(8),
+                                    boxShadow: _completionMode == 'online' 
+                                        ? [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 4, offset: const Offset(0, 2))] 
+                                        : null,
+                                  ),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(Icons.computer, size: 16, color: _completionMode == 'online' ? const Color(0xFF0F8A48) : Colors.grey),
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        'Online (Submit via App)',
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: _completionMode == 'online' ? FontWeight.w700 : FontWeight.w500,
+                                          color: _completionMode == 'online' ? const Color(0xFF0F8A48) : Colors.grey.shade600,
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
-                              ],
+                              ),
                             ),
-                            const SizedBox(height: 12),
-                            if (_isLoadingOfferings)
-                              const Padding(
-                                padding: EdgeInsets.symmetric(vertical: 12),
-                                child: Center(
-                                  child: SizedBox(
-                                    width: 24,
-                                    height: 24,
-                                    child: CircularProgressIndicator(strokeWidth: 2),
+                            Expanded(
+                              child: GestureDetector(
+                                onTap: () => setState(() => _completionMode = 'in_person'),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(vertical: 10),
+                                  decoration: BoxDecoration(
+                                    color: _completionMode == 'in_person' ? Colors.white : Colors.transparent,
+                                    borderRadius: BorderRadius.circular(8),
+                                    boxShadow: _completionMode == 'in_person' 
+                                        ? [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 4, offset: const Offset(0, 2))] 
+                                        : null,
                                   ),
-                                ),
-                              )
-                            else if (_offerings.isEmpty)
-                              const Text(
-                                'No active subject offerings available. Please set up your classes first.',
-                                style: TextStyle(
-                                  color: Color(0xFFEF4444),
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              )
-                            else
-                              Row(
-                                children: [
-                                  // Grade Level Dropdown
-                                  Expanded(
-                                    flex: 3,
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        const Text(
-                                          'Grade Level',
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w600,
-                                          ),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(Icons.group, size: 16, color: _completionMode == 'in_person' ? const Color(0xFF0F8A48) : Colors.grey),
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        'In-Person (Manual Record)',
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: _completionMode == 'in_person' ? FontWeight.w700 : FontWeight.w500,
+                                          color: _completionMode == 'in_person' ? const Color(0xFF0F8A48) : Colors.grey.shade600,
                                         ),
-                                        const SizedBox(height: 6),
-                                        DropdownButtonFormField<String>(
-                                          initialValue: _availableGrades.contains(_selectedGrade)
-                                              ? _selectedGrade
-                                              : (_availableGrades.isNotEmpty ? _availableGrades.first : null),
-                                          isExpanded: true,
-                                          decoration: InputDecoration(
-                                            contentPadding: const EdgeInsets.symmetric(
-                                              horizontal: 12,
-                                              vertical: 10,
-                                            ),
-                                            border: OutlineInputBorder(
-                                              borderRadius: BorderRadius.circular(8),
-                                            ),
-                                          ),
-                                          items: _availableGrades.map((g) {
-                                            return DropdownMenuItem(
-                                              value: g,
-                                              child: Text(g, style: const TextStyle(fontSize: 12)),
-                                            );
-                                          }).toList(),
-                                          onChanged: (val) {
-                                            if (val != null) {
-                                              setState(() {
-                                                _selectedGrade = val;
-                                                final subs = _availableSubjects;
-                                                _selectedSubject = subs.isNotEmpty ? subs.first : null;
-                                                final secs = _availableSections;
-                                                _selectedOfferingId = secs.isNotEmpty
-                                                    ? secs.first['id']?.toString()
-                                                    : null;
-                                                _offeringError = null;
-                                              });
-                                            }
-                                          },
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  const SizedBox(width: 10),
-
-                                  // Subject Dropdown
-                                  Expanded(
-                                    flex: 5,
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        const Text(
-                                          'Subject',
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 6),
-                                        DropdownButtonFormField<String>(
-                                          initialValue: _availableSubjects.contains(_selectedSubject)
-                                              ? _selectedSubject
-                                              : (_availableSubjects.isNotEmpty ? _availableSubjects.first : null),
-                                          isExpanded: true,
-                                          decoration: InputDecoration(
-                                            contentPadding: const EdgeInsets.symmetric(
-                                              horizontal: 12,
-                                              vertical: 10,
-                                            ),
-                                            border: OutlineInputBorder(
-                                              borderRadius: BorderRadius.circular(8),
-                                            ),
-                                          ),
-                                          items: _availableSubjects.map((sub) {
-                                            return DropdownMenuItem(
-                                              value: sub,
-                                              child: Text(
-                                                sub,
-                                                style: const TextStyle(fontSize: 12),
-                                                overflow: TextOverflow.ellipsis,
-                                              ),
-                                            );
-                                          }).toList(),
-                                          onChanged: (val) {
-                                            if (val != null) {
-                                              setState(() {
-                                                _selectedSubject = val;
-                                                final secs = _availableSections;
-                                                _selectedOfferingId = secs.isNotEmpty
-                                                    ? secs.first['id']?.toString()
-                                                    : null;
-                                                _offeringError = null;
-                                              });
-                                            }
-                                          },
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  const SizedBox(width: 10),
-
-                                  // Section Dropdown
-                                  Expanded(
-                                    flex: 4,
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        const Text(
-                                          'Section',
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 6),
-                                        DropdownButtonFormField<String>(
-                                          initialValue: _availableSections.any((s) => s['id']?.toString() == _selectedOfferingId)
-                                              ? _selectedOfferingId
-                                              : (_availableSections.isNotEmpty ? _availableSections.first['id']?.toString() : null),
-                                          isExpanded: true,
-                                          decoration: InputDecoration(
-                                            contentPadding: const EdgeInsets.symmetric(
-                                              horizontal: 12,
-                                              vertical: 10,
-                                            ),
-                                            border: OutlineInputBorder(
-                                              borderRadius: BorderRadius.circular(8),
-                                            ),
-                                          ),
-                                          items: _availableSections.map((sec) {
-                                            final id = sec['id']?.toString() ?? '';
-                                            final secName = sec['section_name']?.toString() ?? 'Section';
-                                            return DropdownMenuItem(
-                                              value: id,
-                                              child: Text(
-                                                secName,
-                                                style: const TextStyle(
-                                                  fontSize: 12,
-                                                  fontWeight: FontWeight.w600,
-                                                ),
-                                                overflow: TextOverflow.ellipsis,
-                                              ),
-                                            );
-                                          }).toList(),
-                                          onChanged: (val) {
-                                            if (val != null) {
-                                              setState(() {
-                                                _selectedOfferingId = val;
-                                                _offeringError = null;
-                                              });
-                                            }
-                                          },
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            if (_offeringError != null)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 8, left: 4),
-                                child: Text(
-                                  _offeringError!,
-                                  style: const TextStyle(
-                                    color: Color(0xFFEF4444),
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w500,
+                                      ),
+                                    ],
                                   ),
                                 ),
                               ),
+                            ),
                           ],
                         ),
                       ),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 20),
 
-                      // Due Date & Time Picker
-                      Text(
-                        'Submission Deadline / Due Date *',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: theme.colorScheme.onSurface,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      InkWell(
-                        onTap: _selectDeadline,
-                        borderRadius: BorderRadius.circular(10),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 14,
-                          ),
+                      // B. Context Badge
+                      if (_selectedOfferingId != null)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                           decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(
-                              color: _deadlineError != null
-                                  ? const Color(0xFFEF4444)
-                                  : theme.colorScheme.onSurface.withValues(alpha: 0.15),
-                            ),
+                            color: const Color(0xFFE8F5E9), // Light Emerald
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: const Color(0xFF0F8A48).withValues(alpha: 0.2)),
                           ),
                           child: Row(
                             children: [
-                              Icon(
-                                Icons.calendar_month_outlined,
-                                size: 18,
-                                color: theme.colorScheme.primary,
-                              ),
+                              const Icon(Icons.school, size: 16, color: Color(0xFF0F8A48)),
                               const SizedBox(width: 10),
                               Expanded(
                                 child: Text(
-                                  _formatDeadline(_deadline),
-                                  style: TextStyle(
+                                  '🎯 $_selectedGrade • $_selectedSubject • ${_offerings.firstWhere((o) => o['id'].toString() == _selectedOfferingId, orElse: () => {'section_name': ''})['section_name']}',
+                                  style: const TextStyle(
                                     fontSize: 13,
                                     fontWeight: FontWeight.w600,
-                                    color: theme.colorScheme.onSurface,
-                                  ),
-                                ),
-                              ),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                decoration: BoxDecoration(
-                                  color: theme.colorScheme.primary.withValues(alpha: 0.08),
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: Text(
-                                  'Change Deadline',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.bold,
-                                    color: theme.colorScheme.primary,
+                                    color: Color(0xFF0F8A48),
                                   ),
                                 ),
                               ),
                             ],
                           ),
                         ),
-                      ),
-                      if (_deadlineError != null)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 6, left: 4),
-                          child: Text(
-                            _deadlineError!,
-                            style: const TextStyle(
-                              color: Color(0xFFEF4444),
-                              fontSize: 12,
-                            ),
-                          ),
-                        ),
                       const SizedBox(height: 16),
 
-                      // 3. Total Points *
-                      SizedBox(
-                        width: 280,
-                        child: AppTextField(
-                          label: 'Total Points *',
-                          hint: '10-100',
-                          controller: _maxScoreCtrl,
-                          keyboardType: TextInputType.number,
-                          inputFormatters: [
-                            FilteringTextInputFormatter.digitsOnly,
-                            LengthLimitingTextInputFormatter(3),
-                          ],
-                          validator: (value) {
-                            final text = (value ?? '').trim();
-                            if (text.isEmpty) {
-                              return 'Total points is required.';
-                            }
-                            final score = int.tryParse(text);
-                            if (score == null || score < 10 || score > 100) {
-                              return 'Total points must be a whole number from 10 to 100.';
-                            }
-                            return null;
-                          },
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-
-                      // 4. Detailed Instructions *
+                      // C. Title
                       AppTextField(
-                        label: widget.isPerformanceTask
-                            ? 'Detailed Instructions & Rubrics *'
-                            : 'Detailed Instructions *',
-                        hint: 'Provide step-by-step instructions for students...',
-                        controller: _instructionsCtrl,
-                        maxLines: 4,
+                        label: widget.isPerformanceTask ? 'Performance Task Title *' : 'Activity / Assignment Title *',
+                        hint: widget.isPerformanceTask ? 'e.g. Stage Play Performance' : 'e.g. Chapter 1 Reading Reflection',
+                        controller: _titleCtrl,
                         validator: (value) {
                           final text = (value ?? '').trim();
-                          if (text.isEmpty) {
-                            return 'Detailed instructions are required.';
-                          }
-                          if (text.length > 1000) {
-                            return 'Instructions must not exceed 1,000 characters.';
-                          }
+                          if (text.isEmpty) return 'Title is required.';
+                          if (text.length > 100) return 'Title must not exceed 100 characters.';
                           return null;
                         },
                       ),
                       const SizedBox(height: 16),
 
-                      // 5. Attachment Box (Optional, PDF, DOC, DOCX up to 5 MiB)
-                      Text(
-                        'Classwork Attachment (Optional - PDF, DOC, DOCX up to 5 MiB)',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: theme.colorScheme.onSurface,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Container(
-                        padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
-                            color: _fileError != null
-                                ? const Color(0xFFEF4444)
-                                : theme.colorScheme.onSurface
-                                    .withValues(alpha: 0.12),
-                            width: _fileError != null ? 1.5 : 1,
+                      // D. Grid Row 1 (Term & Column)
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Gradebook Term *',
+                                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                                ),
+                                const SizedBox(height: 6),
+                                DropdownButtonFormField<int>(
+                                  initialValue: _termNumber,
+                                  decoration: InputDecoration(
+                                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                  ),
+                                  items: const [
+                                    DropdownMenuItem(value: 1, child: Text('1st Term', style: TextStyle(fontSize: 13))),
+                                    DropdownMenuItem(value: 2, child: Text('2nd Term', style: TextStyle(fontSize: 13))),
+                                    DropdownMenuItem(value: 3, child: Text('3rd Term', style: TextStyle(fontSize: 13))),
+                                  ],
+                                  onChanged: (val) {
+                                    if (val != null) setState(() => _termNumber = val);
+                                  },
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
-                        child: Row(
-                          children: [
-                            OutlinedButton.icon(
-                              onPressed: _isSubmitting ? null : _pickFile,
-                              icon: const Icon(Icons.attach_file, size: 18),
-                              label: Text(
-                                _attachmentName == null
-                                    ? 'Attach PDF/DOCX'
-                                    : 'Replace File',
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: _attachmentName != null
-                                  ? Row(
-                                      children: [
-                                        Expanded(
-                                          child: Text(
-                                            _pickedFileSizeBytes != null
-                                                ? '$_attachmentName (${_formatFileSize(_pickedFileSizeBytes!)})'
-                                                : _attachmentName!,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: TextStyle(
-                                              color: theme.colorScheme.onSurface,
-                                              fontSize: 13,
-                                              fontWeight: FontWeight.w500,
-                                            ),
-                                          ),
-                                        ),
-                                        IconButton(
-                                          icon: const Icon(
-                                            Icons.close,
-                                            size: 18,
-                                            color: Color(0xFFEF4444),
-                                          ),
-                                          tooltip: 'Remove Attachment',
-                                          onPressed: _isSubmitting
-                                              ? null
-                                              : _removeAttachment,
-                                        ),
-                                      ],
-                                    )
-                                  : Text(
-                                      'No file attached',
-                                      style: TextStyle(
-                                        color: theme.colorScheme.onSurface
-                                            .withValues(alpha: 0.6),
-                                        fontSize: 12,
-                                      ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Gradebook Column *',
+                                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                                ),
+                                const SizedBox(height: 6),
+                                DropdownButtonFormField<int?>(
+                                  initialValue: _gradebookColumnIndex,
+                                  hint: Text('Select ${widget.isPerformanceTask ? 'PT' : 'WW'} Slot', style: const TextStyle(fontSize: 13)),
+                                  decoration: InputDecoration(
+                                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                      borderSide: _columnError != null ? const BorderSide(color: Color(0xFFEF4444)) : const BorderSide(),
                                     ),
+                                  ),
+                                  items: List.generate(10, (i) {
+                                    final col = i + 1;
+                                    return DropdownMenuItem(
+                                      value: col,
+                                      child: Text('${widget.isPerformanceTask ? 'PT' : 'WW'} $col', style: const TextStyle(fontSize: 13)),
+                                    );
+                                  }),
+                                  onChanged: (val) {
+                                    if (val != null) {
+                                      setState(() {
+                                      _gradebookColumnIndex = val;
+                                      _columnError = null;
+                                    });
+                                    }
+                                  },
+                                  validator: (val) => val == null ? 'Column slot required.' : null,
+                                ),
+                              ],
                             ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
-                      if (_fileError != null)
+                      if (_columnError != null)
                         Padding(
                           padding: const EdgeInsets.only(top: 6, left: 4),
                           child: Text(
-                            _fileError!,
-                            style: const TextStyle(
-                              color: Color(0xFFEF4444),
-                              fontSize: 12,
-                            ),
+                            _columnError!,
+                            style: const TextStyle(color: Color(0xFFEF4444), fontSize: 12),
                           ),
                         ),
+                      const SizedBox(height: 16),
+
+                      // E. Grid Row 2 (Deadline & HPS)
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  _completionMode == 'online' ? 'Submission Deadline *' : 'Target Date (Optional)',
+                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                                ),
+                                const SizedBox(height: 6),
+                                InkWell(
+                                  onTap: _selectDeadline,
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(
+                                        color: _deadlineError != null ? const Color(0xFFEF4444) : Colors.grey.shade400,
+                                      ),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        const Icon(Icons.calendar_today, size: 16, color: Color(0xFF0F8A48)),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Text(
+                                            _formatDeadline(_deadline),
+                                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                                if (_deadlineError != null)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 6, left: 4),
+                                    child: Text(
+                                      _deadlineError!,
+                                      style: const TextStyle(color: Color(0xFFEF4444), fontSize: 12),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Total Points (HPS) *',
+                                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                                ),
+                                const SizedBox(height: 6),
+                                AppTextField(
+                                  label: 'HPS',
+                                  hint: '1 to 100',
+                                  controller: _maxScoreCtrl,
+                                  keyboardType: TextInputType.number,
+                                  inputFormatters: [
+                                    FilteringTextInputFormatter.digitsOnly,
+                                    LengthLimitingTextInputFormatter(3),
+                                  ],
+                                  validator: (value) {
+                                    final text = (value ?? '').trim();
+                                    if (text.isEmpty) return 'Required.';
+                                    final score = int.tryParse(text);
+                                    if (score == null || score < 1 || score > 100) {
+                                      return 'Must be 1 to 100.';
+                                    }
+                                    return null;
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+
+                      // F. Detailed Instructions
+                      AppTextField(
+                        label: 'Detailed Instructions & Rubrics *',
+                        hint: 'Provide step-by-step instructions for students...',
+                        controller: _instructionsCtrl,
+                        maxLines: 4,
+                        validator: (value) {
+                          final text = (value ?? '').trim();
+                          if (text.isEmpty) return 'Detailed instructions are required.';
+                          if (text.length > 1000) return 'Must not exceed 1,000 characters.';
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 16),
+
+                      // G. Optional Attachment (Online Mode Only)
+                      if (_completionMode == 'online') ...[
+                        const Text(
+                          'Classwork Attachment (Optional - PDF, DOC, DOCX up to 5 MiB)',
+                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                        ),
+                        const SizedBox(height: 6),
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: _fileError != null ? const Color(0xFFEF4444) : Colors.grey.shade400,
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              OutlinedButton.icon(
+                                onPressed: _isSubmitting ? null : _pickFile,
+                                icon: const Icon(Icons.attach_file, size: 16),
+                                label: Text(_attachmentName == null ? 'Attach File' : 'Replace File', style: const TextStyle(fontSize: 12)),
+                                style: OutlinedButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: _attachmentName != null
+                                    ? Row(
+                                        children: [
+                                          Expanded(
+                                            child: Text(
+                                              _pickedFileSizeBytes != null ? '$_attachmentName (${_formatFileSize(_pickedFileSizeBytes!)})' : _attachmentName!,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+                                            ),
+                                          ),
+                                          IconButton(
+                                            icon: const Icon(Icons.close, size: 16, color: Color(0xFFEF4444)),
+                                            padding: EdgeInsets.zero,
+                                            constraints: const BoxConstraints(),
+                                            onPressed: _isSubmitting ? null : _removeAttachment,
+                                          ),
+                                        ],
+                                      )
+                                    : const Text('No file attached', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                              ),
+                            ],
+                          ),
+                        ),
+                        if (_fileError != null)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 6, left: 4),
+                            child: Text(
+                              _fileError!,
+                              style: const TextStyle(color: Color(0xFFEF4444), fontSize: 12),
+                            ),
+                          ),
+                      ],
 
                       if (_formSubmitError != null) ...[
                         const SizedBox(height: 16),
@@ -1036,20 +936,10 @@ class _CreateRequirementFlowDialogState
                           ),
                           child: Row(
                             children: [
-                              const Icon(
-                                Icons.error_outline,
-                                color: Color(0xFFEF4444),
-                                size: 20,
-                              ),
+                              const Icon(Icons.error_outline, color: Color(0xFFEF4444), size: 20),
                               const SizedBox(width: 10),
                               Expanded(
-                                child: Text(
-                                  _formSubmitError!,
-                                  style: const TextStyle(
-                                    color: Color(0xFFEF4444),
-                                    fontSize: 13,
-                                  ),
-                                ),
+                                child: Text(_formSubmitError!, style: const TextStyle(color: Color(0xFFEF4444), fontSize: 13)),
                               ),
                             ],
                           ),

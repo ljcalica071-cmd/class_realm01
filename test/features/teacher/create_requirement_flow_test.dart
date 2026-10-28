@@ -32,6 +32,17 @@ class FakeTeacherClassworkRepo implements TeacherClassworkRepository {
   Future<void> deleteActivity(String activityId) async {
     activities.removeWhere((a) => a.id == activityId);
   }
+
+  @override
+  Future<bool> isGradebookSlotOccupied({
+    required String subjectOfferingId,
+    required String gradingCategory,
+    required int termNumber,
+    required int gradebookColumnIndex,
+    String? excludeClassworkId,
+  }) async {
+    return false;
+  }
 }
 
 void main() {

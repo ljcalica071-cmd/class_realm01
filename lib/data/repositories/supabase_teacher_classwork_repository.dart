@@ -97,15 +97,21 @@ class SupabaseTeacherClassworkRepository implements TeacherClassworkRepository {
       final insertData = <String, dynamic>{
         'subject_offering_id': subjectOfferingId,
         'classwork_type': classworkType,
+        'grading_category': activity.isRequirement ? 'pt' : 'ww',
         'title': activity.title,
         'instructions': activity.instructions,
         'max_score': activity.maxScore.round(),
         'deadline': activity.deadline.toIso8601String(),
-        'is_published': true,
-        'is_archived': false,
-        'storage_path': ?storagePath,
-        'file_name': ?fileName,
-        'mime_type': ?mimeType,
+        'is_published': activity.isPublished,
+        'is_archived': activity.isArchived,
+        'term_number': activity.termNumber,
+        'gradebook_column_index': activity.gradebookColumnIndex,
+        'completion_mode': activity.completionMode,
+        'allow_late_submission': activity.allowLateSubmission,
+        'batch_group_id': activity.batchGroupId,
+        'storage_path': storagePath,
+        'file_name': fileName,
+        'mime_type': mimeType,
         if (fileBytes != null) 'file_size_bytes': fileBytes.lengthInBytes,
       };
 
@@ -126,9 +132,13 @@ class SupabaseTeacherClassworkRepository implements TeacherClassworkRepository {
         'instructions': activity.instructions,
         'max_score': activity.maxScore.round(),
         'deadline': activity.deadline.toIso8601String(),
-        'storage_path': ?storagePath,
-        'file_name': ?fileName,
-        'mime_type': ?mimeType,
+        'term_number': activity.termNumber,
+        'gradebook_column_index': activity.gradebookColumnIndex,
+        'completion_mode': activity.completionMode,
+        'allow_late_submission': activity.allowLateSubmission,
+        'storage_path': storagePath,
+        'file_name': fileName,
+        'mime_type': mimeType,
         if (fileBytes != null) 'file_size_bytes': fileBytes.lengthInBytes,
         if (removeExistingAttachment) 'storage_path': null,
       };
@@ -160,6 +170,36 @@ class SupabaseTeacherClassworkRepository implements TeacherClassworkRepository {
           .eq('id', activityId);
     } catch (e) {
       debugPrint('Pure Dart delete classwork notice: $e');
+    }
+  }
+
+  @override
+  Future<bool> isGradebookSlotOccupied({
+    required String subjectOfferingId,
+    required String gradingCategory,
+    required int termNumber,
+    required int gradebookColumnIndex,
+    String? excludeClassworkId,
+  }) async {
+    try {
+      var query = _client
+          .from('classwork_items')
+          .select('id')
+          .eq('subject_offering_id', subjectOfferingId)
+          .eq('grading_category', gradingCategory)
+          .eq('term_number', termNumber)
+          .eq('gradebook_column_index', gradebookColumnIndex)
+          .eq('is_archived', false);
+          
+      if (excludeClassworkId != null && excludeClassworkId.isNotEmpty) {
+        query = query.neq('id', excludeClassworkId);
+      }
+      
+      final res = await query.limit(1).maybeSingle();
+      return res != null;
+    } catch (e) {
+      debugPrint('isGradebookSlotOccupied error: $e');
+      return false; // Fallback to allow if query fails, or could throw.
     }
   }
 }

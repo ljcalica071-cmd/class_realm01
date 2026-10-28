@@ -1354,26 +1354,40 @@ class SubjectRepository {
       final secName = (secConfig['name']?.toString() ?? '').trim();
       if (secName.isEmpty) continue;
 
+      final isExisting = secConfig['isExisting'] == true;
       final existingOfferingId = secConfig['id']?.toString();
 
-      if (existingOfferingId != null &&
-          existingOfferingId.isNotEmpty &&
-          !existingOfferingId.startsWith('row_')) {
-        // Find existing offering's section_id
+      if (isExisting) {
+        if (existingOfferingId == null ||
+            existingOfferingId.isEmpty ||
+            existingOfferingId.startsWith('row-') ||
+            existingOfferingId.startsWith('row_')) {
+          throw StateError(
+            'An existing section is missing its database offering ID.',
+          );
+        }
+
         final off = await _client
             .from('subject_offerings')
             .select('section_id')
             .eq('id', existingOfferingId)
+            .eq('teacher_id', teacherId)
+            .eq('subject_id', subjectId)
             .maybeSingle();
         final secId = off?['section_id']?.toString();
-        if (secId != null) {
-          await _client
-              .from('sections')
-              .update({'section_name': secName, 'grade_level': gLevel})
-              .eq('id', secId);
+        if (secId == null || secId.isEmpty) {
+          throw StateError(
+            'The section no longer belongs to this teacher and subject. '
+            'Reload the classroom setup and try again.',
+          );
         }
+
+        await _client
+            .from('sections')
+            .update({'section_name': secName, 'grade_level': gLevel})
+            .eq('id', secId);
       } else {
-        // Newly added section: find or insert section, then insert subject_offering
+        // Draft IDs are UI-only; create or reuse the database section by its fields.
         final existingSec = await _client
             .from('sections')
             .select('id')

@@ -63,6 +63,7 @@ dependencies:
     sdk: flutter
   google_generative_ai: ^0.4.7
   archive: any
+  syncfusion_flutter_xlsio: ^35.1.42
 dev_dependencies:
   flutter_test:
     sdk: flutter

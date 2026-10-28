@@ -96,6 +96,16 @@ class ActivityModel {
   final int submissionsCount;
   final int totalStudents;
   final Map<String, DateTime> sectionDeadlines;
+  
+  // New Classwork Fields
+  final int termNumber;
+  final int? gradebookColumnIndex;
+  final String completionMode; // 'online' or 'in_person'
+  final bool allowLateSubmission;
+  final String? batchGroupId;
+  final bool isArchived;
+  final DateTime? updatedInstructionsAt;
+  final List<String>? targetStudentIds;
 
   ActivityModel({
     required this.id,
@@ -119,6 +129,14 @@ class ActivityModel {
     this.submissionsCount = 0,
     this.totalStudents = 35,
     Map<String, DateTime>? sectionDeadlines,
+    this.termNumber = 1,
+    this.gradebookColumnIndex,
+    this.completionMode = 'online',
+    this.allowLateSubmission = true,
+    this.batchGroupId,
+    this.isArchived = false,
+    this.updatedInstructionsAt,
+    this.targetStudentIds,
   }) : dateAssigned = dateAssigned ?? DateTime.now(),
        sectionDeadlines = sectionDeadlines ?? {section: deadline};
 
@@ -149,6 +167,14 @@ class ActivityModel {
     int? submissionsCount,
     int? totalStudents,
     Map<String, DateTime>? sectionDeadlines,
+    int? termNumber,
+    int? gradebookColumnIndex,
+    String? completionMode,
+    bool? allowLateSubmission,
+    String? batchGroupId,
+    bool? isArchived,
+    DateTime? updatedInstructionsAt,
+    List<String>? targetStudentIds,
   }) {
     return ActivityModel(
       id: id ?? this.id,
@@ -172,6 +198,14 @@ class ActivityModel {
       submissionsCount: submissionsCount ?? this.submissionsCount,
       totalStudents: totalStudents ?? this.totalStudents,
       sectionDeadlines: sectionDeadlines ?? this.sectionDeadlines,
+      termNumber: termNumber ?? this.termNumber,
+      gradebookColumnIndex: gradebookColumnIndex ?? this.gradebookColumnIndex,
+      completionMode: completionMode ?? this.completionMode,
+      allowLateSubmission: allowLateSubmission ?? this.allowLateSubmission,
+      batchGroupId: batchGroupId ?? this.batchGroupId,
+      isArchived: isArchived ?? this.isArchived,
+      updatedInstructionsAt: updatedInstructionsAt ?? this.updatedInstructionsAt,
+      targetStudentIds: targetStudentIds ?? this.targetStudentIds,
     );
   }
 
@@ -229,6 +263,11 @@ class ActivityModel {
       sBytes = (json['file_size_bytes'] as num?)?.toInt();
     }
 
+    List<String>? parsedTargetStudentIds;
+    if (json['target_student_ids'] != null) {
+      parsedTargetStudentIds = (json['target_student_ids'] as List).map((e) => e.toString()).toList();
+    }
+
     return ActivityModel(
       id: json['id']?.toString() ?? '',
       title: json['title']?.toString() ?? '',
@@ -247,6 +286,14 @@ class ActivityModel {
       storagePath: sPath,
       mimeType: mType,
       fileSizeBytes: sBytes,
+      termNumber: json['term_number'] is int ? json['term_number'] as int : 1,
+      gradebookColumnIndex: json['gradebook_column_index'] as int?,
+      completionMode: json['completion_mode']?.toString() ?? 'online',
+      allowLateSubmission: json['allow_late_submission'] != false,
+      batchGroupId: json['batch_group_id']?.toString(),
+      isArchived: json['is_archived'] == true,
+      updatedInstructionsAt: json['updated_instructions_at'] != null ? DateTime.tryParse(json['updated_instructions_at'].toString()) : null,
+      targetStudentIds: parsedTargetStudentIds,
     );
   }
 

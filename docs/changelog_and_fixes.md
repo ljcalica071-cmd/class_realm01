@@ -58,3 +58,51 @@ This document serves as a record of all the problems identified and the correspo
   1. **Lazy Loading by 20:** Loads students in chunks of 20 as the teacher scrolls down, preventing lag.
   2. **Sticky Top Headers:** WW, PT, EX, 1-10 numbers, and HPS are now frozen at the top of the screen when scrolling down.
   3. **Sticky Left Column:** Student Names and LRNs are frozen on the left when scrolling right towards the Final Grades.
+
+---
+
+## 6. Teacher: Student Bulk Upload (Validation Blueprint & Reversion)
+**Attempted Fix for Template Validations:**
+- *Issue:* The downloaded template allowed unrestricted data input (letters in LRNs, invalid dates, email typos).
+- *Action:* An attempt was made to migrate the generator to `syncfusion_flutter_xlsio` to create an `.xlsx` file with built-in Layer 1 constraints (Dropdowns for gender, formulas for age, strict LRN length). 
+- *Reversion:* The generated constraints did not behave predictably across various spreadsheet apps (WPS, older MS Excel), breaking the dropdowns. Thus, it was **reverted to the reliable CSV generator**, and the strict validations will be handled entirely at Layer 2 (System level).
+
+**Documented Validation Rules (For Future System Reference):**
+To ensure data integrity, the following rules were mapped out for the system:
+
+*Layer 1 (Ideal Excel File Constraints):*
+- **LRN:** Must be exactly 12 numeric digits. (Error: "Invalid LRN")
+- **Email Address:** Approved providers only (@gmail.com, @yahoo.com, etc.). (Error: "Invalid Email: Please enter a valid email address")
+- **Names:** Cannot contain numbers. (Error: "Invalid Name Format")
+- **Gender:** Male/Female dropdown. (Error: "Invalid Gender")
+- **Birthday:** Must be between 10 and 50 years old, format YYYY-MM-DD. (Error: "Invalid Birthday")
+
+*Layer 2 (System Pre-Flight Validations):*
+- **Wrong/Blank File:** Checks if headers match and file is not empty.
+- **Row-Specific Pinpointing:** All UI alerts must specify the row and the exact error to avoid guesswork.
+- **Error Messages Map:**
+  - `Row X (LRN: [Data]): Must be exactly 12 digits.`
+  - `Row X (LRN: [Data]): Duplicate LRN in file.`
+  - `Row X (LRN: [Data]): LRN already registered.`
+  - `Row X (Class: [LRN]): Already enrolled in class.`
+  - `Row X (Capacity: [Gender]): Capacity exceeded. Max 50 per gender. (Found: [Gender] ([Count])).`
+  - `Row X (Email: [Data]): Invalid email address.` (Catches typos like @gamil.com)
+  - `Row X (Email: [Data]): Email already in use.`
+  - `Row X ([Field]: [Data]): Cannot contain numbers.`
+  - `Row X ([Field]: [Data]): Invalid special characters.`
+  - `Row X (Birthday: [Data]): Use YYYY-MM-DD format.`
+  - `Row X (Birthday: [Data]): Must be 10-50 years old.`
+
+---
+
+## 🚀 RECOMMENDATIONS & WHAT'S NEXT (Pending Features)
+
+Based on our End-to-End System Flow, these are the immediate next steps you should command the development agent to build:
+
+1. **Teacher Classwork Workspace (High Priority)**
+   - *Why:* The Gradebook currently has no way to accept grades because there are no Classwork items (Written Works, Performance Tasks, Exams) plotted yet.
+   - *Action:* We need to build the `Teacher Classwork` tab where teachers can "Create New Classwork", set the max score, assign it to a term, and enable Item Analysis.
+
+2. **Attendance History & Analytics (Medium Priority)**
+   - *Why:* The manual and RFID attendance logging works and saves to the database, but teachers need to view the history.
+   - *Action:* Build the `AttendanceHistoryAnalyticsView` to display Average Daily Attendance, total lates/absences, and export capabilities for DepEd School Form 2 (SF2).

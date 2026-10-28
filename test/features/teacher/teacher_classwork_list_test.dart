@@ -34,6 +34,17 @@ class MockClassworkRepo implements TeacherClassworkRepository {
     deletedId = activityId;
     items.removeWhere((i) => i.id == activityId);
   }
+
+  @override
+  Future<bool> isGradebookSlotOccupied({
+    required String subjectOfferingId,
+    required String gradingCategory,
+    required int termNumber,
+    required int gradebookColumnIndex,
+    String? excludeClassworkId,
+  }) async {
+    return false;
+  }
 }
 
 void main() {

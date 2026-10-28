@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:class_realm/core/theme/app_theme.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
@@ -2402,9 +2403,9 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
     } catch (e) {
       debugPrint('Error saving subject: $e');
       if (mounted) {
-        final friendlyMsg = e.toString().contains('PostgrestException') || e.toString().contains('406')
-            ? 'Unable to save subject changes. Please try again.'
-            : 'Failed to save subject: ${e.toString().replaceAll(RegExp(r'PostgrestException.*'), 'Database sync issue. Please try again.')}';
+        final friendlyMsg = e is PostgrestException
+            ? 'Unable to save subject changes: ${e.message}'
+            : 'Failed to save subject: ${e.toString()}';
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(

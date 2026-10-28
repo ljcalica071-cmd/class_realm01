@@ -21,4 +21,14 @@ abstract class TeacherClassworkRepository {
 
   /// Deletes a classwork item and cleans up any associated attachment.
   Future<void> deleteActivity(String activityId);
+
+  /// Checks if a gradebook slot is already occupied.
+  /// Returns `true` if the slot is occupied (i.e. another active classwork uses it).
+  Future<bool> isGradebookSlotOccupied({
+    required String subjectOfferingId,
+    required String gradingCategory,
+    required int termNumber,
+    required int gradebookColumnIndex,
+    String? excludeClassworkId,
+  });
 }

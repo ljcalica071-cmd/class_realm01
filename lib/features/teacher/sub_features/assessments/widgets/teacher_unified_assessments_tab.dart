@@ -638,20 +638,27 @@ class _TeacherUnifiedAssessmentsTabState
 
   Widget _buildUnifiedActivityCard(ActivityModel item, String category) {
     final dueDate = item.deadlineForSection(_selectedClassSection ?? '');
+    final isOnline = item.completionMode == 'online';
+    
     return _buildUnifiedCard(
       title: item.title,
       description: item.isRequirement ? '' : item.description,
       category: category,
       details: item.isRequirement
-          ? '${item.section} • ${item.maxScore.toInt()} pts • Due ${_monthName(dueDate.month)} ${dueDate.day}, ${_formatTime(dueDate)}'
-          : '${item.section} • ${item.maxScore.toInt()} pts • Due ${_monthName(dueDate.month)} ${dueDate.day}',
+          ? '${item.section} • Term ${item.termNumber} • ${item.maxScore.toInt()} pts${isOnline ? ' • Due ${_monthName(dueDate.month)} ${dueDate.day}, ${_formatTime(dueDate)}' : ''}'
+          : '${item.section} • Term ${item.termNumber} • ${item.maxScore.toInt()} pts${isOnline ? ' • Due ${_monthName(dueDate.month)} ${dueDate.day}' : ''}',
       icon: Icons.assignment_outlined,
-      onPressed: () {
-        if (widget.onViewSubmissions != null) {
-          widget.onViewSubmissions!(item);
-        }
-      },
-      actionLabel: 'View Submissions',
+      onPressed: isOnline 
+          ? () {
+              if (widget.onViewSubmissions != null) {
+                widget.onViewSubmissions!(item);
+              }
+            } 
+          : () {
+              // In-Person -> Open Edit or Gradebook
+              _showEditActivityModal(item);
+            },
+      actionLabel: isOnline ? 'View Submissions' : 'Edit Details',
       onEdit: () => _showEditActivityModal(item),
       onDelete: () => _confirmDeleteActivity(item),
     );
@@ -896,11 +903,7 @@ class _TeacherUnifiedAssessmentsTabState
         if (widget.repository != null) {
           try {
             await widget.repository!.deleteActivity(item.id);
-          } catch (_) {
-            MockDatabase.instance.deleteActivity(item.id);
-          }
-        } else {
-          MockDatabase.instance.deleteActivity(item.id);
+          } catch (_) {}
         }
         widget.onRefresh?.call();
         setState(() {});

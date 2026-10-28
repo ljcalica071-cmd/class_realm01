@@ -194,35 +194,34 @@ class ExcelTemplateGenerator {
 $rowsBuffer
   </sheetData>
   <dataValidations count="7">
-    <!-- Validation 1: Gender Dropdown (Male / Female) -->
-    <dataValidation type="list" errorStyle="stop" allowBlank="1" showInputMessage="1" showErrorMessage="1" errorTitle="Invalid Gender" error="Please select Male or Female from the dropdown." promptTitle="Gender" prompt="Select Male or Female" sqref="F3:F100">
-      <formula1>&quot;Male,Female&quot;</formula1>
+    <!-- Validation 1: LRN (Numbers only, Exactly 12 Digits, No leading zero) -->
+    <dataValidation type="custom" errorStyle="stop" allowBlank="1" showInputMessage="1" showErrorMessage="1" errorTitle="Invalid LRN" error="LRN must be exactly 12 numeric digits." promptTitle="LRN (12 Digits)" prompt="Enter 12-digit Learner Reference Number" sqref="A3:A100">
+      <formula1>AND(ISNUMBER(--A3),LEN(A3)=12,LEFT(A3,1)&lt;&gt;&quot;0&quot;)</formula1>
     </dataValidation>
-    <!-- Validation 2: LRN (Numbers only, Exactly 12 Digits) -->
-    <dataValidation type="textLength" operator="equal" errorStyle="stop" allowBlank="1" showInputMessage="1" showErrorMessage="1" errorTitle="Invalid LRN" error="LRN must be exactly 12 numeric digits." promptTitle="LRN (12 Digits)" prompt="Enter 12-digit Learner Reference Number" sqref="A3:A100">
-      <formula1>12</formula1>
-    </dataValidation>
-    <!-- Validation 3: Email Address (Valid Format with @ and .) -->
-    <dataValidation type="custom" errorStyle="stop" allowBlank="1" showInputMessage="1" showErrorMessage="1" errorTitle="Invalid Email Address" error="Invalid email address format (e.g. student@gmail.com)." promptTitle="Email Address" prompt="Enter valid student email address" sqref="B3:B100">
+    <!-- Validation 2: Email Address (Valid Format with @ and .) -->
+    <dataValidation type="custom" errorStyle="stop" allowBlank="1" showInputMessage="1" showErrorMessage="1" errorTitle="Invalid Email" error="Please enter a valid email address." promptTitle="Email Address" prompt="Enter valid student email address" sqref="B3:B100">
       <formula1>AND(ISNUMBER(FIND(&quot;@&quot;,B3)),ISNUMBER(FIND(&quot;.&quot;,B3)),LEN(B3)&gt;=6)</formula1>
     </dataValidation>
-    <!-- Validation 4: Last Name (2 to 30 characters) -->
-    <dataValidation type="textLength" operator="between" errorStyle="stop" allowBlank="1" showInputMessage="1" showErrorMessage="1" errorTitle="Invalid Last Name" error="Last name must be between 2 and 30 characters." promptTitle="Last Name" prompt="Enter surname (2-30 letters)" sqref="C3:C100">
-      <formula1>2</formula1>
-      <formula2>30</formula2>
+    <!-- Validation 3: Last Name (2 to 30 characters, no numbers) -->
+    <dataValidation type="custom" errorStyle="stop" allowBlank="1" showInputMessage="1" showErrorMessage="1" errorTitle="Invalid Name" error="Names cannot contain numbers." promptTitle="Last Name" prompt="Enter surname (2-30 letters)" sqref="C3:C100">
+      <formula1>AND(ISERROR(FIND(&quot;0&quot;,C3)),ISERROR(FIND(&quot;1&quot;,C3)),ISERROR(FIND(&quot;2&quot;,C3)),ISERROR(FIND(&quot;3&quot;,C3)),ISERROR(FIND(&quot;4&quot;,C3)),ISERROR(FIND(&quot;5&quot;,C3)),ISERROR(FIND(&quot;6&quot;,C3)),ISERROR(FIND(&quot;7&quot;,C3)),ISERROR(FIND(&quot;8&quot;,C3)),ISERROR(FIND(&quot;9&quot;,C3)),LEN(C3)&gt;=2,LEN(C3)&lt;=30)</formula1>
     </dataValidation>
-    <!-- Validation 5: First Name (2 to 30 characters) -->
-    <dataValidation type="textLength" operator="between" errorStyle="stop" allowBlank="1" showInputMessage="1" showErrorMessage="1" errorTitle="Invalid First Name" error="First name must be between 2 and 30 characters." promptTitle="First Name" prompt="Enter given name (2-30 letters)" sqref="D3:D100">
-      <formula1>2</formula1>
-      <formula2>30</formula2>
+    <!-- Validation 4: First Name (2 to 30 characters, no numbers) -->
+    <dataValidation type="custom" errorStyle="stop" allowBlank="1" showInputMessage="1" showErrorMessage="1" errorTitle="Invalid Name" error="Names cannot contain numbers." promptTitle="First Name" prompt="Enter given name (2-30 letters)" sqref="D3:D100">
+      <formula1>AND(ISERROR(FIND(&quot;0&quot;,D3)),ISERROR(FIND(&quot;1&quot;,D3)),ISERROR(FIND(&quot;2&quot;,D3)),ISERROR(FIND(&quot;3&quot;,D3)),ISERROR(FIND(&quot;4&quot;,D3)),ISERROR(FIND(&quot;5&quot;,D3)),ISERROR(FIND(&quot;6&quot;,D3)),ISERROR(FIND(&quot;7&quot;,D3)),ISERROR(FIND(&quot;8&quot;,D3)),ISERROR(FIND(&quot;9&quot;,D3)),LEN(D3)&gt;=2,LEN(D3)&lt;=30)</formula1>
     </dataValidation>
-    <!-- Validation 6: Middle Initial (Optional, max 1 char) -->
-    <dataValidation type="textLength" operator="lessThanOrEqual" errorStyle="stop" allowBlank="1" showInputMessage="1" showErrorMessage="1" errorTitle="Invalid Middle Initial" error="Middle initial is optional. If provided, enter 1 letter only." promptTitle="Middle Initial (Optional)" prompt="Leave blank or enter 1 letter only" sqref="E3:E100">
-      <formula1>1</formula1>
+    <!-- Validation 5: Middle Initial (Optional, max 1 char, no numbers) -->
+    <dataValidation type="custom" errorStyle="stop" allowBlank="1" showInputMessage="1" showErrorMessage="1" errorTitle="Invalid Name" error="Names cannot contain numbers." promptTitle="Middle Initial (Optional)" prompt="Leave blank or enter 1 letter only" sqref="E3:E100">
+      <formula1>OR(LEN(E3)=0,AND(LEN(E3)=1,ISERROR(FIND(&quot;0&quot;,E3)),ISERROR(FIND(&quot;1&quot;,E3)),ISERROR(FIND(&quot;2&quot;,E3)),ISERROR(FIND(&quot;3&quot;,E3)),ISERROR(FIND(&quot;4&quot;,E3)),ISERROR(FIND(&quot;5&quot;,E3)),ISERROR(FIND(&quot;6&quot;,E3)),ISERROR(FIND(&quot;7&quot;,E3)),ISERROR(FIND(&quot;8&quot;,E3)),ISERROR(FIND(&quot;9&quot;,E3))))</formula1>
     </dataValidation>
-    <!-- Validation 7: Birthday (YYYY-MM-DD, student age 10-50 years old) -->
-    <dataValidation type="textLength" operator="equal" errorStyle="stop" allowBlank="1" showInputMessage="1" showErrorMessage="1" errorTitle="Invalid Birthday" error="Student must be between 10 and 50 years old. Enter valid date in YYYY-MM-DD format (e.g. 2011-01-01)." promptTitle="Birthday [YYYY-MM-DD]" prompt="Enter date in YYYY-MM-DD format (e.g. 2011-01-01, Age 10-50)" sqref="G3:G100">
-      <formula1>10</formula1>
+    <!-- Validation 6: Gender Dropdown (Male / Female) -->
+    <dataValidation type="list" errorStyle="stop" allowBlank="1" showInputMessage="1" showErrorMessage="1" errorTitle="Invalid Gender" error="Please select 'Male' or 'Female' from the dropdown list." promptTitle="Gender" prompt="Select Male or Female" sqref="F3:F100">
+      <formula1>&quot;Male,Female&quot;</formula1>
+    </dataValidation>
+    <!-- Validation 7: Birthday (Date validation: 10 to 50 years old from TODAY()) -->
+    <dataValidation type="date" operator="between" errorStyle="stop" allowBlank="1" showInputMessage="1" showErrorMessage="1" errorTitle="Invalid Birthday" error="Student must be between 10 and 50 years old." promptTitle="Birthday [YYYY-MM-DD]" prompt="Enter date in YYYY-MM-DD format (Age 10-50)" sqref="G3:G100">
+      <formula1>DATE(YEAR(TODAY())-50,1,1)</formula1>
+      <formula2>DATE(YEAR(TODAY())-10,12,31)</formula2>
     </dataValidation>
   </dataValidations>
 </worksheet>''';
