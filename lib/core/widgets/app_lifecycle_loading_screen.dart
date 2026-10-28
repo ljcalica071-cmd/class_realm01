@@ -58,10 +58,8 @@ class _AppLifecycleLoadingScreenState extends State<AppLifecycleLoadingScreen>
     _startedAt = DateTime.now();
     AppLifecycleCoordinator.instance.onCreate();
 
-    // Immediately remove static HTML pre-loader if present
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      removePreBootstrapLoader();
-    });
+    // The HTML pre-loader will now be removed automatically by index.html 
+    // 350ms after flutter-first-frame to allow this widget to crossfade in.
 
     // Exit transition controller (320ms dissolve + slight scale)
     _exitController = AnimationController(

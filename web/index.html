@@ -287,7 +287,10 @@
 
       window.addEventListener("flutter-first-frame", function() {
         if (window.removePreBootstrapLoader) {
-          window.removePreBootstrapLoader();
+          // Delay removal to allow Flutter's AppLifecycleLoadingScreen to fade in
+          setTimeout(() => {
+            window.removePreBootstrapLoader();
+          }, 350);
         }
       });
     })();

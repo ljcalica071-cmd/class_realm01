@@ -106,3 +106,23 @@ Based on our End-to-End System Flow, these are the immediate next steps you shou
 2. **Attendance History & Analytics (Medium Priority)**
    - *Why:* The manual and RFID attendance logging works and saves to the database, but teachers need to view the history.
    - *Action:* Build the `AttendanceHistoryAnalyticsView` to display Average Daily Attendance, total lates/absences, and export capabilities for DepEd School Form 2 (SF2).
+
+## 7. Teacher: Performance Tasks Setup (Completion Mode & Gradebook Sync)
+**Problem:**
+- *Issue:* The "Create Performance Task" form was visually cramped and relied entirely on a MockDatabase instead of real SQL persistence. More importantly, it lacked crucial scheduling logic for offline vs online submission, and it didn't prevent gradebook slot conflicts.
+- *Fix & Enhancements:*
+  1. **Schema Update:** Added a `completion_mode` column to `classwork_items` to distinguish between `online` (where students must submit digital files) and `in_person` (where students only view instructions and teachers manually encode scores).
+  2. **Gradebook Conflict Checking:** Added robust backend validation. If a teacher tries to save a PT into "Term 1, PT 1" but it is already occupied, the system halts and warns them to prevent data overwrite.
+  3. **UI/UX Pro Max Redesign:** Overhauled the Create modal. 
+     - Added a clean "Slide-Toggle" mode switcher (Online vs In-Person).
+     - Grouped inputs logically (Term and Gradebook Column mapped side-by-side).
+     - Applied a strict 1-100 constraint on the HPS (Highest Possible Score).
+  4. **Workspace Visibility Logic:** If a PT is set to `in_person`, the "View Submissions" button in the teacher workspace is hidden, nudging the teacher to grade them directly via the Gradebook Tab instead.
+
+---
+
+## 🚀 RECOMMENDATIONS & WHAT'S NEXT (Pending Features)
+1. **Teacher: Written Works (WW)**
+   - *Action:* Re-use the brand new PT modal layout for Written Works (Activities and Assignments).
+2. **Student Dashboard (End-to-End Classwork Submissions)**
+   - *Action:* Completely remove MockDatabase on the student side. Connect the student's Classwork tab to real `classwork_items`. Implement the `student_classwork_submissions` upload flow so their digital files sync to the teacher's "View Submissions" screen!
