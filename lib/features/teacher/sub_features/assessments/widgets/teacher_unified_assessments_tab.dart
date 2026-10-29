@@ -2,7 +2,6 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 
 import 'package:class_realm/core/theme/app_theme.dart';
-import 'package:class_realm/data/mock_database.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/data/repositories/subject_repository.dart';
 import 'package:class_realm/data/repositories/teacher_classwork_repository.dart';
@@ -933,7 +932,10 @@ class _TeacherUnifiedAssessmentsTabState
     _showDeleteConfirmation(
       title: item.title,
       onDelete: () {
-        setState(() => MockDatabase.instance.deleteQuizOrExam(item.id));
+        setState(() {
+          widget.assessments.removeWhere((q) => q.id == item.id);
+        });
+        widget.onRefresh?.call();
       },
     );
   }

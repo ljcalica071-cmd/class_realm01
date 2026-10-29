@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/features/admin/widgets/widgets.dart';
@@ -85,7 +84,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     updateBrowserUrl(route);
     LocalStorageService.saveLastActiveRoute(route);
     LocalStorageService.saveActiveDashboardTab('admin', index);
-    SystemChannels.navigation.invokeMethod<void>('selectRouteName', route);
   }
 
   void _subscribeToRealtimeChanges() {
@@ -263,17 +261,20 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               ],
             );
 
-    return SessionActivityTracker(
-      child: Scaffold(
-        drawer: isMobile ? sidebar : null,
-        body: isMobile
-            ? mainContent
-            : Row(
-                children: [
-                  sidebar,
-                  Expanded(child: mainContent),
-                ],
-              ),
+    return PopScope(
+      canPop: false,
+      child: SessionActivityTracker(
+        child: Scaffold(
+          drawer: isMobile ? sidebar : null,
+          body: isMobile
+              ? mainContent
+              : Row(
+                  children: [
+                    sidebar,
+                    Expanded(child: mainContent),
+                  ],
+                ),
+        ),
       ),
     );
   }

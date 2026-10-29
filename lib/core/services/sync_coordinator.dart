@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:drift/drift.dart';
@@ -9,13 +10,18 @@ class SyncCoordinator {
   static final SyncCoordinator instance = SyncCoordinator._internal();
   SyncCoordinator._internal();
 
-  final SupabaseClient _client = Supabase.instance.client;
-  final AppDatabase _db = AppDatabase.instance;
+  /// Web uses online-first direct Supabase client + memory/local storage cache.
+  /// Drift SQLite Web Worker (sqlite3.wasm / drift_worker.js) is reserved for native platforms.
+  static bool get isLocalDbSupported => !kIsWeb;
+
+  SupabaseClient get _client => Supabase.instance.client;
+  AppDatabase get _db => AppDatabase.instance;
 
   Timer? _periodicSyncTimer;
   bool _isSyncing = false;
 
   void startBackgroundSync() {
+    if (!isLocalDbSupported) return;
     _periodicSyncTimer?.cancel();
     _periodicSyncTimer = Timer.periodic(const Duration(seconds: 45), (_) {
       processPendingQueue();
@@ -32,7 +38,7 @@ class SyncCoordinator {
   // =========================================================================
 
   Future<void> syncTeacherData(String teacherId) async {
-    if (teacherId.isEmpty) return;
+    if (!isLocalDbSupported || teacherId.isEmpty) return;
 
     try {
       // 1. Fetch active offerings with subjects and sections
@@ -92,7 +98,10 @@ class SyncCoordinator {
                 sectionId: sectionId,
                 subjectName: sub['subject_name']?.toString() ?? 'Subject',
                 sectionName: sec['section_name']?.toString() ?? 'Section',
-                gradeLevel: (sub['grade_level'] ?? sec['grade_level'] as num?)?.toInt() ?? 11,
+                gradeLevel:
+                    (sub['grade_level'] ?? sec['grade_level'] as num?)
+                        ?.toInt() ??
+                    11,
                 wwWeight: Value((row['ww_weight'] as num?)?.toDouble() ?? 20.0),
                 ptWeight: Value((row['pt_weight'] as num?)?.toDouble() ?? 50.0),
                 exWeight: Value((row['ex_weight'] as num?)?.toDouble() ?? 30.0),
@@ -105,7 +114,10 @@ class SyncCoordinator {
         await _db.batch((b) {
           b.insertAllOnConflictUpdate(_db.localSubjects, subjectCompanions);
           b.insertAllOnConflictUpdate(_db.localSections, sectionCompanions);
-          b.insertAllOnConflictUpdate(_db.localSubjectOfferings, offeringCompanions);
+          b.insertAllOnConflictUpdate(
+            _db.localSubjectOfferings,
+            offeringCompanions,
+          );
         });
       }
 
@@ -131,7 +143,8 @@ class SyncCoordinator {
 
         for (final row in enrollmentResponse as List) {
           final st = row['student_profiles'] as Map<String, dynamic>? ?? {};
-          final stId = st['student_id']?.toString() ?? row['student_id']?.toString();
+          final stId =
+              st['student_id']?.toString() ?? row['student_id']?.toString();
           final enrollId = row['id']?.toString() ?? '';
           final offeringId = row['subject_offering_id']?.toString() ?? '';
 
@@ -144,7 +157,9 @@ class SyncCoordinator {
                 middleName: Value(st['middle_name']?.toString()),
                 lastName: st['last_name']?.toString() ?? '',
                 gender: Value(st['gender']?.toString() ?? 'unspecified'),
-                departmentOrSection: Value(st['department_or_section']?.toString()),
+                departmentOrSection: Value(
+                  st['department_or_section']?.toString(),
+                ),
               ),
             );
 
@@ -170,7 +185,9 @@ class SyncCoordinator {
       // 3. Process any pending offline mutations
       await processPendingQueue();
     } catch (e) {
-      debugPrint('SyncCoordinator teacher sync error (safe offline fallback active): $e');
+      debugPrint(
+        'SyncCoordinator teacher sync error (safe offline fallback active): $e',
+      );
     }
   }
 
@@ -179,7 +196,7 @@ class SyncCoordinator {
   // =========================================================================
 
   Future<void> syncStudentData(String studentId) async {
-    if (studentId.isEmpty) return;
+    if (!isLocalDbSupported || studentId.isEmpty) return;
     try {
       final enrollments = await _client
           .from('student_enrollments')
@@ -213,7 +230,10 @@ class SyncCoordinator {
                 sectionId: sec['id']?.toString() ?? '',
                 subjectName: sub['subject_name']?.toString() ?? 'Subject',
                 sectionName: sec['section_name']?.toString() ?? 'Section',
-                gradeLevel: (sub['grade_level'] ?? sec['grade_level'] as num?)?.toInt() ?? 11,
+                gradeLevel:
+                    (sub['grade_level'] ?? sec['grade_level'] as num?)
+                        ?.toInt() ??
+                    11,
               ),
             );
           }
@@ -233,7 +253,7 @@ class SyncCoordinator {
   // =========================================================================
 
   Future<void> syncParentData(String parentId) async {
-    if (parentId.isEmpty) return;
+    if (!isLocalDbSupported || parentId.isEmpty) return;
     try {
       final links = await _client
           .from('parent_student_links')
@@ -254,7 +274,8 @@ class SyncCoordinator {
 
         for (final row in links as List) {
           final st = row['student_profiles'] as Map<String, dynamic>? ?? {};
-          final stId = st['student_id']?.toString() ?? row['student_id']?.toString();
+          final stId =
+              st['student_id']?.toString() ?? row['student_id']?.toString();
           final linkId = row['id']?.toString() ?? '${parentId}_$stId';
 
           if (stId != null && stId.isNotEmpty) {
@@ -266,7 +287,9 @@ class SyncCoordinator {
                 middleName: Value(st['middle_name']?.toString()),
                 lastName: st['last_name']?.toString() ?? '',
                 gender: Value(st['gender']?.toString() ?? 'unspecified'),
-                departmentOrSection: Value(st['department_or_section']?.toString()),
+                departmentOrSection: Value(
+                  st['department_or_section']?.toString(),
+                ),
               ),
             );
 
@@ -275,7 +298,9 @@ class SyncCoordinator {
                 id: linkId,
                 parentId: parentId,
                 studentId: stId,
-                relationship: Value(row['relationship']?.toString() ?? 'Guardian'),
+                relationship: Value(
+                  row['relationship']?.toString() ?? 'Guardian',
+                ),
               ),
             );
           }
@@ -283,7 +308,10 @@ class SyncCoordinator {
 
         await _db.batch((b) {
           b.insertAllOnConflictUpdate(_db.localStudents, studentCompanions);
-          b.insertAllOnConflictUpdate(_db.localParentStudentLinks, linkCompanions);
+          b.insertAllOnConflictUpdate(
+            _db.localParentStudentLinks,
+            linkCompanions,
+          );
         });
       }
     } catch (e) {
@@ -296,7 +324,7 @@ class SyncCoordinator {
   // =========================================================================
 
   Future<void> processPendingQueue() async {
-    if (_isSyncing) return;
+    if (!isLocalDbSupported || _isSyncing) return;
     _isSyncing = true;
 
     try {
@@ -316,31 +344,38 @@ class SyncCoordinator {
             final records = (payload['records'] as List? ?? []);
 
             if (offeringId != null && date != null && records.isNotEmpty) {
-              final rows = records.map((r) => {
-                'student_id': r['student_id'],
-                'subject_offering_id': offeringId,
-                'attendance_date': date,
-                'status': r['status'],
-                'remarks': r['remarks'],
-              }).toList();
+              final rows = records
+                  .map(
+                    (r) => {
+                      'student_id': r['student_id'],
+                      'subject_offering_id': offeringId,
+                      'attendance_date': date,
+                      'status': r['status'],
+                      'remarks': r['remarks'],
+                    },
+                  )
+                  .toList();
 
-              await _client.from('attendance_records').upsert(
-                rows,
-                onConflict: 'student_id,subject_offering_id,attendance_date',
-              );
+              await _client
+                  .from('attendance_records')
+                  .upsert(
+                    rows,
+                    onConflict:
+                        'student_id,subject_offering_id,attendance_date',
+                  );
             }
           }
 
           // Mark item as synced / remove from queue
-          await (_db.delete(_db.offlineSyncQueue)
-                ..where((t) => t.id.equals(item.id)))
-              .go();
+          await (_db.delete(
+            _db.offlineSyncQueue,
+          )..where((t) => t.id.equals(item.id))).go();
         } catch (itemErr) {
           debugPrint('Error syncing item ${item.id}: $itemErr');
           // Increment retry count
-          await (_db.update(_db.offlineSyncQueue)
-                ..where((t) => t.id.equals(item.id)))
-              .write(
+          await (_db.update(
+            _db.offlineSyncQueue,
+          )..where((t) => t.id.equals(item.id))).write(
             OfflineSyncQueueCompanion(
               retryCount: Value(item.retryCount + 1),
               errorMessage: Value(itemErr.toString()),

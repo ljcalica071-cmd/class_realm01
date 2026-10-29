@@ -102,6 +102,15 @@ class _CreateRequirementFlowDialogState
   String? _formSubmitError;
   String? _columnError;
 
+  // Gradebook columns already used by another active classwork for the
+  // selected subject offering + category + term. These are disabled in the
+  // column dropdown so the teacher cannot pick an occupied slot by mistake.
+  Set<int> _occupiedColumns = <int>{};
+  bool _isLoadingOccupied = false;
+  int _occupiedRequestId = 0;
+
+  bool get _isInPerson => _completionMode == 'in_person';
+
   @override
   void initState() {
     super.initState();
@@ -111,7 +120,7 @@ class _CreateRequirementFlowDialogState
     _maxScoreCtrl.text = task?.maxScore.toInt().toString() ?? '100';
     _attachmentName = task?.attachmentName;
     _pickedFileSizeBytes = task?.fileSizeBytes;
-    
+
     if (task != null) {
       _deadline = task.deadline;
       _selectedOfferingId = task.subjectOfferingId;
@@ -126,6 +135,9 @@ class _CreateRequirementFlowDialogState
       _offerings = List<Map<String, dynamic>>.from(widget.initialOfferings!);
       _isLoadingOfferings = false;
       _initializeSelectedOffering();
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _loadOccupiedColumns(),
+      );
     } else {
       _loadTeacherOfferings();
     }
@@ -171,8 +183,11 @@ class _CreateRequirementFlowDialogState
     return _offerings.where((o) {
       final g = o['grade_level']?.toString().trim();
       final gradeLabel = g != null && g.startsWith('Grade') ? g : 'Grade $g';
-      final matchesGrade = _selectedGrade == null || gradeLabel == _selectedGrade;
-      final matchesSub = _selectedSubject == null || o['subject_name']?.toString().trim() == _selectedSubject;
+      final matchesGrade =
+          _selectedGrade == null || gradeLabel == _selectedGrade;
+      final matchesSub =
+          _selectedSubject == null ||
+          o['subject_name']?.toString().trim() == _selectedSubject;
       return matchesGrade && matchesSub;
     }).toList();
   }
@@ -235,7 +250,8 @@ class _CreateRequirementFlowDialogState
         return const [1];
       } else if (termsTaught == 2) {
         final upper = termBlock.toUpperCase();
-        if (upper.contains('3') || upper.contains('2ND & 3RD')) return const [2, 3];
+        if (upper.contains('3') || upper.contains('2ND & 3RD'))
+          return const [2, 3];
         return const [1, 2];
       }
     }
@@ -262,10 +278,12 @@ class _CreateRequirementFlowDialogState
       try {
         match = _offerings.firstWhere(
           (o) {
-            final secMatch = widget.initialSection.isEmpty ||
+            final secMatch =
+                widget.initialSection.isEmpty ||
                 o['section_name']?.toString().trim() ==
                     widget.initialSection.trim();
-            final subMatch = widget.initialSubject == null ||
+            final subMatch =
+                widget.initialSubject == null ||
                 widget.initialSubject!.isEmpty ||
                 o['subject_name']?.toString().trim() ==
                     widget.initialSubject!.trim();
@@ -300,16 +318,64 @@ class _CreateRequirementFlowDialogState
         if (mounted) setState(() => _isLoadingOfferings = false);
         return;
       }
-      final subjects =
-          await SubjectRepository.instance.getTeacherSubjects(teacherId);
+      final subjects = await SubjectRepository.instance.getTeacherSubjects(
+        teacherId,
+      );
       if (!mounted) return;
       setState(() {
         _offerings = subjects;
         _isLoadingOfferings = false;
         _initializeSelectedOffering();
       });
+      _loadOccupiedColumns();
     } catch (_) {
       if (mounted) setState(() => _isLoadingOfferings = false);
+    }
+  }
+
+  /// Loads which gradebook columns are already taken for the selected
+  /// subject offering (subject + section), category (WW / PT) and term.
+  Future<void> _loadOccupiedColumns() async {
+    final offeringId = _selectedOfferingId;
+    if (offeringId == null || offeringId.trim().isEmpty) return;
+
+    final requestId = ++_occupiedRequestId;
+    final term = _termNumber;
+    if (mounted) setState(() => _isLoadingOccupied = true);
+
+    try {
+      final repo =
+          widget.repository ?? SupabaseTeacherClassworkRepository.instance;
+      final items = await repo.getActivities(subjectOfferingId: offeringId);
+      if (!mounted || requestId != _occupiedRequestId) return;
+
+      final excludeId = widget.existingTask?.id;
+      final occupied = <int>{};
+      for (final item in items) {
+        if (item.isArchived) continue;
+        if (item.isRequirement != widget.isPerformanceTask) continue;
+        if (item.termNumber != term) continue;
+        final col = item.gradebookColumnIndex;
+        if (col == null) continue;
+        if (excludeId != null && excludeId.isNotEmpty && item.id == excludeId) {
+          continue;
+        }
+        occupied.add(col);
+      }
+
+      setState(() {
+        _occupiedColumns = occupied;
+        _isLoadingOccupied = false;
+        // Clear a previously chosen column if it turned out to be taken.
+        if (_gradebookColumnIndex != null &&
+            occupied.contains(_gradebookColumnIndex)) {
+          _gradebookColumnIndex = null;
+        }
+      });
+    } catch (_) {
+      if (mounted && requestId == _occupiedRequestId) {
+        setState(() => _isLoadingOccupied = false);
+      }
     }
   }
 
@@ -365,8 +431,7 @@ class _CreateRequirementFlowDialogState
       } else if (ext == 'doc') {
         mime = 'application/msword';
       } else if (ext == 'docx') {
-        mime =
-            'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+        mime = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
       }
 
       setState(() {
@@ -399,13 +464,34 @@ class _CreateRequirementFlowDialogState
 
   Future<void> _selectDeadline() async {
     final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+
+    // In-Person: the teacher records the date the work was handed in,
+    // so past dates are allowed and no time is needed.
+    if (_isInPerson) {
+      final initial = _deadline ?? today;
+      final date = await showAppDatePickerDialog(
+        context,
+        initialDate: initial,
+        firstDate: DateTime(today.year - 1, 1, 1),
+        lastDate: DateTime(2100),
+        title: 'Select Date Submitted',
+      );
+      if (!mounted || date == null) return;
+      setState(() {
+        _deadline = DateTime(date.year, date.month, date.day, 23, 59);
+        _deadlineError = null;
+      });
+      return;
+    }
+
     final initial = _deadline != null && _deadline!.isAfter(now)
         ? _deadline!
         : now.add(const Duration(days: 1));
     final date = await showAppDatePickerDialog(
       context,
       initialDate: initial,
-      firstDate: DateTime(now.year, now.month, now.day),
+      firstDate: today,
       lastDate: DateTime(2100),
       title: 'Select Due Date',
     );
@@ -439,7 +525,23 @@ class _CreateRequirementFlowDialogState
         : (date.hour > 12 ? date.hour - 12 : date.hour);
     final minute = date.minute.toString().padLeft(2, '0');
     final period = date.hour >= 12 ? 'PM' : 'AM';
+    if (_isInPerson) return '$day/$month/${date.year}';
     return '$day/$month/${date.year} ${hour.toString().padLeft(2, '0')}:$minute $period';
+  }
+
+  void _setCompletionMode(String mode) {
+    if (_completionMode == mode) return;
+    setState(() {
+      _completionMode = mode;
+      _deadlineError = null;
+      // An online deadline in the past is not valid; make the teacher re-pick.
+      if (mode == 'online' &&
+          _deadline != null &&
+          widget.existingTask == null &&
+          _deadline!.isBefore(DateTime.now())) {
+        _deadline = null;
+      }
+    });
   }
 
   String _formatFileSize(int bytes) {
@@ -455,9 +557,11 @@ class _CreateRequirementFlowDialogState
     });
 
     final formValid = _formKey.currentState?.validate() ?? false;
-    final offeringValid = _selectedOfferingId != null &&
-        _selectedOfferingId!.trim().isNotEmpty;
-    final columnValid = _gradebookColumnIndex != null;
+    final offeringValid =
+        _selectedOfferingId != null && _selectedOfferingId!.trim().isNotEmpty;
+    final columnValid =
+        _gradebookColumnIndex != null &&
+        !_occupiedColumns.contains(_gradebookColumnIndex);
 
     if (!offeringValid) {
       setState(() => _offeringError = 'Select a subject offering.');
@@ -465,20 +569,20 @@ class _CreateRequirementFlowDialogState
       setState(() => _offeringError = null);
     }
 
-    if (!columnValid) {
-      setState(() => _columnError = 'Select a gradebook column.');
-    } else {
-      setState(() => _columnError = null);
-    }
+    // The column error is shown inline by the dropdown's own validator,
+    // so no second message is rendered under the Term field.
+    setState(() => _columnError = columnValid ? null : 'column');
 
-    if (_completionMode == 'online') {
-      if (_deadline == null) {
-        setState(() => _deadlineError = 'Please select a submission deadline.');
-      } else if (widget.existingTask == null && _deadline!.isBefore(DateTime.now())) {
-        setState(() => _deadlineError = 'Due date must be in the future.');
-      } else {
-        setState(() => _deadlineError = null);
-      }
+    if (_deadline == null) {
+      setState(
+        () => _deadlineError = _isInPerson
+            ? 'Please select the date submitted.'
+            : 'Please select a submission deadline.',
+      );
+    } else if (!_isInPerson &&
+        widget.existingTask == null &&
+        _deadline!.isBefore(DateTime.now())) {
+      setState(() => _deadlineError = 'Due date must be in the future.');
     } else {
       setState(() => _deadlineError = null);
     }
@@ -488,7 +592,7 @@ class _CreateRequirementFlowDialogState
         !columnValid ||
         _fileError != null ||
         _deadlineError != null ||
-        (_completionMode == 'online' && _deadline == null)) {
+        _deadline == null) {
       return;
     }
 
@@ -498,9 +602,12 @@ class _CreateRequirementFlowDialogState
     );
 
     final maxScore = int.parse(_maxScoreCtrl.text.trim()).toDouble();
-    final subjectName = selectedOffering['subject_name']?.toString() ?? 'General Subject';
-    final sectionName = selectedOffering['section_name']?.toString() ?? 'General Section';
-    final gradeLevel = selectedOffering['grade_level']?.toString() ?? 'Grade 11';
+    final subjectName =
+        selectedOffering['subject_name']?.toString() ?? 'General Subject';
+    final sectionName =
+        selectedOffering['section_name']?.toString() ?? 'General Section';
+    final gradeLevel =
+        selectedOffering['grade_level']?.toString() ?? 'Grade 11';
 
     final categoryKey = widget.isPerformanceTask ? 'pt' : 'ww';
     final categoryLabel = widget.isPerformanceTask ? 'PT' : 'WW';
@@ -508,8 +615,9 @@ class _CreateRequirementFlowDialogState
     setState(() => _isSubmitting = true);
 
     try {
-      final repo = widget.repository ?? SupabaseTeacherClassworkRepository.instance;
-      
+      final repo =
+          widget.repository ?? SupabaseTeacherClassworkRepository.instance;
+
       // Gradebook Slot Conflict Check
       final isOccupied = await repo.isGradebookSlotOccupied(
         subjectOfferingId: _selectedOfferingId!,
@@ -518,7 +626,7 @@ class _CreateRequirementFlowDialogState
         gradebookColumnIndex: _gradebookColumnIndex!,
         excludeClassworkId: widget.existingTask?.id,
       );
-      
+
       if (isOccupied) {
         throw Exception(
           'Slot Occupied: Gradebook column $categoryLabel $_gradebookColumnIndex is already in use for Term $_termNumber. Please select an empty slot.',
@@ -533,7 +641,7 @@ class _CreateRequirementFlowDialogState
         subject: subjectName,
         gradeLevel: gradeLevel,
         section: sectionName,
-        deadline: _deadline ?? DateTime.now().add(const Duration(days: 7)),
+        deadline: _deadline!,
         maxScore: maxScore,
         isPublished: true,
         isRequirement: widget.isPerformanceTask,
@@ -556,18 +664,29 @@ class _CreateRequirementFlowDialogState
         removeExistingAttachment: _removeExistingAttachment,
       );
 
-      // We skip the legacy gradebook HPS sync for this phase, since 
+      // We skip the legacy gradebook HPS sync for this phase, since
       // the new gradebook will fetch HPS directly from classwork_items!
       // But just to keep old UI from crashing if it reads HPS:
       try {
-        final termSheet = await SubjectRepository.instance.getGradebookTermSheet(_selectedOfferingId!, _termNumber) ?? {};
+        final termSheet =
+            await SubjectRepository.instance.getGradebookTermSheet(
+              _selectedOfferingId!,
+              _termNumber,
+            ) ??
+            {};
         final hps = Map<String, dynamic>.from(termSheet['hps'] as Map? ?? {});
-        final catMap = Map<String, dynamic>.from(hps[categoryKey] as Map? ?? {});
+        final catMap = Map<String, dynamic>.from(
+          hps[categoryKey] as Map? ?? {},
+        );
 
         catMap[_gradebookColumnIndex.toString()] = maxScore;
         hps[categoryKey] = catMap;
         termSheet['hps'] = hps;
-        await SubjectRepository.instance.saveGradebookTermSheet(_selectedOfferingId!, _termNumber, termSheet);
+        await SubjectRepository.instance.saveGradebookTermSheet(
+          _selectedOfferingId!,
+          _termNumber,
+          termSheet,
+        );
       } catch (gbErr) {
         debugPrint('Gradebook HPS sync notice: $gbErr');
       }
@@ -616,9 +735,7 @@ class _CreateRequirementFlowDialogState
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: theme.colorScheme.primary
-                          .withValues(alpha: 0.1)
-                          .withValues(alpha: 0.15),
+                      color: theme.colorScheme.primary.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Icon(
@@ -646,8 +763,9 @@ class _CreateRequirementFlowDialogState
                               : 'Assign $typeName to a specific subject offering',
                           style: TextStyle(
                             fontSize: 12,
-                            color:
-                                theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                            color: theme.colorScheme.onSurface.withValues(
+                              alpha: 0.6,
+                            ),
                           ),
                         ),
                       ],
@@ -679,7 +797,9 @@ class _CreateRequirementFlowDialogState
                       // A. Mode Slider (Top Navigation)
                       Container(
                         decoration: BoxDecoration(
-                          color: const Color(0xFFF1F5F9), // 60-30-10: 30% background for field
+                          color: const Color(
+                            0xFFF1F5F9,
+                          ), // 60-30-10: 30% background for field
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(color: const Color(0xFFE2E8F0)),
                         ),
@@ -688,20 +808,38 @@ class _CreateRequirementFlowDialogState
                           children: [
                             Expanded(
                               child: GestureDetector(
-                                onTap: () => setState(() => _completionMode = 'online'),
+                                onTap: () => _setCompletionMode('online'),
                                 child: Container(
-                                  padding: const EdgeInsets.symmetric(vertical: 10),
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 10,
+                                  ),
                                   decoration: BoxDecoration(
-                                    color: _completionMode == 'online' ? Colors.white : Colors.transparent,
+                                    color: _completionMode == 'online'
+                                        ? Colors.white
+                                        : Colors.transparent,
                                     borderRadius: BorderRadius.circular(8),
-                                    boxShadow: _completionMode == 'online' 
-                                        ? [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 4, offset: const Offset(0, 2))] 
+                                    boxShadow: _completionMode == 'online'
+                                        ? [
+                                            BoxShadow(
+                                              color: Colors.black.withValues(
+                                                alpha: 0.05,
+                                              ),
+                                              blurRadius: 4,
+                                              offset: const Offset(0, 2),
+                                            ),
+                                          ]
                                         : null,
                                   ),
                                   child: Row(
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
-                                      Icon(Icons.computer, size: 16, color: _completionMode == 'online' ? const Color(0xFF0F8A48) : Colors.grey),
+                                      Icon(
+                                        Icons.computer,
+                                        size: 16,
+                                        color: _completionMode == 'online'
+                                            ? const Color(0xFF0F8A48)
+                                            : Colors.grey,
+                                      ),
                                       const SizedBox(width: 6),
                                       Flexible(
                                         child: Text(
@@ -709,8 +847,13 @@ class _CreateRequirementFlowDialogState
                                           overflow: TextOverflow.ellipsis,
                                           style: TextStyle(
                                             fontSize: 13,
-                                            fontWeight: _completionMode == 'online' ? FontWeight.w700 : FontWeight.w500,
-                                            color: _completionMode == 'online' ? const Color(0xFF0F8A48) : Colors.grey.shade600,
+                                            fontWeight:
+                                                _completionMode == 'online'
+                                                ? FontWeight.w700
+                                                : FontWeight.w500,
+                                            color: _completionMode == 'online'
+                                                ? const Color(0xFF0F8A48)
+                                                : Colors.grey.shade600,
                                           ),
                                         ),
                                       ),
@@ -721,20 +864,38 @@ class _CreateRequirementFlowDialogState
                             ),
                             Expanded(
                               child: GestureDetector(
-                                onTap: () => setState(() => _completionMode = 'in_person'),
+                                onTap: () => _setCompletionMode('in_person'),
                                 child: Container(
-                                  padding: const EdgeInsets.symmetric(vertical: 10),
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 10,
+                                  ),
                                   decoration: BoxDecoration(
-                                    color: _completionMode == 'in_person' ? Colors.white : Colors.transparent,
+                                    color: _completionMode == 'in_person'
+                                        ? Colors.white
+                                        : Colors.transparent,
                                     borderRadius: BorderRadius.circular(8),
-                                    boxShadow: _completionMode == 'in_person' 
-                                        ? [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 4, offset: const Offset(0, 2))] 
+                                    boxShadow: _completionMode == 'in_person'
+                                        ? [
+                                            BoxShadow(
+                                              color: Colors.black.withValues(
+                                                alpha: 0.05,
+                                              ),
+                                              blurRadius: 4,
+                                              offset: const Offset(0, 2),
+                                            ),
+                                          ]
                                         : null,
                                   ),
                                   child: Row(
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
-                                      Icon(Icons.group, size: 16, color: _completionMode == 'in_person' ? const Color(0xFF0F8A48) : Colors.grey),
+                                      Icon(
+                                        Icons.group,
+                                        size: 16,
+                                        color: _completionMode == 'in_person'
+                                            ? const Color(0xFF0F8A48)
+                                            : Colors.grey,
+                                      ),
                                       const SizedBox(width: 6),
                                       Flexible(
                                         child: Text(
@@ -742,8 +903,14 @@ class _CreateRequirementFlowDialogState
                                           overflow: TextOverflow.ellipsis,
                                           style: TextStyle(
                                             fontSize: 13,
-                                            fontWeight: _completionMode == 'in_person' ? FontWeight.w700 : FontWeight.w500,
-                                            color: _completionMode == 'in_person' ? const Color(0xFF0F8A48) : Colors.grey.shade600,
+                                            fontWeight:
+                                                _completionMode == 'in_person'
+                                                ? FontWeight.w700
+                                                : FontWeight.w500,
+                                            color:
+                                                _completionMode == 'in_person'
+                                                ? const Color(0xFF0F8A48)
+                                                : Colors.grey.shade600,
                                           ),
                                         ),
                                       ),
@@ -761,11 +928,17 @@ class _CreateRequirementFlowDialogState
                       if (_selectedOfferingId != null)
                         Container(
                           width: double.infinity,
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 10,
+                          ),
                           decoration: BoxDecoration(
                             color: const Color(0xFFE8F5E9), // Light Emerald
                             borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: const Color(0xFF0F8A48).withValues(alpha: 0.2)),
+                            border: Border.all(
+                              color: const Color(0xFF0F8A48)
+                                  .withValues(alpha: 0.2),
+                            ),
                           ),
                           alignment: Alignment.center,
                           child: Text(
@@ -782,18 +955,21 @@ class _CreateRequirementFlowDialogState
 
                       // C. Title
                       AppTextField(
-                        label: widget.isPerformanceTask ? 'Performance Task Title *' : 'Activity / Assignment Title *',
-                        hint: widget.isPerformanceTask ? 'e.g. Stage Play Performance' : 'e.g. Chapter 1 Reading Reflection',
+                        label: widget.isPerformanceTask
+                            ? 'Performance Task Title *'
+                            : 'Activity / Assignment Title *',
+                        hint: widget.isPerformanceTask
+                            ? 'e.g. Stage Play Performance'
+                            : 'e.g. Chapter 1 Reading Reflection',
                         controller: _titleCtrl,
                         maxLength: 50,
                         showCounter: true,
-                        inputFormatters: [
-                          LengthLimitingTextInputFormatter(50),
-                        ],
+                        inputFormatters: [LengthLimitingTextInputFormatter(50)],
                         validator: (value) {
                           final text = (value ?? '').trim();
                           if (text.isEmpty) return 'Title is required.';
-                          if (text.length > 50) return 'Title must not exceed 50 characters.';
+                          if (text.length > 50)
+                            return 'Title must not exceed 50 characters.';
                           return null;
                         },
                       ),
@@ -806,10 +982,15 @@ class _CreateRequirementFlowDialogState
                             (o) => o['id']?.toString() == _selectedOfferingId,
                             orElse: () => <String, dynamic>{},
                           );
-                          final availableTerms = _getAvailableTermsForOffering(selectedOffering);
-                          final currentTerm = availableTerms.contains(_termNumber)
+                          final availableTerms = _getAvailableTermsForOffering(
+                            selectedOffering,
+                          );
+                          final currentTerm =
+                              availableTerms.contains(_termNumber)
                               ? _termNumber
-                              : (availableTerms.isNotEmpty ? availableTerms.first : 1);
+                              : (availableTerms.isNotEmpty
+                                    ? availableTerms.first
+                                    : 1);
 
                           return Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -820,21 +1001,34 @@ class _CreateRequirementFlowDialogState
                                   children: [
                                     const Text(
                                       'Gradebook Term *',
-                                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                      ),
                                     ),
                                     const SizedBox(height: 6),
                                     if (availableTerms.length <= 1)
                                       Container(
                                         height: 48,
-                                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 12,
+                                        ),
                                         alignment: Alignment.centerLeft,
                                         decoration: BoxDecoration(
                                           color: const Color(0xFFF8FAFC),
-                                          borderRadius: BorderRadius.circular(8),
-                                          border: Border.all(color: Colors.grey.shade400),
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
+                                          border: Border.all(
+                                            color: Colors.grey.shade400,
+                                          ),
                                         ),
                                         child: Text(
-                                          _termLabel(availableTerms.isNotEmpty ? availableTerms.first : 1),
+                                          _termLabel(
+                                            availableTerms.isNotEmpty
+                                                ? availableTerms.first
+                                                : 1,
+                                          ),
                                           style: const TextStyle(
                                             fontSize: 13,
                                             fontWeight: FontWeight.w600,
@@ -846,17 +1040,34 @@ class _CreateRequirementFlowDialogState
                                       DropdownButtonFormField<int>(
                                         initialValue: currentTerm,
                                         decoration: InputDecoration(
-                                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                          contentPadding:
+                                              const EdgeInsets.symmetric(
+                                                horizontal: 12,
+                                                vertical: 10,
+                                              ),
+                                          border: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(
+                                              8,
+                                            ),
+                                          ),
                                         ),
                                         items: availableTerms.map((term) {
                                           return DropdownMenuItem<int>(
                                             value: term,
-                                            child: Text(_termLabel(term), style: const TextStyle(fontSize: 13)),
+                                            child: Text(
+                                              _termLabel(term),
+                                              style: const TextStyle(
+                                                fontSize: 13,
+                                              ),
+                                            ),
                                           );
                                         }).toList(),
                                         onChanged: (val) {
-                                          if (val != null) setState(() => _termNumber = val);
+                                          if (val != null &&
+                                              val != _termNumber) {
+                                            setState(() => _termNumber = val);
+                                            _loadOccupiedColumns();
+                                          }
                                         },
                                       ),
                                   ],
@@ -869,36 +1080,113 @@ class _CreateRequirementFlowDialogState
                                   children: [
                                     const Text(
                                       'Gradebook Column *',
-                                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                      ),
                                     ),
                                     const SizedBox(height: 6),
                                     DropdownButtonFormField<int?>(
-                                      initialValue: _gradebookColumnIndex,
-                                      hint: Text('Select ${widget.isPerformanceTask ? 'PT' : 'WW'} Slot', style: const TextStyle(fontSize: 13)),
+                                      key: ValueKey(
+                                        'column-$_termNumber-${_occupiedColumns.join(',')}',
+                                      ),
+                                      initialValue:
+                                          _occupiedColumns.contains(
+                                            _gradebookColumnIndex,
+                                          )
+                                          ? null
+                                          : _gradebookColumnIndex,
+                                      isExpanded: true,
+                                      hint: Text(
+                                        _isLoadingOccupied
+                                            ? 'Checking used slots...'
+                                            : 'Select ${widget.isPerformanceTask ? 'PT' : 'WW'} Slot',
+                                        style: const TextStyle(fontSize: 13),
+                                      ),
                                       decoration: InputDecoration(
-                                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                        contentPadding:
+                                            const EdgeInsets.symmetric(
+                                              horizontal: 12,
+                                              vertical: 10,
+                                            ),
                                         border: OutlineInputBorder(
-                                          borderRadius: BorderRadius.circular(8),
-                                          borderSide: _columnError != null ? const BorderSide(color: Color(0xFFEF4444)) : const BorderSide(),
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
                                         ),
                                       ),
                                       items: List.generate(10, (i) {
                                         final col = i + 1;
-                                        return DropdownMenuItem(
+                                        final prefix = widget.isPerformanceTask
+                                            ? 'PT'
+                                            : 'WW';
+                                        final isUsed = _occupiedColumns
+                                            .contains(col);
+                                        return DropdownMenuItem<int?>(
                                           value: col,
-                                          child: Text('${widget.isPerformanceTask ? 'PT' : 'WW'} $col', style: const TextStyle(fontSize: 13)),
+                                          enabled: !isUsed,
+                                          child: Row(
+                                            children: [
+                                              Expanded(
+                                                child: Text(
+                                                  '$prefix $col',
+                                                  style: TextStyle(
+                                                    fontSize: 13,
+                                                    color: isUsed
+                                                        ? Colors.grey.shade400
+                                                        : null,
+                                                    decoration: isUsed
+                                                        ? TextDecoration
+                                                              .lineThrough
+                                                        : null,
+                                                  ),
+                                                ),
+                                              ),
+                                              if (isUsed)
+                                                Text(
+                                                  'Used',
+                                                  style: TextStyle(
+                                                    fontSize: 11,
+                                                    fontWeight: FontWeight.w600,
+                                                    color: Colors.grey.shade500,
+                                                  ),
+                                                ),
+                                            ],
+                                          ),
                                         );
                                       }),
                                       onChanged: (val) {
-                                        if (val != null) {
+                                        if (val != null &&
+                                            !_occupiedColumns.contains(val)) {
                                           setState(() {
                                             _gradebookColumnIndex = val;
                                             _columnError = null;
                                           });
                                         }
                                       },
-                                      validator: (val) => val == null ? 'Column slot required.' : null,
+                                      validator: (val) {
+                                        if (val == null)
+                                          return 'Please select a gradebook column.';
+                                        if (_occupiedColumns.contains(val)) {
+                                          return 'This column is already used.';
+                                        }
+                                        return null;
+                                      },
                                     ),
+                                    if (_occupiedColumns.length >= 10)
+                                      const Padding(
+                                        padding: EdgeInsets.only(
+                                          top: 6,
+                                          left: 4,
+                                        ),
+                                        child: Text(
+                                          'All columns for this term are already used.',
+                                          style: TextStyle(
+                                            color: Color(0xFFEF4444),
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                      ),
                                   ],
                                 ),
                               ),
@@ -906,14 +1194,6 @@ class _CreateRequirementFlowDialogState
                           );
                         },
                       ),
-                      if (_columnError != null)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 6, left: 4),
-                          child: Text(
-                            _columnError!,
-                            style: const TextStyle(color: Color(0xFFEF4444), fontSize: 12),
-                          ),
-                        ),
                       const SizedBox(height: 16),
 
                       // E. Grid Row 2 (Deadline & HPS)
@@ -925,39 +1205,58 @@ class _CreateRequirementFlowDialogState
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  _completionMode == 'online' ? 'Submission Deadline *' : 'Target Date (Optional)',
-                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                                  _isInPerson
+                                      ? 'Date Submitted *'
+                                      : 'Submission Deadline *',
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                  ),
                                 ),
                                 const SizedBox(height: 6),
                                 InkWell(
                                   onTap: _selectDeadline,
                                   borderRadius: BorderRadius.circular(8),
                                   child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 14,
+                                    ),
                                     decoration: BoxDecoration(
                                       color: Colors.white,
                                       borderRadius: BorderRadius.circular(8),
                                       border: Border.all(
-                                        color: _deadlineError != null ? const Color(0xFFEF4444) : Colors.grey.shade400,
+                                        color: _deadlineError != null
+                                            ? const Color(0xFFEF4444)
+                                            : Colors.grey.shade400,
                                       ),
                                     ),
                                     child: Row(
                                       children: [
-                                        const Icon(Icons.calendar_today, size: 16, color: Color(0xFF0F8A48)),
+                                        const Icon(
+                                          Icons.calendar_today,
+                                          size: 16,
+                                          color: Color(0xFF0F8A48),
+                                        ),
                                         const SizedBox(width: 8),
                                         Expanded(
                                           child: Text(
                                             _deadline != null
                                                 ? _formatDeadline(_deadline!)
-                                                : (_completionMode == 'online'
-                                                    ? 'Select deadline'
-                                                    : 'Select target date (Optional)'),
+                                                : (_isInPerson
+                                                      ? 'Select date submitted'
+                                                      : 'Select deadline'),
                                             style: TextStyle(
                                               fontSize: 13,
-                                              fontWeight: _deadline != null ? FontWeight.w500 : FontWeight.normal,
+                                              fontWeight: _deadline != null
+                                                  ? FontWeight.w500
+                                                  : FontWeight.normal,
                                               color: _deadline != null
                                                   ? theme.colorScheme.onSurface
-                                                  : theme.colorScheme.onSurface.withValues(alpha: 0.38),
+                                                  : theme.colorScheme.onSurface
+                                                        .withValues(
+                                                          alpha: 0.38,
+                                                        ),
                                             ),
                                             overflow: TextOverflow.ellipsis,
                                           ),
@@ -968,10 +1267,16 @@ class _CreateRequirementFlowDialogState
                                 ),
                                 if (_deadlineError != null)
                                   Padding(
-                                    padding: const EdgeInsets.only(top: 6, left: 4),
+                                    padding: const EdgeInsets.only(
+                                      top: 6,
+                                      left: 4,
+                                    ),
                                     child: Text(
                                       _deadlineError!,
-                                      style: const TextStyle(color: Color(0xFFEF4444), fontSize: 12),
+                                      style: const TextStyle(
+                                        color: Color(0xFFEF4444),
+                                        fontSize: 12,
+                                      ),
                                     ),
                                   ),
                               ],
@@ -1006,7 +1311,8 @@ class _CreateRequirementFlowDialogState
                       // F. Detailed Instructions
                       AppTextField(
                         label: 'Detailed Instructions & Rubrics *',
-                        hint: 'Provide step-by-step instructions for students...',
+                        hint:
+                            'Provide step-by-step instructions for students...',
                         controller: _instructionsCtrl,
                         maxLines: 4,
                         maxLength: 1000,
@@ -1016,8 +1322,10 @@ class _CreateRequirementFlowDialogState
                         ],
                         validator: (value) {
                           final text = (value ?? '').trim();
-                          if (text.isEmpty) return 'Detailed instructions are required.';
-                          if (text.length > 1000) return 'Must not exceed 1,000 characters.';
+                          if (text.isEmpty)
+                            return 'Detailed instructions are required.';
+                          if (text.length > 1000)
+                            return 'Must not exceed 1,000 characters.';
                           return null;
                         },
                       ),
@@ -1027,7 +1335,10 @@ class _CreateRequirementFlowDialogState
                       if (_completionMode == 'online') ...[
                         const Text(
                           'Classwork Attachment (Optional - PDF, DOC, DOCX up to 5 MiB)',
-                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                         const SizedBox(height: 6),
                         Container(
@@ -1036,7 +1347,9 @@ class _CreateRequirementFlowDialogState
                             color: Colors.white,
                             borderRadius: BorderRadius.circular(8),
                             border: Border.all(
-                              color: _fileError != null ? const Color(0xFFEF4444) : Colors.grey.shade400,
+                              color: _fileError != null
+                                  ? const Color(0xFFEF4444)
+                                  : Colors.grey.shade400,
                             ),
                           ),
                           child: Row(
@@ -1044,9 +1357,17 @@ class _CreateRequirementFlowDialogState
                               OutlinedButton.icon(
                                 onPressed: _isSubmitting ? null : _pickFile,
                                 icon: const Icon(Icons.attach_file, size: 16),
-                                label: Text(_attachmentName == null ? 'Attach File' : 'Replace File', style: const TextStyle(fontSize: 12)),
+                                label: Text(
+                                  _attachmentName == null
+                                      ? 'Attach File'
+                                      : 'Replace File',
+                                  style: const TextStyle(fontSize: 12),
+                                ),
                                 style: OutlinedButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 8,
+                                  ),
                                 ),
                               ),
                               const SizedBox(width: 12),
@@ -1056,20 +1377,37 @@ class _CreateRequirementFlowDialogState
                                         children: [
                                           Expanded(
                                             child: Text(
-                                              _pickedFileSizeBytes != null ? '$_attachmentName (${_formatFileSize(_pickedFileSizeBytes!)})' : _attachmentName!,
+                                              _pickedFileSizeBytes != null
+                                                  ? '$_attachmentName (${_formatFileSize(_pickedFileSizeBytes!)})'
+                                                  : _attachmentName!,
                                               overflow: TextOverflow.ellipsis,
-                                              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+                                              style: const TextStyle(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w500,
+                                              ),
                                             ),
                                           ),
                                           IconButton(
-                                            icon: const Icon(Icons.close, size: 16, color: Color(0xFFEF4444)),
+                                            icon: const Icon(
+                                              Icons.close,
+                                              size: 16,
+                                              color: Color(0xFFEF4444),
+                                            ),
                                             padding: EdgeInsets.zero,
                                             constraints: const BoxConstraints(),
-                                            onPressed: _isSubmitting ? null : _removeAttachment,
+                                            onPressed: _isSubmitting
+                                                ? null
+                                                : _removeAttachment,
                                           ),
                                         ],
                                       )
-                                    : const Text('No file attached', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                                    : const Text(
+                                        'No file attached',
+                                        style: TextStyle(
+                                          color: Colors.grey,
+                                          fontSize: 12,
+                                        ),
+                                      ),
                               ),
                             ],
                           ),
@@ -1079,7 +1417,10 @@ class _CreateRequirementFlowDialogState
                             padding: const EdgeInsets.only(top: 6, left: 4),
                             child: Text(
                               _fileError!,
-                              style: const TextStyle(color: Color(0xFFEF4444), fontSize: 12),
+                              style: const TextStyle(
+                                color: Color(0xFFEF4444),
+                                fontSize: 12,
+                              ),
                             ),
                           ),
                       ],
@@ -1095,10 +1436,20 @@ class _CreateRequirementFlowDialogState
                           ),
                           child: Row(
                             children: [
-                              const Icon(Icons.error_outline, color: Color(0xFFEF4444), size: 20),
+                              const Icon(
+                                Icons.error_outline,
+                                color: Color(0xFFEF4444),
+                                size: 20,
+                              ),
                               const SizedBox(width: 10),
                               Expanded(
-                                child: Text(_formSubmitError!, style: const TextStyle(color: Color(0xFFEF4444), fontSize: 13)),
+                                child: Text(
+                                  _formSubmitError!,
+                                  style: const TextStyle(
+                                    color: Color(0xFFEF4444),
+                                    fontSize: 13,
+                                  ),
+                                ),
                               ),
                             ],
                           ),
@@ -1135,8 +1486,9 @@ class _CreateRequirementFlowDialogState
                     child: Text(
                       'Cancel',
                       style: TextStyle(
-                        color:
-                            theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.6,
+                        ),
                         fontWeight: FontWeight.w600,
                       ),
                     ),

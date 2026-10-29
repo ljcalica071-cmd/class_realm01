@@ -6,7 +6,6 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:class_realm/core/theme/app_theme.dart';
-import 'package:class_realm/data/mock_database.dart';
 import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/shared/widgets/shared_widgets.dart';
 import 'package:class_realm/features/teacher/sub_features/class_management/widgets/add_parent_dialog.dart';
@@ -113,8 +112,12 @@ class _TeacherParentManagementTabState
 
     final teacherId = AuthRepository.instance.currentUser?.id;
     if (teacherId == null) {
-      _fallbackToMockData();
-      setState(() => _isLoading = false);
+      final fallbackParents = widget.parents ?? const <UserModel>[];
+      setState(() {
+        _activeParents = fallbackParents.where((p) => !p.isArchived).toList();
+        _archivedParents = fallbackParents.where((p) => p.isArchived).toList();
+        _isLoading = false;
+      });
       return;
     }
 
@@ -154,41 +157,23 @@ class _TeacherParentManagementTabState
           _teacherSubjects = subjectsSet.toList()..sort();
           _teacherSections = sectionsSet.toList()..sort();
           _enrolledStudents = students;
-
-          if (active.isEmpty && archived.isEmpty && (widget.parents != null && widget.parents!.isNotEmpty)) {
-            _fallbackToMockData();
-          } else {
-            _activeParents = active;
-            _archivedParents = archived;
-          }
+          _activeParents = active;
+          _archivedParents = archived;
           _isLoading = false;
         });
       }
     } catch (e) {
       debugPrint('Parent load notice: $e');
       if (mounted) {
-        _fallbackToMockData();
-        setState(() => _isLoading = false);
+        final fallbackParents = widget.parents ?? const <UserModel>[];
+        setState(() {
+          _activeParents = fallbackParents.where((p) => !p.isArchived).toList();
+          _archivedParents = fallbackParents
+              .where((p) => p.isArchived)
+              .toList();
+          _isLoading = false;
+        });
       }
-    }
-  }
-
-  void _fallbackToMockData() {
-    final allMockParents = widget.parents ??
-        MockDatabase.instance.users
-            .where((u) => u.role == UserRole.parent)
-            .toList();
-
-    _activeParents = allMockParents.where((p) => !p.isArchived).toList();
-    _archivedParents = allMockParents.where((p) => p.isArchived).toList();
-
-    _enrolledStudents = MockDatabase.instance.users
-        .where((u) => u.role == UserRole.student)
-        .toList();
-
-    final sections = MockDatabase.instance.sections;
-    if (_teacherSections.isEmpty) {
-      _teacherSections = sections;
     }
   }
 
@@ -230,61 +215,72 @@ class _TeacherParentManagementTabState
       availableSections = filteredSectionsSet.toList()..sort();
     }
 
-    var displayList =
-        (_showArchivedParents ? _archivedParents : _activeParents).where((p) {
-      final linkedStudent = _enrolledStudents
-          .where((user) => user.id == p.linkedStudentId)
-          .firstOrNull ??
-          MockDatabase.instance.users
+    var displayList = (_showArchivedParents ? _archivedParents : _activeParents)
+        .where((p) {
+          final linkedStudent = _enrolledStudents
               .where((user) => user.id == p.linkedStudentId)
               .firstOrNull;
 
-      final studentName = linkedStudent?.fullName ?? '';
-      final studentSection = linkedStudent?.departmentOrSection ?? p.departmentOrSection ?? '';
-      final studentSubject = linkedStudent?.enrolledSubjectName ?? p.enrolledSubjectName ?? '';
+          final studentName = linkedStudent?.fullName ?? '';
+          final studentSection =
+              linkedStudent?.departmentOrSection ?? p.departmentOrSection ?? '';
+          final studentSubject =
+              linkedStudent?.enrolledSubjectName ?? p.enrolledSubjectName ?? '';
 
-      final matchesSearch =
-          p.fullName.toLowerCase().contains(_parentSearchQuery.toLowerCase()) ||
-          p.username.toLowerCase().contains(_parentSearchQuery.toLowerCase()) ||
-          (p.contactNumber ?? '').contains(_parentSearchQuery) ||
-          studentName.toLowerCase().contains(_parentSearchQuery.toLowerCase());
+          final matchesSearch =
+              p.fullName.toLowerCase().contains(
+                _parentSearchQuery.toLowerCase(),
+              ) ||
+              p.username.toLowerCase().contains(
+                _parentSearchQuery.toLowerCase(),
+              ) ||
+              (p.contactNumber ?? '').contains(_parentSearchQuery) ||
+              studentName.toLowerCase().contains(
+                _parentSearchQuery.toLowerCase(),
+              );
 
-      final matchesSubject =
-          _selectedSubjectFilter == '— All Subjects —' ||
-          (studentSubject == _selectedSubjectFilter);
+          final matchesSubject =
+              _selectedSubjectFilter == '— All Subjects —' ||
+              (studentSubject == _selectedSubjectFilter);
 
-      final matchesSection =
-          _selectedSectionFilter == '— All Sections —' ||
-          (studentSection == _selectedSectionFilter);
+          final matchesSection =
+              _selectedSectionFilter == '— All Sections —' ||
+              (studentSection == _selectedSectionFilter);
 
-      return matchesSearch && matchesSubject && matchesSection;
-    }).toList();
+          return matchesSearch && matchesSubject && matchesSection;
+        })
+        .toList();
 
     // Sort logic
     displayList.sort((a, b) {
       int cmp = 0;
       switch (_sortColumn) {
         case 'lastName':
-          final aLast = a.lastName ??
+          final aLast =
+              a.lastName ??
               (a.fullName.contains(' ')
                   ? a.fullName.split(' ').last
                   : a.fullName);
-          final bLast = b.lastName ??
+          final bLast =
+              b.lastName ??
               (b.fullName.contains(' ')
                   ? b.fullName.split(' ').last
                   : b.fullName);
           cmp = aLast.compareTo(bLast);
           break;
         case 'firstName':
-          final aFirst = a.firstName ??
+          final aFirst =
+              a.firstName ??
               (a.fullName.contains(' ') ? a.fullName.split(' ').first : '');
-          final bFirst = b.firstName ??
+          final bFirst =
+              b.firstName ??
               (b.fullName.contains(' ') ? b.fullName.split(' ').first : '');
           cmp = aFirst.compareTo(bFirst);
           break;
         case 'relationship':
-          cmp = (a.parentGuardianRelationship ?? '')
-              .compareTo(b.parentGuardianRelationship ?? '');
+          cmp = (a.parentGuardianRelationship ?? '').compareTo(
+            b.parentGuardianRelationship ?? '',
+          );
           break;
         case 'username':
           cmp = a.username.compareTo(b.username);
@@ -309,7 +305,8 @@ class _TeacherParentManagementTabState
     final endIndex = (startIndex + _itemsPerPage).clamp(0, displayList.length);
     final paginatedList = displayList.sublist(startIndex, endIndex);
 
-    bool allSelected = paginatedList.isNotEmpty &&
+    bool allSelected =
+        paginatedList.isNotEmpty &&
         paginatedList.every((p) => _selectedParentIds.contains(p.id));
 
     const colCheckWidth = 48.0;
@@ -323,7 +320,8 @@ class _TeacherParentManagementTabState
     const colStatusWidth = 140.0;
     const colActionsWidth = 180.0;
 
-    const totalTableWidth = colCheckWidth +
+    const totalTableWidth =
+        colCheckWidth +
         colNumWidth +
         colLastNameWidth +
         colFirstNameWidth +
@@ -339,849 +337,933 @@ class _TeacherParentManagementTabState
         Padding(
           padding: const EdgeInsets.all(24),
           child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Top Header Row
-                Wrap(
-                  alignment: WrapAlignment.spaceBetween,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  runSpacing: 16,
-                  spacing: 16,
-                  children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          'Parent Directory',
-                          style: TextStyle(
-                            fontSize: 24,
-                            fontWeight: FontWeight.w800,
-                            color: theme.colorScheme.onSurface,
-                          ),
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Top Header Row
+              Wrap(
+                alignment: WrapAlignment.spaceBetween,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                runSpacing: 16,
+                spacing: 16,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Parent Directory',
+                        style: TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.w800,
+                          color: theme.colorScheme.onSurface,
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'View and manage parent or guardian accounts linked to enrolled students.',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: theme.colorScheme.onSurface.withValues(
-                              alpha: 0.6,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-
-                // Controls Row (Filters on left, Actions aligned together on right)
-                LayoutBuilder(
-                  builder: (context, constraints) {
-                    final filters = Wrap(
-                      spacing: 12,
-                      runSpacing: 12,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      children: [
-                        // Subject Filter
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                          decoration: BoxDecoration(
-                            color: theme.colorScheme.surface,
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                              color: theme.colorScheme.onSurface.withValues(
-                                alpha: 0.12,
-                              ),
-                            ),
-                          ),
-                          child: DropdownButtonHideUnderline(
-                            child: DropdownButton<String>(
-                              value: _selectedSubjectFilter,
-                              dropdownColor: theme.colorScheme.surface,
-                              style: TextStyle(
-                                color: theme.colorScheme.onSurface,
-                              ),
-                              items: ['— All Subjects —', ..._teacherSubjects]
-                                  .map(
-                                    (sub) => DropdownMenuItem(
-                                      value: sub,
-                                      child: Text(
-                                        sub,
-                                        style: const TextStyle(fontSize: 13),
-                                      ),
-                                    ),
-                                  )
-                                  .toList(),
-                              onChanged: (val) {
-                                if (val != null) {
-                                  setState(() {
-                                    _selectedSubjectFilter = val;
-                                    _selectedSectionFilter = '— All Sections —';
-                                    _currentPage = 1;
-                                  });
-                                  unawaited(_saveFilters());
-                                }
-                              },
-                            ),
-                          ),
-                        ),
-
-                        // Section Filter
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                          decoration: BoxDecoration(
-                            color: theme.colorScheme.surface,
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                              color: theme.colorScheme.onSurface.withValues(
-                                alpha: 0.12,
-                              ),
-                            ),
-                          ),
-                          child: DropdownButtonHideUnderline(
-                            child: DropdownButton<String>(
-                              value: _selectedSectionFilter,
-                              dropdownColor: theme.colorScheme.surface,
-                              style: TextStyle(
-                                color: theme.colorScheme.onSurface,
-                              ),
-                              items: ['— All Sections —', ...availableSections]
-                                  .map(
-                                    (sec) => DropdownMenuItem(
-                                      value: sec,
-                                      child: Text(
-                                        sec,
-                                        style: const TextStyle(fontSize: 13),
-                                      ),
-                                    ),
-                                  )
-                                  .toList(),
-                              onChanged: (val) {
-                                if (val != null) {
-                                  setState(() {
-                                    _selectedSectionFilter = val;
-                                    _currentPage = 1;
-                                  });
-                                  unawaited(_saveFilters());
-                                }
-                              },
-                            ),
-                          ),
-                        ),
-
-                        // Search Input
-                        SizedBox(
-                          width: 300,
-                          child: TextField(
-                            onChanged: (v) =>
-                                setState(() => _parentSearchQuery = v),
-                            decoration: InputDecoration(
-                              hintText:
-                                  'Search by parent name, student, or contact...',
-                              hintStyle: TextStyle(
-                                color: theme.colorScheme.onSurface.withValues(
-                                  alpha: 0.6,
-                                ),
-                              ),
-                              prefixIcon: Icon(
-                                LucideIcons.search,
-                                size: 20,
-                                color: theme.colorScheme.onSurface.withValues(
-                                  alpha: 0.6,
-                                ),
-                              ),
-                              filled: true,
-                              fillColor: theme.colorScheme.surface,
-                              contentPadding: const EdgeInsets.symmetric(
-                                vertical: 10,
-                                horizontal: 16,
-                              ),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(8),
-                                borderSide: BorderSide(
-                                  color: theme.colorScheme.onSurface.withValues(
-                                    alpha: 0.12,
-                                  ),
-                                ),
-                              ),
-                              enabledBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(8),
-                                borderSide: BorderSide(
-                                  color: theme.colorScheme.onSurface.withValues(
-                                    alpha: 0.12,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    );
-
-                    final archiveButton = SizedBox(
-                      height: 56,
-                      child: OutlinedButton.icon(
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: _showArchivedParents
-                              ? theme.colorScheme.primary
-                              : theme.colorScheme.onSurface.withValues(
-                                  alpha: 0.7,
-                                ),
-                          side: BorderSide(
-                            color: _showArchivedParents
-                                ? theme.colorScheme.primary
-                                : theme.colorScheme.onSurface.withValues(
-                                    alpha: 0.2,
-                                  ),
-                          ),
-                          padding: const EdgeInsets.symmetric(horizontal: 14),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                        ),
-                        icon: Icon(
-                          _showArchivedParents
-                              ? Icons.people_outline
-                              : Icons.archive_outlined,
-                          size: 18,
-                        ),
-                        label: Text(
-                          _showArchivedParents
-                              ? 'View Active'
-                              : 'View Archive (${_archivedParents.length})',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 13,
-                          ),
-                        ),
-                        onPressed: () => setState(() {
-                          _showArchivedParents = !_showArchivedParents;
-                          _selectedParentIds.clear();
-                        }),
                       ),
-                    );
-
-                    final actionButtons = Wrap(
-                      spacing: 12,
-                      runSpacing: 12,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      alignment: WrapAlignment.end,
-                      children: [
-                        AppButton.success(
-                          icon: LucideIcons.upload,
-                          label: 'Import Excel',
-                          onPressed: () {
-                            AppModals.showSuccessDialog(
-                              context: context,
-                              title: 'Import Parents via Excel',
-                              message:
-                                  'Excel batch import template for parent accounts will be available shortly.',
-                            );
-                          },
-                        ),
-                        AppButton.primary(
-                          icon: LucideIcons.userPlus,
-                          label: 'Add Parent',
-                          onPressed: _showAddParentDialog,
-                        ),
-                        archiveButton,
-                      ],
-                    );
-
-                    if (constraints.maxWidth < 760) {
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          filters,
-                          const SizedBox(height: 12),
-                          Align(
-                            alignment: Alignment.centerRight,
-                            child: actionButtons,
+                      const SizedBox(height: 4),
+                      Text(
+                        'View and manage parent or guardian accounts linked to enrolled students.',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: theme.colorScheme.onSurface.withValues(
+                            alpha: 0.6,
                           ),
-                        ],
-                      );
-                    }
-
-                    return Row(
-                      children: [
-                        Expanded(child: filters),
-                        const SizedBox(width: 12),
-                        actionButtons,
-                      ],
-                    );
-                  },
-                ),
-                const SizedBox(height: 16),
-
-                // Table Container
-                Expanded(
-                  child: (_isLoading && _activeParents.isEmpty && _archivedParents.isEmpty)
-                      ? const ShimmerManagementTable(rowCount: 8)
-                      : Stack(
-                          children: [
-                            Container(
-                              decoration: BoxDecoration(
-                                color: theme.colorScheme.surface,
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: tableBorderColor),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.03),
-                              blurRadius: 10,
-                              offset: const Offset(0, 4),
-                            ),
-                          ],
                         ),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(12),
-                          child: SingleChildScrollView(
-                            scrollDirection: Axis.horizontal,
-                            child: SizedBox(
-                              width: totalTableWidth,
-                              child: Column(
-                                children: [
-                                  // Table Header
-                                  Container(
-                                    height: 48,
-                                    decoration: BoxDecoration(
-                                      color: tableHeaderColor,
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        _buildHeaderCell(
-                                          width: colCheckWidth,
-                                          child: Center(
-                                            child: Checkbox(
-                                              value: allSelected,
-                                              activeColor:
-                                                  theme.colorScheme.primary,
-                                              checkColor:
-                                                  theme.colorScheme.onPrimary,
-                                              side: BorderSide(
-                                                color: tableHeaderTextColor,
-                                                width: 1.5,
-                                              ),
-                                              onChanged: (val) {
-                                                setState(() {
-                                                  if (val == true) {
-                                                    for (var p in paginatedList) {
-                                                      _selectedParentIds.add(p.id);
-                                                    }
-                                                  } else {
-                                                    for (var p in paginatedList) {
-                                                      _selectedParentIds.remove(p.id);
-                                                    }
-                                                  }
-                                                });
-                                              },
-                                            ),
-                                          ),
-                                        ),
-                                        _buildHeaderCell(
-                                          width: colNumWidth,
-                                          child: Center(
-                                            child: Text(
-                                              '#',
-                                              style: TextStyle(
-                                                color: tableHeaderTextColor,
-                                                fontWeight: FontWeight.bold,
-                                                fontSize: 13,
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                        _buildHeaderCell(
-                                          width: colLastNameWidth,
-                                          child: _buildClickableHeaderTitle(
-                                            'LAST NAME',
-                                            'lastName',
-                                          ),
-                                        ),
-                                        _buildHeaderCell(
-                                          width: colFirstNameWidth,
-                                          child: _buildClickableHeaderTitle(
-                                            'FIRST NAME',
-                                            'firstName',
-                                          ),
-                                        ),
-                                        _buildHeaderCell(
-                                          width: colRelWidth,
-                                          child: _buildClickableHeaderTitle(
-                                            'RELATIONSHIP',
-                                            'relationship',
-                                          ),
-                                        ),
-                                        _buildHeaderCell(
-                                          width: colStudentWidth,
-                                          child: Text(
-                                            'LINKED STUDENT',
-                                            style: TextStyle(
-                                              color: tableHeaderTextColor,
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 13,
-                                            ),
-                                          ),
-                                        ),
-                                        _buildHeaderCell(
-                                          width: colSectionWidth,
-                                          child: Text(
-                                            'SECTION',
-                                            style: TextStyle(
-                                              color: tableHeaderTextColor,
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 13,
-                                            ),
-                                          ),
-                                        ),
-                                        _buildHeaderCell(
-                                          width: colContactWidth,
-                                          child: _buildClickableHeaderTitle(
-                                            'CONTACT NO.',
-                                            'contact',
-                                          ),
-                                        ),
-                                        _buildHeaderCell(
-                                          width: colStatusWidth,
-                                          child: _buildClickableHeaderTitle(
-                                            'STATUS',
-                                            'status',
-                                          ),
-                                        ),
-                                        _buildHeaderCell(
-                                          width: colActionsWidth,
-                                          hasRightBorder: false,
-                                          child: Center(
-                                            child: Text(
-                                              'ACTIONS',
-                                              style: TextStyle(
-                                                color: tableHeaderTextColor,
-                                                fontWeight: FontWeight.bold,
-                                                fontSize: 13,
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      ],
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+
+              // Controls Row (Filters on left, Actions aligned together on right)
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final filters = Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      // Subject Filter
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.surface,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: theme.colorScheme.onSurface.withValues(
+                              alpha: 0.12,
+                            ),
+                          ),
+                        ),
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<String>(
+                            value: _selectedSubjectFilter,
+                            dropdownColor: theme.colorScheme.surface,
+                            style: TextStyle(
+                              color: theme.colorScheme.onSurface,
+                            ),
+                            items: ['— All Subjects —', ..._teacherSubjects]
+                                .map(
+                                  (sub) => DropdownMenuItem(
+                                    value: sub,
+                                    child: Text(
+                                      sub,
+                                      style: const TextStyle(fontSize: 13),
                                     ),
                                   ),
+                                )
+                                .toList(),
+                            onChanged: (val) {
+                              if (val != null) {
+                                setState(() {
+                                  _selectedSubjectFilter = val;
+                                  _selectedSectionFilter = '— All Sections —';
+                                  _currentPage = 1;
+                                });
+                                unawaited(_saveFilters());
+                              }
+                            },
+                          ),
+                        ),
+                      ),
 
-                                  // Table Body
-                                  Expanded(
-                                    child: displayList.isEmpty
-                                        ? Center(
-                                            child: Column(
-                                              mainAxisAlignment:
-                                                  MainAxisAlignment.center,
-                                              children: [
-                                                Icon(
-                                                  _showArchivedParents
-                                                      ? Icons.archive_outlined
-                                                      : Icons.family_restroom,
-                                                  size: 56,
-                                                  color: theme
-                                                      .colorScheme
-                                                      .onSurface
-                                                      .withValues(alpha: 0.5),
-                                                ),
-                                                const SizedBox(height: 16),
-                                                Text(
-                                                  _showArchivedParents
-                                                      ? 'No archived parents found.'
-                                                      : 'No parent accounts found for the current filters.',
-                                                  textAlign: TextAlign.center,
-                                                  style: TextStyle(
-                                                    fontSize: 16,
-                                                    fontWeight: FontWeight.w500,
-                                                    color: theme
-                                                        .colorScheme
-                                                        .onSurface
-                                                        .withValues(alpha: 0.8),
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          )
-                                        : ListView.builder(
-                                            itemCount: paginatedList.length,
-                                            itemBuilder: (ctx, i) {
-                                              final p = paginatedList[i];
-                                              final isSelected =
-                                                  _selectedParentIds
-                                                      .contains(p.id);
-
-                                              final linkedStudent =
-                                                  _enrolledStudents
-                                                      .where((user) =>
-                                                          user.id ==
-                                                          p.linkedStudentId)
-                                                      .firstOrNull ??
-                                                  MockDatabase.instance.users
-                                                      .where((user) =>
-                                                          user.id ==
-                                                          p.linkedStudentId)
-                                                      .firstOrNull;
-
-                                              final lastName = p.lastName ??
-                                                  (p.fullName.contains(' ')
-                                                      ? p.fullName
-                                                          .split(' ')
-                                                          .last
-                                                      : p.fullName);
-                                              final firstName = p.firstName ??
-                                                  (p.fullName.contains(' ')
-                                                      ? p.fullName
-                                                          .split(' ')
-                                                          .first
-                                                      : '');
-
-                                              final studentName =
-                                                  linkedStudent?.fullName ??
-                                                      'Unlinked Student';
-                                              final section = linkedStudent
-                                                      ?.departmentOrSection ??
-                                                  p.departmentOrSection ??
-                                                  '—';
-
-                                              return Container(
-                                                height: 52,
-                                                decoration: BoxDecoration(
-                                                  color: isSelected
-                                                      ? theme.colorScheme.primary
-                                                          .withValues(
-                                                              alpha: 0.12)
-                                                      : (i % 2 == 1
-                                                          ? alternateRowColor
-                                                          : theme.colorScheme
-                                                              .surface),
-                                                  border: Border(
-                                                    bottom: BorderSide(
-                                                      color: tableBorderColor,
-                                                    ),
-                                                  ),
-                                                ),
-                                                child: Row(
-                                                  children: [
-                                                    _buildDataCell(
-                                                      width: colCheckWidth,
-                                                      child: Center(
-                                                        child: Checkbox(
-                                                          value: isSelected,
-                                                          onChanged: (val) =>
-                                                              setState(() {
-                                                            if (val == true) {
-                                                              _selectedParentIds
-                                                                  .add(p.id);
-                                                            } else {
-                                                              _selectedParentIds
-                                                                  .remove(p.id);
-                                                            }
-                                                          }),
-                                                        ),
-                                                      ),
-                                                    ),
-                                                    _buildDataCell(
-                                                      width: colNumWidth,
-                                                      child: Center(
-                                                        child: Text(
-                                                          '${startIndex + i + 1}',
-                                                          style:
-                                                              const TextStyle(
-                                                            fontSize: 13,
-                                                          ),
-                                                        ),
-                                                      ),
-                                                    ),
-                                                    _buildDataCell(
-                                                      width: colLastNameWidth,
-                                                      child: Text(
-                                                        lastName,
-                                                        style: const TextStyle(
-                                                          fontSize: 13,
-                                                          fontWeight:
-                                                              FontWeight.bold,
-                                                        ),
-                                                      ),
-                                                    ),
-                                                    _buildDataCell(
-                                                      width: colFirstNameWidth,
-                                                      child: Text(
-                                                        firstName,
-                                                        style: const TextStyle(
-                                                          fontSize: 13,
-                                                        ),
-                                                      ),
-                                                    ),
-                                                    _buildDataCell(
-                                                      width: colRelWidth,
-                                                      child: Text(
-                                                        p.parentGuardianRelationship ??
-                                                            'Parent/Guardian',
-                                                        style: const TextStyle(
-                                                          fontSize: 13,
-                                                        ),
-                                                      ),
-                                                    ),
-                                                    _buildDataCell(
-                                                      width: colStudentWidth,
-                                                      child: Text(
-                                                        studentName,
-                                                        style: TextStyle(
-                                                          fontSize: 13,
-                                                          color: theme
-                                                              .colorScheme
-                                                              .primary,
-                                                          fontWeight:
-                                                              FontWeight.bold,
-                                                        ),
-                                                        overflow: TextOverflow
-                                                            .ellipsis,
-                                                      ),
-                                                    ),
-                                                    _buildDataCell(
-                                                      width: colSectionWidth,
-                                                      child: Text(
-                                                        section,
-                                                        style: const TextStyle(
-                                                          fontSize: 13,
-                                                        ),
-                                                      ),
-                                                    ),
-                                                    _buildDataCell(
-                                                      width: colContactWidth,
-                                                      child: Text(
-                                                        p.contactNumber ?? 'N/A',
-                                                        style: const TextStyle(
-                                                          fontSize: 13,
-                                                        ),
-                                                      ),
-                                                    ),
-                                                    _buildDataCell(
-                                                      width: colStatusWidth,
-                                                      child: StatusBadge
-                                                          .fromAccountStatus(
-                                                        p.status,
-                                                      ),
-                                                    ),
-                                                    _buildDataCell(
-                                                      width: colActionsWidth,
-                                                      hasRightBorder: false,
-                                                      child: Row(
-                                                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                                                        children: [
-                                                          // View / Copy Credentials Slip
-                                                          IconButton(
-                                                            tooltip:
-                                                                'Access Credentials Slip',
-                                                            icon: const Icon(
-                                                              Icons.badge_outlined,
-                                                              size: 18,
-                                                              color: Color(
-                                                                  0xFF64748B),
-                                                            ),
-                                                            splashRadius: 18,
-                                                            onPressed: () =>
-                                                                _showCredentialSlip(
-                                                              p,
-                                                              studentName,
-                                                            ),
-                                                          ),
-
-                                                          // Reset Parent Password (active only)
-                                                          if (!_showArchivedParents)
-                                                            IconButton(
-                                                              tooltip:
-                                                                  'Reset Parent Password',
-                                                              icon: const Icon(
-                                                                Icons
-                                                                    .lock_reset_outlined,
-                                                                size: 19,
-                                                                color: Color(
-                                                                    0xFF64748B),
-                                                              ),
-                                                              splashRadius: 18,
-                                                              onPressed: () =>
-                                                                  _handleResetParentPassword(
-                                                                p,
-                                                                studentName,
-                                                              ),
-                                                            ),
-
-                                                          // Edit Parent
-                                                          if (!_showArchivedParents)
-                                                            IconButton(
-                                                              tooltip:
-                                                                  p.status == AccountStatus.pendingFirstLogin ? 'Cannot edit: Pending First Login' : 'Edit Parent Details',
-                                                              icon: Icon(
-                                                                Icons
-                                                                    .edit_outlined,
-                                                                size: 18,
-                                                                color: p.status == AccountStatus.pendingFirstLogin ? theme.colorScheme.onSurface.withValues(alpha: 0.25) : const Color(0xFF64748B),
-                                                              ),
-                                                              splashRadius: 18,
-                                                              onPressed: p.status == AccountStatus.pendingFirstLogin ? () { AppModals.showErrorDialog(context: context, title: 'Cannot Edit Parent', message: 'This parent account has not completed their first login yet. Profiles can only be edited once the parent has logged in and set up their account.'); } : () =>
-                                                                  _showEditParentDialog(
-                                                                      p),
-                                                            ),
-
-                                                          // Archive / Restore
-                                                          IconButton(
-                                                            tooltip: _showArchivedParents
-                                                                ? 'Restore Parent'
-                                                                : 'Archive Parent',
-                                                            icon: Icon(
-                                                              _showArchivedParents
-                                                                  ? Icons
-                                                                      .unarchive_outlined
-                                                                  : Icons
-                                                                      .archive_outlined,
-                                                              size: 18,
-                                                              color: const Color(
-                                                                  0xFF94A3B8),
-                                                            ),
-                                                            splashRadius: 18,
-                                                            onPressed: () =>
-                                                                _toggleArchiveParent(
-                                                                    p),
-                                                          ),
-
-                                                          // Delete (in archive mode)
-                                                          if (false)
-                                                            IconButton(
-                                                              tooltip:
-                                                                  'Permanently Delete',
-                                                              icon: const Icon(
-                                                                Icons
-                                                                    .delete_outline,
-                                                                size: 18,
-                                                                color: Colors
-                                                                    .redAccent,
-                                                              ),
-                                                              splashRadius: 18,
-                                                              onPressed: () =>
-                                                                  _permanentlyDeleteParent(
-                                                                      p),
-                                                            ),
-                                                        ],
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
-                                              );
-                                            },
-                                          ),
-                                  ),
-
-                                  // Pagination Footer
-                                  Container(
-                                    height: 52,
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 20,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: theme.brightness == Brightness.dark
-                                          ? theme.colorScheme.surface
-                                          : const Color(0xFFF8FAFC),
-                                      border: Border(
-                                        top: BorderSide(
-                                          color: theme.brightness ==
-                                                  Brightness.dark
-                                              ? theme.colorScheme.onSurface
-                                                  .withValues(alpha: 0.1)
-                                              : const Color(0xFFE2E8F0),
-                                        ),
-                                      ),
-                                    ),
-                                    child: Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        Text(
-                                          'Showing ${displayList.isEmpty ? 0 : startIndex + 1} to $endIndex of ${displayList.length} entries',
-                                          style: TextStyle(
-                                            fontSize: 13,
-                                            fontWeight: FontWeight.w500,
-                                            color: theme.colorScheme.onSurface
-                                                .withValues(alpha: 0.6),
-                                          ),
-                                        ),
-                                        if (totalPages > 1)
-                                          Row(
-                                            children: [
-                                              _buildPageButton(
-                                                'First',
-                                                () => setState(
-                                                  () => _currentPage = 1,
-                                                ),
-                                                _currentPage > 1,
-                                              ),
-                                              _buildPageButton(
-                                                '<',
-                                                () => setState(
-                                                  () => _currentPage--,
-                                                ),
-                                                _currentPage > 1,
-                                              ),
-                                              for (int p = 1;
-                                                  p <= totalPages;
-                                                  p++)
-                                                if (p >= _currentPage - 2 &&
-                                                    p <= _currentPage + 2)
-                                                  _buildPageButton(
-                                                    p.toString(),
-                                                    () => setState(
-                                                      () => _currentPage = p,
-                                                    ),
-                                                    true,
-                                                    isActive:
-                                                        p == _currentPage,
-                                                  ),
-                                              _buildPageButton(
-                                                '>',
-                                                () => setState(
-                                                  () => _currentPage++,
-                                                ),
-                                                _currentPage < totalPages,
-                                              ),
-                                              _buildPageButton(
-                                                'Last',
-                                                () => setState(
-                                                  () => _currentPage =
-                                                      totalPages,
-                                                ),
-                                                _currentPage < totalPages,
-                                              ),
-                                            ],
-                                          ),
-                                      ],
+                      // Section Filter
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.surface,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: theme.colorScheme.onSurface.withValues(
+                              alpha: 0.12,
+                            ),
+                          ),
+                        ),
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<String>(
+                            value: _selectedSectionFilter,
+                            dropdownColor: theme.colorScheme.surface,
+                            style: TextStyle(
+                              color: theme.colorScheme.onSurface,
+                            ),
+                            items: ['— All Sections —', ...availableSections]
+                                .map(
+                                  (sec) => DropdownMenuItem(
+                                    value: sec,
+                                    child: Text(
+                                      sec,
+                                      style: const TextStyle(fontSize: 13),
                                     ),
                                   ),
-                                ],
+                                )
+                                .toList(),
+                            onChanged: (val) {
+                              if (val != null) {
+                                setState(() {
+                                  _selectedSectionFilter = val;
+                                  _currentPage = 1;
+                                });
+                                unawaited(_saveFilters());
+                              }
+                            },
+                          ),
+                        ),
+                      ),
+
+                      // Search Input
+                      SizedBox(
+                        width: 300,
+                        child: TextField(
+                          onChanged: (v) =>
+                              setState(() => _parentSearchQuery = v),
+                          decoration: InputDecoration(
+                            hintText:
+                                'Search by parent name, student, or contact...',
+                            hintStyle: TextStyle(
+                              color: theme.colorScheme.onSurface.withValues(
+                                alpha: 0.6,
+                              ),
+                            ),
+                            prefixIcon: Icon(
+                              LucideIcons.search,
+                              size: 20,
+                              color: theme.colorScheme.onSurface.withValues(
+                                alpha: 0.6,
+                              ),
+                            ),
+                            filled: true,
+                            fillColor: theme.colorScheme.surface,
+                            contentPadding: const EdgeInsets.symmetric(
+                              vertical: 10,
+                              horizontal: 16,
+                            ),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                              borderSide: BorderSide(
+                                color: theme.colorScheme.onSurface.withValues(
+                                  alpha: 0.12,
+                                ),
+                              ),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                              borderSide: BorderSide(
+                                color: theme.colorScheme.onSurface.withValues(
+                                  alpha: 0.12,
+                                ),
                               ),
                             ),
                           ),
                         ),
                       ),
                     ],
-                  ),
-                ),
-              ],
+                  );
+
+                  final archiveButton = SizedBox(
+                    height: 56,
+                    child: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: _showArchivedParents
+                            ? theme.colorScheme.primary
+                            : theme.colorScheme.onSurface.withValues(
+                                alpha: 0.7,
+                              ),
+                        side: BorderSide(
+                          color: _showArchivedParents
+                              ? theme.colorScheme.primary
+                              : theme.colorScheme.onSurface.withValues(
+                                  alpha: 0.2,
+                                ),
+                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      icon: Icon(
+                        _showArchivedParents
+                            ? Icons.people_outline
+                            : Icons.archive_outlined,
+                        size: 18,
+                      ),
+                      label: Text(
+                        _showArchivedParents
+                            ? 'View Active'
+                            : 'View Archive (${_archivedParents.length})',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
+                      ),
+                      onPressed: () => setState(() {
+                        _showArchivedParents = !_showArchivedParents;
+                        _selectedParentIds.clear();
+                      }),
+                    ),
+                  );
+
+                  final actionButtons = Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    alignment: WrapAlignment.end,
+                    children: [
+                      AppButton.success(
+                        icon: LucideIcons.upload,
+                        label: 'Import Excel',
+                        onPressed: () {
+                          AppModals.showSuccessDialog(
+                            context: context,
+                            title: 'Import Parents via Excel',
+                            message: 'Excel batch import template for parent accounts will be available shortly.',
+                          );
+                        },
+                      ),
+                      AppButton.primary(
+                        icon: LucideIcons.userPlus,
+                        label: 'Add Parent',
+                        onPressed: _showAddParentDialog,
+                      ),
+                      archiveButton,
+                    ],
+                  );
+
+                  if (constraints.maxWidth < 760) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        filters,
+                        const SizedBox(height: 12),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: actionButtons,
+                        ),
+                      ],
+                    );
+                  }
+
+                  return Row(
+                    children: [
+                      Expanded(child: filters),
+                      const SizedBox(width: 12),
+                      actionButtons,
+                    ],
+                  );
+                },
+              ),
+              const SizedBox(height: 16),
+
+              // Table Container
+              Expanded(
+                child:
+                    (_isLoading &&
+                        _activeParents.isEmpty &&
+                        _archivedParents.isEmpty)
+                    ? const ShimmerManagementTable(rowCount: 8)
+                    : Stack(
+                        children: [
+                          Container(
+                            decoration: BoxDecoration(
+                              color: theme.colorScheme.surface,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: tableBorderColor),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.03),
+                                  blurRadius: 10,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ],
+                            ),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(12),
+                              child: SingleChildScrollView(
+                                scrollDirection: Axis.horizontal,
+                                child: SizedBox(
+                                  width: totalTableWidth,
+                                  child: Column(
+                                    children: [
+                                      // Table Header
+                                      Container(
+                                        height: 48,
+                                        decoration: BoxDecoration(
+                                          color: tableHeaderColor,
+                                        ),
+                                        child: Row(
+                                          children: [
+                                            _buildHeaderCell(
+                                              width: colCheckWidth,
+                                              child: Center(
+                                                child: Checkbox(
+                                                  value: allSelected,
+                                                  activeColor:
+                                                      theme.colorScheme.primary,
+                                                  checkColor: theme
+                                                      .colorScheme
+                                                      .onPrimary,
+                                                  side: BorderSide(
+                                                    color: tableHeaderTextColor,
+                                                    width: 1.5,
+                                                  ),
+                                                  onChanged: (val) {
+                                                    setState(() {
+                                                      if (val == true) {
+                                                        for (var p
+                                                            in paginatedList) {
+                                                          _selectedParentIds
+                                                              .add(p.id);
+                                                        }
+                                                      } else {
+                                                        for (var p
+                                                            in paginatedList) {
+                                                          _selectedParentIds
+                                                              .remove(p.id);
+                                                        }
+                                                      }
+                                                    });
+                                                  },
+                                                ),
+                                              ),
+                                            ),
+                                            _buildHeaderCell(
+                                              width: colNumWidth,
+                                              child: Center(
+                                                child: Text(
+                                                  '#',
+                                                  style: TextStyle(
+                                                    color: tableHeaderTextColor,
+                                                    fontWeight: FontWeight.bold,
+                                                    fontSize: 13,
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                            _buildHeaderCell(
+                                              width: colLastNameWidth,
+                                              child: _buildClickableHeaderTitle(
+                                                'LAST NAME',
+                                                'lastName',
+                                              ),
+                                            ),
+                                            _buildHeaderCell(
+                                              width: colFirstNameWidth,
+                                              child: _buildClickableHeaderTitle(
+                                                'FIRST NAME',
+                                                'firstName',
+                                              ),
+                                            ),
+                                            _buildHeaderCell(
+                                              width: colRelWidth,
+                                              child: _buildClickableHeaderTitle(
+                                                'RELATIONSHIP',
+                                                'relationship',
+                                              ),
+                                            ),
+                                            _buildHeaderCell(
+                                              width: colStudentWidth,
+                                              child: Text(
+                                                'LINKED STUDENT',
+                                                style: TextStyle(
+                                                  color: tableHeaderTextColor,
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 13,
+                                                ),
+                                              ),
+                                            ),
+                                            _buildHeaderCell(
+                                              width: colSectionWidth,
+                                              child: Text(
+                                                'SECTION',
+                                                style: TextStyle(
+                                                  color: tableHeaderTextColor,
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 13,
+                                                ),
+                                              ),
+                                            ),
+                                            _buildHeaderCell(
+                                              width: colContactWidth,
+                                              child: _buildClickableHeaderTitle(
+                                                'CONTACT NO.',
+                                                'contact',
+                                              ),
+                                            ),
+                                            _buildHeaderCell(
+                                              width: colStatusWidth,
+                                              child: _buildClickableHeaderTitle(
+                                                'STATUS',
+                                                'status',
+                                              ),
+                                            ),
+                                            _buildHeaderCell(
+                                              width: colActionsWidth,
+                                              hasRightBorder: false,
+                                              child: Center(
+                                                child: Text(
+                                                  'ACTIONS',
+                                                  style: TextStyle(
+                                                    color: tableHeaderTextColor,
+                                                    fontWeight: FontWeight.bold,
+                                                    fontSize: 13,
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+
+                                      // Table Body
+                                      Expanded(
+                                        child: displayList.isEmpty
+                                            ? Center(
+                                                child: Column(
+                                                  mainAxisAlignment:
+                                                      MainAxisAlignment.center,
+                                                  children: [
+                                                    Icon(
+                                                      _showArchivedParents
+                                                          ? Icons
+                                                                .archive_outlined
+                                                          : Icons
+                                                                .family_restroom,
+                                                      size: 56,
+                                                      color: theme
+                                                          .colorScheme
+                                                          .onSurface
+                                                          .withValues(
+                                                            alpha: 0.5,
+                                                          ),
+                                                    ),
+                                                    const SizedBox(height: 16),
+                                                    Text(
+                                                      _showArchivedParents
+                                                          ? 'No archived parents found.'
+                                                          : 'No parent accounts found for the current filters.',
+                                                      textAlign:
+                                                          TextAlign.center,
+                                                      style: TextStyle(
+                                                        fontSize: 16,
+                                                        fontWeight:
+                                                            FontWeight.w500,
+                                                        color: theme
+                                                            .colorScheme
+                                                            .onSurface
+                                                            .withValues(
+                                                              alpha: 0.8,
+                                                            ),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              )
+                                            : ListView.builder(
+                                                itemCount: paginatedList.length,
+                                                itemBuilder: (ctx, i) {
+                                                  final p = paginatedList[i];
+                                                  final isSelected =
+                                                      _selectedParentIds
+                                                          .contains(p.id);
+
+                                                  final linkedStudent =
+                                                      _enrolledStudents
+                                                          .where(
+                                                            (user) =>
+                                                                user.id ==
+                                                                p.linkedStudentId,
+                                                          )
+                                                          .firstOrNull;
+
+                                                  final lastName =
+                                                      p.lastName ??
+                                                      (p.fullName.contains(' ')
+                                                          ? p.fullName
+                                                                .split(' ')
+                                                                .last
+                                                          : p.fullName);
+                                                  final firstName =
+                                                      p.firstName ??
+                                                      (p.fullName.contains(' ')
+                                                          ? p.fullName
+                                                                .split(' ')
+                                                                .first
+                                                          : '');
+
+                                                  final studentName =
+                                                      linkedStudent?.fullName ??
+                                                      'Unlinked Student';
+                                                  final section =
+                                                      linkedStudent
+                                                          ?.departmentOrSection ??
+                                                      p.departmentOrSection ??
+                                                      '—';
+
+                                                  return Container(
+                                                    height: 52,
+                                                    decoration: BoxDecoration(
+                                                      color: isSelected
+                                                          ? theme
+                                                                .colorScheme
+                                                                .primary
+                                                                .withValues(
+                                                                  alpha: 0.12,
+                                                                )
+                                                          : (i % 2 == 1
+                                                                ? alternateRowColor
+                                                                : theme
+                                                                      .colorScheme
+                                                                      .surface),
+                                                      border: Border(
+                                                        bottom: BorderSide(
+                                                          color:
+                                                              tableBorderColor,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    child: Row(
+                                                      children: [
+                                                        _buildDataCell(
+                                                          width: colCheckWidth,
+                                                          child: Center(
+                                                            child: Checkbox(
+                                                              value: isSelected,
+                                                              onChanged: (val) => setState(() {
+                                                                if (val ==
+                                                                    true) {
+                                                                  _selectedParentIds
+                                                                      .add(
+                                                                        p.id,
+                                                                      );
+                                                                } else {
+                                                                  _selectedParentIds
+                                                                      .remove(
+                                                                        p.id,
+                                                                      );
+                                                                }
+                                                              }),
+                                                            ),
+                                                          ),
+                                                        ),
+                                                        _buildDataCell(
+                                                          width: colNumWidth,
+                                                          child: Center(
+                                                            child: Text(
+                                                              '${startIndex + i + 1}',
+                                                              style:
+                                                                  const TextStyle(
+                                                                    fontSize:
+                                                                        13,
+                                                                  ),
+                                                            ),
+                                                          ),
+                                                        ),
+                                                        _buildDataCell(
+                                                          width:
+                                                              colLastNameWidth,
+                                                          child: Text(
+                                                            lastName,
+                                                            style:
+                                                                const TextStyle(
+                                                                  fontSize: 13,
+                                                                  fontWeight:
+                                                                      FontWeight
+                                                                          .bold,
+                                                                ),
+                                                          ),
+                                                        ),
+                                                        _buildDataCell(
+                                                          width:
+                                                              colFirstNameWidth,
+                                                          child: Text(
+                                                            firstName,
+                                                            style:
+                                                                const TextStyle(
+                                                                  fontSize: 13,
+                                                                ),
+                                                          ),
+                                                        ),
+                                                        _buildDataCell(
+                                                          width: colRelWidth,
+                                                          child: Text(
+                                                            p.parentGuardianRelationship ?? 'Parent/Guardian',
+                                                            style:
+                                                                const TextStyle(
+                                                                  fontSize: 13,
+                                                                ),
+                                                          ),
+                                                        ),
+                                                        _buildDataCell(
+                                                          width:
+                                                              colStudentWidth,
+                                                          child: Text(
+                                                            studentName,
+                                                            style: TextStyle(
+                                                              fontSize: 13,
+                                                              color: theme
+                                                                  .colorScheme
+                                                                  .primary,
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .bold,
+                                                            ),
+                                                            overflow:
+                                                                TextOverflow
+                                                                    .ellipsis,
+                                                          ),
+                                                        ),
+                                                        _buildDataCell(
+                                                          width:
+                                                              colSectionWidth,
+                                                          child: Text(
+                                                            section,
+                                                            style:
+                                                                const TextStyle(
+                                                                  fontSize: 13,
+                                                                ),
+                                                          ),
+                                                        ),
+                                                        _buildDataCell(
+                                                          width:
+                                                              colContactWidth,
+                                                          child: Text(
+                                                            p.contactNumber ??
+                                                                'N/A',
+                                                            style:
+                                                                const TextStyle(
+                                                                  fontSize: 13,
+                                                                ),
+                                                          ),
+                                                        ),
+                                                        _buildDataCell(
+                                                          width: colStatusWidth,
+                                                          child:
+                                                              StatusBadge.fromAccountStatus(
+                                                                p.status,
+                                                              ),
+                                                        ),
+                                                        _buildDataCell(
+                                                          width:
+                                                              colActionsWidth,
+                                                          hasRightBorder: false,
+                                                          child: Row(
+                                                            mainAxisAlignment:
+                                                                MainAxisAlignment
+                                                                    .spaceEvenly,
+                                                            children: [
+                                                              // View / Copy Credentials Slip
+                                                              IconButton(
+                                                                tooltip: 'Access Credentials Slip',
+                                                                icon: const Icon(
+                                                                  Icons
+                                                                      .badge_outlined,
+                                                                  size: 18,
+                                                                  color: Color(
+                                                                    0xFF64748B,
+                                                                  ),
+                                                                ),
+                                                                splashRadius:
+                                                                    18,
+                                                                onPressed: () =>
+                                                                    _showCredentialSlip(
+                                                                      p,
+                                                                      studentName,
+                                                                    ),
+                                                              ),
+
+                                                              // Reset Parent Password (active only)
+                                                              if (!_showArchivedParents)
+                                                                IconButton(
+                                                                  tooltip: 'Reset Parent Password',
+                                                                  icon: const Icon(
+                                                                    Icons
+                                                                        .lock_reset_outlined,
+                                                                    size: 19,
+                                                                    color: Color(
+                                                                      0xFF64748B,
+                                                                    ),
+                                                                  ),
+                                                                  splashRadius:
+                                                                      18,
+                                                                  onPressed: () =>
+                                                                      _handleResetParentPassword(
+                                                                        p,
+                                                                        studentName,
+                                                                      ),
+                                                                ),
+
+                                                              // Edit Parent
+                                                              if (!_showArchivedParents)
+                                                                IconButton(
+                                                                  tooltip:
+                                                                      p.status ==
+                                                                          AccountStatus
+                                                                              .pendingFirstLogin
+                                                                      ? 'Cannot edit: Pending First Login'
+                                                                      : 'Edit Parent Details',
+                                                                  icon: Icon(
+                                                                    Icons
+                                                                        .edit_outlined,
+                                                                    size: 18,
+                                                                    color:
+                                                                        p.status ==
+                                                                            AccountStatus.pendingFirstLogin
+                                                                        ? theme
+                                                                              .colorScheme
+                                                                              .onSurface
+                                                                              .withValues(alpha: 0.25)
+                                                                        : const Color(
+                                                                            0xFF64748B,
+                                                                          ),
+                                                                  ),
+                                                                  splashRadius:
+                                                                      18,
+                                                                  onPressed:
+                                                                      p.status ==
+                                                                          AccountStatus
+                                                                              .pendingFirstLogin
+                                                                      ? () {
+                                                                          AppModals.showErrorDialog(
+                                                                            context:
+                                                                                context,
+                                                                            title: 'Cannot Edit Parent',
+                                                                            message: 'This parent account has not completed their first login yet. Profiles can only be edited once the parent has logged in and set up their account.',
+                                                                          );
+                                                                        }
+                                                                      : () =>
+                                                                            _showEditParentDialog(
+                                                                              p,
+                                                                            ),
+                                                                ),
+
+                                                              // Archive / Restore
+                                                              IconButton(
+                                                                tooltip:
+                                                                    _showArchivedParents
+                                                                    ? 'Restore Parent'
+                                                                    : 'Archive Parent',
+                                                                icon: Icon(
+                                                                  _showArchivedParents
+                                                                      ? Icons
+                                                                            .unarchive_outlined
+                                                                      : Icons
+                                                                            .archive_outlined,
+                                                                  size: 18,
+                                                                  color: const Color(
+                                                                    0xFF94A3B8,
+                                                                  ),
+                                                                ),
+                                                                splashRadius:
+                                                                    18,
+                                                                onPressed: () =>
+                                                                    _toggleArchiveParent(
+                                                                      p,
+                                                                    ),
+                                                              ),
+
+                                                              // Delete (in archive mode)
+                                                              if (_showArchivedParents)
+                                                                IconButton(
+                                                                  tooltip: 'Permanently Delete',
+                                                                  icon: const Icon(
+                                                                    Icons
+                                                                        .delete_outline,
+                                                                    size: 18,
+                                                                    color: Colors
+                                                                        .redAccent,
+                                                                  ),
+                                                                  splashRadius:
+                                                                      18,
+                                                                  onPressed: () =>
+                                                                      _permanentlyDeleteParent(
+                                                                        p,
+                                                                      ),
+                                                                ),
+                                                            ],
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  );
+                                                },
+                                              ),
+                                      ),
+
+                                      // Pagination Footer
+                                      Container(
+                                        height: 52,
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 20,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color:
+                                              theme.brightness ==
+                                                  Brightness.dark
+                                              ? theme.colorScheme.surface
+                                              : const Color(0xFFF8FAFC),
+                                          border: Border(
+                                            top: BorderSide(
+                                              color:
+                                                  theme.brightness ==
+                                                      Brightness.dark
+                                                  ? theme.colorScheme.onSurface
+                                                        .withValues(alpha: 0.1)
+                                                  : const Color(0xFFE2E8F0),
+                                            ),
+                                          ),
+                                        ),
+                                        child: Row(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            Text(
+                                              'Showing ${displayList.isEmpty ? 0 : startIndex + 1} to $endIndex of ${displayList.length} entries',
+                                              style: TextStyle(
+                                                fontSize: 13,
+                                                fontWeight: FontWeight.w500,
+                                                color: theme
+                                                    .colorScheme
+                                                    .onSurface
+                                                    .withValues(alpha: 0.6),
+                                              ),
+                                            ),
+                                            if (totalPages > 1)
+                                              Row(
+                                                children: [
+                                                  _buildPageButton(
+                                                    'First',
+                                                    () => setState(
+                                                      () => _currentPage = 1,
+                                                    ),
+                                                    _currentPage > 1,
+                                                  ),
+                                                  _buildPageButton(
+                                                    '<',
+                                                    () => setState(
+                                                      () => _currentPage--,
+                                                    ),
+                                                    _currentPage > 1,
+                                                  ),
+                                                  for (
+                                                    int p = 1;
+                                                    p <= totalPages;
+                                                    p++
+                                                  )
+                                                    if (p >= _currentPage - 2 &&
+                                                        p <= _currentPage + 2)
+                                                      _buildPageButton(
+                                                        p.toString(),
+                                                        () => setState(
+                                                          () =>
+                                                              _currentPage = p,
+                                                        ),
+                                                        true,
+                                                        isActive:
+                                                            p == _currentPage,
+                                                      ),
+                                                  _buildPageButton(
+                                                    '>',
+                                                    () => setState(
+                                                      () => _currentPage++,
+                                                    ),
+                                                    _currentPage < totalPages,
+                                                  ),
+                                                  _buildPageButton(
+                                                    'Last',
+                                                    () => setState(
+                                                      () => _currentPage =
+                                                          totalPages,
+                                                    ),
+                                                    _currentPage < totalPages,
+                                                  ),
+                                                ],
+                                              ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+              ),
+            ],
+          ),
+        ),
+        if (_isLoading)
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: LinearProgressIndicator(
+              minHeight: 3,
+              color: theme.colorScheme.primary,
+              backgroundColor: Colors.transparent,
             ),
           ),
-          if (_isLoading)
-            Positioned(
-              top: 0,
-              left: 0,
-              right: 0,
-              child: LinearProgressIndicator(
-                minHeight: 3,
-                color: theme.colorScheme.primary,
-                backgroundColor: Colors.transparent,
-              ),
-            ),
-        ],
-      );
+      ],
+    );
   }
 
   Widget _buildHeaderCell({
@@ -1263,9 +1345,7 @@ class _TeacherParentManagementTabState
         margin: const EdgeInsets.symmetric(horizontal: 3),
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
-          color: isActive
-              ? theme.colorScheme.primary
-              : Colors.transparent,
+          color: isActive ? theme.colorScheme.primary : Colors.transparent,
           borderRadius: BorderRadius.circular(6),
           border: Border.all(
             color: isActive
@@ -1281,8 +1361,8 @@ class _TeacherParentManagementTabState
             color: isActive
                 ? Colors.white
                 : (enabled
-                    ? theme.colorScheme.onSurface
-                    : theme.colorScheme.onSurface.withValues(alpha: 0.3)),
+                      ? theme.colorScheme.onSurface
+                      : theme.colorScheme.onSurface.withValues(alpha: 0.3)),
           ),
         ),
       ),
@@ -1298,12 +1378,14 @@ class _TeacherParentManagementTabState
   }
 
   void _showCredentialSlip(UserModel parent, String studentName) {
-    final rawLastName = parent.lastName ??
+    final rawLastName =
+        parent.lastName ??
         (parent.fullName.contains(' ')
             ? parent.fullName.split(' ').last
             : parent.fullName);
-    final formattedLastName =
-        ParentCredentialHelper.sanitizeLastName(rawLastName);
+    final formattedLastName = ParentCredentialHelper.sanitizeLastName(
+      rawLastName,
+    );
     final email = parent.email.isNotEmpty && parent.email.contains('@')
         ? parent.email
         : ParentCredentialHelper.generateEmail(formattedLastName);
@@ -1315,7 +1397,8 @@ class _TeacherParentManagementTabState
         : '${formattedLastName}YYYYMMDD';
     final phone = parent.contactNumber ?? 'N/A';
 
-    final credentialsText = '''
+    final credentialsText =
+        '''
 [CLASSREALM PARENT ACCESS SLIP]
 Parent Name: ${parent.fullName}
 Linked Student: $studentName
@@ -1342,7 +1425,8 @@ Instructions:
               Container(
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
+                  color: Theme.of(context).colorScheme.primary
+                      .withValues(alpha: 0.1),
                   shape: BoxShape.circle,
                 ),
                 child: Icon(
@@ -1368,7 +1452,8 @@ Instructions:
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 13,
-                  color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
+                  color: Theme.of(context).colorScheme.onSurface
+                      .withValues(alpha: 0.7),
                   height: 1.5,
                 ),
               ),
@@ -1376,7 +1461,11 @@ Instructions:
               _buildCredentialCardRow('Parent', parent.fullName),
               _buildCredentialCardRow('Linked Student', studentName),
               _buildCredentialCardRow('Email (Login)', email),
-              _buildCredentialCardRow('Temp Password', tempPassword, isSecret: true),
+              _buildCredentialCardRow(
+                'Temp Password',
+                tempPassword,
+                isSecret: true,
+              ),
               _buildCredentialCardRow('Phone Number', phone),
               const SizedBox(height: 20),
               Row(
@@ -1395,7 +1484,9 @@ Instructions:
                         Clipboard.setData(ClipboardData(text: credentialsText));
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
-                            content: Text('Parent Access Slip copied to clipboard!'),
+                            content: Text(
+                              'Parent Access Slip copied to clipboard!',
+                            ),
                             duration: Duration(seconds: 2),
                           ),
                         );
@@ -1418,13 +1509,20 @@ Instructions:
     );
   }
 
-  Future<void> _handleResetParentPassword(UserModel parent, String studentName) async {
-    final rawLastName = parent.lastName ??
+  Future<void> _handleResetParentPassword(
+    UserModel parent,
+    String studentName,
+  ) async {
+    final rawLastName =
+        parent.lastName ??
         (parent.fullName.contains(' ')
             ? parent.fullName.split(' ').last
             : parent.fullName);
     final tempPasswordSample = parent.birthday != null
-        ? ParentCredentialHelper.generateTempPassword(rawLastName, parent.birthday!)
+        ? ParentCredentialHelper.generateTempPassword(
+            rawLastName,
+            parent.birthday!,
+          )
         : '[lastname][YYYYMMDD]';
 
     final confirmed = await showDialog<bool>(
@@ -1433,7 +1531,11 @@ Instructions:
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Row(
           children: [
-            Icon(Icons.lock_reset_outlined, color: Theme.of(context).colorScheme.primary, size: 24),
+            Icon(
+              Icons.lock_reset_outlined,
+              color: Theme.of(context).colorScheme.primary,
+              size: 24,
+            ),
             const SizedBox(width: 8),
             const Text('Reset Parent Password'),
           ],
@@ -1478,7 +1580,11 @@ Instructions:
     }
   }
 
-  Widget _buildCredentialCardRow(String label, String value, {bool isSecret = false}) {
+  Widget _buildCredentialCardRow(
+    String label,
+    String value, {
+    bool isSecret = false,
+  }) {
     final theme = Theme.of(context);
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
@@ -1530,7 +1636,9 @@ Instructions:
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
           title: const Text('Edit Parent / Guardian Details'),
           content: SizedBox(
             width: 480,
@@ -1556,7 +1664,8 @@ Instructions:
                     ),
                     keyboardType: TextInputType.phone,
                     validator: (value) {
-                      if (value == null || value.trim().isEmpty) return 'Required';
+                      if (value == null || value.trim().isEmpty)
+                        return 'Required';
                       if (value.trim().length != 11) return 'Must be 11 digits';
                       return null;
                     },
@@ -1613,7 +1722,9 @@ Instructions:
                 if (formKey.currentState!.validate()) {
                   final nameParts = nameController.text.trim().split(' ');
                   final firstName = nameParts.first;
-                  final lastName = nameParts.length > 1 ? nameParts.sublist(1).join(' ') : '';
+                  final lastName = nameParts.length > 1
+                      ? nameParts.sublist(1).join(' ')
+                      : '';
 
                   try {
                     final repo = SupabaseParentRepository();
@@ -1626,15 +1737,6 @@ Instructions:
                       studentId: linkedStudentId,
                     );
                   } catch (_) {}
-
-                  MockDatabase.instance.updateParentAccount(
-                    id: parent.id,
-                    fullName: nameController.text.trim(),
-                    email: parent.email,
-                    contactNumber: contactController.text.trim(),
-                    relationship: relationship!,
-                    linkedStudentId: linkedStudentId!,
-                  );
 
                   Navigator.pop(context);
                   _loadData();
@@ -1682,12 +1784,6 @@ Instructions:
         );
       } catch (_) {}
 
-      final idx = MockDatabase.instance.users.indexWhere((u) => u.id == parent.id);
-      if (idx != -1) {
-        MockDatabase.instance.users[idx] =
-            MockDatabase.instance.users[idx].copyWith(isArchived: isArchiving);
-      }
-
       _loadData();
       if (mounted) {
         AppModals.showSuccessDialog(
@@ -1715,7 +1811,6 @@ Instructions:
         await repo.permanentlyDelete(parent.id);
       } catch (_) {}
 
-      MockDatabase.instance.users.removeWhere((u) => u.id == parent.id);
       _loadData();
       if (mounted) {
         AppModals.showSuccessDialog(

@@ -150,5 +150,40 @@ void main() {
       // Multi-term has DropdownButtonFormField<int> for terms
       expect(find.byType(DropdownButtonFormField<int>), findsOneWidget);
     });
+
+    testWidgets('switching to In-Person updates date label to Date Submitted and allows past date selection', (tester) async {
+      tester.view.physicalSize = const Size(1200, 1000);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: CreateRequirementFlowDialog(
+              onRequirementCreated: () {},
+              initialOfferings: singleTermOffering,
+              initialOfferingId: 'offering-1',
+              isPerformanceTask: false,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Initial is Online mode
+      expect(find.text('Submission Deadline *'), findsOneWidget);
+      expect(find.text('Select deadline'), findsOneWidget);
+
+      // Tap In-Person mode toggle
+      await tester.tap(find.text('In-Person (Manual Record)'));
+      await tester.pumpAndSettle();
+
+      // Label switches to Date Submitted *
+      expect(find.text('Date Submitted *'), findsOneWidget);
+      expect(find.text('Select date submitted'), findsOneWidget);
+      // Attachment section is hidden in in-person mode
+      expect(find.textContaining('Classwork Attachment'), findsNothing);
+    });
   });
 }

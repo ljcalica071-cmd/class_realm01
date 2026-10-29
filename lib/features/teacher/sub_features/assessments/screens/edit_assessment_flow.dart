@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:class_realm/data/mock_database.dart';
 import 'package:class_realm/models/academic_models.dart';
 import 'package:class_realm/widgets/common/app_buttons.dart';
 import 'package:class_realm/widgets/common/app_modals.dart';
@@ -68,12 +67,6 @@ class _EditAssessmentFlowDialogState extends State<EditAssessmentFlowDialog> {
       section: _sectionCtrl.text.trim(),
       questions: _questions,
     );
-
-    // Update in MockDatabase list
-    final idx = MockDatabase.instance.quizzesAndExams.indexWhere((q) => q.id == updated.id);
-    if (idx != -1) {
-      MockDatabase.instance.quizzesAndExams[idx] = updated;
-    }
 
     widget.onAssessmentUpdated();
     Navigator.of(context).pop();

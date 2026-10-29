@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:class_realm/core/theme/app_theme.dart';
-import 'package:class_realm/data/mock_database.dart';
 import 'package:class_realm/models/academic_models.dart';
 import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
@@ -40,6 +39,7 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
   Timer? _timer;
   int _secondsRemaining = 0;
   DateTime? _startTime;
+  AssessmentResultModel? _submittedResult;
 
   @override
   void initState() {
@@ -159,10 +159,8 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
       _currentStep = 2;
     });
 
-    // Store result in MockDatabase
     final student =
         AuthRepository.instance.currentUser ??
-        MockDatabase.instance.currentUser ??
         UserModel(
           id: 'temp_student',
           username: 'student',
@@ -170,26 +168,20 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
           email: '',
           role: UserRole.student,
         );
-    MockDatabase.instance.assessmentResults.removeWhere(
-      (r) =>
-          r.assessmentId == widget.assessment.id && r.studentId == student.id,
-    );
-    MockDatabase.instance.assessmentResults.add(
-      AssessmentResultModel(
-        id: 'res_${DateTime.now().millisecondsSinceEpoch}',
-        assessmentId: widget.assessment.id,
-        studentId: student.id,
-        studentName: student.fullName,
-        submittedAt: DateTime.now(),
-        durationTakenMinutes: durationTaken,
-        violationCount: _violations,
-        violationLog: List.from(_violationLog),
-        answers: Map.from(_studentAnswers),
-        scoreEarned: scoreEarned,
-        totalPoints: widget.assessment.totalPoints,
-        isReleased: widget.assessment.resultsReleased,
-        needsTeacherReview: widget.assessment.isExam,
-      ),
+    _submittedResult = AssessmentResultModel(
+      id: 'res_${DateTime.now().millisecondsSinceEpoch}',
+      assessmentId: widget.assessment.id,
+      studentId: student.id,
+      studentName: student.fullName,
+      submittedAt: DateTime.now(),
+      durationTakenMinutes: durationTaken,
+      violationCount: _violations,
+      violationLog: List.from(_violationLog),
+      answers: Map.from(_studentAnswers),
+      scoreEarned: scoreEarned,
+      totalPoints: widget.assessment.totalPoints,
+      isReleased: widget.assessment.resultsReleased,
+      needsTeacherReview: widget.assessment.isExam,
     );
   }
 
@@ -201,8 +193,6 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
 
   @override
   Widget build(BuildContext context) {
-    final isOnline = MockDatabase.instance.isOnline;
-
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.assessment.title),
@@ -233,46 +223,6 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
               ),
             ),
           ),
-          if (!isOnline && _currentStep < 2)
-            Container(
-              color: Colors.black.withValues(alpha: 0.6),
-              child: Center(
-                child: Container(
-                  padding: const EdgeInsets.all(32),
-                  margin: const EdgeInsets.all(24),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.surface,
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(
-                        Icons.wifi_off,
-                        size: 64,
-                        color: AppTheme.catRed,
-                      ),
-                      const SizedBox(height: 24),
-                      Text(
-                        widget.assessment.isExam
-                            ? 'Internet connection lost. Your examination session requires an active internet connection.'
-                            : 'Internet connection lost. Quiz access is temporarily unavailable.',
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        'Please reconnect to the internet to continue.',
-                        style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6)),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
         ],
       ),
     );
@@ -690,7 +640,6 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
   Widget _buildResultView() {
     final student =
         AuthRepository.instance.currentUser ??
-        MockDatabase.instance.currentUser ??
         UserModel(
           id: 'temp_student',
           username: 'student',
@@ -698,21 +647,20 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
           email: '',
           role: UserRole.student,
         );
-    final result = MockDatabase.instance.assessmentResults.firstWhere(
-      (r) => r.assessmentId == widget.assessment.id && r.studentId == student.id,
-      orElse: () => AssessmentResultModel(
-        id: 'res_empty',
-        assessmentId: widget.assessment.id,
-        studentId: student.id,
-        studentName: student.fullName,
-        submittedAt: DateTime.now(),
-        durationTakenMinutes: 10,
-        answers: {},
-        scoreEarned: 0,
-        totalPoints: widget.assessment.totalPoints,
-        isReleased: widget.assessment.resultsReleased,
-      ),
-    );
+    final result =
+        _submittedResult ??
+        AssessmentResultModel(
+          id: 'res_empty',
+          assessmentId: widget.assessment.id,
+          studentId: student.id,
+          studentName: student.fullName,
+          submittedAt: DateTime.now(),
+          durationTakenMinutes: 10,
+          answers: {},
+          scoreEarned: 0,
+          totalPoints: widget.assessment.totalPoints,
+          isReleased: widget.assessment.resultsReleased,
+        );
 
     return Expanded(
       child: Padding(

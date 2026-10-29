@@ -1,24 +1,26 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
+
 <head>
-  <!--
-    If you are serving your web app in a path other than the root, change the
-    href value below to reflect the base path you are serving from.
-
-    The path provided below has to start and end with a slash "/" in order for
-    it to work correctly.
-
-  -->
   <base href="$FLUTTER_BASE_HREF">
 
   <meta charset="UTF-8">
-  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="Integrated SHS Management System">
   <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="ClassRealm">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
-  <link rel="icon" type="image/png" href="favicon.png"/>
+  <link rel="icon" type="image/png" href="favicon.png">
+
+  <!-- Speed: preconnect early to backend, fonts, and assets -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://wfilyatkfgqtybujmahf.supabase.co" crossorigin>
+  <link rel="preconnect" href="https://identitytoolkit.googleapis.com" crossorigin>
+  <link rel="preconnect" href="https://securetoken.googleapis.com" crossorigin>
+  <link rel="preload" as="image" href="assets/assets/branding/school_logo.png">
+  <link rel="preload" as="image" href="assets/assets/branding/logo_app.png">
 
   <title>ClassRealm</title>
   <link rel="manifest" href="manifest.json">
@@ -26,200 +28,308 @@
     * {
       box-sizing: border-box;
     }
+
+    html,
     body {
+      height: 100%;
       margin: 0;
-      min-height: 100vh;
-      background: #090e17;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      padding: 0;
     }
+
+    body {
+      min-height: 100vh;
+      background: #eef2f0;
+      font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* =========================================================================
+       ClassRealm Premium Glassmorphism UI (Zero-Lag GPU Composited)
+       Uses static multi-layered radial-gradients instead of animated blur(75px)
+       filters so Chrome V8 & WebkitDebugger.enable never stall on Celeron CPUs.
+       ========================================================================= */
     #pre-bootstrap-loader {
       position: fixed;
       inset: 0;
       z-index: 9999;
       display: grid;
       place-items: center;
-      overflow: auto;
-      padding: 28px 20px;
-      color: #fff;
+      overflow: hidden;
+      padding: 24px 20px;
+      color: #111827;
       background:
-        radial-gradient(ellipse at 50% 35%, rgba(19, 32, 60, .98), transparent 62%),
-        radial-gradient(ellipse at 8% 8%, rgba(2, 132, 199, .14), transparent 30%),
-        radial-gradient(ellipse at 94% 94%, rgba(245, 158, 11, .1), transparent 30%),
-        #060911;
+        radial-gradient(circle at 12% 14%, rgba(72, 120, 152, 0.36) 0%, transparent 45%),
+        radial-gradient(circle at 88% 86%, rgba(96, 165, 250, 0.32) 0%, transparent 45%),
+        radial-gradient(circle at 18% 78%, rgba(13, 148, 136, 0.14) 0%, transparent 40%),
+        linear-gradient(135deg, #f7f9f8 0%, #e8ebe2 48%, #dce6ed 100%);
       opacity: 1;
-      transition: opacity .24s ease-out;
+      transition: opacity .28s ease-out, transform .28s ease-out;
     }
+
     #pre-bootstrap-loader[hidden] {
       display: none !important;
     }
-    .bootstrap-card {
-      width: min(100%, 460px);
-      padding: 40px 36px;
-      border: 1px solid rgba(51, 65, 85, .8);
+
+    /* Frosted glass card */
+    .cr-card {
+      position: relative;
+      width: min(100%, 450px);
+      padding: 40px 36px 32px;
       border-radius: 28px;
-      background: rgba(15, 23, 42, .92);
-      box-shadow: 0 24px 80px rgba(0, 0, 0, .48), 0 0 48px rgba(56, 189, 248, .08);
       text-align: center;
+      background: linear-gradient(155deg, rgba(255, 255, 255, .76), rgba(255, 255, 255, .44));
+      border: 1px solid rgba(255, 255, 255, .88);
+      box-shadow:
+        0 28px 70px -15px rgba(41, 72, 94, .24),
+        0 10px 26px -5px rgba(41, 72, 94, .10),
+        inset 0 1px 1px rgba(255, 255, 255, .95);
+      -webkit-backdrop-filter: blur(20px) saturate(160%);
+      backdrop-filter: blur(20px) saturate(160%);
     }
-    .bootstrap-logos {
+
+    /* Dual branding badges */
+    .cr-logos {
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 16px;
-      margin-bottom: 26px;
+      gap: 18px;
+      margin-bottom: 24px;
     }
-    .bootstrap-logo-frame {
-      width: 72px;
-      height: 72px;
+
+    .cr-logo-ring {
+      width: 76px;
+      height: 76px;
+      padding: 4px;
       border-radius: 50%;
-      border: 1.5px solid #ffffff;
-      background: #1e293b;
-      box-shadow: 0 0 22px rgba(56, 189, 248, .35);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      overflow: hidden;
-      padding: 0;
+      background: linear-gradient(145deg, rgba(255, 255, 255, .95), rgba(255, 255, 255, .55));
+      border: 1px solid rgba(255, 255, 255, .95);
+      box-shadow: 0 10px 24px -6px rgba(72, 120, 152, .35), inset 0 1px 0 #fff;
     }
-    .bootstrap-logo-frame.app {
-      box-shadow: 0 0 22px rgba(245, 158, 11, .35);
-    }
-    .bootstrap-logo-circle {
+
+    .cr-logo-circle {
       width: 100%;
       height: 100%;
       border-radius: 50%;
-      background: #ffffff;
+      background: #fff;
+      overflow: hidden;
       display: flex;
       align-items: center;
       justify-content: center;
-      overflow: hidden;
     }
-    .bootstrap-logo {
+
+    .cr-logo {
       width: 100%;
       height: 100%;
       padding: 3px;
       object-fit: contain;
     }
-    .bootstrap-logo.app {
+
+    .cr-logo.app {
       padding: 0;
       transform: scale(1.82);
     }
-    .bootstrap-divider {
-      width: 2px;
+
+    .cr-divider {
+      width: 1.5px;
       height: 42px;
-      background: linear-gradient(#38bdf8, #f59e0b);
+      border-radius: 2px;
+      background: linear-gradient(transparent, #487898, transparent);
+      opacity: .55;
     }
-    .bootstrap-title {
+
+    .cr-title {
       margin: 0;
-      color: #fff;
       font-size: 28px;
-      font-weight: 900;
-      letter-spacing: 3.5px;
+      font-weight: 800;
+      letter-spacing: 4px;
+      color: #1b2b38;
     }
-    .bootstrap-school {
-      margin: 8px 0 34px;
-      color: #fbbf24;
+
+    .cr-title span {
+      color: #487898;
+    }
+
+    .cr-school {
+      margin: 8px 0 28px;
+      color: #487898;
       font-size: 11px;
       font-weight: 700;
-      letter-spacing: 1.5px;
+      letter-spacing: 1.6px;
       line-height: 1.6;
+      opacity: .95;
     }
-    .bootstrap-progress-heading {
+
+    /* Progress header: status & percentage */
+    .cr-progress-head {
       display: flex;
-      align-items: center;
+      align-items: flex-end;
       justify-content: space-between;
       gap: 12px;
       margin-bottom: 12px;
     }
-    .bootstrap-status {
-      overflow: hidden;
-      color: #cbd5e1;
-      font-size: 12px;
+
+    .cr-status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+      color: #3b4a56;
+      font-size: 12.5px;
+      font-weight: 600;
       text-align: left;
+    }
+
+    .cr-status-dot {
+      flex: none;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #487898;
+    }
+
+    .cr-status-text {
+      overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
     }
-    .bootstrap-percent {
-      color: #f8fafc;
-      font: 800 16px/1.2 monospace;
+
+    .cr-percent {
+      flex: none;
+      color: #2f5872;
+      font-size: 22px;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: -.5px;
+      line-height: 1;
     }
-    .bootstrap-track {
+
+    .cr-percent small {
+      font-size: 13px;
+      font-weight: 700;
+      opacity: .75;
+      margin-left: 1px;
+    }
+
+    /* High-tech track & GPU-composited fill */
+    .cr-track {
       position: relative;
-      height: 9px;
+      height: 11px;
       overflow: hidden;
-      border: 1px solid rgba(148, 163, 184, .18);
       border-radius: 999px;
-      background: #1e293b;
+      background: rgba(255, 255, 255, .65);
+      border: 1px solid rgba(255, 255, 255, .90);
+      box-shadow: inset 0 1px 3px rgba(41, 72, 94, .14);
     }
-    .bootstrap-fill {
-      width: 0;
+
+    .cr-fill {
+      position: relative;
+      width: 1%;
       height: 100%;
       border-radius: inherit;
-      background: linear-gradient(90deg, #0ea5e9, #38bdf8, #fbbf24);
-      box-shadow: 0 0 18px rgba(56, 189, 248, .45);
-      transition: width .18s linear;
+      background: linear-gradient(90deg, #3a6a88, #487898 50%, #60a5fa);
+      transition: width .16s linear;
     }
-    .bootstrap-footnote {
-      margin-top: 18px;
-      color: #64748b;
-      font-size: 11px;
-      letter-spacing: .3px;
+
+    .cr-foot {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      margin-top: 24px;
+      color: #6b7c89;
+      font-size: 11.5px;
+      font-weight: 500;
+      letter-spacing: .25px;
     }
+
+    .cr-foot svg {
+      width: 13px;
+      height: 13px;
+      color: #487898;
+    }
+
+    #pre-bootstrap-loader.is-ready .cr-status-dot {
+      background: #16a34a;
+    }
+
+    #pre-bootstrap-loader.is-ready .cr-percent {
+      color: #15803d;
+    }
+
+    #pre-bootstrap-loader.is-ready .cr-fill {
+      background: linear-gradient(90deg, #487898, #16a34a);
+    }
+
     @media (max-width: 520px) {
-      .bootstrap-card {
-        padding: 34px 24px;
+      .cr-card {
+        padding: 32px 24px 26px;
+        border-radius: 24px;
       }
-      .bootstrap-logo-frame {
-        width: 64px;
-        height: 64px;
+
+      .cr-logo-ring {
+        width: 68px;
+        height: 68px;
       }
-      .bootstrap-title {
+
+      .cr-title {
         font-size: 24px;
+        letter-spacing: 3px;
       }
     }
   </style>
 </head>
+
 <body>
-  <div id="pre-bootstrap-loader" hidden role="status" aria-live="polite" data-progress="0">
-    <main class="bootstrap-card">
-      <div class="bootstrap-logos" aria-hidden="true">
-        <div class="bootstrap-logo-frame">
-          <div class="bootstrap-logo-circle">
-            <img class="bootstrap-logo" id="bootstrap-school-logo" alt="">
-          </div>
+  <div id="pre-bootstrap-loader" hidden role="status" aria-live="polite" data-progress="1">
+    <main class="cr-card">
+      <div class="cr-logos" aria-hidden="true">
+        <div class="cr-logo-ring">
+          <div class="cr-logo-circle"><img class="cr-logo" id="bootstrap-school-logo"
+              src="assets/assets/branding/school_logo.png" alt="School Logo"></div>
         </div>
-        <span class="bootstrap-divider"></span>
-        <div class="bootstrap-logo-frame app">
-          <div class="bootstrap-logo-circle">
-            <img class="bootstrap-logo app" id="bootstrap-app-logo" alt="">
-          </div>
+        <span class="cr-divider"></span>
+        <div class="cr-logo-ring">
+          <div class="cr-logo-circle"><img class="cr-logo app" id="bootstrap-app-logo"
+              src="assets/assets/branding/logo_app.png" alt="ClassRealm App Logo"></div>
         </div>
       </div>
-      <h1 class="bootstrap-title">CLASSREALM</h1>
-      <p class="bootstrap-school">EDUARDO BARRETTO SENIOR INTEGRATED SCHOOL</p>
-      <div class="bootstrap-progress-heading">
-        <span class="bootstrap-status" id="bootstrap-status">Initializing ClassRealm workspace...</span>
-        <span class="bootstrap-percent" id="bootstrap-progress-value">0%</span>
+
+      <h1 class="cr-title">CLASS<span>REALM</span></h1>
+      <p class="cr-school">EDUARDO BARRETTO SENIOR INTEGRATED SCHOOL</p>
+
+      <div class="cr-progress-head">
+        <div class="cr-status">
+          <span class="cr-status-dot"></span>
+          <span class="cr-status-text" id="bootstrap-status">Starting ClassRealm engine...</span>
+        </div>
+        <div class="cr-percent"><span id="bootstrap-progress-value">1</span><small>%</small></div>
       </div>
-      <div class="bootstrap-track" role="progressbar" aria-label="Loading ClassRealm" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
-        <div class="bootstrap-fill" id="bootstrap-progress-fill"></div>
+      <div class="cr-track" role="progressbar" aria-label="Loading ClassRealm" aria-valuemin="0" aria-valuemax="100"
+        aria-valuenow="1">
+        <div class="cr-fill" id="bootstrap-progress-fill"></div>
       </div>
-      <div class="bootstrap-footnote">Preparing your secure learning workspace</div>
+
+      <div class="cr-foot">
+        <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+          stroke-linecap="round" stroke-linejoin="round">
+          <rect x="4" y="11" width="16" height="10" rx="2" />
+          <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+        </svg>
+        Preparing your secure learning workspace
+      </div>
     </main>
   </div>
+
   <script>
     (() => {
       const loader = document.getElementById("pre-bootstrap-loader");
       let warmSession = false;
       try {
         warmSession = window.sessionStorage.getItem("classrealm_warm_session") === "1";
-      } catch (_) {}
+      } catch (_) { }
 
-      // On warm session (F5 / active login), destroy HTML loader immediately so Frame 1 renders instantly
       if (warmSession) {
-        if (loader && loader.parentNode) {
-          loader.parentNode.removeChild(loader);
-        }
+        if (loader && loader.parentNode) loader.parentNode.removeChild(loader);
       } else if (loader) {
         loader.hidden = false;
         const baseUrl = document.querySelector("base").href;
@@ -231,70 +341,152 @@
         const fill = document.getElementById("bootstrap-progress-fill");
         const value = document.getElementById("bootstrap-progress-value");
         const bar = loader.querySelector('[role="progressbar"]');
-        const setProgress = (progress) => {
-          loader.dataset.progress = String(progress);
-          fill.style.width = `${progress}%`;
-          value.textContent = `${progress}%`;
-          bar.setAttribute("aria-valuenow", String(progress));
-        };
-        const animateTo = (target, duration, done) => {
-          const start = performance.now();
-          const from = Number(loader.dataset.progress) || 0;
-          const tick = (now) => {
-            const fraction = Math.min(1, (now - start) / duration);
-            setProgress(Math.round(from + (target - from) * fraction));
-            if (fraction < 1) {
-              requestAnimationFrame(tick);
-            } else if (done) {
-              done();
-            }
-          };
-          requestAnimationFrame(tick);
+        const statusEl = document.getElementById("bootstrap-status");
+
+        /* ====================================================================
+           3-Phase Loading Curve (Zero Main-Thread Contention for DWDS):
+           - Phase 1 (SLOW,         0% -> 28%): Deliberate start (~5.5%/s) while DWDS attaches.
+           - Phase 2 (MODERATE,    28% -> 50%): Steady climb (~9.5%/s) as modules load.
+           - Phase 3 (BOOST FAST, 50% -> 100%): Fast boost (~28%/s -> 180%/s) to 100%.
+           Updates DOM at 180ms intervals ONLY when integer % changes so Chrome's
+           V8 debugger handshake (WebkitDebugger.enable) completes in < 0.2s!
+           ==================================================================== */
+        let currentProgress = 1;
+        let lastRenderedPct = 1;
+        let dartMilestone = 0;
+        let isCompleting = false;
+        let isRemoved = false;
+        let customDartStatus = "";
+        let lastTickTime = performance.now();
+
+        const render = (pct) => {
+          const clamped = Math.max(1, Math.min(100, Math.floor(pct)));
+          if (clamped === lastRenderedPct && clamped < 100) return;
+          lastRenderedPct = clamped;
+          loader.dataset.progress = String(clamped);
+          if (fill) fill.style.width = clamped + "%";
+          if (value) value.textContent = String(clamped);
+          if (bar) bar.setAttribute("aria-valuenow", String(clamped));
+          if (clamped >= 100) {
+            loader.classList.add("is-ready");
+          }
         };
 
-        // Continuous progress without stalling at 65%: 0% -> 30% -> 65% -> 100%
-        const statusEl = document.getElementById("bootstrap-status");
-        animateTo(30, 450, () => {
-          if (statusEl) statusEl.textContent = "Connecting secure database & services...";
-          animateTo(65, 550, () => {
-            if (statusEl) statusEl.textContent = "ClassRealm Ready! Welcome.";
-            animateTo(100, 450, () => {
-              window.setTimeout(() => {
-                if (window.removePreBootstrapLoader) {
-                  window.removePreBootstrapLoader();
-                }
-              }, 160);
-            });
-          });
+        const setStatus = (text) => {
+          if (statusEl && text && statusEl.textContent !== text) {
+            statusEl.textContent = text;
+          }
+        };
+
+        const finalizeAndRemove = () => {
+          if (isRemoved) return;
+          isRemoved = true;
+          clearInterval(timerId);
+          render(100);
+          setStatus("ClassRealm Ready! Welcome.");
+          setTimeout(() => {
+            if (!loader) return;
+            loader.style.opacity = "0";
+            loader.style.transform = "scale(1.015)";
+            loader.style.pointerEvents = "none";
+            setTimeout(() => {
+              if (loader && loader.parentNode) loader.parentNode.removeChild(loader);
+            }, 300);
+          }, 80);
+        };
+
+        const computeTempoSpeed = (p) => {
+          if (isCompleting) return 190.0;
+          if (p < 28) return 5.5;   // Phase 1: SLOW (0 - 28%)
+          if (p < 50) return 10.5;  // Phase 2: MODERATE (28 - 50%)
+          if (p < 88) return 26.0;  // Phase 3: BOOST FAST (50 - 88%)
+          if (p < 97) return 2.2;   // Smooth upper glide while Dart finishes init
+          return 0.4;
+        };
+
+        const updateContextualStatus = (p) => {
+          if (isCompleting || p >= 100) {
+            setStatus("ClassRealm Ready! Welcome.");
+            return;
+          }
+          if (customDartStatus && p < 92) {
+            setStatus(customDartStatus);
+            return;
+          }
+          if (p < 28) {
+            setStatus("Starting ClassRealm engine...");
+          } else if (p < 50) {
+            setStatus("Connecting to cloud & security services...");
+          } else {
+            setStatus("Preparing your secure workspace...");
+          }
+        };
+
+        const timerId = setInterval(() => {
+          if (isRemoved || !document.getElementById("pre-bootstrap-loader")) {
+            clearInterval(timerId);
+            return;
+          }
+          const now = performance.now();
+          const dt = Math.min(0.25, Math.max(0.01, (now - lastTickTime) / 1000));
+          lastTickTime = now;
+
+          let speed = computeTempoSpeed(currentProgress);
+          if (!isCompleting && dartMilestone > currentProgress) {
+            speed = Math.max(speed, (dartMilestone - currentProgress) * 2.5);
+          }
+
+          const ceiling = isCompleting ? 100 : 98;
+          currentProgress = Math.min(ceiling, currentProgress + speed * dt);
+
+          render(currentProgress);
+          updateContextualStatus(currentProgress);
+
+          if (isCompleting && currentProgress >= 100) {
+            finalizeAndRemove();
+          }
+        }, 160);
+
+        window.updatePreBootstrapProgress = function (fraction, statusText) {
+          const pct = fraction <= 1.0 ? Math.round(fraction * 100) : Math.round(fraction);
+          dartMilestone = Math.max(dartMilestone, pct);
+          if (statusText) {
+            customDartStatus = statusText;
+            setStatus(statusText);
+          }
+          if (pct >= 100) {
+            isCompleting = true;
+            finalizeAndRemove();
+          }
+        };
+
+        window.removePreBootstrapLoader = function () {
+          isCompleting = true;
+          dartMilestone = 100;
+          finalizeAndRemove();
+        };
+
+        loader.setAttribute("data-js-progress", "1");
+        loader.addEventListener("cr-progress", () => {
+          const p = Number(loader.getAttribute("data-dart-progress") || 0);
+          const s = loader.getAttribute("data-dart-status") || "";
+          window.updatePreBootstrapProgress(p, s);
         });
+        loader.addEventListener("cr-remove", () => {
+          window.removePreBootstrapLoader();
+        });
+      } else {
+        window.removePreBootstrapLoader = function () { };
       }
 
-      // Global hook invoked when Flutter canvas is ready or loading finishes
-      window.removePreBootstrapLoader = function() {
-        const l = document.getElementById("pre-bootstrap-loader");
-        if (l && l.style.opacity !== "0") {
-          l.style.transition = "opacity 0.35s ease-out, transform 0.35s ease-out";
-          l.style.opacity = "0";
-          l.style.transform = "scale(1.02)";
-          l.style.pointerEvents = "none";
-          setTimeout(() => {
-            if (l && l.parentNode) {
-              l.parentNode.removeChild(l);
-            }
-          }, 360);
-        }
-      };
-
-      window.addEventListener("flutter-first-frame", function() {
+      window.addEventListener("flutter-first-frame", function () {
         if (window.removePreBootstrapLoader) {
-          // Delay removal to allow Flutter's AppLifecycleLoadingScreen to fade in
-          setTimeout(() => {
-            window.removePreBootstrapLoader();
-          }, 350);
+          window.removePreBootstrapLoader();
         }
       });
     })();
   </script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
+
 </html>

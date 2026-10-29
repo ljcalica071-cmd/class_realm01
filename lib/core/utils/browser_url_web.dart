@@ -41,6 +41,16 @@ void removePreBootstrapLoaderWeb() {
   try {
     final loader = html.document.getElementById('pre-bootstrap-loader');
     if (loader != null) {
+      if (loader.getAttribute('data-js-progress') == '1') {
+        loader.dispatchEvent(html.Event('cr-remove'));
+        // Safety fallback in case requestAnimationFrame is throttled in background tab
+        Future.delayed(const Duration(milliseconds: 900), () {
+          try {
+            html.document.getElementById('pre-bootstrap-loader')?.remove();
+          } catch (_) {}
+        });
+        return;
+      }
       loader.style.pointerEvents = 'none';
       loader.style.opacity = '0';
       loader.style.transition = 'opacity 0.25s ease-out, transform 0.25s ease-out';
@@ -70,11 +80,24 @@ void updatePreBootstrapProgressWeb(double progress, String status) {
     final loader = html.document.getElementById('pre-bootstrap-loader');
     if (loader == null) return;
     final value = progress.clamp(0.0, 1.0);
-    loader.setAttribute('data-progress', value.toString());
+    // Prefer the loader's JS hook so the HTML progress model (floor/ceiling
+    // creep) stays in sync and the bar never jumps backwards.
+    if (loader.getAttribute('data-js-progress') == '1') {
+      loader.setAttribute('data-dart-progress', value.toString());
+      loader.setAttribute('data-dart-status', status);
+      loader.dispatchEvent(html.Event('cr-progress'));
+      return;
+    }
+    final pct = (value * 100).round();
+    loader.setAttribute('data-progress', pct.toString());
     html.document.getElementById('bootstrap-progress-fill')?.style.width =
-        '${(value * 100).toStringAsFixed(1)}%';
+        '$pct%';
     html.document.getElementById('bootstrap-progress-value')?.text =
-        '${(value * 100).round()}%';
+        '$pct%';
+    loader.querySelector('[role="progressbar"]')?.setAttribute(
+      'aria-valuenow',
+      pct.toString(),
+    );
     html.document.getElementById('bootstrap-status')?.text = status;
   } catch (_) {}
 }

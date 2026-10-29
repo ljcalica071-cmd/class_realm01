@@ -2,13 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'package:class_realm/core/theme/app_theme.dart';
-import 'package:class_realm/data/mock_database.dart';
 import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/models/academic_models.dart';
 import 'package:class_realm/widgets/common/status_badge.dart';
 import 'package:class_realm/widgets/common/app_buttons.dart';
 import 'package:class_realm/widgets/common/app_modals.dart';
+import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/data/repositories/subject_repository.dart';
+import 'package:class_realm/data/repositories/supabase_student_repository.dart';
 
 class ActivitySubmissionsScreen extends StatefulWidget {
   final ActivityModel activity;
@@ -39,6 +40,29 @@ class ActivitySubmissionsScreen extends StatefulWidget {
 class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
   String _selectedStatus = 'All';
   String _selectedSection = 'All Sections';
+  List<UserModel> _enrolledStudents = [];
+  final List<StudentSubmission> _submissions = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadEnrolledStudents();
+  }
+
+  Future<void> _loadEnrolledStudents() async {
+    final teacher = AuthRepository.instance.currentUser;
+    if (teacher == null) return;
+    try {
+      final repo = SupabaseStudentRepository();
+      final students = await repo.getStudentsForTeacher(
+        teacher.id,
+        subjectId: widget.activity.subjectOfferingId,
+      );
+      if (mounted) {
+        setState(() => _enrolledStudents = students);
+      }
+    } catch (_) {}
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -47,13 +71,14 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
       'All Sections',
       ...widget.activity.assignedSections.where((s) => s.isNotEmpty).toSet(),
     ];
-    final allStudents = MockDatabase.instance.users.where((u) {
+    final allStudents = _enrolledStudents.where((u) {
       if (u.role != UserRole.student || u.isArchived) return false;
       if (_selectedSection != 'All Sections' &&
           u.departmentOrSection != _selectedSection) {
         return false;
       }
-      if (!widget.activity.assignedSections.contains(u.departmentOrSection)) {
+      if (widget.activity.assignedSections.isNotEmpty &&
+          !widget.activity.assignedSections.contains(u.departmentOrSection)) {
         return false;
       }
       return true;
@@ -69,7 +94,7 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
           statusCounts[_statusFor(submission)]! + 1;
     }
     final students = allStudents.where((u) {
-      final matching = MockDatabase.instance.activitySubmissions.where(
+      final matching = _submissions.where(
         (sub) =>
             sub.activityOrExamId == widget.activity.id && sub.studentId == u.id,
       );
@@ -104,7 +129,8 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
                     'Subject: ${widget.activity.subject} • Sections: ${widget.activity.section}',
                     style: TextStyle(
                       fontSize: 13,
-                      color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+                      color: Theme.of(context).colorScheme.onSurface
+                          .withValues(alpha: 0.6),
                     ),
                   ),
                 ],
@@ -115,7 +141,8 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
                     '${allStudents.length - statusCounts['Unsubmitted']!}/${allStudents.length} submitted  •  ${statusCounts['Graded']} graded  •  ${statusCounts['Pending']} pending  •  ${statusCounts['Unsubmitted']} unsubmitted',
                     style: TextStyle(
                       fontSize: 12,
-                      color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+                      color: Theme.of(context).colorScheme.onSurface
+                          .withValues(alpha: 0.6),
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -170,7 +197,10 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.12)),
+                border: Border.all(
+                  color: Theme.of(context).colorScheme.onSurface
+                      .withValues(alpha: 0.12),
+                ),
               ),
               child: ListView.separated(
                 itemCount: students.length,
@@ -178,21 +208,20 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
                 itemBuilder: (ctx, i) {
                   final student = students[i];
                   // Find submission if exists
-                  final submission = MockDatabase.instance.activitySubmissions
-                      .firstWhere(
-                        (sub) =>
-                            sub.activityOrExamId == widget.activity.id &&
-                            sub.studentId == student.id,
-                        orElse: () => StudentSubmission(
-                          id: 'sub_dummy_${student.id}',
-                          activityOrExamId: widget.activity.id,
-                          studentId: student.id,
-                          studentName: student.fullName,
-                          submittedAt: DateTime.now(),
-                          maxScore: widget.activity.maxScore,
-                          status: ActivityStatus.pending,
-                        ),
-                      );
+                  final submission = _submissions.firstWhere(
+                    (sub) =>
+                        sub.activityOrExamId == widget.activity.id &&
+                        sub.studentId == student.id,
+                    orElse: () => StudentSubmission(
+                      id: 'sub_dummy_${student.id}',
+                      activityOrExamId: widget.activity.id,
+                      studentId: student.id,
+                      studentName: student.fullName,
+                      submittedAt: DateTime.now(),
+                      maxScore: widget.activity.maxScore,
+                      status: ActivityStatus.pending,
+                    ),
+                  );
                   final name = [
                     student.lastName ?? student.fullName.split(' ').last,
                     student.firstName ?? student.fullName.split(' ').first,
@@ -204,7 +233,8 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
                       vertical: 8,
                     ),
                     leading: CircleAvatar(
-                      backgroundColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
+                      backgroundColor: Theme.of(context).colorScheme.primary
+                          .withValues(alpha: 0.1),
                       child: Text(
                         student.fullName.substring(0, 1),
                         style: TextStyle(
@@ -257,7 +287,8 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
                                 ? Theme.of(context).scaffoldBackgroundColor
                                 : AppTheme.catOrange.withValues(alpha: 0.1),
                             textColor: submission.attachedFile == null
-                                ? Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6)
+                                ? Theme.of(context).colorScheme.onSurface
+                                      .withValues(alpha: 0.6)
                                 : AppTheme.catOrange,
                           ),
                         const SizedBox(width: 8),
@@ -265,10 +296,14 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
                           icon: const Icon(Icons.schedule, size: 15),
                           label: const Text('Reschedule'),
                           style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 8,
+                            ),
                             textStyle: const TextStyle(fontSize: 12),
                           ),
-                          onPressed: () => _showRescheduleDialog(context, student.fullName),
+                          onPressed: () =>
+                              _showRescheduleDialog(context, student.fullName),
                         ),
                         const SizedBox(width: 8),
                         AppPrimaryButton(
@@ -337,7 +372,7 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
   }
 
   StudentSubmission? _submissionFor(String studentId) {
-    final matches = MockDatabase.instance.activitySubmissions.where(
+    final matches = _submissions.where(
       (sub) =>
           sub.activityOrExamId == widget.activity.id &&
           sub.studentId == studentId,
@@ -388,7 +423,10 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
                 decoration: BoxDecoration(
                   color: Theme.of(context).scaffoldBackgroundColor,
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.12)),
+                  border: Border.all(
+                    color: Theme.of(context).colorScheme.onSurface
+                        .withValues(alpha: 0.12),
+                  ),
                 ),
                 child: Row(
                   children: [
@@ -407,7 +445,8 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
                             'Student Work File',
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
-                              color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+                              color: Theme.of(context).colorScheme.onSurface
+                                  .withValues(alpha: 0.6),
                             ),
                           ),
                           const SizedBox(height: 6),
@@ -474,11 +513,26 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
               }
 
               setState(() {
-                MockDatabase.instance.scoreSubmission(
-                  submission.id,
-                  enteredScore,
-                  feedbackCtrl.text.trim(),
+                final idx = _submissions.indexWhere(
+                  (s) => s.id == submission.id,
                 );
+                final updatedSub = StudentSubmission(
+                  id: submission.id,
+                  activityOrExamId: submission.activityOrExamId,
+                  studentId: submission.studentId,
+                  studentName: submission.studentName,
+                  submittedAt: submission.submittedAt,
+                  attachedFile: submission.attachedFile,
+                  maxScore: submission.maxScore,
+                  score: enteredScore,
+                  feedback: feedbackCtrl.text.trim(),
+                  status: ActivityStatus.graded,
+                );
+                if (idx != -1) {
+                  _submissions[idx] = updatedSub;
+                } else {
+                  _submissions.add(updatedSub);
+                }
               });
 
               // Synchronize score directly to Gradebook sheet
@@ -486,22 +540,35 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
                   widget.activity.subjectOfferingId!.isNotEmpty) {
                 final offeringId = widget.activity.subjectOfferingId!;
                 final catKey = widget.activity.isRequirement ? 'pt' : 'ww';
-                SubjectRepository.instance.getGradebookTermSheet(offeringId, 1).then((termSheet) {
-                  final sheet = Map<String, dynamic>.from(termSheet ?? {});
-                  final scores = Map<String, dynamic>.from(sheet['scores'] as Map? ?? {});
-                  final studentScores = Map<String, dynamic>.from(scores[submission.studentId] as Map? ?? {});
-                  final catScores = Map<String, dynamic>.from(studentScores[catKey] as Map? ?? {});
-                  
-                  // Use first column if not yet assigned
-                  catScores['1'] = enteredScore;
-                  studentScores[catKey] = catScores;
-                  scores[submission.studentId] = studentScores;
-                  sheet['scores'] = scores;
+                SubjectRepository.instance
+                    .getGradebookTermSheet(offeringId, 1)
+                    .then((termSheet) {
+                      final sheet = Map<String, dynamic>.from(termSheet ?? {});
+                      final scores = Map<String, dynamic>.from(
+                        sheet['scores'] as Map? ?? {},
+                      );
+                      final studentScores = Map<String, dynamic>.from(
+                        scores[submission.studentId] as Map? ?? {},
+                      );
+                      final catScores = Map<String, dynamic>.from(
+                        studentScores[catKey] as Map? ?? {},
+                      );
 
-                  SubjectRepository.instance.saveGradebookTermSheet(offeringId, 1, sheet);
-                }).catchError((e) {
-                  debugPrint('Gradebook score sync notice: $e');
-                });
+                      // Use first column if not yet assigned
+                      catScores['1'] = enteredScore;
+                      studentScores[catKey] = catScores;
+                      scores[submission.studentId] = studentScores;
+                      sheet['scores'] = scores;
+
+                      SubjectRepository.instance.saveGradebookTermSheet(
+                        offeringId,
+                        1,
+                        sheet,
+                      );
+                    })
+                    .catchError((e) {
+                      debugPrint('Gradebook score sync notice: $e');
+                    });
               }
 
               Navigator.pop(ctx);
@@ -526,20 +593,33 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (context, setModalState) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
           title: Row(
             children: [
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
+                  color: Theme.of(context).colorScheme.primary
+                      .withValues(alpha: 0.1),
                   shape: BoxShape.circle,
                 ),
-                child: Icon(Icons.schedule, color: Theme.of(context).colorScheme.primary, size: 20),
+                child: Icon(
+                  Icons.schedule,
+                  color: Theme.of(context).colorScheme.primary,
+                  size: 20,
+                ),
               ),
               const SizedBox(width: 10),
               Expanded(
-                child: Text('Reschedule Deadline', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                child: Text(
+                  'Reschedule Deadline',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
               ),
             ],
           ),
@@ -580,17 +660,26 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
                 },
                 borderRadius: BorderRadius.circular(10),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 12,
+                  ),
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.2)),
+                    border: Border.all(
+                      color: Theme.of(context).colorScheme.onSurface
+                          .withValues(alpha: 0.2),
+                    ),
                   ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
                         '${newDeadline.month}/${newDeadline.day}/${newDeadline.year} ${newDeadline.hour > 12 ? newDeadline.hour - 12 : newDeadline.hour}:${newDeadline.minute.toString().padLeft(2, '0')} ${newDeadline.hour >= 12 ? 'PM' : 'AM'}',
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
                       ),
                       const Icon(Icons.calendar_month, size: 18),
                     ],
@@ -614,7 +703,9 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
                 Navigator.pop(ctx);
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
-                    content: Text('Special deadline granted to $studentName until ${_formatSubmittedAt(newDeadline)}.'),
+                    content: Text(
+                      'Special deadline granted to $studentName until ${_formatSubmittedAt(newDeadline)}.',
+                    ),
                     backgroundColor: const Color(0xFF0F8A48),
                   ),
                 );

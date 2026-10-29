@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:class_realm/core/theme/app_theme.dart';
-import 'package:class_realm/data/mock_database.dart';
 import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/widgets/common/app_buttons.dart';
 import 'package:class_realm/widgets/common/app_modals.dart';
@@ -30,10 +29,8 @@ class AddParentDialog extends StatefulWidget {
     return showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (_) => AddParentDialog(
-        onParentCreated: onParentCreated,
-        students: students,
-      ),
+      builder: (_) =>
+          AddParentDialog(onParentCreated: onParentCreated, students: students),
     );
   }
 
@@ -108,18 +105,22 @@ class _AddParentDialogState extends State<AddParentDialog> {
     setState(() => _isSubmitting = true);
 
     final firstName = _firstNameCtrl.text.trim();
-    final middleName = _middleNameCtrl.text.trim().isNotEmpty ? _middleNameCtrl.text.trim() : null;
+    final middleName = _middleNameCtrl.text.trim().isNotEmpty
+        ? _middleNameCtrl.text.trim()
+        : null;
     final lastName = _lastNameCtrl.text.trim();
     final fullName = [firstName, ?middleName, lastName].join(' ');
 
     final contactNumber = _contactCtrl.text.trim();
-    final relationship = _relationship == 'Other' 
-        ? _customRelationshipCtrl.text.trim() 
+    final relationship = _relationship == 'Other'
+        ? _customRelationshipCtrl.text.trim()
         : _relationship!;
 
-    final tempPassword = ParentCredentialHelper.generateTempPassword(lastName, _birthday!);
+    final tempPassword = ParentCredentialHelper.generateTempPassword(
+      lastName,
+      _birthday!,
+    );
     final parentEmail = ParentCredentialHelper.generateEmail(lastName);
-    final primaryStudent = _selectedStudents.first;
 
     UserModel? createdUser;
     try {
@@ -150,27 +151,6 @@ class _AddParentDialogState extends State<AddParentDialog> {
 
     final finalEmail = createdUser?.email ?? parentEmail;
 
-    // Also sync to MockDatabase
-    final newParent = createdUser ??
-        UserModel(
-          id: 'parent_${DateTime.now().millisecondsSinceEpoch}',
-          username: finalEmail,
-          email: finalEmail,
-          fullName: fullName,
-          firstName: firstName,
-          middleName: middleName,
-          lastName: lastName,
-          role: UserRole.parent,
-          status: AccountStatus.pendingFirstLogin,
-          linkedStudentId: primaryStudent.id,
-          contactNumber: contactNumber,
-          birthday: _birthday,
-          departmentOrSection: primaryStudent.departmentOrSection ?? relationship,
-          parentGuardianRelationship: relationship,
-        );
-
-    MockDatabase.instance.users.add(newParent);
-
     if (mounted) {
       setState(() => _isSubmitting = false);
       Navigator.of(context).pop();
@@ -195,7 +175,8 @@ class _AddParentDialogState extends State<AddParentDialog> {
     required String tempPassword,
     required String linkedStudentName,
   }) {
-    final credentialsText = '''
+    final credentialsText =
+        '''
 [CLASSREALM PARENT ACCESS SLIP]
 Parent Name: $fullName
 Linked Student: $linkedStudentName
@@ -248,7 +229,8 @@ Instructions:
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 13,
-                  color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
+                  color: Theme.of(context).colorScheme.onSurface
+                      .withValues(alpha: 0.7),
                   height: 1.5,
                 ),
               ),
@@ -262,10 +244,12 @@ Instructions:
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.06),
+                  color: Theme.of(context).colorScheme.primary
+                      .withValues(alpha: 0.06),
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
-                    color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.2),
+                    color: Theme.of(context).colorScheme.primary
+                        .withValues(alpha: 0.2),
                   ),
                 ),
                 child: Row(
@@ -281,7 +265,8 @@ Instructions:
                         'On first login, the parent will set their private password before accessing their portal.',
                         style: TextStyle(
                           fontSize: 12,
-                          color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.8),
+                          color: Theme.of(context).colorScheme.onSurface
+                              .withValues(alpha: 0.8),
                         ),
                       ),
                     ),
@@ -458,10 +443,7 @@ Instructions:
                       ),
                     ),
                     const SizedBox(width: 12),
-                    Expanded(
-                      flex: 2,
-                      child: _buildAgeField(Theme.of(context)),
-                    ),
+                    Expanded(flex: 2, child: _buildAgeField(Theme.of(context))),
                   ],
                 ),
                 const SizedBox(height: 16),
@@ -478,8 +460,10 @@ Instructions:
                           LengthLimitingTextInputFormatter(11),
                         ],
                         validator: (v) {
-                          if (v == null || v.trim().isEmpty) return 'Phone number is required.';
-                          if (v.trim().length != 11 || !v.trim().startsWith('09')) {
+                          if (v == null || v.trim().isEmpty)
+                            return 'Phone number is required.';
+                          if (v.trim().length != 11 ||
+                              !v.trim().startsWith('09')) {
                             return 'Phone number must be 11 digits starting with 09.';
                           }
                           return null;
@@ -622,17 +606,24 @@ Instructions:
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
-                        color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.6,
+                        ),
                       ),
                     ),
                     const SizedBox(height: 4),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
                       decoration: BoxDecoration(
                         color: theme.colorScheme.surface,
                         borderRadius: BorderRadius.circular(6),
                         border: Border.all(
-                          color: theme.colorScheme.outline.withValues(alpha: 0.25),
+                          color: theme.colorScheme.outline.withValues(
+                            alpha: 0.25,
+                          ),
                         ),
                       ),
                       child: Text(
@@ -659,17 +650,24 @@ Instructions:
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
-                        color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.6,
+                        ),
                       ),
                     ),
                     const SizedBox(height: 4),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
                       decoration: BoxDecoration(
                         color: theme.colorScheme.surface,
                         borderRadius: BorderRadius.circular(6),
                         border: Border.all(
-                          color: theme.colorScheme.outline.withValues(alpha: 0.25),
+                          color: theme.colorScheme.outline.withValues(
+                            alpha: 0.25,
+                          ),
                         ),
                       ),
                       child: Text(
@@ -679,7 +677,9 @@ Instructions:
                           fontWeight: FontWeight.w700,
                           color: _birthday != null
                               ? AppTheme.catGreen
-                              : theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                              : theme.colorScheme.onSurface.withValues(
+                                  alpha: 0.5,
+                                ),
                           fontFamily: 'monospace',
                         ),
                         overflow: TextOverflow.ellipsis,
@@ -739,14 +739,15 @@ Instructions:
             ),
             errorBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(
-                color: theme.colorScheme.error,
-              ),
+              borderSide: BorderSide(color: theme.colorScheme.error),
             ),
           ),
-          items: const ['Mother', 'Father', 'Guardian', 'Other']
-              .map((r) => DropdownMenuItem(value: r, child: Text(r)))
-              .toList(),
+          items: const [
+            'Mother',
+            'Father',
+            'Guardian',
+            'Other',
+          ].map((r) => DropdownMenuItem(value: r, child: Text(r))).toList(),
           onChanged: (val) {
             setState(() {
               _relationship = val;
@@ -809,7 +810,9 @@ Instructions:
                   ageText,
                   style: TextStyle(
                     fontSize: 13,
-                    fontWeight: _calculatedAge != null ? FontWeight.w600 : FontWeight.normal,
+                    fontWeight: _calculatedAge != null
+                        ? FontWeight.w600
+                        : FontWeight.normal,
                     color: _calculatedAge != null
                         ? theme.colorScheme.onSurface
                         : theme.colorScheme.onSurface.withValues(alpha: 0.4),
@@ -824,19 +827,22 @@ Instructions:
   }
 
   Widget _buildLinkStudentSection(ThemeData theme) {
-    final candidateStudents = (widget.students != null && widget.students!.isNotEmpty)
-        ? widget.students!
-        : MockDatabase.instance.users.where((u) => u.role == UserRole.student).toList();
+    final candidateStudents = widget.students ?? const <UserModel>[];
 
     final query = _studentSearchQuery.trim().toLowerCase();
     final matchingStudents = query.isEmpty
         ? <UserModel>[]
-        : candidateStudents.where((u) {
-            final nameMatch = u.fullName.toLowerCase().contains(query);
-            final lrnMatch = (u.lrn ?? '').toLowerCase().contains(query);
-            final isAlreadySelected = _selectedStudents.any((s) => s.id == u.id);
-            return !isAlreadySelected && (nameMatch || lrnMatch);
-          }).take(6).toList();
+        : candidateStudents
+              .where((u) {
+                final nameMatch = u.fullName.toLowerCase().contains(query);
+                final lrnMatch = (u.lrn ?? '').toLowerCase().contains(query);
+                final isAlreadySelected = _selectedStudents.any(
+                  (s) => s.id == u.id,
+                );
+                return !isAlreadySelected && (nameMatch || lrnMatch);
+              })
+              .take(6)
+              .toList();
 
     return FormField<List<UserModel>>(
       initialValue: _selectedStudents,
@@ -859,7 +865,9 @@ Instructions:
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    color: hasError ? theme.colorScheme.error : theme.colorScheme.onSurface,
+                    color: hasError
+                        ? theme.colorScheme.error
+                        : theme.colorScheme.onSurface,
                   ),
                 ),
                 Text(
@@ -898,7 +906,10 @@ Instructions:
                     : null,
                 filled: true,
                 fillColor: theme.colorScheme.surface,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 12,
+                ),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                   borderSide: BorderSide(
@@ -916,7 +927,9 @@ Instructions:
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                   borderSide: BorderSide(
-                    color: hasError ? theme.colorScheme.error : theme.colorScheme.primary,
+                    color: hasError
+                        ? theme.colorScheme.error
+                        : theme.colorScheme.primary,
                     width: 2,
                   ),
                 ),
@@ -947,7 +960,9 @@ Instructions:
                             'No matching students found for "$_studentSearchQuery"',
                             style: TextStyle(
                               fontSize: 13,
-                              color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                              color: theme.colorScheme.onSurface.withValues(
+                                alpha: 0.6,
+                              ),
                             ),
                           ),
                         ),
@@ -982,9 +997,12 @@ Instructions:
                                 children: [
                                   CircleAvatar(
                                     radius: 16,
-                                    backgroundColor: theme.colorScheme.primary.withValues(alpha: 0.1),
+                                    backgroundColor: theme.colorScheme.primary
+                                        .withValues(alpha: 0.1),
                                     child: Text(
-                                      s.fullName.isNotEmpty ? s.fullName[0].toUpperCase() : 'S',
+                                      s.fullName.isNotEmpty
+                                          ? s.fullName[0].toUpperCase()
+                                          : 'S',
                                       style: TextStyle(
                                         color: theme.colorScheme.primary,
                                         fontWeight: FontWeight.bold,
@@ -995,7 +1013,8 @@ Instructions:
                                   const SizedBox(width: 12),
                                   Expanded(
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         Text(
                                           s.fullName,
@@ -1008,7 +1027,8 @@ Instructions:
                                           'LRN: ${s.lrn ?? s.studentId ?? 'N/A'} • ${s.departmentOrSection ?? 'Enrolled'}',
                                           style: TextStyle(
                                             fontSize: 11,
-                                            color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                                            color: theme.colorScheme.onSurface
+                                                .withValues(alpha: 0.6),
                                           ),
                                         ),
                                       ],
@@ -1020,7 +1040,8 @@ Instructions:
                                       vertical: 4,
                                     ),
                                     decoration: BoxDecoration(
-                                      color: theme.colorScheme.primary.withValues(alpha: 0.1),
+                                      color: theme.colorScheme.primary
+                                          .withValues(alpha: 0.1),
                                       borderRadius: BorderRadius.circular(6),
                                     ),
                                     child: Row(
@@ -1055,7 +1076,10 @@ Instructions:
             if (_selectedStudents.isEmpty) ...[
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 14,
+                ),
                 decoration: BoxDecoration(
                   color: theme.colorScheme.surface,
                   borderRadius: BorderRadius.circular(10),
@@ -1082,7 +1106,9 @@ Instructions:
                           fontSize: 12,
                           color: hasError
                               ? theme.colorScheme.error
-                              : theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                              : theme.colorScheme.onSurface.withValues(
+                                  alpha: 0.6,
+                                ),
                         ),
                       ),
                     ),
@@ -1107,12 +1133,17 @@ Instructions:
                 runSpacing: 8,
                 children: _selectedStudents.map((student) {
                   return Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
                     decoration: BoxDecoration(
                       color: theme.colorScheme.primary.withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(10),
                       border: Border.all(
-                        color: theme.colorScheme.primary.withValues(alpha: 0.25),
+                        color: theme.colorScheme.primary.withValues(
+                          alpha: 0.25,
+                        ),
                       ),
                     ),
                     child: Row(
@@ -1140,7 +1171,9 @@ Instructions:
                               'LRN: ${student.lrn ?? 'N/A'} • ${student.departmentOrSection ?? 'Enrolled'}',
                               style: TextStyle(
                                 fontSize: 10.5,
-                                color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                                color: theme.colorScheme.onSurface.withValues(
+                                  alpha: 0.6,
+                                ),
                               ),
                             ),
                           ],
@@ -1197,7 +1230,8 @@ class _SectionLabel extends StatelessWidget {
           const SizedBox(width: 12),
           Expanded(
             child: Divider(
-              color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.2),
+              color: Theme.of(context).colorScheme.primary
+                  .withValues(alpha: 0.2),
             ),
           ),
         ],
@@ -1247,7 +1281,9 @@ class _CredentialRow extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
-                        fontFamily: label.contains('Password') ? 'monospace' : null,
+                        fontFamily: label.contains('Password')
+                            ? 'monospace'
+                            : null,
                       ),
                     ),
                   ),

@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'package:class_realm/core/theme/app_theme.dart';
-import 'package:class_realm/data/mock_database.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/data/repositories/subject_repository.dart';
 import 'package:class_realm/models/academic_models.dart';
@@ -448,60 +447,15 @@ class _CreateAssessmentFlowDialogState
     }
 
     // Strict EX (ST1, ST2, TE single slot) and WW (10 limit) validation
-    if (_isExam) {
-      if (_isZeroExamSubject) {
-        AppModals.showErrorDialog(
-          context: context,
-          title: 'Zero-Exam Subject',
-          message:
-              'This subject has no Examination component under DepEd Order No. 015, s. 2026. Initial Grades are computed 100% from Written Works and Performance Tasks.',
-        );
-        return;
-      }
-      final existingExams = MockDatabase.instance.quizzesAndExams.where(
-        (a) => a.isExam && a.title.contains(_examCategory),
+    if (_isExam && _isZeroExamSubject) {
+      AppModals.showErrorDialog(
+        context: context,
+        title: 'Zero-Exam Subject',
+        message:
+            'This subject has no Examination component under DepEd Order No. 015, s. 2026. Initial Grades are computed 100% from Written Works and Performance Tasks.',
       );
-      if (existingExams.isNotEmpty) {
-        AppModals.showErrorDialog(
-          context: context,
-          title: 'Exam Slot Occupied',
-          message:
-              'You already have an existing $_examCategory scheduled for this subject. In accordance with DepEd guidelines, only one ST1, one ST2, and one TE are allowed per term.',
-        );
-        return;
-      }
-    } else {
-      final existingQuizzes = MockDatabase.instance.quizzesAndExams.where((a) => !a.isExam).length;
-      final existingActivities = MockDatabase.instance.activities.where((a) => !a.isRequirement).length;
-      if (existingQuizzes + existingActivities >= 10) {
-        AppModals.showErrorDialog(
-          context: context,
-          title: 'Maximum Limit Reached',
-          message:
-              'Maximum limit reached: You have already assigned all 10 WW columns for this Term.',
-        );
-        return;
-      }
+      return;
     }
-
-    final newAssessment = QuizOrExamModel(
-      id: '${_isExam ? "exam" : "quiz"}_${DateTime.now().millisecondsSinceEpoch}',
-      title: _titleCtrl.text.trim(),
-      description: _descCtrl.text.trim(),
-      subject: _subjectName.isNotEmpty ? _subjectName : 'General Subject',
-      section: _selectedSections.join(', '),
-      isExam: _isExam,
-      durationMinutes: duration,
-      scheduleDate: _sectionDeadlines[_selectedSections.first] ?? _scheduleDate,
-      sectionDeadlines: {
-        for (final section in _selectedSections)
-          section: _sectionDeadlines[section] ?? _scheduleDate,
-      },
-      isPublished: true,
-      questions: List.from(_questions),
-    );
-
-    MockDatabase.instance.addQuizOrExam(newAssessment);
 
     // Synchronize Quiz or Exam HPS into Gradebook sheet for the assigned sections
     try {
@@ -546,7 +500,7 @@ class _CreateAssessmentFlowDialogState
           ? 'Periodical Examination Published'
           : 'Quiz Assessment Published',
       message:
-          '${newAssessment.title} has been configured and published for ${newAssessment.section}. Duration: $duration mins, Total Points: ${newAssessment.totalPoints.toInt()} pts.',
+          '${_titleCtrl.text.trim()} has been configured and published for ${_selectedSections.join(', ')}. Duration: $duration mins, Total Points: ${totalPoints.toInt()} pts.',
     );
   }
 

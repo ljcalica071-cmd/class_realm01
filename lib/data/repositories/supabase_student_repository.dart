@@ -1,11 +1,11 @@
 import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:drift/drift.dart' show Value;
 import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/data/repositories/student_repository.dart';
 import 'package:class_realm/data/datasources/local/app_database.dart';
-import 'package:class_realm/data/mock_database.dart';
 import 'package:class_realm/core/services/email_service.dart';
 import 'package:class_realm/core/services/firebase_auth_admin_service.dart';
 
@@ -52,23 +52,29 @@ class SupabaseStudentRepository implements StudentRepository {
         return cloudStudents;
       }
     } catch (e) {
-      debugPrint('Cloud sync error in getStudentsForTeacher, falling back to local: $e');
+      debugPrint(
+        'Cloud sync error in getStudentsForTeacher, falling back to local: $e',
+      );
     }
 
     // 2. FAST LOCAL DRIFT SQLITE READ (offline fallback)
     try {
       final List<LocalStudent> localStudents;
       if (subjectId != null && subjectId.isNotEmpty) {
-        localStudents = await AppDatabase.instance.getStudentsForOffering(subjectId);
+        localStudents = await AppDatabase.instance.getStudentsForOffering(
+          subjectId,
+        );
       } else {
         localStudents = await AppDatabase.instance.getAllStudents();
       }
 
       if (localStudents.isNotEmpty) {
         return localStudents.map((st) {
-          final fullName = [st.firstName, st.middleName, st.lastName]
-              .where((name) => name != null && name.trim().isNotEmpty)
-              .join(' ');
+          final fullName = [
+            st.firstName,
+            st.middleName,
+            st.lastName,
+          ].where((name) => name != null && name.trim().isNotEmpty).join(' ');
 
           return UserModel(
             id: st.studentId,
@@ -133,7 +139,9 @@ class SupabaseStudentRepository implements StudentRepository {
 
       // Collect student IDs to query student_settings for authoritative status
       final studentIds = (response as List)
-          .map((r) => (r['student_profiles'] as Map?)?['student_id']?.toString())
+          .map(
+            (r) => (r['student_profiles'] as Map?)?['student_id']?.toString(),
+          )
           .whereType<String>()
           .toSet()
           .toList();
@@ -159,18 +167,26 @@ class SupabaseStudentRepository implements StudentRepository {
 
       final mapped = (response as List).map<UserModel>((row) {
         final profile = row['student_profiles'] as Map<String, dynamic>? ?? {};
-        final offering = row['subject_offerings'] as Map<String, dynamic>? ?? {};
+        final offering =
+            row['subject_offerings'] as Map<String, dynamic>? ?? {};
         final sub = offering['subjects'] as Map<String, dynamic>? ?? {};
         final sec = offering['sections'] as Map<String, dynamic>? ?? {};
 
-        final fullName = [profile['first_name'], profile['middle_name'], profile['last_name']]
-            .where((name) => name != null && name.toString().trim().isNotEmpty)
-            .join(' ');
+        final fullName =
+            [
+                  profile['first_name'],
+                  profile['middle_name'],
+                  profile['last_name'],
+                ]
+                .where(
+                  (name) => name != null && name.toString().trim().isNotEmpty,
+                )
+                .join(' ');
 
         final usersData = profile['users'] as Map<String, dynamic>? ?? {};
         final studentId = profile['student_id']?.toString() ?? '';
         final realEmail = usersData['email']?.toString() ?? '';
-        
+
         final enrollmentStatus = row['status']?.toString().toLowerCase();
         final isEnrollmentArchived = enrollmentStatus == 'archived';
         final isUserArchived = usersData['is_archived'] == true;
@@ -180,12 +196,16 @@ class SupabaseStudentRepository implements StudentRepository {
         if (isArchived) {
           accountStatus = AccountStatus.archived;
         } else {
-          final rawStatus = (studentSettingsStatus[studentId] ?? usersData['status']?.toString() ?? 'pending_first_login')
-              .toLowerCase()
-              .replaceAll(RegExp(r'[\s_-]'), '');
+          final rawStatus =
+              (studentSettingsStatus[studentId] ??
+                      usersData['status']?.toString() ??
+                      'pending_first_login')
+                  .toLowerCase()
+                  .replaceAll(RegExp(r'[\s_-]'), '');
           if (rawStatus == 'active') {
             accountStatus = AccountStatus.active;
-          } else if (rawStatus == 'pending' || rawStatus == 'pendingfirstlogin') {
+          } else if (rawStatus == 'pending' ||
+              rawStatus == 'pendingfirstlogin') {
             accountStatus = AccountStatus.pendingFirstLogin;
           } else if (rawStatus == 'deactivated') {
             accountStatus = AccountStatus.deactivated;
@@ -209,7 +229,8 @@ class SupabaseStudentRepository implements StudentRepository {
               : null,
           lrn: profile['lrn']?.toString(),
           departmentOrSection: sec['section_name']?.toString(),
-          enrolledSubjectId: sub['id']?.toString() ?? offering['id']?.toString(),
+          enrolledSubjectId:
+              sub['id']?.toString() ?? offering['id']?.toString(),
           enrolledSubjectName: sub['subject_name']?.toString(),
           status: accountStatus,
           isArchived: isArchived,
@@ -218,18 +239,25 @@ class SupabaseStudentRepository implements StudentRepository {
 
       // Batch persist to Drift SQLite safely without blocking data return on web
       try {
-        final companions = mapped.map((u) => LocalStudentsCompanion.insert(
-          studentId: u.id,
-          lrn: Value(u.lrn),
-          firstName: u.firstName ?? 'Student',
-          middleName: Value(u.middleName),
-          lastName: u.lastName ?? '',
-          gender: Value(u.gender ?? 'unspecified'),
-          departmentOrSection: Value(u.departmentOrSection),
-        )).toList();
+        final companions = mapped
+            .map(
+              (u) => LocalStudentsCompanion.insert(
+                studentId: u.id,
+                lrn: Value(u.lrn),
+                firstName: u.firstName ?? 'Student',
+                middleName: Value(u.middleName),
+                lastName: u.lastName ?? '',
+                gender: Value(u.gender ?? 'unspecified'),
+                departmentOrSection: Value(u.departmentOrSection),
+              ),
+            )
+            .toList();
 
         await AppDatabase.instance.batch((b) {
-          b.insertAllOnConflictUpdate(AppDatabase.instance.localStudents, companions);
+          b.insertAllOnConflictUpdate(
+            AppDatabase.instance.localStudents,
+            companions,
+          );
         });
       } catch (dbErr) {
         debugPrint('Drift local students save notice on web: $dbErr');
@@ -237,30 +265,66 @@ class SupabaseStudentRepository implements StudentRepository {
 
       return mapped;
     } catch (e) {
-      debugPrint('Error getting students for teacher (falling back to mock): $e');
-      return MockDatabase.instance.users
-          .where((u) => u.role == UserRole.student && !u.isArchived)
-          .toList();
-    }
-  }
-
-  AccountStatus _parseStatus(String? dbStatus) {
-    switch (dbStatus?.toLowerCase().replaceAll(RegExp(r'[\s_-]'), '')) {
-      case 'active':
-        return AccountStatus.active;
-      case 'archived':
-        return AccountStatus.archived;
-      case 'pending':
-      case 'pendingfirstlogin':
-        return AccountStatus.pendingFirstLogin;
-      default:
-        return AccountStatus.active;
+      debugPrint('Error getting students for teacher: $e');
+      return [];
     }
   }
 
   @override
   Future<UserModel?> getStudentById(String id) async {
-    return null;
+    try {
+      final row = await _client
+          .from('users')
+          .select('''
+            id,
+            email,
+            first_name,
+            middle_name,
+            last_name,
+            role,
+            account_status,
+            is_archived,
+            student_profiles ( lrn, gender, birthdate, grade_level )
+          ''')
+          .eq('id', id)
+          .maybeSingle();
+      if (row == null) return null;
+      final profile = row['student_profiles'] is Map
+          ? row['student_profiles'] as Map
+          : (row['student_profiles'] is List &&
+                    (row['student_profiles'] as List).isNotEmpty
+                ? (row['student_profiles'] as List).first as Map
+                : const <String, dynamic>{});
+      final fName = row['first_name']?.toString() ?? '';
+      final mName = row['middle_name']?.toString();
+      final lName = row['last_name']?.toString() ?? '';
+      return UserModel(
+        id: row['id'].toString(),
+        username: row['email']?.toString() ?? '',
+        fullName: [
+          fName,
+          mName,
+          lName,
+        ].where((s) => s != null && s.isNotEmpty).join(' '),
+        email: row['email']?.toString() ?? '',
+        role: UserRole.student,
+        firstName: fName,
+        middleName: mName,
+        lastName: lName,
+        lrn: profile['lrn']?.toString(),
+        gender: profile['gender']?.toString(),
+        birthday: profile['birthdate'] != null
+            ? DateTime.tryParse(profile['birthdate'].toString())
+            : null,
+        gradeLevel: profile['grade_level'] != null
+            ? 'Grade ${profile['grade_level']}'
+            : null,
+        isArchived: row['is_archived'] == true,
+      );
+    } catch (e) {
+      debugPrint('Error fetching student by id $id: $e');
+      return null;
+    }
   }
 
   @override
@@ -291,13 +355,17 @@ class SupabaseStudentRepository implements StudentRepository {
     final cleanEmail = email.trim().toLowerCase();
     final bdayStr =
         '${birthday.year.toString().padLeft(4, '0')}-${birthday.month.toString().padLeft(2, '0')}-${birthday.day.toString().padLeft(2, '0')}';
-    final cleanLastName =
-        lastName.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+    final cleanLastName = lastName.toLowerCase().replaceAll(
+      RegExp(r'[^a-z0-9]'),
+      '',
+    );
     final tempPassword =
         '$cleanLastName${birthday.year}${birthday.month.toString().padLeft(2, '0')}${birthday.day.toString().padLeft(2, '0')}';
-    final studentFullName = [firstName, middleName, lastName]
-        .where((s) => s.isNotEmpty)
-        .join(' ');
+    final studentFullName = [
+      firstName,
+      middleName,
+      lastName,
+    ].where((s) => s.isNotEmpty).join(' ');
 
     // 0. Check if student already exists globally by LRN (ClassRealm Cross-Teacher Reuse)
     String? existingStudentId;
@@ -309,18 +377,26 @@ class SupabaseStudentRepository implements StudentRepository {
           .maybeSingle();
 
       if (existingProfile != null && existingProfile['student_id'] != null) {
-        final existingFirst = (existingProfile['first_name'] ?? '').toString().trim().toLowerCase();
-        final existingLast = (existingProfile['last_name'] ?? '').toString().trim().toLowerCase();
+        final existingFirst = (existingProfile['first_name'] ?? '')
+            .toString()
+            .trim()
+            .toLowerCase();
+        final existingLast = (existingProfile['last_name'] ?? '')
+            .toString()
+            .trim()
+            .toLowerCase();
         final inputFirst = firstName.trim().toLowerCase();
         final inputLast = lastName.trim().toLowerCase();
 
         // Security / Data Integrity: If LRN exists but name does not match, reject as conflict
         if (existingFirst != inputFirst || existingLast != inputLast) {
-          final registeredName = '${existingProfile['first_name']} ${existingProfile['last_name']}'.trim();
+          final registeredName =
+              '${existingProfile['first_name']} ${existingProfile['last_name']}'
+                  .trim();
           throw Exception(
             'LRN Conflict: LRN $lrn is already registered to "$registeredName". '
             'You cannot register this LRN with a different name ("$studentFullName"). '
-            'Please verify the student\'s LRN with the school registrar or previous teacher.'
+            'Please verify the student\'s LRN with the school registrar or previous teacher.',
           );
         }
 
@@ -438,7 +514,7 @@ class SupabaseStudentRepository implements StudentRepository {
       }
     }
 
-    // 2. Persist locally to Drift SQLite and MockDatabase
+    // 2. Persist locally to Drift SQLite
     try {
       await AppDatabase.instance
           .into(AppDatabase.instance.localStudents)
@@ -454,22 +530,6 @@ class SupabaseStudentRepository implements StudentRepository {
           );
     } catch (_) {}
 
-    final newStudentModel = UserModel(
-      id: studentId,
-      username: cleanEmail,
-      fullName: studentFullName,
-      email: cleanEmail,
-      role: UserRole.student,
-      firstName: firstName,
-      middleName: middleName,
-      lastName: lastName,
-      gender: gender,
-      birthday: birthday,
-      lrn: lrn,
-      status: AccountStatus.pendingFirstLogin,
-    );
-    MockDatabase.instance.users.add(newStudentModel);
-
     // Send welcome email with student credentials if not skipped (e.g. In bulk queues)
     if (!skipEmail) {
       try {
@@ -479,7 +539,9 @@ class SupabaseStudentRepository implements StudentRepository {
           tempPassword: tempPassword,
         );
       } catch (e) {
-        debugPrint('[SupabaseStudentRepository] Student welcome email error: $e');
+        debugPrint(
+          '[SupabaseStudentRepository] Student welcome email error: $e',
+        );
       }
     }
 
@@ -513,43 +575,30 @@ class SupabaseStudentRepository implements StudentRepository {
     final bdayStr =
         '${birthday.year.toString().padLeft(4, '0')}-${birthday.month.toString().padLeft(2, '0')}-${birthday.day.toString().padLeft(2, '0')}';
     try {
-      await _client.from('student_profiles').update({
-        'lrn': studentId,
-        'first_name': firstName,
-        'middle_name': middleName.isEmpty ? null : middleName,
-        'last_name': lastName,
-        'gender': gender,
-        'birthday': bdayStr,
-      }).eq('student_id', id);
+      await _client
+          .from('student_profiles')
+          .update({
+            'lrn': studentId,
+            'first_name': firstName,
+            'middle_name': middleName.isEmpty ? null : middleName,
+            'last_name': lastName,
+            'gender': gender,
+            'birthday': bdayStr,
+          })
+          .eq('student_id', id);
 
-      await _client.from('users').update({
-        'email': email,
-      }).eq('id', id);
+      await _client.from('users').update({'email': email}).eq('id', id);
     } catch (e) {
       debugPrint('Pure Dart student update notice: $e');
-    }
-
-    // Update in MockDatabase
-    final idx = MockDatabase.instance.users.indexWhere((u) => u.id == id);
-    if (idx != -1) {
-      final old = MockDatabase.instance.users[idx];
-      MockDatabase.instance.users[idx] = old.copyWith(
-        firstName: firstName,
-        middleName: middleName,
-        lastName: lastName,
-        fullName: [firstName, middleName, lastName]
-            .where((s) => s.isNotEmpty)
-            .join(' '),
-        email: email,
-        lrn: studentId,
-        gender: gender,
-        birthday: birthday,
-      );
     }
   }
 
   @override
-  Future<void> archiveStudent(String id, [String? subjectId, String? currentStatusHint]) async {
+  Future<void> archiveStudent(
+    String id, [
+    String? subjectId,
+    String? currentStatusHint,
+  ]) async {
     if (subjectId != null) {
       await _client
           .from('student_enrollments')
@@ -573,19 +622,23 @@ class SupabaseStudentRepository implements StudentRepository {
               .eq('student_id', id)
               .maybeSingle();
           final currentStatus = cur?['status']?.toString();
-          final statusToSave = (currentStatus != null &&
+          final statusToSave =
+              (currentStatus != null &&
                   currentStatus.isNotEmpty &&
                   currentStatus != 'archived')
               ? currentStatus
               : (currentStatusHint ?? 'active');
 
-          await _client.from('student_settings').update({
-            'previous_status': statusToSave,
-            'status': 'archived',
-          }).eq('student_id', id);
+          await _client
+              .from('student_settings')
+              .update({'previous_status': statusToSave, 'status': 'archived'})
+              .eq('student_id', id);
         } catch (_) {}
         try {
-          await FirebaseAuthAdminService.setUserDisabled(uid: id, disabled: true);
+          await FirebaseAuthAdminService.setUserDisabled(
+            uid: id,
+            disabled: true,
+          );
         } catch (_) {}
       } catch (e) {
         debugPrint('Error archiving global student account: $e');
@@ -618,17 +671,21 @@ class SupabaseStudentRepository implements StudentRepository {
             .maybeSingle();
         final prev = cur?['previous_status']?.toString();
         // Restore exact status before archive, default to active, NEVER pending_first_login unless it was genuinely pending
-        final targetStatus = (prev != null && prev.isNotEmpty && prev != 'archived')
+        final targetStatus =
+            (prev != null && prev.isNotEmpty && prev != 'archived')
             ? prev
             : 'active';
 
-        await _client.from('student_settings').update({
-          'status': targetStatus,
-          'previous_status': null,
-        }).eq('student_id', id);
+        await _client
+            .from('student_settings')
+            .update({'status': targetStatus, 'previous_status': null})
+            .eq('student_id', id);
       } catch (_) {}
       try {
-        await FirebaseAuthAdminService.setUserDisabled(uid: id, disabled: false);
+        await FirebaseAuthAdminService.setUserDisabled(
+          uid: id,
+          disabled: false,
+        );
       } catch (_) {}
     } catch (e) {
       debugPrint('Error restoring student account: $e');
@@ -665,14 +722,12 @@ class SupabaseStudentRepository implements StudentRepository {
         await _client.from('student_enrollments').delete().eq('student_id', id);
       }
 
-      // 2. Fetch linked parents before deleting links
-      final pLinks = await _client
-          .from('parent_student_links')
-          .select('parent_id')
-          .eq('student_id', id);
-
+      // 2. Unlink parents before deleting student record
       try {
-        await _client.from('parent_student_links').delete().eq('student_id', id);
+        await _client
+            .from('parent_student_links')
+            .delete()
+            .eq('student_id', id);
       } catch (_) {}
 
       // 3. Delete student settings, profile, and users record

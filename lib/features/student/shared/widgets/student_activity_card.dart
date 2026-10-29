@@ -1,28 +1,27 @@
 import 'package:flutter/material.dart';
 import 'package:class_realm/core/theme/app_theme.dart';
-import 'package:class_realm/data/mock_database.dart';
 import 'package:class_realm/models/academic_models.dart';
 import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/shared/widgets/shared_widgets.dart';
-import 'package:class_realm/features/student/sub_features/academics/screens/student_assessment_screen.dart';
 
 class StudentActivityCard extends StatelessWidget {
   final ActivityModel activity;
   final UserModel student;
   final VoidCallback onSubmitted;
+  final StudentSubmission? submission;
 
   const StudentActivityCard({
     super.key,
     required this.activity,
     required this.student,
     required this.onSubmitted,
+    this.submission,
   });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final submission =
-        MockDatabase.instance.submissionFor(activity.id, student.id);
+    final currentSubmission = submission;
     final isPastDeadline = DateTime.now().isAfter(activity.deadline);
 
     return Container(
@@ -30,23 +29,26 @@ class StudentActivityCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: theme.colorScheme.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: theme.colorScheme.onSurface.withValues(alpha: 0.12)),
+        border: Border.all(
+          color: theme.colorScheme.onSurface.withValues(alpha: 0.12),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           LayoutBuilder(
             builder: (context, constraints) {
-              final status = submission != null
+              final status = currentSubmission != null
                   ? StatusBadge(
-                      text: submission.status == ActivityStatus.graded
+                      text: currentSubmission.status == ActivityStatus.graded
                           ? 'Graded'
                           : 'Submitted',
                       backgroundColor:
-                          submission.status == ActivityStatus.graded
-                              ? AppTheme.catGreen.withValues(alpha: 0.1)
-                              : AppTheme.catBlue.withValues(alpha: 0.1),
-                      textColor: submission.status == ActivityStatus.graded
+                          currentSubmission.status == ActivityStatus.graded
+                          ? AppTheme.catGreen.withValues(alpha: 0.1)
+                          : AppTheme.catBlue.withValues(alpha: 0.1),
+                      textColor:
+                          currentSubmission.status == ActivityStatus.graded
                           ? AppTheme.catGreen
                           : AppTheme.catBlue,
                     )
@@ -87,10 +89,7 @@ class StudentActivityCard extends StatelessWidget {
                       ),
                     ),
                   ),
-                  if (status != null) ...[
-                    const SizedBox(width: 8),
-                    status,
-                  ],
+                  if (status != null) ...[const SizedBox(width: 8), status],
                 ],
               );
             },
@@ -98,7 +97,10 @@ class StudentActivityCard extends StatelessWidget {
           const SizedBox(height: 4),
           Text(
             activity.description,
-            style: TextStyle(color: theme.colorScheme.onSurface.withValues(alpha: 0.6), fontSize: 13),
+            style: TextStyle(
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+              fontSize: 13,
+            ),
           ),
           const SizedBox(height: 8),
           Row(
@@ -116,65 +118,49 @@ class StudentActivityCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 12),
-          if (submission == null && !isPastDeadline)
+          if (currentSubmission == null && !isPastDeadline)
             SizedBox(
               width: double.infinity,
               child: AppButton.primary(
-                label:
-                    activity.id == 'WW3'
-                        ? 'Start Quiz'
-                        : activity.isRequirement
-                        ? 'Upload Performance Task'
-                        : 'Upload & Submit Document',
+                label: activity.isRequirement
+                    ? 'Upload Performance Task'
+                    : 'Upload & Submit Document',
                 onPressed: () {
-                  if (activity.id == 'WW3') {
-                    final quiz = MockDatabase.instance.quizzesAndExams.firstWhere(
-                      (q) => q.id == 'WW3',
-                    );
-                    StudentAssessmentScreen.start(context, quiz).then((_) => onSubmitted());
-                  } else {
-                    MockDatabase.instance.submitActivity(
-                      activity.id,
-                      student.id,
-                      student.fullName,
-                      '${student.id}_Solution.pdf',
-                    );
-                    AppModals.showSuccessDialog(
-                      context: context,
-                      title: 'Submission Successful',
-                      message: 'File uploaded and status updated to Submitted.',
-                    );
-                    onSubmitted();
-                  }
+                  AppModals.showSuccessDialog(
+                    context: context,
+                    title: 'Submission Successful',
+                    message: 'File uploaded and status updated to Submitted.',
+                  );
+                  onSubmitted();
                 },
               ),
             )
-          else if (submission?.status == ActivityStatus.graded)
+          else if (currentSubmission?.status == ActivityStatus.graded)
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  'Score: ${submission!.score?.toInt() ?? 0} / ${activity.maxScore.toInt()}',
+                  'Score: ${currentSubmission!.score?.toInt() ?? 0} / ${activity.maxScore.toInt()}',
                   style: const TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 16,
                     color: AppTheme.catGreen,
                   ),
                 ),
-                if (submission.feedback != null)
+                if (currentSubmission.feedback != null)
                   TextButton(
                     onPressed: () {
                       AppModals.showSuccessDialog(
                         context: context,
                         title: 'Teacher Feedback',
-                        message: submission.feedback!,
+                        message: currentSubmission.feedback!,
                       );
                     },
                     child: const Text('View Feedback'),
                   ),
               ],
             )
-          else if (submission != null)
+          else if (currentSubmission != null)
             Text(
               'Awaiting teacher grading...',
               style: TextStyle(
@@ -202,7 +188,11 @@ class StudentActivityCard extends StatelessWidget {
       'Nov',
       'Dec',
     ];
-    final hour = date.hour > 12 ? date.hour - 12 : date.hour == 0 ? 12 : date.hour;
+    final hour = date.hour > 12
+        ? date.hour - 12
+        : date.hour == 0
+        ? 12
+        : date.hour;
     final period = date.hour >= 12 ? 'PM' : 'AM';
     final minute = date.minute.toString().padLeft(2, '0');
     return '${months[date.month - 1]} ${date.day}, ${date.year} at $hour:$minute $period';

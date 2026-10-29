@@ -30,30 +30,37 @@ import 'features/teacher/sub_features/setup/screens/academic_setup_wizard_screen
 import 'features/teacher/screens/teacher_dashboard_screen.dart';
 import 'features/student/screens/student_home_screen.dart';
 import 'features/parent/screens/parent_home_screen.dart';
-import 'shared/widgets/indicators/global_top_loading_bar.dart';
+
+/// Runs a startup task with a strict timeout without letting its failure abort the boot sequence.
+Future<void> _guarded(
+  Future<Object?> task,
+  String label, {
+  Duration timeout = const Duration(milliseconds: 3500),
+}) async {
+  try {
+    await task.timeout(timeout);
+  } catch (e) {
+    debugPrint('$label initialization notice: $e');
+  }
+}
 
 /// Initializes clients before protected screens subscribe to backend services.
-Future<void> _initializeRuntimeServices() async {
-  try {
-    await EnvConfig.init();
-  } catch (e) {
-    debugPrint('EnvConfig initialization notice: $e');
-  }
+Future<void> _initializeRuntimeServices({
+  void Function(double progress, String status)? onProgress,
+}) async {
+  onProgress?.call(0.24, 'Loading environment configuration...');
+  await _guarded(EnvConfig.init(), 'EnvConfig');
 
-  try {
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    );
-  } catch (e) {
-    debugPrint('Firebase initialization notice: $e');
-  }
+  onProgress?.call(0.48, 'Connecting to Firebase Auth & Supabase...');
+  await Future.wait<void>([
+    _guarded(
+      Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform),
+      'Firebase',
+    ),
+    _guarded(SupabaseService.initialize(), 'Supabase'),
+  ]);
 
-  try {
-    await SupabaseService.initialize();
-  } catch (e) {
-    debugPrint('Supabase initialization notice: $e');
-  }
-
+  onProgress?.call(0.78, 'Preparing local sync engine...');
   try {
     AppDatabase.instance;
     SyncCoordinator.instance.startBackgroundSync();
@@ -65,7 +72,7 @@ Future<void> _initializeRuntimeServices() async {
 Future<UserModel?> _restoreUserSession() async {
   try {
     final restoredUser = await AuthRepository.instance.restoreSession().timeout(
-      const Duration(seconds: 4),
+      const Duration(milliseconds: 2400),
       onTimeout: () => AuthRepository.instance.currentUser,
     );
     return restoredUser;
@@ -75,19 +82,20 @@ Future<UserModel?> _restoreUserSession() async {
   }
 }
 
-Future<UserModel?> _bootstrapClassRealmServices() async {
-  await LocalStorageService.init();
+Future<UserModel?> _bootstrapClassRealmServices(
+  void Function(double progress, String status) onProgress,
+) async {
+  onProgress(0.12, 'Loading local storage cache...');
+  await _guarded(LocalStorageService.init(), 'LocalStorage');
   final cached = AuthRepository.instance.hydrateCachedSessionSync();
 
-  // Run heavy runtime services asynchronously without blocking the loading screen completion
-  final runtimeInit = _initializeRuntimeServices().catchError((e) {
-    debugPrint('Runtime services initialization notice: $e');
-  });
+  await _initializeRuntimeServices(onProgress: onProgress);
 
+  onProgress(0.92, 'Restoring user session...');
   if (cached != null) {
     try {
       final restored = await _restoreUserSession().timeout(
-        const Duration(milliseconds: 300),
+        const Duration(milliseconds: 1600),
         onTimeout: () => cached,
       );
       return restored ?? cached;
@@ -96,8 +104,7 @@ Future<UserModel?> _bootstrapClassRealmServices() async {
     }
   }
 
-  unawaited(runtimeInit);
-  return null;
+  return await _restoreUserSession();
 }
 
 void main() async {
@@ -110,40 +117,66 @@ void main() async {
     return;
   }
 
-  // 1. Initialize synchronous local cache layer (< 5ms)
-  await LocalStorageService.init();
+  // On Web, check whether this tab is already in a warm session (e.g., F5 refresh).
+  final warmTab = isWarmSession();
 
-  // 1.5 Sync-Initialize basic config needed for background revalidation
-  await EnvConfig.init();
-  await SupabaseService.initialize();
+  if (!warmTab) {
+    updatePreBootstrapProgress(
+      0.55,
+      'Loading local storage & configuration...',
+    );
+  }
+  // Speed: local storage and env config are independent - load in parallel with hard timeouts.
+  await Future.wait<void>([
+    _guarded(LocalStorageService.init(), 'LocalStorage'),
+    _guarded(EnvConfig.init(), 'EnvConfig'),
+  ]);
 
-  // 2. Synchronously hydrate cached UserModel before first frame renders (if active & < 30m idle)
+  if (!warmTab) {
+    updatePreBootstrapProgress(
+      0.74,
+      'Connecting to Firebase Auth & Supabase...',
+    );
+  }
+  // Speed: Firebase and Supabase handshakes run concurrently instead of
+  // back-to-back, so cold start only waits for the slower of the two.
+  await Future.wait<void>([
+    _guarded(
+      Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform),
+      'Firebase',
+    ),
+    _guarded(SupabaseService.initialize(), 'Supabase'),
+  ]);
+
+  // Synchronously hydrate cached UserModel before first frame renders (if active & < 30m idle)
   final cachedUser = AuthRepository.instance.hydrateCachedSessionSync();
 
-  final hasActiveSession = cachedUser != null;
-  final warm = isWarmSession() || hasActiveSession;
-
-  // A refresh in the same tab restores its cached route without the cold-start
-  // loading screen. Render Frame 1 IMMEDIATELY on the user's active route.
-  if (hasActiveSession && warm) {
+  if (cachedUser != null) {
     // -----------------------------------------------------------------------
-    // Warm Browser Refresh (F5) or warm app resume:
-    // Render target screen IMMEDIATELY on Frame 1 using cached UserModel & SWR data.
-    // Zero blank screen, zero loading splash reset, zero logout!
+    // Instant Session Hydration (Warm F5 or Cached Active Session):
+    // Render target screen IMMEDIATELY on Frame 1 using cached UserModel & SWR data,
+    // and revalidate session + local SQLite sync in the background.
     // -----------------------------------------------------------------------
+    if (!warmTab) {
+      updatePreBootstrapProgress(1.0, 'ClassRealm Ready! Welcome.');
+    }
     markWarmSession();
     AppLifecycleCoordinator.instance.initialize();
+    if (!warmTab) {
+      AppLifecycleCoordinator.instance.onCreate();
+    }
     AppLifecycleCoordinator.instance.onStart();
     AppLifecycleCoordinator.instance.onResume();
     AppLifecycleCoordinator.instance.setSyncing(true);
 
-    // Render Frame 1 instantly! Never block UI on network calls!
     runApp(const ClassRealmApp(isWarmBoot: true));
 
-    // Non-blocking background revalidation & delta sync
     unawaited(() async {
       try {
-        await _initializeRuntimeServices();
+        if (!kIsWeb) {
+          AppDatabase.instance;
+          SyncCoordinator.instance.startBackgroundSync();
+        }
         await _restoreUserSession();
       } catch (e) {
         debugPrint('Background session revalidation notice: $e');
@@ -153,12 +186,36 @@ void main() async {
     }());
   } else {
     // -----------------------------------------------------------------------
-    // Cold Start:
-    // Display branded onCreate() Slow-to-Fast Progress Loading Screen
-    // (0% -> 30% -> 65% -> 100%) with school_logo.png + logo_app.png.
+    // Cold Start on Web (No Cached User):
+    // Bound session check tightly and defer Drift SQLite / background sync
+    // until after runApp() so the UI never hangs on Web Workers or network.
     // -----------------------------------------------------------------------
+    updatePreBootstrapProgress(0.88, 'Preparing your secure workspace...');
+    await _guarded(
+      _restoreUserSession(),
+      'SessionRestore',
+      timeout: const Duration(milliseconds: 2200),
+    );
+
+    updatePreBootstrapProgress(1.0, 'ClassRealm Ready! Welcome.');
+    markWarmSession();
     AppLifecycleCoordinator.instance.initialize();
-    runApp(const ClassRealmApp(isWarmBoot: false));
+    AppLifecycleCoordinator.instance.onCreate();
+    AppLifecycleCoordinator.instance.onStart();
+    AppLifecycleCoordinator.instance.onResume();
+
+    runApp(const ClassRealmApp(isWarmBoot: true));
+
+    unawaited(() async {
+      try {
+        if (!kIsWeb) {
+          AppDatabase.instance;
+          SyncCoordinator.instance.startBackgroundSync();
+        }
+      } catch (e) {
+        debugPrint('Local database initialization notice: $e');
+      }
+    }());
   }
 }
 
@@ -242,34 +299,193 @@ class _ClassRealmAppState extends State<ClassRealmApp> {
     if (activeUser != null) {
       final String dest;
       final savedRoute = LocalStorageService.getLastActiveRoute();
-      if (_targetRoute != null && _targetRoute!.isNotEmpty && _targetRoute != '/') {
+      if (_targetRoute != null &&
+          _targetRoute!.isNotEmpty &&
+          _targetRoute != '/') {
         dest = _targetRoute!;
-      } else if (savedRoute != null && savedRoute.isNotEmpty && savedRoute != '/') {
+      } else if (savedRoute != null &&
+          savedRoute.isNotEmpty &&
+          savedRoute != '/') {
         dest = savedRoute;
       } else {
         dest = AppRoutes.getDashboardRouteForRole(activeUser.role);
       }
-      
+
       updateBrowserUrl(dest);
       if (dest.isNotEmpty &&
           dest != AppRoutes.login &&
           dest != AppRoutes.splash &&
           dest != '/') {
-        AppRoutes.navigatorKey.currentState?.pushReplacementNamed(dest);
+        AppRoutes.navigatorKey.currentState?.pushNamedAndRemoveUntil(
+          dest,
+          (route) => false,
+        );
       } else {
-        AppRoutes.navigatorKey.currentState?.pushReplacementNamed(
+        AppRoutes.navigatorKey.currentState?.pushNamedAndRemoveUntil(
           AppRoutes.getDashboardRouteForRole(activeUser.role),
+          (route) => false,
         );
       }
     } else {
       updateBrowserUrl(AppRoutes.login);
       final current = getBrowserUrlPath();
       if (current != AppRoutes.login) {
-        AppRoutes.navigatorKey.currentState?.pushReplacementNamed(
+        AppRoutes.navigatorKey.currentState?.pushNamedAndRemoveUntil(
           AppRoutes.login,
+          (route) => false,
         );
       }
     }
+  }
+
+  Map<String, WidgetBuilder> _buildAppRoutes() {
+    return {
+      AppRoutes.splash: (context) => const SizedBox.shrink(),
+      '/': (context) {
+        final activeUser = AuthRepository.instance.currentUser;
+        if (activeUser != null) {
+          switch (activeUser.role) {
+            case UserRole.admin:
+              return const AuthGuard(
+                allowedRoles: [UserRole.admin],
+                child: AdminDashboardScreen(initialIndex: 0),
+              );
+            case UserRole.teacher:
+              return const AuthGuard(
+                allowedRoles: [UserRole.teacher],
+                child: TeacherDashboardScreen(initialSelectedIndex: 0),
+              );
+            case UserRole.student:
+              return const AuthGuard(
+                allowedRoles: [UserRole.student],
+                child: StudentHomeScreen(),
+              );
+            case UserRole.parent:
+              return const AuthGuard(
+                allowedRoles: [UserRole.parent],
+                child: ParentHomeScreen(),
+              );
+          }
+        }
+        return const LoginScreen();
+      },
+      AppRoutes.login: (context) {
+        final activeUser = AuthRepository.instance.currentUser;
+        if (activeUser != null) {
+          Future.microtask(() {
+            if (context.mounted) {
+              Navigator.pushNamedAndRemoveUntil(
+                context,
+                AppRoutes.getDashboardRouteForRole(activeUser.role),
+                (route) => false,
+              );
+            }
+          });
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+        return const LoginScreen();
+      },
+      AppRoutes.adminAddTeacher: (context) => const AuthGuard(
+        allowedRoles: [UserRole.admin],
+        child: AdminAddTeacherScreen(),
+      ),
+      AppRoutes.forgotPassword: (context) => const ForgotPasswordScreen(),
+      AppRoutes.studentFirstLogin: (context) => const AuthGuard(
+        allowedRoles: [UserRole.student, UserRole.parent],
+        child: FirstLoginScreen(),
+      ),
+      AppRoutes.teacherFirstLogin: (context) => const AuthGuard(
+        allowedRoles: [UserRole.teacher],
+        child: FirstLoginScreen(),
+      ),
+      AppRoutes.academicSetup: (context) => const AuthGuard(
+        allowedRoles: [UserRole.teacher],
+        child: AcademicSetupWizardScreen(),
+      ),
+      AppRoutes.adminDashboard: (context) => const AuthGuard(
+        allowedRoles: [UserRole.admin],
+        child: AdminDashboardScreen(initialIndex: 0),
+      ),
+      AppRoutes.adminBroadcasts: (context) => const AuthGuard(
+        allowedRoles: [UserRole.admin],
+        child: AdminDashboardScreen(initialIndex: 1),
+      ),
+      AppRoutes.adminTeacherManagement: (context) => const AuthGuard(
+        allowedRoles: [UserRole.admin],
+        child: AdminDashboardScreen(initialIndex: 2),
+      ),
+      AppRoutes.adminActivityAnalytics: (context) => const AuthGuard(
+        allowedRoles: [UserRole.admin],
+        child: AdminDashboardScreen(initialIndex: 3),
+      ),
+      AppRoutes.adminProfile: (context) => const AuthGuard(
+        allowedRoles: [UserRole.admin],
+        child: AdminDashboardScreen(initialIndex: 4),
+      ),
+      // Teacher Routes with sub-route support
+      AppRoutes.teacherDashboard: (context) => const AuthGuard(
+        allowedRoles: [UserRole.teacher],
+        child: TeacherDashboardScreen(initialSelectedIndex: 0),
+      ),
+      AppRoutes.teacherClassroomSetup: (context) => const AuthGuard(
+        allowedRoles: [UserRole.teacher],
+        child: TeacherDashboardScreen(initialSelectedIndex: 17),
+      ),
+      AppRoutes.teacherGradebook: (context) => const AuthGuard(
+        allowedRoles: [UserRole.teacher],
+        child: TeacherDashboardScreen(initialSelectedIndex: 18),
+      ),
+      AppRoutes.teacherManageStudents: (context) => const AuthGuard(
+        allowedRoles: [UserRole.teacher],
+        child: TeacherDashboardScreen(initialSelectedIndex: 12),
+      ),
+      AppRoutes.teacherManageParents: (context) => const AuthGuard(
+        allowedRoles: [UserRole.teacher],
+        child: TeacherDashboardScreen(initialSelectedIndex: 19),
+      ),
+      AppRoutes.teacherClasswork: (context) => const AuthGuard(
+        allowedRoles: [UserRole.teacher],
+        child: TeacherDashboardScreen(initialSelectedIndex: 1),
+      ),
+      AppRoutes.teacherLessonPlanning: (context) => const AuthGuard(
+        allowedRoles: [UserRole.teacher],
+        child: TeacherDashboardScreen(initialSelectedIndex: 3),
+      ),
+      AppRoutes.teacherLearningMaterials: (context) => const AuthGuard(
+        allowedRoles: [UserRole.teacher],
+        child: TeacherDashboardScreen(initialSelectedIndex: 4),
+      ),
+      AppRoutes.teacherAttendance: (context) => const AuthGuard(
+        allowedRoles: [UserRole.teacher],
+        child: TeacherDashboardScreen(initialSelectedIndex: 5),
+      ),
+      AppRoutes.teacherGrades: (context) => const AuthGuard(
+        allowedRoles: [UserRole.teacher],
+        child: TeacherDashboardScreen(initialSelectedIndex: 9),
+      ),
+      AppRoutes.teacherSchedule: (context) => const AuthGuard(
+        allowedRoles: [UserRole.teacher],
+        child: TeacherDashboardScreen(initialSelectedIndex: 14),
+      ),
+      AppRoutes.teacherNotifications: (context) => const AuthGuard(
+        allowedRoles: [UserRole.teacher],
+        child: TeacherDashboardScreen(initialSelectedIndex: 15),
+      ),
+      AppRoutes.teacherProfile: (context) => const AuthGuard(
+        allowedRoles: [UserRole.teacher],
+        child: TeacherDashboardScreen(initialSelectedIndex: 16),
+      ),
+      AppRoutes.studentHome: (context) => const AuthGuard(
+        allowedRoles: [UserRole.student],
+        child: StudentHomeScreen(),
+      ),
+      AppRoutes.parentHome: (context) => const AuthGuard(
+        allowedRoles: [UserRole.parent],
+        child: ParentHomeScreen(),
+      ),
+    };
   }
 
   @override
@@ -281,6 +497,7 @@ class _ClassRealmAppState extends State<ClassRealmApp> {
         if (widget.isWarmBoot) {
           updateBrowserUrl(initialDestination);
         }
+        final appRoutes = _buildAppRoutes();
 
         return MaterialApp(
           navigatorKey: AppRoutes.navigatorKey,
@@ -300,16 +517,22 @@ class _ClassRealmAppState extends State<ClassRealmApp> {
           themeAnimationDuration: const Duration(milliseconds: 600),
           themeAnimationCurve: Curves.easeInOut,
           initialRoute: initialDestination,
+          onGenerateInitialRoutes: (String initialRouteName) {
+            final builder =
+                appRoutes[initialRouteName] ??
+                appRoutes[initialDestination] ??
+                appRoutes[AppRoutes.login]!;
+            return [
+              MaterialPageRoute(
+                settings: RouteSettings(name: initialRouteName),
+                builder: builder,
+              ),
+            ];
+          },
           builder: (context, child) {
             return Stack(
               children: [
                 ?child,
-                const Positioned(
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  child: GlobalTopLoadingBar(),
-                ),
                 if (!_isBootstrapped && !widget.isWarmBoot)
                   Positioned.fill(
                     child: AppLifecycleLoadingScreen(
@@ -328,150 +551,7 @@ class _ClassRealmAppState extends State<ClassRealmApp> {
               ],
             );
           },
-          routes: {
-            AppRoutes.splash: (context) => const SizedBox.shrink(),
-            '/': (context) {
-              final activeUser = AuthRepository.instance.currentUser;
-              if (activeUser != null) {
-                switch (activeUser.role) {
-                  case UserRole.admin:
-                    return const AuthGuard(
-                      allowedRoles: [UserRole.admin],
-                      child: AdminDashboardScreen(initialIndex: 0),
-                    );
-                  case UserRole.teacher:
-                    return const AuthGuard(
-                      allowedRoles: [UserRole.teacher],
-                      child: TeacherDashboardScreen(initialSelectedIndex: 0),
-                    );
-                  case UserRole.student:
-                    return const AuthGuard(
-                      allowedRoles: [UserRole.student],
-                      child: StudentHomeScreen(),
-                    );
-                  case UserRole.parent:
-                    return const AuthGuard(
-                      allowedRoles: [UserRole.parent],
-                      child: ParentHomeScreen(),
-                    );
-                }
-              }
-              return const LoginScreen();
-            },
-            AppRoutes.login: (context) {
-              final activeUser = AuthRepository.instance.currentUser;
-              if (activeUser != null) {
-                // If a user is already logged in and tries to go to login page (or refreshes on it),
-                // bounce them back to their dashboard.
-                Future.microtask(() {
-                  Navigator.pushReplacementNamed(
-                    context, 
-                    AppRoutes.getDashboardRouteForRole(activeUser.role)
-                  );
-                });
-                return const Scaffold(body: Center(child: CircularProgressIndicator())); // Temporary blank state
-              }
-              return const LoginScreen();
-            },
-            AppRoutes.adminAddTeacher: (context) => const AuthGuard(
-              allowedRoles: [UserRole.admin],
-              child: AdminAddTeacherScreen(),
-            ),
-            AppRoutes.forgotPassword: (context) => const ForgotPasswordScreen(),
-            AppRoutes.studentFirstLogin: (context) => const AuthGuard(
-              allowedRoles: [UserRole.student, UserRole.parent],
-              child: FirstLoginScreen(),
-            ),
-            AppRoutes.teacherFirstLogin: (context) => const AuthGuard(
-              allowedRoles: [UserRole.teacher],
-              child: FirstLoginScreen(),
-            ),
-            AppRoutes.academicSetup: (context) => const AuthGuard(
-              allowedRoles: [UserRole.teacher],
-              child: AcademicSetupWizardScreen(),
-            ),
-            AppRoutes.adminDashboard: (context) => const AuthGuard(
-              allowedRoles: [UserRole.admin],
-              child: AdminDashboardScreen(initialIndex: 0),
-            ),
-            AppRoutes.adminBroadcasts: (context) => const AuthGuard(
-              allowedRoles: [UserRole.admin],
-              child: AdminDashboardScreen(initialIndex: 1),
-            ),
-            AppRoutes.adminTeacherManagement: (context) => const AuthGuard(
-              allowedRoles: [UserRole.admin],
-              child: AdminDashboardScreen(initialIndex: 2),
-            ),
-            AppRoutes.adminActivityAnalytics: (context) => const AuthGuard(
-              allowedRoles: [UserRole.admin],
-              child: AdminDashboardScreen(initialIndex: 3),
-            ),
-            AppRoutes.adminProfile: (context) => const AuthGuard(
-              allowedRoles: [UserRole.admin],
-              child: AdminDashboardScreen(initialIndex: 4),
-            ),
-            // Teacher Routes with sub-route support
-            AppRoutes.teacherDashboard: (context) => const AuthGuard(
-              allowedRoles: [UserRole.teacher],
-              child: TeacherDashboardScreen(initialSelectedIndex: 0),
-            ),
-            AppRoutes.teacherClassroomSetup: (context) => const AuthGuard(
-              allowedRoles: [UserRole.teacher],
-              child: TeacherDashboardScreen(initialSelectedIndex: 17),
-            ),
-            AppRoutes.teacherGradebook: (context) => const AuthGuard(
-              allowedRoles: [UserRole.teacher],
-              child: TeacherDashboardScreen(initialSelectedIndex: 18),
-            ),
-            AppRoutes.teacherManageStudents: (context) => const AuthGuard(
-              allowedRoles: [UserRole.teacher],
-              child: TeacherDashboardScreen(initialSelectedIndex: 12),
-            ),
-            AppRoutes.teacherManageParents: (context) => const AuthGuard(
-              allowedRoles: [UserRole.teacher],
-              child: TeacherDashboardScreen(initialSelectedIndex: 19),
-            ),
-            AppRoutes.teacherClasswork: (context) => const AuthGuard(
-              allowedRoles: [UserRole.teacher],
-              child: TeacherDashboardScreen(initialSelectedIndex: 1),
-            ),
-            AppRoutes.teacherLessonPlanning: (context) => const AuthGuard(
-              allowedRoles: [UserRole.teacher],
-              child: TeacherDashboardScreen(initialSelectedIndex: 3),
-            ),
-            AppRoutes.teacherLearningMaterials: (context) => const AuthGuard(
-              allowedRoles: [UserRole.teacher],
-              child: TeacherDashboardScreen(initialSelectedIndex: 4),
-            ),
-            AppRoutes.teacherAttendance: (context) => const AuthGuard(
-              allowedRoles: [UserRole.teacher],
-              child: TeacherDashboardScreen(initialSelectedIndex: 5),
-            ),
-            AppRoutes.teacherGrades: (context) => const AuthGuard(
-              allowedRoles: [UserRole.teacher],
-              child: TeacherDashboardScreen(initialSelectedIndex: 9),
-            ),
-            AppRoutes.teacherSchedule: (context) => const AuthGuard(
-              allowedRoles: [UserRole.teacher],
-              child: TeacherDashboardScreen(initialSelectedIndex: 14),
-            ),
-            AppRoutes.teacherNotifications: (context) => const AuthGuard(
-              allowedRoles: [UserRole.teacher],
-              child: TeacherDashboardScreen(initialSelectedIndex: 15),
-            ),
-            AppRoutes.teacherProfile: (context) => const AuthGuard(
-              allowedRoles: [UserRole.teacher],
-              child: TeacherDashboardScreen(initialSelectedIndex: 16),
-            ),
-            AppRoutes.studentHome: (context) => const AuthGuard(
-              allowedRoles: [UserRole.student],
-              child: StudentHomeScreen(),
-            ),
-            AppRoutes.parentHome: (context) => const AuthGuard(
-              allowedRoles: [UserRole.parent],
-              child: ParentHomeScreen(),
-            ),
-          },
+          routes: appRoutes,
         );
       },
     );

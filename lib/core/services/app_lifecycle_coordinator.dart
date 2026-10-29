@@ -183,7 +183,9 @@ class AppLifecycleCoordinator with WidgetsBindingObserver {
     stateNotifier.value = AppActivityLifecycleState.destroyed;
     debugPrint('[AppLifecycleCoordinator] onDestroy()');
 
-    unawaited(AuthRepository.instance.endSession('terminated'));
+    final now = DateTime.now();
+    unawaited(LocalStorageService.saveLastInteraction(now));
+    unawaited(AuthRepository.instance.recordHeartbeat());
   }
 
   // =========================================================================

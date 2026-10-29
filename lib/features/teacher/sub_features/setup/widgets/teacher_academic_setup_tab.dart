@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import 'package:class_realm/core/theme/app_theme.dart';
-import 'package:class_realm/data/mock_database.dart';
+import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/models/subject_catalog_model.dart';
 import 'package:class_realm/shared/widgets/shared_widgets.dart';
 
@@ -31,12 +31,14 @@ class _TeacherAcademicSetupTabState extends State<TeacherAcademicSetupTab> {
   @override
   void initState() {
     super.initState();
-    _academicYear = MockDatabase.instance.academicYear;
-    _gradeLevel = MockDatabase.instance.gradeLevel;
+    final current = AuthRepository.instance.currentUser;
+    final year = DateTime.now().year >= 2026 ? DateTime.now().year : 2026;
+    _academicYear = '$year-${year + 1}';
+    _gradeLevel = current?.gradeLevel ?? 'Grade 11';
     _selectedCategory = DepEdSubjectCatalog.catCore;
     _selectedCluster = 'CORE';
-    _selectedSubject = MockDatabase.instance.currentSubject;
-    _sections = List.from(MockDatabase.instance.sections);
+    _selectedSubject = current?.departmentOrSection ?? 'General Mathematics';
+    _sections = ['$_gradeLevel - Section A'];
 
     // Auto-detect category & cluster if matching current subject
     final match = DepEdSubjectCatalog.allSubjects.firstWhere(
@@ -93,22 +95,13 @@ class _TeacherAcademicSetupTabState extends State<TeacherAcademicSetupTab> {
   }
 
   void _saveConfiguration() {
-    MockDatabase.instance.academicYear = _academicYear;
-    MockDatabase.instance.gradeLevel = _gradeLevel;
-    MockDatabase.instance.currentSubject = _selectedSubject;
-    MockDatabase.instance.sections = List.from(_sections);
-
-    final current = MockDatabase.instance.currentUser;
+    final current = AuthRepository.instance.currentUser;
     if (current != null) {
       final updated = current.copyWith(
         departmentOrSection: _selectedSubject,
         gradeLevel: _gradeLevel,
       );
-      MockDatabase.instance.currentUser = updated;
-      final idx = MockDatabase.instance.users.indexWhere((u) => u.id == current.id);
-      if (idx != -1) {
-        MockDatabase.instance.users[idx] = updated;
-      }
+      AuthRepository.instance.setCurrentUser(updated);
     }
 
     AppModals.showSuccessDialog(

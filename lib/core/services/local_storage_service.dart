@@ -28,6 +28,14 @@ class LocalStorageService {
     _preferences = await SharedPreferences.getInstance();
     // Clear legacy global keyIsDarkMode so all users strictly default to light mode
     await _preferences?.remove(keyIsDarkMode);
+    // Purge any legacy plaintext passwords stored by older app versions
+    await _preferences?.remove(keySavedPassword);
+    final keys = _preferences?.getKeys().toList() ?? const <String>[];
+    for (final k in keys) {
+      if (k.startsWith(_savedCredPrefix)) {
+        await _preferences?.remove(k);
+      }
+    }
   }
 
   static Future<SharedPreferences> get _prefs async {
@@ -73,15 +81,13 @@ class LocalStorageService {
     String? password,
   }) async {
     final prefs = await _prefs;
+    // Never persist plaintext passwords in SharedPreferences / localStorage.
+    await prefs.remove(keySavedPassword);
     if (value) {
       await _ensureSaved(await prefs.setString(keySavedEmail, email));
-      if (password != null && password.isNotEmpty) {
-        await _ensureSaved(await prefs.setString(keySavedPassword, password));
-      }
       await _ensureSaved(await prefs.setBool(keyRememberMe, true));
     } else {
       await _ensureSaved(await prefs.remove(keySavedEmail));
-      await _ensureSaved(await prefs.remove(keySavedPassword));
       await _ensureSaved(await prefs.setBool(keyRememberMe, false));
     }
   }
@@ -90,39 +96,23 @@ class LocalStorageService {
     String newPassword, {
     String? forEmail,
   }) async {
-    if (!isRememberMe) return;
-    if (forEmail != null &&
-        savedEmail != null &&
-        savedEmail!.trim().toLowerCase() != forEmail.trim().toLowerCase()) {
-      return;
-    }
     final prefs = await _prefs;
-    await _ensureSaved(await prefs.setString(keySavedPassword, newPassword));
+    await prefs.remove(keySavedPassword);
   }
 
   static const String _savedCredPrefix = 'auth.saved_cred.';
 
-  /// Checks if credentials have already been saved on this device for the given email and password.
-  static bool hasSavedCredentials(String email, String password) {
+  /// Checks if credentials have already been saved on this device for the given email.
+  static bool hasSavedCredentials(String email, [String? password]) {
     final sanitizedEmail = email.trim().toLowerCase();
-    final saved = _preferences?.getString('$_savedCredPrefix$sanitizedEmail');
-    if (saved != null && saved == password) {
-      return true;
-    }
-    if (isRememberMe &&
-        savedEmail != null &&
-        savedEmail!.trim().toLowerCase() == sanitizedEmail &&
-        savedPassword == password) {
-      return true;
-    }
-    return false;
+    return _preferences?.getBool('$_savedCredPrefix$sanitizedEmail') ?? false;
   }
 
-  /// Marks credentials as saved on this device so the user is not prompted again.
-  static Future<void> markCredentialsSaved(String email, String password) async {
+  /// Marks credentials as saved on this device (boolean flag only, never plaintext password).
+  static Future<void> markCredentialsSaved(String email, [String? password]) async {
     final sanitizedEmail = email.trim().toLowerCase();
     final prefs = await _prefs;
-    await _ensureSaved(await prefs.setString('$_savedCredPrefix$sanitizedEmail', password));
+    await _ensureSaved(await prefs.setBool('$_savedCredPrefix$sanitizedEmail', true));
   }
 
   static Future<void> saveUser(UserModel user) async {

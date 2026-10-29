@@ -3,7 +3,6 @@ import 'package:loading_animation_widget/loading_animation_widget.dart';
 import 'package:class_realm/core/theme/app_theme.dart';
 import 'package:class_realm/core/services/local_storage_service.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
-import 'package:class_realm/data/mock_database.dart';
 import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/features/parent/widgets/widgets.dart';
 import 'package:class_realm/data/repositories/supabase_parent_repository.dart';
@@ -38,9 +37,7 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
   }
 
   Future<void> _loadLinkedStudents() async {
-    final parent =
-        AuthRepository.instance.currentUser ??
-        MockDatabase.instance.currentUser;
+    final parent = AuthRepository.instance.currentUser;
     if (parent == null) {
       if (mounted) setState(() => _isLoadingStudents = false);
       return;
@@ -64,16 +61,7 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
   }
 
   List<UserModel> _getLinkedStudents(UserModel parent) {
-    if (_linkedStudents.isNotEmpty) return _linkedStudents;
-    return MockDatabase.instance.users
-        .where(
-          (u) =>
-              u.role == UserRole.student &&
-              (u.id == parent.linkedStudentId ||
-                  parent.linkedStudentId == null),
-        )
-        .take(1)
-        .toList();
+    return _linkedStudents;
   }
 
   void _switchChildWithLoading(int targetIndex) async {
@@ -82,7 +70,6 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
 
     final parent =
         AuthRepository.instance.currentUser ??
-        MockDatabase.instance.currentUser ??
         UserModel(
           id: 'parent',
           username: 'parent',
@@ -169,7 +156,6 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
     final theme = Theme.of(context);
     final parent =
         AuthRepository.instance.currentUser ??
-        MockDatabase.instance.currentUser ??
         UserModel(
           id: 'parent',
           username: 'parent',
@@ -210,167 +196,167 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
 
     return SessionActivityTracker(
       child: Scaffold(
-      key: _scaffoldKey,
-      appBar: AppBar(
-        title: const Text(
-          'Parent Portal',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-        ),
-        leading: IconButton(
-          icon: const Icon(Icons.menu),
-          onPressed: () => _scaffoldKey.currentState?.openDrawer(),
-        ),
-        actions: [
-          if (linkedStudents.length > 1)
+        key: _scaffoldKey,
+        appBar: AppBar(
+          title: const Text(
+            'Parent Portal',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+          leading: IconButton(
+            icon: const Icon(Icons.menu),
+            onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+          ),
+          actions: [
+            if (linkedStudents.length > 1)
+              IconButton(
+                icon: const Icon(Icons.swap_horiz_rounded),
+                tooltip:
+                    'Switch Child Profile (${linkedStudent?.firstName ?? ""})',
+                onPressed: () {
+                  _switchChildWithLoading(_selectedChildIndex + 1);
+                },
+              ),
             IconButton(
-              icon: const Icon(Icons.swap_horiz_rounded),
-              tooltip:
-                  'Switch Child Profile (${linkedStudent?.firstName ?? ""})',
+              icon: Icon(
+                theme.brightness == Brightness.dark
+                    ? Icons.light_mode_outlined
+                    : Icons.dark_mode_outlined,
+              ),
+              tooltip: 'Toggle Theme',
               onPressed: () {
-                _switchChildWithLoading(_selectedChildIndex + 1);
+                final isDark = theme.brightness != Brightness.dark;
+                AppTheme.themeModeNotifier.value = isDark
+                    ? ThemeMode.dark
+                    : ThemeMode.light;
+                LocalStorageService.saveUserThemeMode(
+                  parent.id,
+                  isDark,
+                  email: parent.email,
+                );
               },
             ),
-          IconButton(
-            icon: Icon(
-              theme.brightness == Brightness.dark
-                  ? Icons.light_mode_outlined
-                  : Icons.dark_mode_outlined,
-            ),
-            tooltip: 'Toggle Theme',
-            onPressed: () {
-              final isDark = theme.brightness != Brightness.dark;
-              AppTheme.themeModeNotifier.value = isDark
-                  ? ThemeMode.dark
-                  : ThemeMode.light;
-              LocalStorageService.saveUserThemeMode(
-                parent.id,
-                isDark,
-                email: parent.email,
-              );
-            },
-          ),
-          const Center(
-            child: Padding(
-              padding: EdgeInsets.symmetric(horizontal: 12),
-              child: SyncStatusBadge(),
-            ),
-          ),
-        ],
-      ),
-      drawer: ParentDrawer(parent: parent, linkedStudent: linkedStudent),
-      body: LayoutBuilder(
-        builder: (context, constraints) {
-          final content = Column(
-            children: [
-              // Active Child Banner (if parent has multiple children)
-              if (linkedStudents.length > 1 && linkedStudent != null)
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 8,
-                  ),
-                  color: theme.colorScheme.primaryContainer.withValues(
-                    alpha: 0.35,
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.account_circle,
-                        size: 20,
-                        color: theme.colorScheme.primary,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'Viewing: ${linkedStudent.fullName} (${linkedStudent.departmentOrSection ?? "Active"})',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 13,
-                            color: theme.colorScheme.primary,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      TextButton.icon(
-                        style: TextButton.styleFrom(
-                          visualDensity: VisualDensity.compact,
-                          padding: const EdgeInsets.symmetric(horizontal: 8),
-                        ),
-                        icon: const Icon(Icons.swap_horiz, size: 16),
-                        label: const Text(
-                          'Switch',
-                          style: TextStyle(fontSize: 12),
-                        ),
-                        onPressed: () =>
-                            _switchChildWithLoading(_selectedChildIndex + 1),
-                      ),
-                    ],
-                  ),
-                ),
-              Expanded(
-                child: _isLoadingStudents
-                    ? Center(
-                        child: LoadingAnimationWidget.staggeredDotsWave(
-                          color: theme.colorScheme.primary,
-                          size: 40,
-                        ),
-                      )
-                    : StaggeredEntrance(
-                        key: ValueKey(_currentIndex),
-                        index: 0,
-                        duration: const Duration(milliseconds: 280),
-                        child: pages[_currentIndex],
-                      ),
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.symmetric(horizontal: 12),
+                child: SyncStatusBadge(),
               ),
-            ],
-          );
-          if (constraints.maxWidth <= 600) return content;
-          return Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 520),
-              child: content,
             ),
-          );
-        },
+          ],
+        ),
+        drawer: ParentDrawer(parent: parent, linkedStudent: linkedStudent),
+        body: LayoutBuilder(
+          builder: (context, constraints) {
+            final content = Column(
+              children: [
+                // Active Child Banner (if parent has multiple children)
+                if (linkedStudents.length > 1 && linkedStudent != null)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
+                    color: theme.colorScheme.primaryContainer.withValues(
+                      alpha: 0.35,
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.account_circle,
+                          size: 20,
+                          color: theme.colorScheme.primary,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Viewing: ${linkedStudent.fullName} (${linkedStudent.departmentOrSection ?? "Active"})',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                              color: theme.colorScheme.primary,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        TextButton.icon(
+                          style: TextButton.styleFrom(
+                            visualDensity: VisualDensity.compact,
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                          ),
+                          icon: const Icon(Icons.swap_horiz, size: 16),
+                          label: const Text(
+                            'Switch',
+                            style: TextStyle(fontSize: 12),
+                          ),
+                          onPressed: () =>
+                              _switchChildWithLoading(_selectedChildIndex + 1),
+                        ),
+                      ],
+                    ),
+                  ),
+                Expanded(
+                  child: _isLoadingStudents
+                      ? Center(
+                          child: LoadingAnimationWidget.staggeredDotsWave(
+                            color: theme.colorScheme.primary,
+                            size: 40,
+                          ),
+                        )
+                      : StaggeredEntrance(
+                          key: ValueKey(_currentIndex),
+                          index: 0,
+                          duration: const Duration(milliseconds: 280),
+                          child: pages[_currentIndex],
+                        ),
+                ),
+              ],
+            );
+            if (constraints.maxWidth <= 600) return content;
+            return Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 520),
+                child: content,
+              ),
+            );
+          },
+        ),
+        bottomNavigationBar: BottomNavigationBar(
+          currentIndex: _currentIndex,
+          onTap: (index) {
+            setState(() => _currentIndex = index);
+            LocalStorageService.saveActiveDashboardTab('parent', index);
+          },
+          type: BottomNavigationBarType.fixed,
+          items: const [
+            BottomNavigationBarItem(
+              icon: Icon(Icons.dashboard_outlined),
+              activeIcon: Icon(Icons.dashboard),
+              label: 'Overview',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.calendar_today_outlined),
+              activeIcon: Icon(Icons.calendar_today),
+              label: 'Attendance',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.grade_outlined),
+              activeIcon: Icon(Icons.grade),
+              label: 'Grades',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.notifications_outlined),
+              activeIcon: Icon(Icons.notifications),
+              label: 'Alerts',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.person_outline),
+              activeIcon: Icon(Icons.person),
+              label: 'Profile',
+            ),
+          ],
+        ),
       ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        onTap: (index) {
-          setState(() => _currentIndex = index);
-          LocalStorageService.saveActiveDashboardTab('parent', index);
-        },
-        type: BottomNavigationBarType.fixed,
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.dashboard_outlined),
-            activeIcon: Icon(Icons.dashboard),
-            label: 'Overview',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.calendar_today_outlined),
-            activeIcon: Icon(Icons.calendar_today),
-            label: 'Attendance',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.grade_outlined),
-            activeIcon: Icon(Icons.grade),
-            label: 'Grades',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.notifications_outlined),
-            activeIcon: Icon(Icons.notifications),
-            label: 'Alerts',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.person_outline),
-            activeIcon: Icon(Icons.person),
-            label: 'Profile',
-          ),
-        ],
-      ),
-    ),
-  );
-}
+    );
+  }
 
   Widget _buildNoChildEmptyState(ThemeData theme) {
     return Center(

@@ -287,36 +287,6 @@ class FirebaseAuthAdminService {
     return false;
   }
 
-  static const String _defaultServiceAccountPrivateKey =
-      '-----BEGIN PRIVATE KEY-----\n'
-      'MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQCydjJzOwpU/0nv\n'
-      'HpJOrjYg2jhO/QVPchpEZDvhWH3bPcTwqI/iqBxZJ4X4vMuBgakNSAGILwgIuNf6\n'
-      'mSCfvADp3HZGkbMPfc045ADjQLBR2paMZmNywfwnjZYWY4N77a0cfQ5pjW6o4ZAl\n'
-      'KsE3RVPtfOOQS4UPpnbrdcy+ARxiUAp34jSdNSlYqxJJYhacgju37KkVPUkJbofU\n'
-      'YbqQ4cv7SDTDGJg2pQ5zSqOUkp5ydk6aijfsxxXeXAU6pkec5OyfE/IHR3hWJkwt\n'
-      'wQD3ExaJxVJCCKPreEswt3AH6cCdrkSaPrSXPctMDrmo++lUaCgED3yrCqT1TaeT\n'
-      'OPf2kiOTAgMBAAECggEAMFJ756KxcgFsMhCrmh1m769W9uBhGzlwrlsbsbFl5sML\n'
-      'fASQbVWK04M1rfvk+My0izGXpJnjiYUPij4DTO05rBkzd3lFLGkqdACc0uv1sjxH\n'
-      'bn3c6Lpo/gbDAI3ykNBzAtdD20XeFGF7R+0TQ1WE27Xo4m3oeivfYHNVvI8Ncfr5\n'
-      'Q1ZuXiBfqpqldBiOaT47SCP964e/BeUj1EW+nrgWOQaG/bXZqA6BmA/ftRO1Ej3Z\n'
-      'YmUDABLbme4XPqMM/kRTSwXau6J1BQTW3w//VPaKf+/iRZazMhHLoy+4QkpxUUMp\n'
-      'eyKhLHPFfLwblXwc9oaedqTXMvCNytsgDBFJhHUZzQKBgQDl5Tt7iWlVDLEFdxVw\n'
-      'XasvDb6BgWVXiYIFs2g7CX7bls/0TJ5vTvt7kiMdWQFhs7nPgmRPOrzYvz3Hhj5i\n'
-      'rkGumhWdMoBWmhVEIHDkl2JzmdNslrskKvCOM5PgX0aCH+wUsPft7ETDxdrqOnzk\n'
-      'xxHV12m+5VActm0xKExEZMPZLwKBgQDGudoFAGWOyq1wX4ZEe2gGbzsdm9N2l/3a\n'
-      'Qnp2cN086EkT8oXpblfNzWQWvZWp+x5IV+nRdCHNKbYeEm52qTbXzg5xFcPehfpB\n'
-      'C0m23yWw7laLsYGjbm5PIFzOGjR4lSLwq3OQnnOd6PScm1gnhOk+pQ733NQbQ6VW\n'
-      'lWBGkaU63QKBgQDlLSOi/1TVyBUgUZo5rebcvWLQT2HrZdUMQdECKXEhDrK34zl9\n'
-      '1Mq2YPRIaVYLQ9NTnbTJltBzchHwOU8vqG8p08kAMDvoGSpiA8UG3DL08r/lXE2q\n'
-      'vHOaDqi338K2LYR3DAPcVtAmKbMWFMA0gI6zEk8EUi0Osn0fqAB/ncPvWQKBgQCG\n'
-      'hhD8CcS14KV/yGpPuWo10N4nsPB4+3KwaQgVXVmmfWfaxPW5iySNAFicvEGwC3n4\n'
-      'Zuq1CvRGudG6kaeNVAb4F1jXXHB3FiLOHSINVQliuDSF4+dqBrtNfQ7Vxg93AR3h\n'
-      '5W4Zm+mQH75WtSH7vpFWAs4bI7XBrw0hi4TcwIMlUQKBgFysT0ehmVb1uFmGuJ1n\n'
-      'iW4rjYJWYATjauwEl2ByJMCD9p4wH64MiCNIsLi33SI7Fhe9x5edoZcBp6VFStj1\n'
-      'sJWjTbMXX9sJHupfB7RvBl2N2w8VxKAf5p7xhsETpSb1Wvw6wo2xYNT/YJAYwxLd\n'
-      'UGwR7c3xjSm/sUu+bH3A3fHb\n'
-      '-----END PRIVATE KEY-----';
-
   /// Obtains Google OAuth 2.0 Access Token from Service Account credentials
   static Future<String?> _getAccessToken() async {
     final now = DateTime.now();
@@ -324,12 +294,8 @@ class FirebaseAuthAdminService {
       return _cachedAccessToken;
     }
 
-    final clientEmail = EnvConfig.firebaseServiceAccountEmail.isNotEmpty
-        ? EnvConfig.firebaseServiceAccountEmail
-        : 'firebase-adminsdk-fbsvc@classrealm01.iam.gserviceaccount.com';
-    final privateKeyPem = EnvConfig.firebaseServiceAccountPrivateKey.isNotEmpty
-        ? EnvConfig.firebaseServiceAccountPrivateKey
-        : _defaultServiceAccountPrivateKey;
+    final clientEmail = EnvConfig.firebaseServiceAccountEmail;
+    final privateKeyPem = EnvConfig.firebaseServiceAccountPrivateKey;
 
     if (clientEmail.isEmpty || privateKeyPem.isEmpty) {
       return null;

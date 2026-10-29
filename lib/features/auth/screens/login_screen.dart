@@ -35,17 +35,11 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _rememberMe = false;
   Timer? _lockoutTimer;
   Duration? _lockoutRemaining;
-  bool _wasMockLoginEmail = false;
 
   final FocusNode _emailFocusNode = FocusNode();
   final FocusNode _passwordFocusNode = FocusNode();
 
-  bool get _isMockLoginEmail {
-    final email = _emailController.text.trim().toLowerCase();
-    return email == 'student' || email == 'parent' || email == 'teacher';
-  }
-
-  bool get _isRateLimited => _lockoutRemaining != null && !_isMockLoginEmail;
+  bool get _isRateLimited => _lockoutRemaining != null;
 
   @override
   void initState() {
@@ -64,8 +58,11 @@ class _LoginScreenState extends State<LoginScreen> {
       }
     });
 
-    // Load Remember Me state
+    // Load Remember Me state and prefill saved email if remembered
     _rememberMe = LocalStorageService.isRememberMe;
+    if (_rememberMe && LocalStorageService.savedEmail != null) {
+      _emailController.text = LocalStorageService.savedEmail!;
+    }
 
     // Fast Login / Cache Check & Route User + Rate Limit Status Check
     WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -125,13 +122,7 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  void _handleEmailChanged() {
-    final isMockLoginEmail = _isMockLoginEmail;
-    if (isMockLoginEmail != _wasMockLoginEmail) {
-      _wasMockLoginEmail = isMockLoginEmail;
-      if (mounted) setState(() {});
-    }
-  }
+  void _handleEmailChanged() {}
 
   void _handlePasswordChanged() {}
 
@@ -198,47 +189,6 @@ class _LoginScreenState extends State<LoginScreen> {
       }
     } catch (_) {}
 
-    if (_isMockLoginEmail) {
-      TextInput.finishAutofillContext(shouldSave: false);
-      final email = _emailController.text.trim().toLowerCase();
-      final user = await AuthRepository.instance.authenticate(email, 'mockpassword');
-      
-      if (!mounted) return;
-      setState(() => _isLoading = false);
-
-      LocalStorageService.saveActiveDashboardTab('admin', 0);
-      LocalStorageService.saveActiveDashboardTab('teacher', 0);
-      LocalStorageService.saveActiveDashboardTab('student', 0);
-      LocalStorageService.saveActiveDashboardTab('parent', 0);
-
-      if (email == 'student') {
-        if (user != null) {
-          final isUserDark = LocalStorageService.isUserDarkMode(user.id, email: user.email);
-          AppTheme.themeModeNotifier.value = isUserDark ? ThemeMode.dark : ThemeMode.light;
-        }
-        LocalStorageService.saveLastActiveRoute(AppRoutes.studentHome);
-        updateBrowserUrl(AppRoutes.studentHome);
-        Navigator.pushReplacementNamed(context, AppRoutes.studentHome);
-      } else if (email == 'parent') {
-        if (user != null) {
-          final isUserDark = LocalStorageService.isUserDarkMode(user.id, email: user.email);
-          AppTheme.themeModeNotifier.value = isUserDark ? ThemeMode.dark : ThemeMode.light;
-        }
-        LocalStorageService.saveLastActiveRoute(AppRoutes.parentHome);
-        updateBrowserUrl(AppRoutes.parentHome);
-        Navigator.pushReplacementNamed(context, AppRoutes.parentHome);
-      } else if (email == 'teacher') {
-        if (user != null) {
-          final isUserDark = LocalStorageService.isUserDarkMode(user.id, email: user.email);
-          AppTheme.themeModeNotifier.value = isUserDark ? ThemeMode.dark : ThemeMode.light;
-        }
-        LocalStorageService.saveLastActiveRoute(AppRoutes.teacherDashboard);
-        updateBrowserUrl(AppRoutes.teacherDashboard);
-        Navigator.pushReplacementNamed(context, AppRoutes.teacherDashboard);
-      }
-      return;
-    }
-
     if (!mounted) return;
 
     try {
@@ -249,25 +199,13 @@ class _LoginScreenState extends State<LoginScreen> {
 
       if (!mounted) return;
 
-      // Save Remember Me state and trigger browser autofill ONLY upon 100% successful login
+      // Save Remember Me state (email only, never plaintext password) and trigger browser autofill
       if (user != null) {
         final email = _emailController.text.trim();
-        final pass = _passwordController.text;
-        final alreadySaved = LocalStorageService.hasSavedCredentials(email, pass);
-
-        if (!alreadySaved) {
-          // Trigger browser save/update prompt ONCE for new or updated credentials
-          TextInput.finishAutofillContext(shouldSave: true);
-          await LocalStorageService.markCredentialsSaved(email, pass);
-        } else {
-          // Already saved on this device: do NOT prompt again
-          TextInput.finishAutofillContext(shouldSave: false);
-        }
-
+        TextInput.finishAutofillContext(shouldSave: true);
         await LocalStorageService.saveRememberMe(
           _rememberMe,
           email,
-          password: _rememberMe ? pass : null,
         );
         if (!mounted) return;
       }
@@ -386,14 +324,16 @@ class _LoginScreenState extends State<LoginScreen> {
       // Must remain in default light theme for first-login and password setup
       AppTheme.themeModeNotifier.value = ThemeMode.light;
       if (user.role == UserRole.teacher) {
-        Navigator.pushReplacementNamed(
+        Navigator.pushNamedAndRemoveUntil(
           context,
           AppRoutes.teacherFirstLogin,
+          (route) => false,
         );
       } else {
-        Navigator.pushReplacementNamed(
+        Navigator.pushNamedAndRemoveUntil(
           context,
           AppRoutes.studentFirstLogin,
+          (route) => false,
         );
       }
       return;
@@ -444,19 +384,35 @@ class _LoginScreenState extends State<LoginScreen> {
 
     switch (user.role) {
       case UserRole.admin:
-        Navigator.pushReplacementNamed(context, AppRoutes.adminDashboard);
+        Navigator.pushNamedAndRemoveUntil(
+          context,
+          AppRoutes.adminDashboard,
+          (route) => false,
+        );
         break;
       case UserRole.teacher:
         SyncCoordinator.instance.syncTeacherData(user.id);
-        Navigator.pushReplacementNamed(context, AppRoutes.teacherDashboard);
+        Navigator.pushNamedAndRemoveUntil(
+          context,
+          AppRoutes.teacherDashboard,
+          (route) => false,
+        );
         break;
       case UserRole.student:
         SyncCoordinator.instance.syncStudentData(user.id);
-        Navigator.pushReplacementNamed(context, AppRoutes.studentHome);
+        Navigator.pushNamedAndRemoveUntil(
+          context,
+          AppRoutes.studentHome,
+          (route) => false,
+        );
         break;
       case UserRole.parent:
         SyncCoordinator.instance.syncParentData(user.id);
-        Navigator.pushReplacementNamed(context, AppRoutes.parentHome);
+        Navigator.pushNamedAndRemoveUntil(
+          context,
+          AppRoutes.parentHome,
+          (route) => false,
+        );
         break;
     }
   }
@@ -498,10 +454,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     onFieldSubmitted: (_) {
                       FocusScope.of(context).requestFocus(_passwordFocusNode);
                     },
-                    validator: (v) {
-                      if (_isMockLoginEmail) return null;
-                      return AppValidators.validateEmail(v);
-                    },
+                    validator: AppValidators.validateEmail,
                     style: const TextStyle(
                       color: Color(0xFF0F172A),
                       fontSize: 14,
@@ -517,100 +470,61 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  Focus(
-                    onKeyEvent: (node, event) {
-                      if (event is KeyDownEvent &&
-                          event.logicalKey == LogicalKeyboardKey.backspace) {
-                        final text = _passwordController.text;
-                        final sel = _passwordController.selection;
-                        if (text.isNotEmpty) {
-                          if (!sel.isValid || sel.start == -1) {
-                            final newText = text.substring(0, text.length - 1);
-                            _passwordController.value = TextEditingValue(
-                              text: newText,
-                              selection: TextSelection.collapsed(offset: newText.length),
-                            );
-                            return KeyEventResult.handled;
-                          } else if (sel.isCollapsed && sel.start > 0) {
-                            final start = sel.start;
-                            final newText =
-                                text.substring(0, start - 1) + text.substring(start);
-                            _passwordController.value = TextEditingValue(
-                              text: newText,
-                              selection: TextSelection.collapsed(offset: start - 1),
-                            );
-                            return KeyEventResult.handled;
-                          } else if (!sel.isCollapsed && sel.start != sel.end) {
-                            final start = sel.start < sel.end ? sel.start : sel.end;
-                            final end = sel.start < sel.end ? sel.end : sel.start;
-                            final newText =
-                                text.substring(0, start) + text.substring(end);
-                            _passwordController.value = TextEditingValue(
-                              text: newText,
-                              selection: TextSelection.collapsed(offset: start),
-                            );
-                            return KeyEventResult.handled;
-                          }
-                        }
+                  TextFormField(
+                    controller: _passwordController,
+                    focusNode: _passwordFocusNode,
+                    autofillHints: const [AutofillHints.password],
+                    textInputAction: TextInputAction.done,
+                    enableSuggestions: false,
+                    autocorrect: false,
+                    onTap: () {
+                      final text = _passwordController.text;
+                      if (!_passwordController.selection.isValid ||
+                          _passwordController.selection.start == -1) {
+                        _passwordController.selection =
+                            TextSelection.collapsed(offset: text.length);
                       }
-                      return KeyEventResult.ignored;
                     },
-                    child: TextFormField(
-                      controller: _passwordController,
-                      focusNode: _passwordFocusNode,
-                      autofillHints: const [AutofillHints.password],
-                      textInputAction: TextInputAction.done,
-                      enableSuggestions: false,
-                      autocorrect: false,
-                      onTap: () {
-                        final text = _passwordController.text;
-                        if (!_passwordController.selection.isValid ||
-                            _passwordController.selection.start == -1) {
-                          _passwordController.selection =
-                              TextSelection.collapsed(offset: text.length);
-                        }
-                      },
-                      onFieldSubmitted: (_) {
-                        if (!_isLoading && !_isRateLimited) {
-                          _handleLogin();
-                        }
-                      },
-                      obscureText: _obscurePassword,
-                      style: const TextStyle(
-                        color: Color(0xFF0F172A),
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
+                    onFieldSubmitted: (_) {
+                      if (!_isLoading && !_isRateLimited) {
+                        _handleLogin();
+                      }
+                    },
+                    obscureText: _obscurePassword,
+                    style: const TextStyle(
+                      color: Color(0xFF0F172A),
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    inputFormatters: AppValidators.passwordFormatters,
+                    validator: (v) {
+                      if (v == null || v.trim().isEmpty) return 'Password is required';
+                      return null;
+                    },
+                    decoration: AuthResponsiveScaffold.inputDecoration(
+                      hintText: 'Password',
+                      prefixIcon: const Icon(
+                        LucideIcons.lock,
+                        color: Color(0xFF475569),
+                        size: 20,
                       ),
-                      inputFormatters: AppValidators.passwordFormatters,
-                      validator: (v) {
-                        if (v == null || v.trim().isEmpty) return 'Password is required';
-                        return null;
-                      },
-                      decoration: AuthResponsiveScaffold.inputDecoration(
-                        hintText: 'Password',
-                        prefixIcon: const Icon(
-                          LucideIcons.lock,
-                          color: Color(0xFF475569),
+                      suffixIcon: IconButton(
+                        tooltip: _obscurePassword
+                            ? 'Show password'
+                            : 'Hide password',
+                        icon: Icon(
+                          _obscurePassword
+                              ? LucideIcons.eyeOff
+                              : LucideIcons.eye,
+                          color: const Color(0xFF64748B),
                           size: 20,
                         ),
-                        suffixIcon: IconButton(
-                          tooltip: _obscurePassword
-                              ? 'Show password'
-                              : 'Hide password',
-                          icon: Icon(
-                            _obscurePassword
-                                ? LucideIcons.eyeOff
-                                : LucideIcons.eye,
-                            color: const Color(0xFF64748B),
-                            size: 20,
-                          ),
-                          onPressed: () => setState(() {
-                            _obscurePassword = !_obscurePassword;
-                            final text = _passwordController.text;
-                            _passwordController.selection =
-                                TextSelection.collapsed(offset: text.length);
-                          }),
-                        ),
+                        onPressed: () => setState(() {
+                          _obscurePassword = !_obscurePassword;
+                          final text = _passwordController.text;
+                          _passwordController.selection =
+                              TextSelection.collapsed(offset: text.length);
+                        }),
                       ),
                     ),
                   ),

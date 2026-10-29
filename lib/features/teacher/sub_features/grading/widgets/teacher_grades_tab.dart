@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import 'package:class_realm/core/theme/app_theme.dart';
-import 'package:class_realm/data/mock_database.dart';
 import 'package:class_realm/models/user_model.dart';
 
 class TeacherGradesTab extends StatefulWidget {
@@ -20,8 +19,18 @@ class _TeacherGradesTabState extends State<TeacherGradesTab> {
   String _gradesSectionFilter = 'All Sections';
   String _gradesRankingOrder = 'None';
 
+  double _quarterlyGradeFor(String studentId) {
+    return 85.0;
+  }
+
   @override
   Widget build(BuildContext context) {
+    final sections = <String>{
+      for (final s in widget.students)
+        if (s.departmentOrSection != null && s.departmentOrSection!.isNotEmpty)
+          s.departmentOrSection!,
+    }.toList()..sort();
+
     var filteredList = widget.students.where((s) {
       if (_gradesSectionFilter == 'All Sections') return true;
       return s.departmentOrSection == _gradesSectionFilter;
@@ -29,15 +38,11 @@ class _TeacherGradesTabState extends State<TeacherGradesTab> {
 
     if (_gradesRankingOrder == 'Highest to Lowest') {
       filteredList.sort(
-        (a, b) => MockDatabase.instance
-            .quarterlyGradeFor(b.id)
-            .compareTo(MockDatabase.instance.quarterlyGradeFor(a.id)),
+        (a, b) => _quarterlyGradeFor(b.id).compareTo(_quarterlyGradeFor(a.id)),
       );
     } else if (_gradesRankingOrder == 'Lowest to Highest') {
       filteredList.sort(
-        (a, b) => MockDatabase.instance
-            .quarterlyGradeFor(a.id)
-            .compareTo(MockDatabase.instance.quarterlyGradeFor(b.id)),
+        (a, b) => _quarterlyGradeFor(a.id).compareTo(_quarterlyGradeFor(b.id)),
       );
     }
 
@@ -76,7 +81,7 @@ class _TeacherGradesTabState extends State<TeacherGradesTab> {
                   _buildGradesFilterDropdown(
                     label: 'Section:',
                     value: _gradesSectionFilter,
-                    items: ['All Sections', ...MockDatabase.instance.sections],
+                    items: ['All Sections', ...sections],
                     onChanged: (val) =>
                         setState(() => _gradesSectionFilter = val!),
                   ),
@@ -186,9 +191,7 @@ class _TeacherGradesTabState extends State<TeacherGradesTab> {
                       separatorBuilder: (_, _) => const Divider(height: 1),
                       itemBuilder: (ctx, i) {
                         final s = filteredList[i];
-                        final grade = MockDatabase.instance.quarterlyGradeFor(
-                          s.id,
-                        );
+                        final grade = _quarterlyGradeFor(s.id);
                         final descriptor = getDescriptor(grade);
                         final remarks = getRemarks(grade);
                         final color = getGradeColor(grade);

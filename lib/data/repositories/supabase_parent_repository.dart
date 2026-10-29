@@ -3,7 +3,6 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:class_realm/models/user_model.dart';
-import 'package:class_realm/data/mock_database.dart';
 import 'package:class_realm/core/utils/parent_credential_helper.dart';
 import 'package:class_realm/data/repositories/supabase_learning_material_repository.dart';
 import 'package:class_realm/core/services/firebase_auth_admin_service.dart';
@@ -234,11 +233,9 @@ class SupabaseParentRepository {
       return results;
     } catch (e) {
       debugPrint(
-        'Error fetching parents for teacher (falling back to mock): $e',
+        'Error fetching parents for teacher: $e',
       );
-      return MockDatabase.instance.users
-          .where((u) => u.role == UserRole.parent && !u.isArchived)
-          .toList();
+      return [];
     }
   }
 

@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:class_realm/core/utils/browser_url_helper.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:loading_animation_widget/loading_animation_widget.dart';
 
 import 'package:class_realm/core/theme/app_theme.dart';
 import 'package:class_realm/core/utils/logout_helper.dart';
-import 'package:class_realm/data/mock_database.dart';
 import 'package:class_realm/models/academic_models.dart';
 import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/features/teacher/sub_features/assessments/screens/activity_submissions_screen.dart';
@@ -15,6 +13,8 @@ import 'package:class_realm/features/teacher/sub_features/assessments/screens/cr
 import 'package:class_realm/features/teacher/widgets/tabs/tabs.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/data/repositories/subject_repository.dart';
+import 'package:class_realm/data/repositories/supabase_student_repository.dart';
+import 'package:class_realm/data/repositories/supabase_parent_repository.dart';
 import 'package:class_realm/data/repositories/supabase_teacher_classwork_repository.dart';
 import 'package:class_realm/core/services/local_storage_service.dart';
 import 'package:class_realm/core/services/session_activity_tracker.dart';
@@ -42,6 +42,17 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   ActivityModel? _viewingSubmissionsFor;
   bool _isLoading = true;
   List<ActivityModel>? _persistedActivities;
+  List<UserModel> _allStudents = [];
+  List<UserModel> _parents = [];
+  final List<LearningMaterialModel> _materials = [];
+  final List<QuizOrExamModel> _quizzesAndExams = [];
+  final List<LessonPlanModel> _lessonPlans = [];
+  final List<GradingCriteria> _criteria = [
+    GradingCriteria(id: 'ww', name: 'Written Works', percentage: 25.0),
+    GradingCriteria(id: 'pt', name: 'Performance Tasks', percentage: 50.0),
+    GradingCriteria(id: 'qa', name: 'Quarterly Assessment', percentage: 25.0),
+  ];
+  final List<ExamSubmissionReview> _examReviews = [];
 
   bool _isGradebookLocked = true;
   DateTime? _lastGradebookCheck;
@@ -85,7 +96,6 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     final route = _routeForIndex(index);
     LocalStorageService.saveLastActiveRoute(route);
     updateBrowserUrl(route);
-    SystemChannels.navigation.invokeMethod<void>('selectRouteName', route);
   }
 
   @override
@@ -139,10 +149,25 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   }
 
   Future<void> _loadData() async {
-    // Data is loaded instantly via local cache or mock database
     if (mounted) {
       setState(() => _isLoading = false);
     }
+    final user = widget.teacher ?? AuthRepository.instance.currentUser;
+    if (user == null) return;
+    try {
+      final studentRepo = SupabaseStudentRepository();
+      final parentRepo = SupabaseParentRepository();
+      final results = await Future.wait([
+        studentRepo.getStudentsForTeacher(user.id),
+        parentRepo.getParentsForTeacher(user.id),
+      ]);
+      if (mounted) {
+        setState(() {
+          _allStudents = results[0];
+          _parents = results[1];
+        });
+      }
+    } catch (_) {}
   }
 
   @override
@@ -157,22 +182,17 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         ),
       );
     }
-    final allStudents = MockDatabase.instance.users
-        .where((u) => u.role == UserRole.student)
-        .toList();
-    final parents = MockDatabase.instance.users
-        .where((u) => u.role == UserRole.parent)
-        .toList();
+    final allStudents = _allStudents;
+    final parents = _parents;
     final activeStudents = allStudents.where((u) => !u.isArchived).toList();
     final archivedStudents = allStudents.where((u) => u.isArchived).toList();
 
-    final activities =
-        _persistedActivities ?? MockDatabase.instance.activities;
-    final quizzesAndExams = MockDatabase.instance.quizzesAndExams;
-    final lessonPlans = MockDatabase.instance.lessonPlans;
-    final materials = MockDatabase.instance.materials;
-    final criteria = MockDatabase.instance.gradingCriteria;
-    final examReviews = MockDatabase.instance.examReviews;
+    final activities = _persistedActivities ?? <ActivityModel>[];
+    final quizzesAndExams = _quizzesAndExams;
+    final lessonPlans = _lessonPlans;
+    final materials = _materials;
+    final criteria = _criteria;
+    final examReviews = _examReviews;
 
     final theme = Theme.of(context);
     final isMobile = MediaQuery.of(context).size.width < 900;
@@ -500,18 +520,21 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     ],
   );
 
-    return SessionActivityTracker(
-      child: Scaffold(
-        backgroundColor: theme.scaffoldBackgroundColor,
-        drawer: isMobile ? sidebar : null,
-        body: isMobile
-            ? mainContent
-            : Row(
-                children: [
-                  sidebar,
-                  Expanded(child: mainContent),
-                ],
-              ),
+    return PopScope(
+      canPop: false,
+      child: SessionActivityTracker(
+        child: Scaffold(
+          backgroundColor: theme.scaffoldBackgroundColor,
+          drawer: isMobile ? sidebar : null,
+          body: isMobile
+              ? mainContent
+              : Row(
+                  children: [
+                    sidebar,
+                    Expanded(child: mainContent),
+                  ],
+                ),
+        ),
       ),
     );
   }
@@ -564,7 +587,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         return 'Grading Weights';
       case 9:
         return 'Student Achievement Records';
-      case 20: // Assuming this is Manage Students based on the index
+      case 12:
         return 'Student Directory';
       case 13:
         return 'Institutional Analytics';

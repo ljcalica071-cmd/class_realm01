@@ -183,8 +183,9 @@ CREATE TABLE public.attendance_records (
   CONSTRAINT attendance_records_pkey PRIMARY KEY (id),
   CONSTRAINT attendance_records_student_id_fkey FOREIGN KEY (student_id) REFERENCES public.student_profiles(student_id),
   CONSTRAINT attendance_records_subject_offering_id_fkey FOREIGN KEY (subject_offering_id) REFERENCES public.subject_offerings(id),
-  CONSTRAINT attendance_records_recorded_by_fkey FOREIGN KEY (recorded_by) REFERENCES public.users(id),
-  CONSTRAINT attendance_records_unique_record UNIQUE (student_id, subject_offering_id, attendance_date)
+  CONSTRAINT attendance_records_student_offering_fkey FOREIGN KEY (student_id) REFERENCES public.student_enrollments(student_id),
+  CONSTRAINT attendance_records_student_offering_fkey FOREIGN KEY (subject_offering_id) REFERENCES public.student_enrollments(subject_offering_id),
+  CONSTRAINT attendance_records_recorded_by_fkey FOREIGN KEY (recorded_by) REFERENCES public.users(id)
 );
 CREATE TABLE public.classwork_items (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -199,7 +200,6 @@ CREATE TABLE public.classwork_items (
   max_score numeric NOT NULL DEFAULT 0 CHECK (max_score >= 0::numeric),
   is_published boolean NOT NULL DEFAULT false,
   is_archived boolean NOT NULL DEFAULT false,
-  completion_mode character varying NOT NULL DEFAULT 'online'::character varying CHECK (completion_mode::text = ANY (ARRAY['online'::character varying, 'in_person'::character varying]::text[])),
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   updated_at timestamp with time zone NOT NULL DEFAULT now(),
   term_number smallint NOT NULL DEFAULT 1 CHECK (term_number >= 1 AND term_number <= 3),
@@ -280,7 +280,6 @@ CREATE TABLE public.digital_assessments (
   attempts_allowed integer NOT NULL DEFAULT 1 CHECK (attempts_allowed >= 1),
   is_published boolean NOT NULL DEFAULT false,
   is_archived boolean NOT NULL DEFAULT false,
-  completion_mode character varying NOT NULL DEFAULT 'online'::character varying CHECK (completion_mode::text = ANY (ARRAY['online'::character varying, 'in_person'::character varying]::text[])),
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   updated_at timestamp with time zone NOT NULL DEFAULT now(),
   CONSTRAINT digital_assessments_pkey PRIMARY KEY (id),
@@ -495,7 +494,7 @@ CREATE TABLE public.user_session_logs (
   login_at timestamp with time zone NOT NULL DEFAULT now(),
   last_active_at timestamp with time zone NOT NULL DEFAULT now(),
   logout_at timestamp with time zone,
-  logout_reason character varying CHECK (logout_reason IS NULL OR (logout_reason::text = ANY (ARRAY['manual'::character varying, 'inactivity'::character varying, 'inactivity_timeout'::character varying, 'terminated'::character varying, 'app_closed'::character varying, 'session_expired'::character varying, 'session_superseded'::character varying]::text[]))),
+  logout_reason character varying CHECK (logout_reason IS NULL OR (logout_reason::text = ANY (ARRAY['manual'::character varying, 'inactivity'::character varying, 'terminated'::character varying]::text[]))),
   is_active boolean NOT NULL DEFAULT true,
   duration_seconds integer NOT NULL DEFAULT 0 CHECK (duration_seconds >= 0),
   created_at timestamp with time zone NOT NULL DEFAULT now(),

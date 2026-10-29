@@ -8,7 +8,6 @@ import 'package:class_realm/core/config/env_config.dart';
 import 'package:firebase_auth/firebase_auth.dart' as firebase;
 import 'package:supabase_flutter/supabase_flutter.dart' hide User;
 import 'package:class_realm/models/user_model.dart' as custom;
-import 'package:class_realm/data/datasources/mock/mock_database.dart';
 import 'package:class_realm/core/services/local_storage_service.dart';
 import 'package:class_realm/core/services/email_service.dart';
 import 'package:class_realm/core/services/email_verification_service.dart';
@@ -77,7 +76,6 @@ class AuthRepository {
   custom.UserModel? _currentUser;
   custom.UserModel? get currentUser =>
       _currentUser ??
-      MockDatabase.instance.currentUser ??
       LocalStorageService.getCachedUser();
 
   String? _activeSessionId;
@@ -87,7 +85,6 @@ class AuthRepository {
 
   void setCurrentUser(custom.UserModel user) {
     _currentUser = user;
-    MockDatabase.instance.currentUser = user;
     LocalStorageService.saveUser(user);
   }
 
@@ -100,7 +97,6 @@ class AuthRepository {
       if (diff >= const Duration(minutes: 30)) {
         LocalStorageService.clearCachedUser();
         _currentUser = null;
-        MockDatabase.instance.currentUser = null;
         clearWarmSession();
         return null;
       }
@@ -108,7 +104,6 @@ class AuthRepository {
     final cached = LocalStorageService.getCachedUser();
     if (cached != null) {
       _currentUser = cached;
-      MockDatabase.instance.currentUser = cached;
       markWarmSession();
       return cached;
     }
@@ -118,19 +113,6 @@ class AuthRepository {
   // Login
   Future<custom.UserModel?> authenticate(String email, String password) async {
     final cleanEmail = email.trim().toLowerCase();
-
-    // The parent prototype remains available until its real account flow is enabled.
-    if (cleanEmail == 'parent') {
-      _currentUser = custom.UserModel(
-        id: 'usr_parent',
-        username: email,
-        fullName: 'Mock Parent',
-        email: email,
-        role: custom.UserRole.parent,
-      );
-      MockDatabase.instance.currentUser = _currentUser;
-      return _currentUser;
-    }
 
     // 1. Check Device-Wide Lockout (10 failed attempts within 5 minutes)
     final deviceLimit = await RateLimitService.instance.checkStatus(
@@ -199,7 +181,6 @@ class AuthRepository {
         );
 
         await LocalStorageService.saveUser(_currentUser!);
-        MockDatabase.instance.currentUser = _currentUser;
         unawaited(startSessionLog(_currentUser!));
         return _currentUser;
       }
@@ -269,20 +250,27 @@ class AuthRepository {
       await LocalStorageService.clearAuth();
     }
 
-    final firebaseUser = _firebaseAuth.currentUser;
+    var firebaseUser = _firebaseAuth.currentUser;
+    if (firebaseUser == null) {
+      try {
+        firebaseUser = await _firebaseAuth
+            .authStateChanges()
+            .first
+            .timeout(const Duration(seconds: 2), onTimeout: () => null);
+      } catch (_) {}
+    }
+
     if (firebaseUser != null) {
       // 1. Check local cache first for instant load
       final cachedUser = LocalStorageService.getCachedUser();
       if (cachedUser != null && cachedUser.id == firebaseUser.uid) {
         _currentUser = cachedUser;
-        MockDatabase.instance.currentUser = _currentUser;
 
         // 2. Refresh from Supabase to keep profile fields (e.g. gender, name, status) strictly synchronized
         try {
           final updatedUser = await _getUserFromSupabase(firebaseUser.uid);
           if (updatedUser != null) {
             _currentUser = updatedUser;
-            MockDatabase.instance.currentUser = _currentUser;
             await LocalStorageService.saveUser(updatedUser);
           }
         } catch (_) {}
@@ -312,16 +300,19 @@ class AuthRepository {
             return null;
           }
           await LocalStorageService.saveUser(_currentUser!);
-          MockDatabase.instance.currentUser = _currentUser;
           unawaited(startSessionLog(_currentUser!));
           return _currentUser;
         }
       } catch (e) {
-        debugPrint('Failed to restore session: $e');
-        // Token might be expired or user deleted in Supabase
-        await _firebaseAuth.signOut();
-        await LocalStorageService.clearAuth();
+        debugPrint('Failed to restore session from Supabase: $e');
+        if (cachedUser != null) {
+          _currentUser = cachedUser;
+          return _currentUser;
+        }
       }
+    } else if (cached != null) {
+      _currentUser = cached;
+      return _currentUser;
     }
     return null;
   }
@@ -545,9 +536,6 @@ class AuthRepository {
       try {
         await _firebaseAuth.signOut();
       } catch (_) {}
-
-      // Also sign out of mock database just in case it was a student/parent
-      MockDatabase.instance.logout();
     }
   }
 
@@ -1251,7 +1239,6 @@ class AuthRepository {
       final current = _currentUser;
       if (current != null && current.id == userId) {
         _currentUser = current.copyWith(status: custom.AccountStatus.active);
-        MockDatabase.instance.currentUser = _currentUser;
       }
       await LocalStorageService.updateSavedPasswordIfRemembered(newPassword);
       return null;
@@ -1269,7 +1256,7 @@ class AuthRepository {
   int _forgotPasswordAttempts = 0;
   bool _forgotPasswordVerified = false;
 
-  /// Look up a user profile by email across Supabase and MockDatabase.
+  /// Look up a user profile by email in Supabase.
   Future<custom.UserModel?> getUserByEmail(String email) async {
     final cleanEmail = email.trim().toLowerCase();
     if (cleanEmail.isEmpty) return null;
@@ -1289,13 +1276,7 @@ class AuthRepository {
       debugPrint('[AuthRepository] getUserByEmail Supabase error: $e');
     }
 
-    try {
-      return MockDatabase.instance.users.firstWhere(
-        (u) => u.email.trim().toLowerCase() == cleanEmail,
-      );
-    } catch (_) {
-      return null;
-    }
+    return null;
   }
 
   /// Sends a secure pure Dart 6-digit OTP code to the requested email for password restorey.
@@ -1731,17 +1712,6 @@ class AuthRepository {
             .delete()
             .eq('email', cleanEmail);
       } catch (_) {}
-
-      // 4. Update local session or mock database if applicable
-      final mockIndex = MockDatabase.instance.users.indexWhere(
-        (u) => u.email.trim().toLowerCase() == cleanEmail,
-      );
-      if (mockIndex != -1) {
-        final mockUser = MockDatabase.instance.users[mockIndex];
-        MockDatabase.instance.users[mockIndex] = mockUser.copyWith(
-          status: custom.AccountStatus.active,
-        );
-      }
 
       await LocalStorageService.updateSavedPasswordIfRemembered(
         newPassword,
