@@ -448,9 +448,18 @@ class _TeacherUnifiedAssessmentsTabState
                           icon: Icons.assignment_outlined,
                           onPressed: () {
                             final sectionParam = _selectedClassSection ?? '';
+                            final offeringMatch = _teacherSubjects.firstWhere(
+                              (s) =>
+                                  (_selectedSubject == null || s['subject_name'] == _selectedSubject) &&
+                                  (_selectedClassSection == null || s['section_name'] == _selectedClassSection),
+                              orElse: () => _teacherSubjects.isNotEmpty ? _teacherSubjects.first : <String, dynamic>{},
+                            );
                             CreateRequirementFlowDialog.show(
                               context,
                               initialSection: sectionParam,
+                              initialSubject: _selectedSubject,
+                              initialOfferingId: offeringMatch['id']?.toString(),
+                              initialOfferings: _teacherSubjects,
                               isPerformanceTask: false,
                               repository: widget.repository,
                               onRequirementCreated: () {
@@ -495,9 +504,18 @@ class _TeacherUnifiedAssessmentsTabState
                           icon: Icons.add_task,
                           onPressed: () {
                             final sectionParam = _selectedClassSection ?? '';
+                            final offeringMatch = _teacherSubjects.firstWhere(
+                              (s) =>
+                                  (_selectedSubject == null || s['subject_name'] == _selectedSubject) &&
+                                  (_selectedClassSection == null || s['section_name'] == _selectedClassSection),
+                              orElse: () => _teacherSubjects.isNotEmpty ? _teacherSubjects.first : <String, dynamic>{},
+                            );
                             CreateRequirementFlowDialog.show(
                               context,
                               initialSection: sectionParam,
+                              initialSubject: _selectedSubject,
+                              initialOfferingId: offeringMatch['id']?.toString(),
+                              initialOfferings: _teacherSubjects,
                               isPerformanceTask: true,
                               repository: widget.repository,
                               onRequirementCreated: () {
@@ -1074,6 +1092,9 @@ class _TeacherUnifiedAssessmentsTabState
       initialSection: item.assignedSections.isNotEmpty
           ? item.assignedSections.first
           : '',
+      initialSubject: item.subject,
+      initialOfferingId: item.subjectOfferingId,
+      initialOfferings: _teacherSubjects,
       isPerformanceTask: item.isRequirement,
       repository: widget.repository,
       onRequirementCreated: () {

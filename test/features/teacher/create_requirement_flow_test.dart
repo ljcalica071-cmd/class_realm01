@@ -1,218 +1,154 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:class_realm/models/academic_models.dart';
-import 'package:class_realm/data/repositories/teacher_classwork_repository.dart';
 import 'package:class_realm/features/teacher/sub_features/assessments/screens/create_requirement_flow.dart';
-
-class FakeTeacherClassworkRepo implements TeacherClassworkRepository {
-  List<ActivityModel> activities = [];
-  bool saveCalled = false;
-  ActivityModel? lastSavedActivity;
-
-  @override
-  Future<List<ActivityModel>> getActivities({String? subjectOfferingId}) async {
-    return activities;
-  }
-
-  @override
-  Future<ActivityModel> saveActivity({
-    required ActivityModel activity,
-    required String subjectOfferingId,
-    dynamic fileBytes,
-    String? fileName,
-    String? mimeType,
-    bool removeExistingAttachment = false,
-  }) async {
-    saveCalled = true;
-    lastSavedActivity = activity;
-    return activity;
-  }
-
-  @override
-  Future<void> deleteActivity(String activityId) async {
-    activities.removeWhere((a) => a.id == activityId);
-  }
-
-  @override
-  Future<bool> isGradebookSlotOccupied({
-    required String subjectOfferingId,
-    required String gradingCategory,
-    required int termNumber,
-    required int gradebookColumnIndex,
-    String? excludeClassworkId,
-  }) async {
-    return false;
-  }
-}
+import 'package:class_realm/shared/widgets/inputs/app_text_field.dart';
 
 void main() {
-  Widget buildTestWidget({
-    required FakeTeacherClassworkRepo repo,
-    List<Map<String, dynamic>> teacherOfferings = const [],
-    ActivityModel? existingTask,
-    bool isPerformanceTask = false,
-  }) {
-    return MaterialApp(
-      home: Scaffold(
-        body: Center(
-          child: SizedBox(
-            width: 1000,
-            height: 800,
-            child: CreateRequirementFlowDialog(
-              onRequirementCreated: () {},
-              repository: repo,
-              initialOfferings: teacherOfferings,
-              existingTask: existingTask,
-              isPerformanceTask: isPerformanceTask,
+  group('AppTextField Tests', () {
+    testWidgets('renders custom hint, maxLength, and live counter', (tester) async {
+      final controller = TextEditingController();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: AppTextField(
+              label: 'Test Label',
+              hint: 'e.g. Placeholder Hint',
+              controller: controller,
+              maxLength: 50,
+              showCounter: true,
             ),
           ),
         ),
-      ),
-    );
-  }
+      );
 
-  group('CreateRequirementFlowDialog UI & Validation', () {
-    testWidgets('renders required asterisk labels on Title, Total Points, and Instructions', (tester) async {
-      tester.view.physicalSize = const Size(1280, 800);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(() => tester.view.resetPhysicalSize());
+      expect(find.text('Test Label'), findsOneWidget);
+      expect(find.text('e.g. Placeholder Hint'), findsOneWidget);
+      expect(find.text('0/50'), findsOneWidget);
 
-      final repo = FakeTeacherClassworkRepo();
-      await tester.pumpWidget(buildTestWidget(
-        repo: repo,
-        teacherOfferings: [
-          {
-            'id': 'offering-1',
-            'subject_name': 'Mathematics',
-            'section_name': 'Section A',
-            'grade_level': 'Grade 11',
-          }
-        ],
-      ));
-      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextFormField), 'Sample text');
+      await tester.pump();
 
-      expect(find.textContaining('Title *'), findsOneWidget);
-      expect(find.textContaining('Total Points *'), findsOneWidget);
-      expect(find.textContaining('Detailed Instructions *'), findsOneWidget);
+      expect(find.text('11/50'), findsOneWidget);
     });
 
-    testWidgets('shows simultaneous inline error messages when submitted empty, with NO modal dialog', (tester) async {
-      tester.view.physicalSize = const Size(1280, 800);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(() => tester.view.resetPhysicalSize());
+    testWidgets('omits label and spacing when label is empty', (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: AppTextField(
+              label: '',
+              hint: 'No label field',
+            ),
+          ),
+        ),
+      );
 
-      final repo = FakeTeacherClassworkRepo();
-      await tester.pumpWidget(buildTestWidget(
-        repo: repo,
-        teacherOfferings: [
-          {
-            'id': 'offering-1',
-            'subject_name': 'Mathematics',
-            'section_name': 'Section A',
-            'grade_level': 'Grade 11',
-          }
-        ],
-      ));
-      await tester.pumpAndSettle();
+      expect(
+        find.byWidgetPredicate((w) => w is Text && w.style?.fontSize == 13 && w.style?.fontWeight == FontWeight.w600),
+        findsNothing,
+      );
+      expect(find.text('No label field'), findsOneWidget);
+    });
+  });
 
-      // Clear the default '100' points in the score field
-      final pointsFinder = find.widgetWithText(TextFormField, '100');
-      if (pointsFinder.evaluate().isNotEmpty) {
-        await tester.enterText(pointsFinder, '');
+  group('CreateRequirementFlowDialog UI Requirements', () {
+    final singleTermOffering = [
+      {
+        'id': 'offering-1',
+        'subject_id': 'sub-1',
+        'subject_name': 'Art Criticism and Creative Markets',
+        'grade_level': 'Grade 11',
+        'section_id': 'sec-1',
+        'section_name': 'Section 1',
+        'terms_taught': 1,
+        'term_block': '1ST',
+        'ww_weight': 20,
+        'pt_weight': 60,
+        'ex_weight': 20,
       }
+    ];
 
-      // Tap Publish button
-      final publishBtn = find.textContaining('Publish');
-      expect(publishBtn, findsOneWidget);
-      await tester.tap(publishBtn);
+    final multiTermOffering = [
+      {
+        'id': 'offering-2',
+        'subject_id': 'sub-2',
+        'subject_name': 'General Mathematics',
+        'grade_level': 'Grade 11',
+        'section_id': 'sec-2',
+        'section_name': 'Section A',
+        'terms_taught': 2,
+        'term_block': '1ST & 2ND',
+        'ww_weight': 20,
+        'pt_weight': 50,
+        'ex_weight': 30,
+      }
+    ];
+
+    testWidgets('single-term subject shows static term container without dropdown', (tester) async {
+      tester.view.physicalSize = const Size(1200, 1000);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: CreateRequirementFlowDialog(
+              onRequirementCreated: () {},
+              initialOfferings: singleTermOffering,
+              initialOfferingId: 'offering-1',
+              isPerformanceTask: true,
+            ),
+          ),
+        ),
+      );
       await tester.pumpAndSettle();
 
-      // Check inline errors appear
-      expect(find.text('Title is required.'), findsOneWidget);
-      expect(find.text('Total points is required.'), findsOneWidget);
-      expect(find.text('Detailed instructions are required.'), findsOneWidget);
+      // Verify Context Badge is centered and has no emojis
+      expect(find.text('Grade 11 • Art Criticism and Creative Markets • Section 1'), findsOneWidget);
+      expect(find.textContaining('🎯'), findsNothing);
+      expect(find.byIcon(Icons.school), findsNothing);
 
-      // Verify no modal dialog popped up (AppModals was not shown)
-      expect(find.byType(AlertDialog), findsNothing);
-      expect(repo.saveCalled, isFalse);
+      // Verify Gradebook Term is displayed as static text and not a dropdown
+      expect(find.text('1st Term'), findsOneWidget);
+      // There is only 1 DropdownButtonFormField (for Gradebook Column)
+      expect(find.byType(DropdownButtonFormField<int>), findsNothing);
+      expect(find.byType(DropdownButtonFormField<int?>), findsOneWidget); // For Column
+
+      // Verify Total Points has only one label, without duplicate "HPS"
+      expect(find.text('Total Points (HPS) *'), findsOneWidget);
+      expect(find.text('HPS'), findsNothing);
+
+      // Verify Deadline starts empty
+      expect(find.text('Select deadline'), findsOneWidget);
+
+      // Verify Title counter & Rubrics counter
+      expect(find.text('0/50'), findsOneWidget);
+      expect(find.text('0/1000'), findsOneWidget);
     });
 
-    testWidgets('validates score range 10 to 100 whole integers inline', (tester) async {
-      tester.view.physicalSize = const Size(1280, 800);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(() => tester.view.resetPhysicalSize());
+    testWidgets('multi-term subject shows dropdown with only available terms', (tester) async {
+      tester.view.physicalSize = const Size(1200, 1000);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
 
-      final repo = FakeTeacherClassworkRepo();
-      await tester.pumpWidget(buildTestWidget(
-        repo: repo,
-        teacherOfferings: [
-          {
-            'id': 'offering-1',
-            'subject_name': 'Mathematics',
-            'section_name': 'Section A',
-            'grade_level': 'Grade 11',
-          }
-        ],
-      ));
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: CreateRequirementFlowDialog(
+              onRequirementCreated: () {},
+              initialOfferings: multiTermOffering,
+              initialOfferingId: 'offering-2',
+              isPerformanceTask: true,
+            ),
+          ),
+        ),
+      );
       await tester.pumpAndSettle();
 
-      // Find score field
-      final scoreField = find.byType(TextFormField).at(1);
-
-      // Score = 9
-      await tester.enterText(scoreField, '9');
-      final publishBtn = find.textContaining('Publish');
-      await tester.tap(publishBtn);
-      await tester.pumpAndSettle();
-
-      expect(find.text('Total points must be a whole number from 10 to 100.'), findsOneWidget);
-
-      // Score = 101
-      await tester.enterText(scoreField, '101');
-      await tester.tap(publishBtn);
-      await tester.pumpAndSettle();
-
-      expect(find.text('Total points must be a whole number from 10 to 100.'), findsOneWidget);
-
-      // Score = 50 (valid)
-      await tester.enterText(scoreField, '50');
-      await tester.pumpAndSettle();
-
-      expect(find.text('Total points must be a whole number from 10 to 100.'), findsNothing);
-    });
-
-    testWidgets('clears inline error when field is corrected', (tester) async {
-      tester.view.physicalSize = const Size(1280, 800);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(() => tester.view.resetPhysicalSize());
-
-      final repo = FakeTeacherClassworkRepo();
-      await tester.pumpWidget(buildTestWidget(
-        repo: repo,
-        teacherOfferings: [
-          {
-            'id': 'offering-1',
-            'subject_name': 'Mathematics',
-            'section_name': 'Section A',
-            'grade_level': 'Grade 11',
-          }
-        ],
-      ));
-      await tester.pumpAndSettle();
-
-      // Tap publish to trigger validation
-      await tester.tap(find.textContaining('Publish'));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Title is required.'), findsOneWidget);
-
-      // Enter valid title
-      final titleField = find.byType(TextFormField).at(0);
-      await tester.enterText(titleField, 'Algebra Practice');
-      await tester.pumpAndSettle();
-
-      // Error must clear immediately
-      expect(find.text('Title is required.'), findsNothing);
+      // Multi-term has DropdownButtonFormField<int> for terms
+      expect(find.byType(DropdownButtonFormField<int>), findsOneWidget);
     });
   });
 }

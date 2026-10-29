@@ -7,6 +7,7 @@ import 'package:class_realm/data/repositories/subject_repository.dart';
 import 'package:class_realm/data/repositories/teacher_classwork_repository.dart';
 import 'package:class_realm/data/repositories/supabase_teacher_classwork_repository.dart';
 import 'package:class_realm/models/academic_models.dart';
+import 'package:class_realm/models/subject_catalog_model.dart';
 import 'package:class_realm/widgets/common/app_buttons.dart';
 import 'package:class_realm/widgets/common/app_text_field.dart';
 import 'package:class_realm/widgets/common/app_date_picker_field.dart';
@@ -14,6 +15,8 @@ import 'package:class_realm/widgets/common/app_date_picker_field.dart';
 class CreateRequirementFlowDialog extends StatefulWidget {
   final VoidCallback onRequirementCreated;
   final String initialSection;
+  final String? initialSubject;
+  final String? initialOfferingId;
   final ActivityModel? existingTask;
   final bool isPerformanceTask;
   final TeacherClassworkRepository? repository;
@@ -23,6 +26,8 @@ class CreateRequirementFlowDialog extends StatefulWidget {
     super.key,
     required this.onRequirementCreated,
     this.initialSection = '',
+    this.initialSubject,
+    this.initialOfferingId,
     this.existingTask,
     this.isPerformanceTask = true,
     this.repository,
@@ -33,9 +38,12 @@ class CreateRequirementFlowDialog extends StatefulWidget {
     BuildContext context, {
     required VoidCallback onRequirementCreated,
     String? initialSection,
+    String? initialSubject,
+    String? initialOfferingId,
     ActivityModel? existingTask,
     bool isPerformanceTask = true,
     TeacherClassworkRepository? repository,
+    List<Map<String, dynamic>>? initialOfferings,
   }) {
     return showDialog(
       context: context,
@@ -43,9 +51,12 @@ class CreateRequirementFlowDialog extends StatefulWidget {
       builder: (ctx) => CreateRequirementFlowDialog(
         onRequirementCreated: onRequirementCreated,
         initialSection: initialSection ?? '',
+        initialSubject: initialSubject,
+        initialOfferingId: initialOfferingId,
         existingTask: existingTask,
         isPerformanceTask: isPerformanceTask,
         repository: repository,
+        initialOfferings: initialOfferings,
       ),
     );
   }
@@ -65,7 +76,7 @@ class _CreateRequirementFlowDialogState
   String? _selectedOfferingId;
   String? _selectedGrade;
   String? _selectedSubject;
-  DateTime _deadline = DateTime.now().add(const Duration(days: 7));
+  DateTime? _deadline;
   List<Map<String, dynamic>> _offerings = [];
   bool _isLoadingOfferings = true;
 
@@ -107,6 +118,8 @@ class _CreateRequirementFlowDialogState
       _termNumber = task.termNumber;
       _gradebookColumnIndex = task.gradebookColumnIndex;
       _completionMode = task.completionMode;
+    } else {
+      _deadline = null;
     }
 
     if (widget.initialOfferings != null) {
@@ -164,31 +177,119 @@ class _CreateRequirementFlowDialogState
     }).toList();
   }
 
+  String _termLabel(int term) {
+    switch (term) {
+      case 1:
+        return '1st Term';
+      case 2:
+        return '2nd Term';
+      case 3:
+        return '3rd Term';
+      default:
+        return 'Term $term';
+    }
+  }
+
+  List<int> _getAvailableTermsForOffering(Map<String, dynamic>? offering) {
+    if (offering == null || offering.isEmpty) return const [1, 2, 3];
+
+    int? termsTaught;
+    String? termBlock;
+
+    if (offering['terms_taught'] != null) {
+      final tt = offering['terms_taught'];
+      termsTaught = tt is int ? tt : int.tryParse(tt.toString());
+    }
+    if (offering['term_block'] != null) {
+      termBlock = offering['term_block']?.toString();
+    }
+
+    final subjectName = offering['subject_name']?.toString().trim();
+    if (termsTaught == null || termsTaught == 3) {
+      if (subjectName != null && subjectName.isNotEmpty) {
+        try {
+          final catalogMatch = DepEdSubjectCatalog.allSubjects.firstWhere(
+            (item) => item.name.toLowerCase() == subjectName.toLowerCase(),
+          );
+          termsTaught = catalogMatch.termsTaught;
+        } catch (_) {}
+      }
+    }
+
+    termsTaught ??= 3;
+    termBlock ??= (termsTaught == 1
+        ? '1ST'
+        : (termsTaught == 2 ? '1ST & 2ND' : '1ST, 2ND, 3RD'));
+
+    try {
+      final active = DepEdSubjectCatalog.getActiveTermsForBlock(
+        termsTaught.clamp(1, 3),
+        termBlock,
+      );
+      if (active.isNotEmpty) return active;
+    } catch (_) {
+      if (termsTaught == 1) {
+        final upper = termBlock.toUpperCase();
+        if (upper.contains('3') || upper.contains('THIRD')) return const [3];
+        if (upper.contains('2') || upper.contains('SECOND')) return const [2];
+        return const [1];
+      } else if (termsTaught == 2) {
+        final upper = termBlock.toUpperCase();
+        if (upper.contains('3') || upper.contains('2ND & 3RD')) return const [2, 3];
+        return const [1, 2];
+      }
+    }
+    return const [1, 2, 3];
+  }
+
   void _initializeSelectedOffering() {
     if (_offerings.isEmpty) return;
 
+    Map<String, dynamic> match = _offerings.first;
     if (_selectedOfferingId != null) {
-      final match = _offerings.firstWhere(
+      match = _offerings.firstWhere(
         (o) => o['id']?.toString() == _selectedOfferingId,
         orElse: () => _offerings.first,
       );
-      final g = match['grade_level']?.toString().trim();
-      _selectedGrade = g != null && g.startsWith('Grade') ? g : 'Grade $g';
-      _selectedSubject = match['subject_name']?.toString().trim();
-      _selectedOfferingId = match['id']?.toString();
-    } else {
-      Map<String, dynamic> match = _offerings.first;
-      if (widget.initialSection.isNotEmpty) {
-        try {
-          match = _offerings.firstWhere(
-            (o) => o['section_name']?.toString().trim() == widget.initialSection,
-          );
-        } catch (_) {}
-      }
-      final g = match['grade_level']?.toString().trim();
-      _selectedGrade = g != null && g.startsWith('Grade') ? g : 'Grade $g';
-      _selectedSubject = match['subject_name']?.toString().trim();
-      _selectedOfferingId = match['id']?.toString();
+    } else if (widget.initialOfferingId != null &&
+        widget.initialOfferingId!.isNotEmpty) {
+      match = _offerings.firstWhere(
+        (o) => o['id']?.toString() == widget.initialOfferingId,
+        orElse: () => _offerings.first,
+      );
+    } else if (widget.initialSection.isNotEmpty ||
+        (widget.initialSubject != null && widget.initialSubject!.isNotEmpty)) {
+      try {
+        match = _offerings.firstWhere(
+          (o) {
+            final secMatch = widget.initialSection.isEmpty ||
+                o['section_name']?.toString().trim() ==
+                    widget.initialSection.trim();
+            final subMatch = widget.initialSubject == null ||
+                widget.initialSubject!.isEmpty ||
+                o['subject_name']?.toString().trim() ==
+                    widget.initialSubject!.trim();
+            return secMatch && subMatch;
+          },
+          orElse: () => _offerings.firstWhere(
+            (o) =>
+                widget.initialSection.isNotEmpty &&
+                o['section_name']?.toString().trim() ==
+                    widget.initialSection.trim(),
+            orElse: () => _offerings.first,
+          ),
+        );
+      } catch (_) {}
+    }
+
+    final g = match['grade_level']?.toString().trim();
+    _selectedGrade = g != null && g.startsWith('Grade') ? g : 'Grade $g';
+    _selectedSubject = match['subject_name']?.toString().trim();
+    _selectedOfferingId = match['id']?.toString();
+
+    final availableTerms = _getAvailableTermsForOffering(match);
+    if (!availableTerms.contains(_termNumber)) {
+      _termNumber = availableTerms.isNotEmpty ? availableTerms.first : 1;
     }
   }
 
@@ -298,7 +399,9 @@ class _CreateRequirementFlowDialogState
 
   Future<void> _selectDeadline() async {
     final now = DateTime.now();
-    final initial = _deadline.isBefore(now) ? now.add(const Duration(days: 1)) : _deadline;
+    final initial = _deadline != null && _deadline!.isAfter(now)
+        ? _deadline!
+        : now.add(const Duration(days: 1));
     final date = await showAppDatePickerDialog(
       context,
       initialDate: initial,
@@ -322,7 +425,7 @@ class _CreateRequirementFlowDialogState
         time.hour,
         time.minute,
       );
-      if (_deadline.isAfter(DateTime.now())) {
+      if (_deadline!.isAfter(DateTime.now())) {
         _deadlineError = null;
       }
     });
@@ -368,13 +471,24 @@ class _CreateRequirementFlowDialogState
       setState(() => _columnError = null);
     }
 
-    if (_completionMode == 'online' && widget.existingTask == null && _deadline.isBefore(DateTime.now())) {
-      setState(() => _deadlineError = 'Due date must be in the future.');
+    if (_completionMode == 'online') {
+      if (_deadline == null) {
+        setState(() => _deadlineError = 'Please select a submission deadline.');
+      } else if (widget.existingTask == null && _deadline!.isBefore(DateTime.now())) {
+        setState(() => _deadlineError = 'Due date must be in the future.');
+      } else {
+        setState(() => _deadlineError = null);
+      }
     } else {
       setState(() => _deadlineError = null);
     }
 
-    if (!formValid || !offeringValid || !columnValid || _fileError != null || _deadlineError != null) {
+    if (!formValid ||
+        !offeringValid ||
+        !columnValid ||
+        _fileError != null ||
+        _deadlineError != null ||
+        (_completionMode == 'online' && _deadline == null)) {
       return;
     }
 
@@ -419,7 +533,7 @@ class _CreateRequirementFlowDialogState
         subject: subjectName,
         gradeLevel: gradeLevel,
         section: sectionName,
-        deadline: _deadline,
+        deadline: _deadline ?? DateTime.now().add(const Duration(days: 7)),
         maxScore: maxScore,
         isPublished: true,
         isRequirement: widget.isPerformanceTask,
@@ -589,12 +703,15 @@ class _CreateRequirementFlowDialogState
                                     children: [
                                       Icon(Icons.computer, size: 16, color: _completionMode == 'online' ? const Color(0xFF0F8A48) : Colors.grey),
                                       const SizedBox(width: 6),
-                                      Text(
-                                        'Online (Submit via App)',
-                                        style: TextStyle(
-                                          fontSize: 13,
-                                          fontWeight: _completionMode == 'online' ? FontWeight.w700 : FontWeight.w500,
-                                          color: _completionMode == 'online' ? const Color(0xFF0F8A48) : Colors.grey.shade600,
+                                      Flexible(
+                                        child: Text(
+                                          'Online (Submit via App)',
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            fontSize: 13,
+                                            fontWeight: _completionMode == 'online' ? FontWeight.w700 : FontWeight.w500,
+                                            color: _completionMode == 'online' ? const Color(0xFF0F8A48) : Colors.grey.shade600,
+                                          ),
                                         ),
                                       ),
                                     ],
@@ -619,12 +736,15 @@ class _CreateRequirementFlowDialogState
                                     children: [
                                       Icon(Icons.group, size: 16, color: _completionMode == 'in_person' ? const Color(0xFF0F8A48) : Colors.grey),
                                       const SizedBox(width: 6),
-                                      Text(
-                                        'In-Person (Manual Record)',
-                                        style: TextStyle(
-                                          fontSize: 13,
-                                          fontWeight: _completionMode == 'in_person' ? FontWeight.w700 : FontWeight.w500,
-                                          color: _completionMode == 'in_person' ? const Color(0xFF0F8A48) : Colors.grey.shade600,
+                                      Flexible(
+                                        child: Text(
+                                          'In-Person (Manual Record)',
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            fontSize: 13,
+                                            fontWeight: _completionMode == 'in_person' ? FontWeight.w700 : FontWeight.w500,
+                                            color: _completionMode == 'in_person' ? const Color(0xFF0F8A48) : Colors.grey.shade600,
+                                          ),
                                         ),
                                       ),
                                     ],
@@ -640,27 +760,22 @@ class _CreateRequirementFlowDialogState
                       // B. Context Badge
                       if (_selectedOfferingId != null)
                         Container(
+                          width: double.infinity,
                           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                           decoration: BoxDecoration(
                             color: const Color(0xFFE8F5E9), // Light Emerald
                             borderRadius: BorderRadius.circular(8),
                             border: Border.all(color: const Color(0xFF0F8A48).withValues(alpha: 0.2)),
                           ),
-                          child: Row(
-                            children: [
-                              const Icon(Icons.school, size: 16, color: Color(0xFF0F8A48)),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Text(
-                                  '🎯 $_selectedGrade • $_selectedSubject • ${_offerings.firstWhere((o) => o['id'].toString() == _selectedOfferingId, orElse: () => {'section_name': ''})['section_name']}',
-                                  style: const TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w600,
-                                    color: Color(0xFF0F8A48),
-                                  ),
-                                ),
-                              ),
-                            ],
+                          alignment: Alignment.center,
+                          child: Text(
+                            '$_selectedGrade • $_selectedSubject • ${_offerings.firstWhere((o) => o['id'].toString() == _selectedOfferingId, orElse: () => {'section_name': ''})['section_name']}',
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF0F8A48),
+                            ),
                           ),
                         ),
                       const SizedBox(height: 16),
@@ -670,87 +785,126 @@ class _CreateRequirementFlowDialogState
                         label: widget.isPerformanceTask ? 'Performance Task Title *' : 'Activity / Assignment Title *',
                         hint: widget.isPerformanceTask ? 'e.g. Stage Play Performance' : 'e.g. Chapter 1 Reading Reflection',
                         controller: _titleCtrl,
+                        maxLength: 50,
+                        showCounter: true,
+                        inputFormatters: [
+                          LengthLimitingTextInputFormatter(50),
+                        ],
                         validator: (value) {
                           final text = (value ?? '').trim();
                           if (text.isEmpty) return 'Title is required.';
-                          if (text.length > 100) return 'Title must not exceed 100 characters.';
+                          if (text.length > 50) return 'Title must not exceed 50 characters.';
                           return null;
                         },
                       ),
                       const SizedBox(height: 16),
 
                       // D. Grid Row 1 (Term & Column)
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'Gradebook Term *',
-                                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-                                ),
-                                const SizedBox(height: 6),
-                                DropdownButtonFormField<int>(
-                                  initialValue: _termNumber,
-                                  decoration: InputDecoration(
-                                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                                  ),
-                                  items: const [
-                                    DropdownMenuItem(value: 1, child: Text('1st Term', style: TextStyle(fontSize: 13))),
-                                    DropdownMenuItem(value: 2, child: Text('2nd Term', style: TextStyle(fontSize: 13))),
-                                    DropdownMenuItem(value: 3, child: Text('3rd Term', style: TextStyle(fontSize: 13))),
-                                  ],
-                                  onChanged: (val) {
-                                    if (val != null) setState(() => _termNumber = val);
-                                  },
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'Gradebook Column *',
-                                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-                                ),
-                                const SizedBox(height: 6),
-                                DropdownButtonFormField<int?>(
-                                  initialValue: _gradebookColumnIndex,
-                                  hint: Text('Select ${widget.isPerformanceTask ? 'PT' : 'WW'} Slot', style: const TextStyle(fontSize: 13)),
-                                  decoration: InputDecoration(
-                                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(8),
-                                      borderSide: _columnError != null ? const BorderSide(color: Color(0xFFEF4444)) : const BorderSide(),
+                      Builder(
+                        builder: (context) {
+                          final selectedOffering = _offerings.firstWhere(
+                            (o) => o['id']?.toString() == _selectedOfferingId,
+                            orElse: () => <String, dynamic>{},
+                          );
+                          final availableTerms = _getAvailableTermsForOffering(selectedOffering);
+                          final currentTerm = availableTerms.contains(_termNumber)
+                              ? _termNumber
+                              : (availableTerms.isNotEmpty ? availableTerms.first : 1);
+
+                          return Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text(
+                                      'Gradebook Term *',
+                                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
                                     ),
-                                  ),
-                                  items: List.generate(10, (i) {
-                                    final col = i + 1;
-                                    return DropdownMenuItem(
-                                      value: col,
-                                      child: Text('${widget.isPerformanceTask ? 'PT' : 'WW'} $col', style: const TextStyle(fontSize: 13)),
-                                    );
-                                  }),
-                                  onChanged: (val) {
-                                    if (val != null) {
-                                      setState(() {
-                                      _gradebookColumnIndex = val;
-                                      _columnError = null;
-                                    });
-                                    }
-                                  },
-                                  validator: (val) => val == null ? 'Column slot required.' : null,
+                                    const SizedBox(height: 6),
+                                    if (availableTerms.length <= 1)
+                                      Container(
+                                        height: 48,
+                                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                                        alignment: Alignment.centerLeft,
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFF8FAFC),
+                                          borderRadius: BorderRadius.circular(8),
+                                          border: Border.all(color: Colors.grey.shade400),
+                                        ),
+                                        child: Text(
+                                          _termLabel(availableTerms.isNotEmpty ? availableTerms.first : 1),
+                                          style: const TextStyle(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w600,
+                                            color: Color(0xFF1E293B),
+                                          ),
+                                        ),
+                                      )
+                                    else
+                                      DropdownButtonFormField<int>(
+                                        initialValue: currentTerm,
+                                        decoration: InputDecoration(
+                                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                        ),
+                                        items: availableTerms.map((term) {
+                                          return DropdownMenuItem<int>(
+                                            value: term,
+                                            child: Text(_termLabel(term), style: const TextStyle(fontSize: 13)),
+                                          );
+                                        }).toList(),
+                                        onChanged: (val) {
+                                          if (val != null) setState(() => _termNumber = val);
+                                        },
+                                      ),
+                                  ],
                                 ),
-                              ],
-                            ),
-                          ),
-                        ],
+                              ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text(
+                                      'Gradebook Column *',
+                                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    DropdownButtonFormField<int?>(
+                                      initialValue: _gradebookColumnIndex,
+                                      hint: Text('Select ${widget.isPerformanceTask ? 'PT' : 'WW'} Slot', style: const TextStyle(fontSize: 13)),
+                                      decoration: InputDecoration(
+                                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                        border: OutlineInputBorder(
+                                          borderRadius: BorderRadius.circular(8),
+                                          borderSide: _columnError != null ? const BorderSide(color: Color(0xFFEF4444)) : const BorderSide(),
+                                        ),
+                                      ),
+                                      items: List.generate(10, (i) {
+                                        final col = i + 1;
+                                        return DropdownMenuItem(
+                                          value: col,
+                                          child: Text('${widget.isPerformanceTask ? 'PT' : 'WW'} $col', style: const TextStyle(fontSize: 13)),
+                                        );
+                                      }),
+                                      onChanged: (val) {
+                                        if (val != null) {
+                                          setState(() {
+                                            _gradebookColumnIndex = val;
+                                            _columnError = null;
+                                          });
+                                        }
+                                      },
+                                      validator: (val) => val == null ? 'Column slot required.' : null,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          );
+                        },
                       ),
                       if (_columnError != null)
                         Padding(
@@ -793,8 +947,18 @@ class _CreateRequirementFlowDialogState
                                         const SizedBox(width: 8),
                                         Expanded(
                                           child: Text(
-                                            _formatDeadline(_deadline),
-                                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                                            _deadline != null
+                                                ? _formatDeadline(_deadline!)
+                                                : (_completionMode == 'online'
+                                                    ? 'Select deadline'
+                                                    : 'Select target date (Optional)'),
+                                            style: TextStyle(
+                                              fontSize: 13,
+                                              fontWeight: _deadline != null ? FontWeight.w500 : FontWeight.normal,
+                                              color: _deadline != null
+                                                  ? theme.colorScheme.onSurface
+                                                  : theme.colorScheme.onSurface.withValues(alpha: 0.38),
+                                            ),
                                             overflow: TextOverflow.ellipsis,
                                           ),
                                         ),
@@ -815,34 +979,24 @@ class _CreateRequirementFlowDialogState
                           ),
                           const SizedBox(width: 16),
                           Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'Total Points (HPS) *',
-                                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-                                ),
-                                const SizedBox(height: 6),
-                                AppTextField(
-                                  label: 'HPS',
-                                  hint: '1 to 100',
-                                  controller: _maxScoreCtrl,
-                                  keyboardType: TextInputType.number,
-                                  inputFormatters: [
-                                    FilteringTextInputFormatter.digitsOnly,
-                                    LengthLimitingTextInputFormatter(3),
-                                  ],
-                                  validator: (value) {
-                                    final text = (value ?? '').trim();
-                                    if (text.isEmpty) return 'Required.';
-                                    final score = int.tryParse(text);
-                                    if (score == null || score < 1 || score > 100) {
-                                      return 'Must be 1 to 100.';
-                                    }
-                                    return null;
-                                  },
-                                ),
+                            child: AppTextField(
+                              label: 'Total Points (HPS) *',
+                              hint: '1 to 100',
+                              controller: _maxScoreCtrl,
+                              keyboardType: TextInputType.number,
+                              inputFormatters: [
+                                FilteringTextInputFormatter.digitsOnly,
+                                LengthLimitingTextInputFormatter(3),
                               ],
+                              validator: (value) {
+                                final text = (value ?? '').trim();
+                                if (text.isEmpty) return 'Required.';
+                                final score = int.tryParse(text);
+                                if (score == null || score < 1 || score > 100) {
+                                  return 'Must be 1 to 100.';
+                                }
+                                return null;
+                              },
                             ),
                           ),
                         ],
@@ -855,6 +1009,11 @@ class _CreateRequirementFlowDialogState
                         hint: 'Provide step-by-step instructions for students...',
                         controller: _instructionsCtrl,
                         maxLines: 4,
+                        maxLength: 1000,
+                        showCounter: true,
+                        inputFormatters: [
+                          LengthLimitingTextInputFormatter(1000),
+                        ],
                         validator: (value) {
                           final text = (value ?? '').trim();
                           if (text.isEmpty) return 'Detailed instructions are required.';
