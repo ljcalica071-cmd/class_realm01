@@ -270,6 +270,12 @@ class LocalStorageService {
     }
   }
 
+  /// Removes cached JSON entry
+  static Future<void> remove(String key) async {
+    final prefs = await _prefs;
+    await prefs.remove('$_cachePrefix$key');
+  }
+
   /// Teacher Subjects cache
   static Future<void> saveTeacherSubjects(
     String teacherId,

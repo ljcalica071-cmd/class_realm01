@@ -10,6 +10,7 @@ import 'package:class_realm/shared/widgets/shared_widgets.dart';
 import 'package:class_realm/core/utils/parent_credential_helper.dart';
 import 'package:class_realm/data/repositories/supabase_parent_repository.dart';
 import 'package:class_realm/features/auth/widgets/auth_responsive_scaffold.dart';
+import 'package:class_realm/widgets/common/app_date_picker_field.dart';
 
 class FirstLoginScreen extends StatefulWidget {
   const FirstLoginScreen({super.key});
@@ -21,7 +22,7 @@ class FirstLoginScreen extends StatefulWidget {
 class _FirstLoginScreenState extends State<FirstLoginScreen> with SingleTickerProviderStateMixin {
   final _newPassCtrl = TextEditingController();
   final _confirmPassCtrl = TextEditingController();
-  final _parentPhoneCtrl = TextEditingController();
+  DateTime? _parentBirthday;
   final _childLrnLast4Ctrl = TextEditingController();
   bool _obscureNew = true;
   bool _obscureConfirm = true;
@@ -71,7 +72,6 @@ class _FirstLoginScreenState extends State<FirstLoginScreen> with SingleTickerPr
     TextInput.finishAutofillContext(shouldSave: false);
     _newPassCtrl.dispose();
     _confirmPassCtrl.dispose();
-    _parentPhoneCtrl.dispose();
     _childLrnLast4Ctrl.dispose();
     super.dispose();
   }
@@ -96,16 +96,15 @@ class _FirstLoginScreenState extends State<FirstLoginScreen> with SingleTickerPr
     }
 
     if (user.role == UserRole.parent) {
-      final phone = _parentPhoneCtrl.text.trim();
       final lrn4 = _childLrnLast4Ctrl.text.trim();
 
-      if (phone.length != 11 || !phone.startsWith('09')) {
+      if (_parentBirthday == null) {
         setState(() => _isLoading = false);
         TextInput.finishAutofillContext(shouldSave: false);
         AppModals.showErrorDialog(
           context: context,
-          title: 'Phone Number Required',
-          message: 'Please enter your registered 11-digit mobile phone number starting with 09.',
+          title: 'Birthday Required',
+          message: 'Please select your registered birthday.',
         );
         return;
       }
@@ -145,7 +144,7 @@ class _FirstLoginScreenState extends State<FirstLoginScreen> with SingleTickerPr
       final verified = await SupabaseParentRepository()
           .verifyParentIdentityForFirstLogin(
         parentId: user.id,
-        contactNumber: phone,
+        birthday: _parentBirthday!,
         childLrnLast4: lrn4,
       );
 
@@ -157,7 +156,7 @@ class _FirstLoginScreenState extends State<FirstLoginScreen> with SingleTickerPr
           context: context,
           title: 'Identity Verification Failed',
           message:
-              'Identity verification failed. Please enter the exact 11-digit phone number and the last 4 digits of your child\'s LRN registered with the teacher.',
+              'Identity verification failed. Please enter the exact registered birthday and the last 4 digits of your child\'s LRN registered with the teacher.',
         );
         return;
       }
@@ -299,25 +298,17 @@ class _FirstLoginScreenState extends State<FirstLoginScreen> with SingleTickerPr
             ],
           ),
           const SizedBox(height: 16),
-          TextField(
-            controller: _parentPhoneCtrl,
-            keyboardType: TextInputType.number,
-            maxLength: 11,
-            inputFormatters: [
-              FilteringTextInputFormatter.digitsOnly,
-              LengthLimitingTextInputFormatter(11),
-            ],
-            buildCounter: (context, {required currentLength, required isFocused, maxLength}) => null,
-            style: const TextStyle(color: Color(0xFF0F172A), fontSize: 14),
-            decoration: AuthResponsiveScaffold.inputDecoration(
-              labelText: 'Registered 11-Digit Phone Number *',
-              hintText: '09XXXXXXXXX',
-              prefixIcon: const Icon(
-                Icons.phone_android_outlined,
-                size: 20,
-                color: Color(0xFF475569),
-              ),
-            ),
+          AppDatePickerField(
+            label: 'Registered Birthday *',
+            initialDate: _parentBirthday,
+            showAgeHeader: false,
+            firstDate: BirthdayValidator.getMinDate(),
+            lastDate: BirthdayValidator.getMaxDate('parent'),
+            onDateSelected: (d) => setState(() => _parentBirthday = d),
+            validator: (d) {
+              if (d == null) return 'Birthday is required.';
+              return null;
+            },
           ),
           const SizedBox(height: 12),
           TextField(

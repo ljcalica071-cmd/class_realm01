@@ -1,3 +1,4 @@
+import 'package:class_realm/core/services/app_data_cache.dart';
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
@@ -40,7 +41,18 @@ class SupabaseStudentRepository implements StudentRepository {
     String teacherId, {
     String? subjectId,
     bool includeArchived = false,
+    void Function(List<UserModel> fresh)? onFreshData,
   }) async {
+    final cacheKey = 'teacher_students_${teacherId}_${subjectId ?? "all"}_$includeArchived';
+    final cached = AppDataCache.instance.getCached<List<UserModel>>(
+      cacheKey,
+      (json) => (json as List)
+          .map((e) => UserModel.fromJson(Map<String, dynamic>.from(e as Map)))
+          .toList(),
+    );
+    if (cached != null && AppDataCache.instance.isFresh(cacheKey)) {
+      return cached;
+    }
     // 1. Fetch live cloud students first to ensure real registered email and Supabase status
     try {
       final cloudStudents = await _syncStudentsFromCloud(
@@ -49,6 +61,11 @@ class SupabaseStudentRepository implements StudentRepository {
         includeArchived: includeArchived,
       );
       if (cloudStudents.isNotEmpty || includeArchived) {
+        unawaited(AppDataCache.instance.setCache(
+          cacheKey,
+          cloudStudents.map((u) => u.toJson()).toList(),
+        ));
+        onFreshData?.call(cloudStudents);
         return cloudStudents;
       }
     } catch (e) {
@@ -435,7 +452,8 @@ class SupabaseStudentRepository implements StudentRepository {
             );
       } catch (_) {}
 
-      return StudentEnrollmentResult(
+      AppDataCache.instance.invalidatePrefix('teacher_students_');
+    return StudentEnrollmentResult(
         studentId: existingStudentId,
         createdAccount: false,
         tempPassword: null,
@@ -644,6 +662,7 @@ class SupabaseStudentRepository implements StudentRepository {
         debugPrint('Error archiving global student account: $e');
       }
     }
+    AppDataCache.instance.invalidatePrefix('teacher_students_');
   }
 
   @override
@@ -690,6 +709,7 @@ class SupabaseStudentRepository implements StudentRepository {
     } catch (e) {
       debugPrint('Error restoring student account: $e');
     }
+    AppDataCache.instance.invalidatePrefix('teacher_students_');
   }
 
   @override

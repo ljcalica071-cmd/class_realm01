@@ -50,7 +50,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   @override
   void initState() {
     super.initState();
-    _selectedIndex = widget.initialIndex;
+    final savedTab = LocalStorageService.getActiveDashboardTab('admin');
+    _selectedIndex = (widget.initialIndex != 0)
+        ? widget.initialIndex
+        : (savedTab > 0 ? savedTab : 0);
 
     // Direct URL entry security guard: only authenticated Admins allowed
     final user = AuthRepository.instance.currentUser;

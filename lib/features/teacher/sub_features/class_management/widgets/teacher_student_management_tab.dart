@@ -1,3 +1,4 @@
+import 'package:class_realm/core/services/app_data_cache.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -48,8 +49,38 @@ class _TeacherStudentManagementTabState
   void initState() {
     super.initState();
     _loadFilters();
+    _hydrateFromCache();
     _loadData();
     _subscribeRealtime();
+  }
+
+  void _hydrateFromCache() {
+    final teacherId = AuthRepository.instance.currentUser?.id;
+    if (teacherId == null) return;
+    final cachedActive = AppDataCache.instance.getCached<List<UserModel>>(
+      'teacher_students_${teacherId}_all_false',
+      (json) => (json as List).map((e) => UserModel.fromJson(Map<String, dynamic>.from(e as Map))).toList(),
+    );
+    final cachedArchived = AppDataCache.instance.getCached<List<UserModel>>(
+      'teacher_students_${teacherId}_all_true',
+      (json) => (json as List).map((e) => UserModel.fromJson(Map<String, dynamic>.from(e as Map))).toList(),
+    );
+    final cachedSubjects = AppDataCache.instance.getCached<List<Map<String, dynamic>>>(
+      'teacher_subjects_${teacherId}_2026-2027_false',
+      (json) => (json as List).map((e) => Map<String, dynamic>.from(e as Map)).toList(),
+    );
+    if (cachedActive != null && cachedActive.isNotEmpty) {
+      _activeStudents = cachedActive;
+      _isLoading = false;
+    }
+    if (cachedArchived != null) {
+      _archivedStudents = cachedArchived.where((s) => s.isArchived).toList();
+    }
+    if (cachedSubjects != null && cachedSubjects.isNotEmpty) {
+      _teacherSubjectsData = cachedSubjects;
+      _teacherSubjects = cachedSubjects.map((r) => r['subject_name']?.toString() ?? '').where((s) => s.isNotEmpty).toSet().toList()..sort();
+      _teacherSections = cachedSubjects.map((r) => r['section_name']?.toString() ?? '').where((s) => s.isNotEmpty).toSet().toList()..sort();
+    }
   }
 
   void _subscribeRealtime() {
@@ -104,9 +135,11 @@ class _TeacherStudentManagementTabState
   }
 
   Future<void> _loadData() async {
-    setState(() {
-      _isLoading = true;
-    });
+    if (_activeStudents.isEmpty && _archivedStudents.isEmpty) {
+      setState(() {
+        _isLoading = true;
+      });
+    }
 
     final teacherId = AuthRepository.instance.currentUser?.id;
     if (teacherId == null) {

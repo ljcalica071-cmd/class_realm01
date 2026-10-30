@@ -370,7 +370,7 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
         else if (s == 'excused') excused++;
       }
 
-      final total = present + absent + late;
+      final total = present + absent + late + excused;
       final rate = total > 0 ? ((present + late) / total) * 100.0 : 100.0;
 
       return AttendanceStudentSummary(
@@ -522,7 +522,6 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
     }).toList();
   }
 
-  @override
   Future<void> markAttendance(AttendanceRecord record) async {
     await _client.from('attendance_records').insert({
       'student_id': record.studentId,

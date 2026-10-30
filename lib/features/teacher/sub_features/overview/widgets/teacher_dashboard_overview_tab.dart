@@ -1,3 +1,4 @@
+import 'package:class_realm/core/services/app_data_cache.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
@@ -41,7 +42,33 @@ class _TeacherDashboardOverviewTabState
   @override
   void initState() {
     super.initState();
+    _hydrateOverviewStats();
     _loadDashboardStats();
+  }
+
+  void _hydrateOverviewStats() {
+    final currentUser = AuthRepository.instance.currentUser;
+    if (currentUser == null) return;
+    final cachedSubjects = AppDataCache.instance.getCached<List<Map<String, dynamic>>>(
+      'teacher_subjects_${currentUser.id}_2026-2027_false',
+      (json) => (json as List).map((e) => Map<String, dynamic>.from(e as Map)).toList(),
+    );
+    final cachedStudents = AppDataCache.instance.getCached<List<UserModel>>(
+      'teacher_students_${currentUser.id}_all_false',
+      (json) => (json as List).map((e) => UserModel.fromJson(Map<String, dynamic>.from(e as Map))).toList(),
+    );
+    if (cachedSubjects != null || cachedStudents != null) {
+      if (cachedSubjects != null) {
+        totalSubjects = cachedSubjects.map((e) => e['subject_name']).toSet().length;
+        totalSections = cachedSubjects.map((e) => '${e['subject_name']}-${e['section_name']}').toSet().length;
+      }
+      if (cachedStudents != null) {
+        totalStudents = cachedStudents.map((s) => s.id).toSet().length;
+      } else if (widget.activeStudents.isNotEmpty) {
+        totalStudents = widget.activeStudents.length;
+      }
+      isLoadingStats = false;
+    }
   }
 
   Future<void> _loadDashboardStats() async {

@@ -19,8 +19,9 @@ class _TeacherGradesTabState extends State<TeacherGradesTab> {
   String _gradesSectionFilter = 'All Sections';
   String _gradesRankingOrder = 'None';
 
-  double _quarterlyGradeFor(String studentId) {
-    return 85.0;
+  double? _quarterlyGradeFor(String studentId) {
+    // Zero mock data: strictly returns real recorded quarterly grade or null if not yet entered
+    return null;
   }
 
   @override
@@ -37,16 +38,27 @@ class _TeacherGradesTabState extends State<TeacherGradesTab> {
     }).toList();
 
     if (_gradesRankingOrder == 'Highest to Lowest') {
-      filteredList.sort(
-        (a, b) => _quarterlyGradeFor(b.id).compareTo(_quarterlyGradeFor(a.id)),
-      );
+      filteredList.sort((a, b) {
+        final ga = _quarterlyGradeFor(a.id);
+        final gb = _quarterlyGradeFor(b.id);
+        if (ga == null && gb == null) return 0;
+        if (ga == null) return 1;
+        if (gb == null) return -1;
+        return gb.compareTo(ga);
+      });
     } else if (_gradesRankingOrder == 'Lowest to Highest') {
-      filteredList.sort(
-        (a, b) => _quarterlyGradeFor(a.id).compareTo(_quarterlyGradeFor(b.id)),
-      );
+      filteredList.sort((a, b) {
+        final ga = _quarterlyGradeFor(a.id);
+        final gb = _quarterlyGradeFor(b.id);
+        if (ga == null && gb == null) return 0;
+        if (ga == null) return 1;
+        if (gb == null) return -1;
+        return ga.compareTo(gb);
+      });
     }
 
-    String getDescriptor(double grade) {
+    String getDescriptor(double? grade) {
+      if (grade == null) return 'Pending';
       if (grade >= 90) return 'Outstanding';
       if (grade >= 85) return 'Very Satisfactory';
       if (grade >= 80) return 'Satisfactory';
@@ -54,11 +66,13 @@ class _TeacherGradesTabState extends State<TeacherGradesTab> {
       return 'Did Not Meet Expectations';
     }
 
-    String getRemarks(double grade) {
+    String getRemarks(double? grade) {
+      if (grade == null) return '—';
       return grade >= 75 ? 'Passed' : 'Failed';
     }
 
-    Color getGradeColor(double grade) {
+    Color getGradeColor(double? grade, ThemeData theme) {
+      if (grade == null) return theme.colorScheme.onSurface.withValues(alpha: 0.45);
       if (grade >= 90) return AppTheme.catGreen;
       if (grade >= 75) return const Color(0xFF1D4ED8);
       return AppTheme.catRed;
@@ -194,7 +208,7 @@ class _TeacherGradesTabState extends State<TeacherGradesTab> {
                         final grade = _quarterlyGradeFor(s.id);
                         final descriptor = getDescriptor(grade);
                         final remarks = getRemarks(grade);
-                        final color = getGradeColor(grade);
+                        final color = getGradeColor(grade, Theme.of(context));
 
                         return Padding(
                           padding: const EdgeInsets.symmetric(
@@ -243,7 +257,7 @@ class _TeacherGradesTabState extends State<TeacherGradesTab> {
                                 flex: 1,
                                 child: Center(
                                   child: Text(
-                                    grade.toStringAsFixed(1),
+                                    grade != null ? grade.toStringAsFixed(1) : '—',
                                     style: TextStyle(
                                       fontSize: 14,
                                       fontWeight: FontWeight.bold,

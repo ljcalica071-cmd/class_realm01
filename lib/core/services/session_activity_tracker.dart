@@ -159,6 +159,7 @@ class _SessionActivityTrackerState extends State<SessionActivityTracker>
     // 28-Minute Warning Prompt completely removed as requested.
   }
 
+  // ignore: unused_element
   void _showInactivityWarningModal() {
     if (!mounted || _isWarningDialogShowing) return;
     _isWarningDialogShowing = true;

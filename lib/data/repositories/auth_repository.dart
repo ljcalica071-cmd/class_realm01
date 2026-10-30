@@ -105,6 +105,7 @@ class AuthRepository {
     if (cached != null) {
       _currentUser = cached;
       markWarmSession();
+      unawaited(LocalStorageService.saveLastInteraction(DateTime.now()));
       return cached;
     }
     return null;
@@ -181,6 +182,7 @@ class AuthRepository {
         );
 
         await LocalStorageService.saveUser(_currentUser!);
+        unawaited(LocalStorageService.saveLastInteraction(DateTime.now()));
         unawaited(startSessionLog(_currentUser!));
         return _currentUser;
       }
@@ -690,7 +692,7 @@ class AuthRepository {
 
     final now = DateTime.now().toUtc();
     final cleanReason =
-        (reason == null || reason.isEmpty || reason == 'manual_logout')
+        (reason == null || reason.isEmpty || reason == 'manual' || reason == 'manual_logout')
         ? 'manual'
         : (reason == 'inactivity' || reason == 'inactivity_timeout'
               ? 'inactivity'
@@ -745,16 +747,20 @@ class AuthRepository {
       // Even if session ID is lost in local storage (due to hot reloads/tests),
       // force close ALL active sessions for this user to guarantee accuracy.
       if (user != null) {
-        await _supabaseClient
-            .from('user_session_logs')
-            .update({
-              'logout_at': now.toIso8601String(),
-              'logout_reason': cleanReason,
-              'is_active': false,
-              'last_active_at': now.toIso8601String(),
-            })
-            .eq('user_id', user.id)
-            .eq('is_active', true);
+        // If this is a 'terminated' call from background, DO NOT bulk close 
+        // other legitimate active sessions, only targeted ones!
+        if (cleanReason != 'terminated') {
+          await _supabaseClient
+              .from('user_session_logs')
+              .update({
+                'logout_at': now.toIso8601String(),
+                'logout_reason': cleanReason,
+                'is_active': false,
+                'last_active_at': now.toIso8601String(),
+              })
+              .eq('user_id', user.id)
+              .eq('is_active', true);
+        }
       }
     } catch (e) {
       debugPrint('AuthRepository endSession notice: $e');

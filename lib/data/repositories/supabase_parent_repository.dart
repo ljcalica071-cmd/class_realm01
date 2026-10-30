@@ -6,6 +6,7 @@ import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/core/utils/parent_credential_helper.dart';
 import 'package:class_realm/data/repositories/supabase_learning_material_repository.dart';
 import 'package:class_realm/core/services/firebase_auth_admin_service.dart';
+import 'package:class_realm/core/services/app_data_cache.dart';
 
 
 class SupabaseParentRepository {
@@ -33,6 +34,21 @@ class SupabaseParentRepository {
   }
 
   Future<List<UserModel>> getParentsForTeacher(
+    String teacherId, {
+    String? subjectId,
+    bool includeArchived = false,
+    void Function(List<UserModel> fresh)? onFreshData,
+  }) async {
+    final cacheKey = 'teacher_parents_${teacherId}_${subjectId ?? "all"}_$includeArchived';
+    return AppDataCache.instance.fetchWithSvr<List<UserModel>>(
+      cacheKey: cacheKey,
+      ttl: const Duration(minutes: 5),
+      fetcher: () => _fetchParentsFromNetwork(teacherId, subjectId: subjectId, includeArchived: includeArchived),
+      onUpdate: onFreshData,
+    );
+  }
+
+  Future<List<UserModel>> _fetchParentsFromNetwork(
     String teacherId, {
     String? subjectId,
     bool includeArchived = false,
@@ -163,19 +179,17 @@ class SupabaseParentRepository {
             profile['last_name'],
           ].where((n) => n != null && n.toString().trim().isNotEmpty).join(' ');
 
-          final contactNumber = profile['contact_number']?.toString() ?? '';
-          final username = contactNumber.isNotEmpty ? contactNumber : parentId;
+          final username = parentId;
 
           parentGroupMap[parentId] = {
             'id': parentId,
             'username': username,
             'email':
-                userInfo['email'] ?? '$contactNumber@parent.classrealm.edu',
+                userInfo['email'] ?? 'parent_$parentId@classrealm.edu',
             'fullName': fullName.isEmpty ? 'Parent / Guardian' : fullName,
             'firstName': profile['first_name']?.toString() ?? '',
             'middleName': profile['middle_name']?.toString(),
             'lastName': profile['last_name']?.toString() ?? '',
-            'contactNumber': contactNumber,
             'birthday': profile['birthday']?.toString(),
             'profileStatus': profile['status']?.toString(),
             'relationship':
@@ -212,7 +226,6 @@ class SupabaseParentRepository {
             middleName: entry['middleName'],
             lastName: entry['lastName'],
             role: UserRole.parent,
-            contactNumber: entry['contactNumber'],
             birthday: DateTime.tryParse(entry['birthday']?.toString() ?? ''),
             parentGuardianRelationship: entry['relationship'],
             linkedStudentId: entry['primaryStudentId'],
@@ -251,12 +264,15 @@ class SupabaseParentRepository {
     String? tempPassword,
   }) async {
     // 1. Sibling Auto-Linking: Check if the exact same parent already exists in public.parent_profiles
+    final bdayStr =
+        '${birthday.year.toString().padLeft(4, '0')}-${birthday.month.toString().padLeft(2, '0')}-${birthday.day.toString().padLeft(2, '0')}';
+        
     final existingParents = await _client
         .from('parent_profiles')
-        .select('parent_id, first_name, last_name, contact_number, birthday')
+        .select('parent_id, first_name, last_name, birthday')
         .ilike('first_name', firstName.trim())
         .ilike('last_name', lastName.trim())
-        .eq('contact_number', contactNumber.trim());
+        .eq('birthday', bdayStr);
 
     if ((existingParents as List).isNotEmpty) {
       final existingProfile = existingParents.first;
@@ -296,7 +312,6 @@ class SupabaseParentRepository {
         middleName: middleName,
         lastName: lastName,
         birthday: birthday,
-        contactNumber: contactNumber,
         parentGuardianRelationship: relationship,
         linkedStudentId: studentIds.isNotEmpty ? studentIds.first : null,
         role: UserRole.parent,
@@ -382,7 +397,6 @@ class SupabaseParentRepository {
       'first_name': firstName,
       'middle_name': middleName,
       'last_name': lastName,
-      'contact_number': contactNumber,
       'birthday': bdayIso,
       'status': 'pending_first_login',
     });
@@ -402,6 +416,7 @@ class SupabaseParentRepository {
       lastName,
     ].join(' ');
 
+    AppDataCache.instance.invalidatePrefix('teacher_parents_');
     return UserModel(
       id: parentId,
       username: finalEmail,
@@ -411,7 +426,6 @@ class SupabaseParentRepository {
       middleName: middleName,
       lastName: lastName,
       birthday: birthday,
-      contactNumber: contactNumber,
       parentGuardianRelationship: relationship,
       linkedStudentId: studentIds.isNotEmpty ? studentIds.first : null,
       role: UserRole.parent,
@@ -425,24 +439,25 @@ class SupabaseParentRepository {
   /// and at least one linked student's 12-digit LRN ends with childLrnLast4.
   Future<bool> verifyParentIdentityForFirstLogin({
     required String parentId,
-    required String contactNumber,
+    required DateTime birthday,
     required String childLrnLast4,
   }) async {
     try {
-      final cleanPhone = contactNumber.trim();
+      final bdayIso =
+        '${birthday.year}-${birthday.month.toString().padLeft(2, '0')}-${birthday.day.toString().padLeft(2, '0')}';
       final cleanLrn4 = childLrnLast4.trim();
-      if (cleanPhone.isEmpty || cleanLrn4.isEmpty) return false;
+      if (cleanLrn4.isEmpty) return false;
 
       // 1. Query public.parent_profiles for parent_id = parentId
       final profileResp = await _client
           .from('parent_profiles')
-          .select('contact_number')
+          .select('birthday')
           .eq('parent_id', parentId)
           .maybeSingle();
 
       if (profileResp == null) return false;
-      final storedContact = profileResp['contact_number']?.toString().trim();
-      if (storedContact != cleanPhone) {
+      final storedBday = profileResp['birthday']?.toString().trim();
+      if (storedBday != bdayIso) {
         return false;
       }
 
@@ -744,7 +759,6 @@ class SupabaseParentRepository {
     required String firstName,
     String? middleName,
     required String lastName,
-    required String contactNumber,
     required String relationship,
     String? studentId,
   }) async {
@@ -754,7 +768,6 @@ class SupabaseParentRepository {
           'first_name': firstName,
           'middle_name': middleName,
           'last_name': lastName,
-          'contact_number': contactNumber,
         })
         .eq('parent_id', parentId);
 
@@ -766,6 +779,7 @@ class SupabaseParentRepository {
         .from('parent_student_links')
         .update(updateData)
         .eq('parent_id', parentId);
+    AppDataCache.instance.invalidatePrefix('teacher_parents_');
   }
 
   Future<void> setArchived(String parentId, bool archived, {String? currentStatusHint}) async {
@@ -824,6 +838,7 @@ class SupabaseParentRepository {
         disabled: archived,
       );
     } catch (_) {}
+    AppDataCache.instance.invalidatePrefix('teacher_parents_');
   }
 
   Future<void> permanentlyDelete(String parentId) async {

@@ -1,3 +1,4 @@
+import 'package:class_realm/core/services/app_data_cache.dart';
 import 'dart:async';
 import 'dart:convert';
 
@@ -25,8 +26,22 @@ class StudentDashboardRepository {
       return _cachedDashboard!;
     }
 
-    // 1. FAST LOCAL DRIFT SQLITE READ (0 milliseconds load)
-    if (!forceRefresh) {
+    // 1. FAST LOCAL READ (0 milliseconds load, Web + Native parity)
+    final authUser = firebase_auth.FirebaseAuth.instance.currentUser;
+    if (!forceRefresh && authUser != null) {
+      final cachedWeb = AppDataCache.instance.getCached<StudentDashboardData>(
+        'student_dashboard_${authUser.uid}',
+        (json) => StudentDashboardData.fromJson(Map<String, dynamic>.from(json as Map)),
+      );
+      if (cachedWeb != null) {
+        _cachedDashboard = cachedWeb;
+        if (!AppDataCache.instance.isFresh('student_dashboard_${authUser.uid}')) {
+          unawaited(_fetchFromCloud());
+        }
+        return cachedWeb;
+      }
+
+      // SQLite Native Fallback
       try {
         final cachedJsonStr = await AppDatabase.instance.getSetting(
           'cached_student_dashboard',
@@ -206,6 +221,10 @@ class StudentDashboardRepository {
       } catch (_) {}
 
       _cachedDashboard = StudentDashboardData.fromJson(data);
+      unawaited(AppDataCache.instance.setCache(
+        'student_dashboard_${authUser.uid}',
+        data,
+      ));
       return _cachedDashboard!;
     } catch (e) {
       debugPrint('Pure Dart student dashboard notice: $e');

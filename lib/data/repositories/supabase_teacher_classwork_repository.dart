@@ -1,3 +1,4 @@
+import 'package:class_realm/core/services/app_data_cache.dart';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:class_realm/core/services/supabase_service.dart';
@@ -38,25 +39,37 @@ class SupabaseTeacherClassworkRepository implements TeacherClassworkRepository {
 
   @override
   Future<List<ActivityModel>> getActivities({String? subjectOfferingId}) async {
-    try {
-      var query = _client
-          .from('classwork_items')
-          .select()
-          .eq('is_archived', false);
+    final cacheKey = 'teacher_activities_${subjectOfferingId ?? "all"}';
+    return AppDataCache.instance.fetchWithSvr<List<ActivityModel>>(
+      cacheKey: cacheKey,
+      fetcher: () async {
+        try {
+          var query = _client
+              .from('classwork_items')
+              .select()
+              .eq('is_archived', false);
 
-      if (subjectOfferingId != null && subjectOfferingId.isNotEmpty) {
-        query = query.eq('subject_offering_id', subjectOfferingId);
-      }
+          if (subjectOfferingId != null && subjectOfferingId.isNotEmpty) {
+            query = query.eq('subject_offering_id', subjectOfferingId);
+          }
 
-      final rows = await query;
-      final list = rows as List? ?? [];
-      return list.map((item) {
-        return ActivityModel.fromJson(Map<String, dynamic>.from(item as Map));
-      }).toList();
-    } catch (e) {
-      debugPrint('Pure Dart classwork list notice: $e');
-      return [];
-    }
+          final rows = await query;
+          final list = rows as List? ?? [];
+          return list.map((item) {
+            return ActivityModel.fromJson(Map<String, dynamic>.from(item as Map));
+          }).toList();
+        } catch (e) {
+          debugPrint('Pure Dart classwork list notice: $e');
+          return [];
+        }
+      },
+      onUpdate: (_) {},
+      fromJson: (json) => (json as List)
+          .map((e) => ActivityModel.fromJson(Map<String, dynamic>.from(e as Map)))
+          .toList(),
+      toJson: (list) => list.map((a) => a.toJson()).toList(),
+      ttl: const Duration(minutes: 5),
+    );
   }
 
   @override
@@ -121,6 +134,7 @@ class SupabaseTeacherClassworkRepository implements TeacherClassworkRepository {
             .insert(insertData)
             .select()
             .single();
+        AppDataCache.instance.invalidatePrefix('teacher_activities_');
         return ActivityModel.fromJson(Map<String, dynamic>.from(res));
       } catch (e) {
         debugPrint('Pure Dart insert classwork notice: $e');
@@ -150,6 +164,7 @@ class SupabaseTeacherClassworkRepository implements TeacherClassworkRepository {
             .eq('id', activity.id)
             .select()
             .single();
+        AppDataCache.instance.invalidatePrefix('teacher_activities_');
         return ActivityModel.fromJson(Map<String, dynamic>.from(res));
       } catch (e) {
         debugPrint('Pure Dart update classwork notice: $e');
@@ -168,6 +183,7 @@ class SupabaseTeacherClassworkRepository implements TeacherClassworkRepository {
           .from('classwork_items')
           .update({'is_archived': true})
           .eq('id', activityId);
+      AppDataCache.instance.invalidatePrefix('teacher_activities_');
     } catch (e) {
       debugPrint('Pure Dart delete classwork notice: $e');
     }

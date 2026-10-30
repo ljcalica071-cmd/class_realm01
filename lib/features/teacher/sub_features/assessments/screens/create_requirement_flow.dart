@@ -250,8 +250,9 @@ class _CreateRequirementFlowDialogState
         return const [1];
       } else if (termsTaught == 2) {
         final upper = termBlock.toUpperCase();
-        if (upper.contains('3') || upper.contains('2ND & 3RD'))
+        if (upper.contains('3') || upper.contains('2ND & 3RD')) {
           return const [2, 3];
+        }
         return const [1, 2];
       }
     }
@@ -968,8 +969,9 @@ class _CreateRequirementFlowDialogState
                         validator: (value) {
                           final text = (value ?? '').trim();
                           if (text.isEmpty) return 'Title is required.';
-                          if (text.length > 50)
+                          if (text.length > 50) {
                             return 'Title must not exceed 50 characters.';
+                          }
                           return null;
                         },
                       ),
@@ -1165,8 +1167,9 @@ class _CreateRequirementFlowDialogState
                                         }
                                       },
                                       validator: (val) {
-                                        if (val == null)
+                                        if (val == null) {
                                           return 'Please select a gradebook column.';
+                                        }
                                         if (_occupiedColumns.contains(val)) {
                                           return 'This column is already used.';
                                         }
@@ -1322,10 +1325,12 @@ class _CreateRequirementFlowDialogState
                         ],
                         validator: (value) {
                           final text = (value ?? '').trim();
-                          if (text.isEmpty)
+                          if (text.isEmpty) {
                             return 'Detailed instructions are required.';
-                          if (text.length > 1000)
+                          }
+                          if (text.length > 1000) {
                             return 'Must not exceed 1,000 characters.';
+                          }
                           return null;
                         },
                       ),

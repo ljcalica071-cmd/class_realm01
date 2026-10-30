@@ -1,3 +1,4 @@
+import 'package:class_realm/core/services/app_data_cache.dart';
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
@@ -202,6 +203,7 @@ class SubjectRepository {
         }
       }
     }
+    AppDataCache.instance.invalidatePrefix('teacher_subjects_${teacherId}');
   }
 
   /// Synchronously returns cached teacher subjects from local storage.
@@ -215,6 +217,14 @@ class SubjectRepository {
     String schoolYear = '2026-2027',
     bool onlyWithEnrolledStudents = false,
   }) async {
+    final cacheKey = 'teacher_subjects_${teacherId}_${schoolYear}_$onlyWithEnrolledStudents';
+    final cached = AppDataCache.instance.getCached<List<Map<String, dynamic>>>(
+      cacheKey,
+      (json) => (json as List).map((e) => Map<String, dynamic>.from(e as Map)).toList(),
+    );
+    if (cached != null && AppDataCache.instance.isFresh(cacheKey)) {
+      return cached;
+    }
     List<Map<String, dynamic>> results;
     // 1. FAST LOCAL DRIFT SQLITE READ (0 milliseconds load)
     try {
@@ -254,7 +264,7 @@ class SubjectRepository {
         }).toList();
 
         if (onlyWithEnrolledStudents) {
-          return _filterOfferingsWithEnrolledStudents(teacherId, results);
+          return await _filterOfferingsWithEnrolledStudents(teacherId, results);
         }
         return results;
       }
@@ -265,8 +275,11 @@ class SubjectRepository {
     // 2. Fallback / Initial fetch from cloud
     results = await _syncOfferingsFromCloud(teacherId, schoolYear);
     if (onlyWithEnrolledStudents) {
-      return _filterOfferingsWithEnrolledStudents(teacherId, results);
+      final filtered = await _filterOfferingsWithEnrolledStudents(teacherId, results);
+      unawaited(AppDataCache.instance.setCache(cacheKey, filtered));
+      return filtered;
     }
+    unawaited(AppDataCache.instance.setCache(cacheKey, results));
     return results;
   }
 

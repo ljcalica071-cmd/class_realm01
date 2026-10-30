@@ -14,6 +14,7 @@ import 'package:class_realm/data/repositories/subject_repository.dart';
 import 'package:class_realm/data/repositories/supabase_student_repository.dart';
 import 'package:class_realm/data/repositories/supabase_parent_repository.dart';
 import 'package:class_realm/core/services/local_storage_service.dart';
+import 'package:class_realm/core/services/app_data_cache.dart';
 import 'package:class_realm/core/utils/parent_credential_helper.dart';
 import 'package:class_realm/shared/widgets/shimmer_loading.dart';
 
@@ -53,8 +54,44 @@ class _TeacherParentManagementTabState
   void initState() {
     super.initState();
     _loadFilters();
+    _hydrateFromCache();
     _loadData();
     _subscribeRealtime();
+  }
+
+  void _hydrateFromCache() {
+    final teacherId = AuthRepository.instance.currentUser?.id;
+    if (teacherId == null) return;
+
+    final cachedActive = AppDataCache.instance.get<List<UserModel>>(
+      'teacher_parents_${teacherId}_all_false',
+    );
+    final cachedArchived = AppDataCache.instance.get<List<UserModel>>(
+      'teacher_parents_${teacherId}_all_true',
+    );
+    final cachedStudents = AppDataCache.instance.get<List<UserModel>>(
+      'teacher_students_${teacherId}_all_false',
+    );
+    final cachedSubjects = SubjectRepository.instance.getCachedTeacherSubjects(teacherId);
+
+    if (cachedActive != null || cachedStudents != null || cachedSubjects.isNotEmpty) {
+      final subjectsSet = <String>{};
+      final sectionsSet = <String>{};
+      for (final row in cachedSubjects) {
+        if (row['subject_name'] != null) subjectsSet.add(row['subject_name']);
+        if (row['section_name'] != null) sectionsSet.add(row['section_name']);
+      }
+
+      _activeParents = cachedActive ?? _activeParents;
+      _archivedParents = cachedArchived ?? _archivedParents;
+      _enrolledStudents = cachedStudents ?? _enrolledStudents;
+      _teacherSubjectsData = cachedSubjects;
+      _teacherSubjects = subjectsSet.toList()..sort();
+      _teacherSections = sectionsSet.toList()..sort();
+      if (cachedActive != null) {
+        _isLoading = false;
+      }
+    }
   }
 
   void _subscribeRealtime() {
@@ -108,7 +145,9 @@ class _TeacherParentManagementTabState
   }
 
   Future<void> _loadData() async {
-    setState(() => _isLoading = true);
+    if (_activeParents.isEmpty && _archivedParents.isEmpty) {
+      setState(() => _isLoading = true);
+    }
 
     final teacherId = AuthRepository.instance.currentUser?.id;
     if (teacherId == null) {
@@ -139,16 +178,25 @@ class _TeacherParentManagementTabState
       final students = await studentRepo.getStudentsForTeacher(
         teacherId,
         includeArchived: false,
+        onFreshData: (fresh) {
+          if (mounted) setState(() => _enrolledStudents = fresh);
+        },
       );
 
       final parentRepo = SupabaseParentRepository();
       final active = await parentRepo.getParentsForTeacher(
         teacherId,
         includeArchived: false,
+        onFreshData: (fresh) {
+          if (mounted) setState(() => _activeParents = fresh);
+        },
       );
       final archived = await parentRepo.getParentsForTeacher(
         teacherId,
         includeArchived: true,
+        onFreshData: (fresh) {
+          if (mounted) setState(() => _archivedParents = fresh);
+        },
       );
 
       if (mounted) {
@@ -234,7 +282,6 @@ class _TeacherParentManagementTabState
               p.username.toLowerCase().contains(
                 _parentSearchQuery.toLowerCase(),
               ) ||
-              (p.contactNumber ?? '').contains(_parentSearchQuery) ||
               studentName.toLowerCase().contains(
                 _parentSearchQuery.toLowerCase(),
               );
@@ -285,9 +332,6 @@ class _TeacherParentManagementTabState
         case 'username':
           cmp = a.username.compareTo(b.username);
           break;
-        case 'contact':
-          cmp = (a.contactNumber ?? '').compareTo(b.contactNumber ?? '');
-          break;
         case 'status':
           cmp = a.status.name.compareTo(b.status.name);
           break;
@@ -316,7 +360,6 @@ class _TeacherParentManagementTabState
     const colRelWidth = 130.0;
     const colStudentWidth = 240.0;
     const colSectionWidth = 140.0;
-    const colContactWidth = 160.0;
     const colStatusWidth = 140.0;
     const colActionsWidth = 180.0;
 
@@ -328,7 +371,6 @@ class _TeacherParentManagementTabState
         colRelWidth +
         colStudentWidth +
         colSectionWidth +
-        colContactWidth +
         colStatusWidth +
         colActionsWidth;
 
@@ -477,7 +519,7 @@ class _TeacherParentManagementTabState
                               setState(() => _parentSearchQuery = v),
                           decoration: InputDecoration(
                             hintText:
-                                'Search by parent name, student, or contact...',
+                                'Search by parent name or student...',
                             hintStyle: TextStyle(
                               color: theme.colorScheme.onSurface.withValues(
                                 alpha: 0.6,
@@ -741,13 +783,6 @@ class _TeacherParentManagementTabState
                                               ),
                                             ),
                                             _buildHeaderCell(
-                                              width: colContactWidth,
-                                              child: _buildClickableHeaderTitle(
-                                                'CONTACT NO.',
-                                                'contact',
-                                              ),
-                                            ),
-                                            _buildHeaderCell(
                                               width: colStatusWidth,
                                               child: _buildClickableHeaderTitle(
                                                 'STATUS',
@@ -975,18 +1010,6 @@ class _TeacherParentManagementTabState
                                                               colSectionWidth,
                                                           child: Text(
                                                             section,
-                                                            style:
-                                                                const TextStyle(
-                                                                  fontSize: 13,
-                                                                ),
-                                                          ),
-                                                        ),
-                                                        _buildDataCell(
-                                                          width:
-                                                              colContactWidth,
-                                                          child: Text(
-                                                            p.contactNumber ??
-                                                                'N/A',
                                                             style:
                                                                 const TextStyle(
                                                                   fontSize: 13,
@@ -1395,7 +1418,6 @@ class _TeacherParentManagementTabState
             parent.birthday!,
           )
         : '${formattedLastName}YYYYMMDD';
-    final phone = parent.contactNumber ?? 'N/A';
 
     final credentialsText =
         '''
@@ -1404,7 +1426,6 @@ Parent Name: ${parent.fullName}
 Linked Student: $studentName
 Email (Login): $email
 Temporary Password: $tempPassword
-Phone Number: $phone
 
 Instructions:
 1. Open ClassRealm.
@@ -1466,7 +1487,6 @@ Instructions:
                 tempPassword,
                 isSecret: true,
               ),
-              _buildCredentialCardRow('Phone Number', phone),
               const SizedBox(height: 20),
               Row(
                 children: [
@@ -1559,7 +1579,9 @@ Instructions:
 
     if (confirmed != true) return;
 
-    setState(() => _isLoading = true);
+    if (_activeParents.isEmpty && _archivedParents.isEmpty) {
+      setState(() => _isLoading = true);
+    }
     try {
       final repo = SupabaseParentRepository();
       final updatedParent = await repo.resetParentToDefaultPassword(parent);
@@ -1628,7 +1650,6 @@ Instructions:
   Future<void> _showEditParentDialog(UserModel parent) async {
     final formKey = GlobalKey<FormState>();
     final nameController = TextEditingController(text: parent.fullName);
-    final contactController = TextEditingController(text: parent.contactNumber);
     String? relationship = parent.parentGuardianRelationship ?? 'Mother';
     String? linkedStudentId = parent.linkedStudentId;
 
@@ -1655,20 +1676,6 @@ Instructions:
                     validator: (value) => value == null || value.trim().isEmpty
                         ? 'Required'
                         : null,
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: contactController,
-                    decoration: const InputDecoration(
-                      labelText: 'Phone Number (11 digits) *',
-                    ),
-                    keyboardType: TextInputType.phone,
-                    validator: (value) {
-                      if (value == null || value.trim().isEmpty)
-                        return 'Required';
-                      if (value.trim().length != 11) return 'Must be 11 digits';
-                      return null;
-                    },
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
@@ -1732,7 +1739,6 @@ Instructions:
                       parentId: parent.id,
                       firstName: firstName,
                       lastName: lastName,
-                      contactNumber: contactController.text.trim(),
                       relationship: relationship!,
                       studentId: linkedStudentId,
                     );

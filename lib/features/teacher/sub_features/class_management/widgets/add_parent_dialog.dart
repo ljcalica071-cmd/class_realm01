@@ -43,7 +43,6 @@ class _AddParentDialogState extends State<AddParentDialog> {
   final _firstNameCtrl = TextEditingController();
   final _middleNameCtrl = TextEditingController();
   final _lastNameCtrl = TextEditingController();
-  final _contactCtrl = TextEditingController();
   final _customRelationshipCtrl = TextEditingController();
   final _studentSearchCtrl = TextEditingController();
 
@@ -69,7 +68,6 @@ class _AddParentDialogState extends State<AddParentDialog> {
     _firstNameCtrl.dispose();
     _middleNameCtrl.dispose();
     _lastNameCtrl.dispose();
-    _contactCtrl.dispose();
     _customRelationshipCtrl.dispose();
     _studentSearchCtrl.dispose();
     super.dispose();
@@ -111,7 +109,6 @@ class _AddParentDialogState extends State<AddParentDialog> {
     final lastName = _lastNameCtrl.text.trim();
     final fullName = [firstName, ?middleName, lastName].join(' ');
 
-    final contactNumber = _contactCtrl.text.trim();
     final relationship = _relationship == 'Other'
         ? _customRelationshipCtrl.text.trim()
         : _relationship!;
@@ -129,7 +126,7 @@ class _AddParentDialogState extends State<AddParentDialog> {
         firstName: firstName,
         middleName: middleName,
         lastName: lastName,
-        contactNumber: contactNumber,
+        contactNumber: '', // Added empty string argument
         birthday: _birthday!,
         relationship: relationship,
         studentIds: _selectedStudents.map((s) => s.id).toList(),
@@ -160,7 +157,6 @@ class _AddParentDialogState extends State<AddParentDialog> {
         context: context,
         fullName: fullName,
         email: finalEmail,
-        contactNumber: contactNumber,
         tempPassword: tempPassword,
         linkedStudentName: _selectedStudents.map((s) => s.fullName).join(', '),
       );
@@ -171,7 +167,6 @@ class _AddParentDialogState extends State<AddParentDialog> {
     required BuildContext context,
     required String fullName,
     required String email,
-    required String contactNumber,
     required String tempPassword,
     required String linkedStudentName,
   }) {
@@ -182,7 +177,6 @@ Parent Name: $fullName
 Linked Student: $linkedStudentName
 Email (Login): $email
 Temporary Password: $tempPassword
-Phone Number: $contactNumber
 
 Instructions:
 1. Open ClassRealm.
@@ -239,7 +233,6 @@ Instructions:
               _CredentialRow(label: 'Linked Student', value: linkedStudentName),
               _CredentialRow(label: 'Email (Login)', value: email),
               _CredentialRow(label: 'Temp Password', value: tempPassword),
-              _CredentialRow(label: 'Phone Number', value: contactNumber),
               const SizedBox(height: 16),
               Container(
                 padding: const EdgeInsets.all(12),
@@ -450,27 +443,6 @@ Instructions:
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(
-                      child: AppTextField(
-                        label: 'Phone Number (11-digits) *',
-                        controller: _contactCtrl,
-                        keyboardType: TextInputType.phone,
-                        inputFormatters: [
-                          FilteringTextInputFormatter.digitsOnly,
-                          LengthLimitingTextInputFormatter(11),
-                        ],
-                        validator: (v) {
-                          if (v == null || v.trim().isEmpty)
-                            return 'Phone number is required.';
-                          if (v.trim().length != 11 ||
-                              !v.trim().startsWith('09')) {
-                            return 'Phone number must be 11 digits starting with 09.';
-                          }
-                          return null;
-                        },
-                      ),
-                    ),
-                    const SizedBox(width: 12),
                     Expanded(child: _buildRelationshipField(Theme.of(context))),
                   ],
                 ),
