@@ -311,8 +311,8 @@ class _TeacherLessonPlanningTabState extends State<TeacherLessonPlanningTab> {
                         ? Icons.bolt_outlined
                         : Icons.science_outlined,
                     label: keyCount > 0
-                        ? 'Gemini AI ($keyCount-Key Failover Ready)'
-                        : 'Sample Draft Ready • Awaiting .env Keys',
+                        ? 'Gemini AI Ready'
+                        : 'Sample Draft Ready',
                     accent: keyCount > 0
                         ? AppTheme.catGreen
                         : AppTheme.catSlate,
@@ -501,36 +501,108 @@ class _TeacherLessonPlanningTabState extends State<TeacherLessonPlanningTab> {
     required List<String> items,
     required ValueChanged<String?> onChanged,
   }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: theme.colorScheme.onSurface.withValues(alpha: 0.14),
+    return MenuAnchor(
+      alignmentOffset: const Offset(0, 4),
+      style: MenuStyle(
+        backgroundColor: WidgetStatePropertyAll(theme.colorScheme.surface),
+        surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
+        elevation: const WidgetStatePropertyAll(6),
+        shadowColor: WidgetStatePropertyAll(
+          Colors.black.withValues(alpha: 0.16),
         ),
-      ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<String>(
-          value: value,
-          isDense: true,
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w500,
-            color: theme.colorScheme.onSurface,
+        padding: const WidgetStatePropertyAll(
+          EdgeInsets.symmetric(vertical: 4),
+        ),
+        minimumSize: const WidgetStatePropertyAll(Size(150, 0)),
+        side: WidgetStatePropertyAll(
+          BorderSide(
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.12),
           ),
-          items: items
-              .map(
-                (item) => DropdownMenuItem<String>(
-                  value: item,
-                  child: Text(item),
-                ),
-              )
-              .toList(),
-          onChanged: onChanged,
+        ),
+        shape: WidgetStatePropertyAll(
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         ),
       ),
+      menuChildren: items.map((item) {
+        final isSelected = item == value;
+        return MenuItemButton(
+          onPressed: () => onChanged(item),
+          style: ButtonStyle(
+            padding: const WidgetStatePropertyAll(
+              EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            ),
+            backgroundColor: WidgetStateProperty.resolveWith((states) {
+              if (isSelected) {
+                return theme.colorScheme.primary.withValues(alpha: 0.10);
+              }
+              if (states.contains(WidgetState.hovered)) {
+                return theme.colorScheme.onSurface.withValues(alpha: 0.05);
+              }
+              return Colors.transparent;
+            }),
+          ),
+          trailingIcon: isSelected
+              ? Icon(Icons.check, size: 15, color: theme.colorScheme.primary)
+              : null,
+          child: Text(
+            item,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+              color: isSelected
+                  ? theme.colorScheme.primary
+                  : theme.colorScheme.onSurface,
+            ),
+          ),
+        );
+      }).toList(),
+      builder: (context, controller, child) {
+        final isOpen = controller.isOpen;
+        return InkWell(
+          borderRadius: BorderRadius.circular(10),
+          onTap: () {
+            if (controller.isOpen) {
+              controller.close();
+            } else {
+              controller.open();
+            }
+          },
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surface,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: isOpen
+                    ? theme.colorScheme.primary
+                    : theme.colorScheme.onSurface.withValues(alpha: 0.14),
+                width: isOpen ? 1.4 : 1.0,
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  value,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: theme.colorScheme.onSurface,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Icon(
+                  isOpen
+                      ? Icons.keyboard_arrow_up_rounded
+                      : Icons.keyboard_arrow_down_rounded,
+                  size: 18,
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 

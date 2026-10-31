@@ -5,6 +5,7 @@ import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/models/subject_catalog_model.dart';
 import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/features/student/sub_features/academics/screens/student_academic_performance_screen.dart';
+import 'package:class_realm/shared/widgets/shared_widgets.dart';
 import 'package:loading_animation_widget/loading_animation_widget.dart';
 
 class StudentGradesScreen extends StatefulWidget {
@@ -26,10 +27,14 @@ class _StudentGradesScreenState extends State<StudentGradesScreen> {
     _loadGrades();
   }
 
-  Future<void> _loadGrades() async {
+  Future<void> _loadGrades({bool silent = false}) async {
     setState(() {
-      _isLoading = true;
-      _loadError = null;
+      if (!silent || (_offerings.isEmpty && _loadError == null)) {
+        _isLoading = true;
+      }
+      if (!silent) {
+        _loadError = null;
+      }
     });
 
     try {
@@ -95,13 +100,16 @@ class _StudentGradesScreenState extends State<StudentGradesScreen> {
         setState(() {
           _offerings = offeringRows;
           _termGrades = gradesByOffering;
+          _loadError = null;
           _isLoading = false;
         });
       }
     } catch (error) {
       if (mounted) {
         setState(() {
-          _loadError = error;
+          if (!silent || _offerings.isEmpty) {
+            _loadError = error;
+          }
           _isLoading = false;
         });
       }
@@ -119,35 +127,41 @@ class _StudentGradesScreenState extends State<StudentGradesScreen> {
               size: 44,
             ),
           )
-        : _loadError != null
-        ? _buildErrorState(theme)
-        : _offerings.isEmpty
-        ? _buildEmptyState(theme)
-        : ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              if (student != null) _buildStudentHeader(theme, student),
-              const SizedBox(height: 16),
-              for (final offering in _offerings) ...[
-                _StudentSubjectGradeCard(
-                  offering: offering,
-                  termGrades:
-                      _termGrades[offering['id']?.toString()] ?? const {},
-                ),
-                const SizedBox(height: 12),
-              ],
-            ],
+        : AppPullToRefresh(
+            onRefresh: () => _loadGrades(silent: true),
+            child: _loadError != null
+                ? AppPullToRefresh.scrollableState(
+                    child: _buildErrorState(theme),
+                  )
+                : _offerings.isEmpty
+                ? AppPullToRefresh.scrollableState(
+                    child: _buildEmptyState(theme),
+                  )
+                : ListView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.all(16),
+                    children: [
+                      if (student != null) _buildStudentHeader(theme, student),
+                      const SizedBox(height: 16),
+                      for (final offering in _offerings) ...[
+                        _StudentSubjectGradeCard(
+                          offering: offering,
+                          termGrades:
+                              _termGrades[offering['id']?.toString()] ??
+                              const {},
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+                    ],
+                  ),
           );
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('My Grades'),
+        backgroundColor: theme.colorScheme.primary,
+        foregroundColor: theme.colorScheme.onPrimary,
         actions: [
-          IconButton(
-            tooltip: 'Refresh grades',
-            icon: const Icon(Icons.refresh),
-            onPressed: _loadGrades,
-          ),
           IconButton(
             tooltip: 'Academic Performance',
             icon: const Icon(Icons.school_outlined),
@@ -179,21 +193,31 @@ class _StudentGradesScreenState extends State<StudentGradesScreen> {
     ].join(' · ');
 
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
             theme.colorScheme.primary,
             theme.colorScheme.primary.withValues(alpha: 0.84),
           ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
         ),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: [
+          BoxShadow(
+            color: theme.colorScheme.primary.withValues(alpha: 0.24),
+            blurRadius: 12,
+            offset: const Offset(0, 5),
+          ),
+        ],
       ),
       child: Row(
         children: [
           CircleAvatar(
+            radius: 24,
             backgroundColor: theme.colorScheme.onPrimary.withValues(
-              alpha: 0.18,
+              alpha: 0.2,
             ),
             child: Text(
               student.fullName.trim().isEmpty
@@ -201,11 +225,12 @@ class _StudentGradesScreenState extends State<StudentGradesScreen> {
                   : student.fullName.trim()[0].toUpperCase(),
               style: TextStyle(
                 color: theme.colorScheme.onPrimary,
+                fontSize: 18,
                 fontWeight: FontWeight.bold,
               ),
             ),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -221,7 +246,7 @@ class _StudentGradesScreenState extends State<StudentGradesScreen> {
                   Text(
                     schoolInfo,
                     style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onPrimary.withValues(alpha: 0.8),
+                      color: theme.colorScheme.onPrimary.withValues(alpha: 0.82),
                     ),
                   ),
                 if (student.lrn?.isNotEmpty == true)
@@ -240,69 +265,87 @@ class _StudentGradesScreenState extends State<StudentGradesScreen> {
   }
 
   Widget _buildErrorState(ThemeData theme) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.cloud_off_outlined,
-              size: 42,
-              color: theme.colorScheme.error,
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'Grades could not be loaded.',
-              style: theme.textTheme.titleMedium,
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              _loadError.toString(),
-              style: theme.textTheme.bodySmall,
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 16),
-            OutlinedButton.icon(
-              onPressed: _loadGrades,
-              icon: const Icon(Icons.refresh),
-              label: const Text('Try again'),
-            ),
-          ],
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          Icons.cloud_off_outlined,
+          size: 42,
+          color: theme.colorScheme.error,
         ),
-      ),
+        const SizedBox(height: 12),
+        Text(
+          'Grades could not be loaded.',
+          style: theme.textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.bold,
+          ),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 8),
+        Text(
+          _loadError.toString(),
+          style: theme.textTheme.bodySmall,
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 16),
+        OutlinedButton.icon(
+          onPressed: _loadGrades,
+          icon: const Icon(Icons.refresh),
+          label: const Text('Try again'),
+        ),
+      ],
     );
   }
 
   Widget _buildEmptyState(ThemeData theme) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
+    final isDark = theme.brightness == Brightness.dark;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(28),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: theme.colorScheme.onSurface.withValues(
+            alpha: isDark ? 0.14 : 0.1,
+          ),
+        ),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 66,
+            height: 66,
+            decoration: BoxDecoration(
+              color: theme.colorScheme.primary.withValues(
+                alpha: isDark ? 0.18 : 0.1,
+              ),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
               Icons.grade_outlined,
-              size: 44,
+              size: 32,
               color: theme.colorScheme.primary,
             ),
-            const SizedBox(height: 12),
-            Text(
-              'No enrolled subjects found',
-              style: theme.textTheme.titleMedium,
-              textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 14),
+          Text(
+            'No enrolled subjects found',
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.bold,
             ),
-            const SizedBox(height: 6),
-            Text(
-              'Your subjects and posted grades will appear here.',
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-              textAlign: TextAlign.center,
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Your subjects and posted grades will appear here.',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
             ),
-          ],
-        ),
+            textAlign: TextAlign.center,
+          ),
+        ],
       ),
     );
   }
@@ -343,9 +386,11 @@ class _StudentSubjectGradeCard extends StatelessWidget {
     final tPrefix = (tg == 'female' || tg == 'f')
         ? "Ma'am "
         : (tg == 'male' || tg == 'm')
-            ? "Sir "
-            : "";
-    final teacherName = rawTeacherName.isNotEmpty ? '$tPrefix$rawTeacherName' : '';
+        ? "Sir "
+        : "";
+    final teacherName = rawTeacherName.isNotEmpty
+        ? '$tPrefix$rawTeacherName'
+        : '';
     final sectionName = section['section_name']?.toString() ?? '';
     final gradeLevel = section['grade_level'] ?? subject['grade_level'];
     final schoolInfo = [
@@ -356,7 +401,8 @@ class _StudentSubjectGradeCard extends StatelessWidget {
     return Card(
       clipBehavior: Clip.antiAlias,
       margin: EdgeInsets.zero,
-      elevation: 1,
+      elevation: 0,
+      color: scheme.surface,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
         side: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.65)),
@@ -582,8 +628,10 @@ class _InfoBadge extends StatelessWidget {
         label,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
-        style: Theme.of(context).textTheme.labelSmall
-            ?.copyWith(color: foreground, fontWeight: FontWeight.w700),
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+          color: foreground,
+          fontWeight: FontWeight.w700,
+        ),
       ),
     );
   }

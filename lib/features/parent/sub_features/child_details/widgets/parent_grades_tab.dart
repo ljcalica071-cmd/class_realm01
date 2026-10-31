@@ -3,6 +3,7 @@ import 'package:class_realm/core/theme/app_theme.dart';
 import 'package:class_realm/core/services/app_data_cache.dart';
 import 'package:class_realm/core/services/supabase_service.dart';
 import 'package:class_realm/models/user_model.dart';
+import 'package:class_realm/shared/widgets/shared_widgets.dart';
 import 'package:loading_animation_widget/loading_animation_widget.dart';
 
 class ParentGradesTab extends StatefulWidget {
@@ -39,24 +40,26 @@ class _ParentGradesTabState extends State<ParentGradesTab> {
     return const {};
   }
 
-  Future<void> _loadGrades() async {
+  Future<void> _loadGrades({bool silent = false}) async {
     final studentId = widget.student?.id;
     if (studentId == null || studentId.isEmpty) {
       if (mounted) setState(() => _isLoading = false);
       return;
     }
 
-    final cacheKey = 'parent_child_grades_$studentId';
-    final cached = AppDataCache.instance.getCached<Map<String, dynamic>>(
-      cacheKey,
-      (json) => Map<String, dynamic>.from(json as Map),
-    );
-    if (cached != null) {
-      final offerings = (cached['offerings'] as List? ?? [])
-          .map((e) => Map<String, dynamic>.from(e as Map))
-          .toList();
-      _offerings = offerings;
-      _isLoading = false;
+    if (!silent) {
+      final cacheKey = 'parent_child_grades_$studentId';
+      final cached = AppDataCache.instance.getCached<Map<String, dynamic>>(
+        cacheKey,
+        (json) => Map<String, dynamic>.from(json as Map),
+      );
+      if (cached != null) {
+        final offerings = (cached['offerings'] as List? ?? [])
+            .map((e) => Map<String, dynamic>.from(e as Map))
+            .toList();
+        _offerings = offerings;
+        _isLoading = false;
+      }
     }
 
     try {
@@ -117,7 +120,9 @@ class _ParentGradesTabState extends State<ParentGradesTab> {
         _isLoading = false;
       });
 
-      AppDataCache.instance.set(cacheKey, {'offerings': offeringRows});
+      AppDataCache.instance.set('parent_child_grades_$studentId', {
+        'offerings': offeringRows,
+      });
     } catch (e) {
       debugPrint('Error loading parent grades: $e');
       if (mounted) setState(() => _isLoading = false);
@@ -152,14 +157,16 @@ class _ParentGradesTabState extends State<ParentGradesTab> {
     }
 
     if (_offerings.isEmpty) {
-      return Padding(
-        padding: const EdgeInsets.all(16),
-        child: Center(
+      return AppPullToRefresh(
+        onRefresh: () => _loadGrades(silent: true),
+        child: AppPullToRefresh.scrollableState(
+          padding: const EdgeInsets.all(16),
           child: Container(
+            width: double.infinity,
             padding: const EdgeInsets.all(28),
             decoration: BoxDecoration(
               color: theme.colorScheme.surface,
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(18),
               border: Border.all(
                 color: theme.colorScheme.onSurface.withValues(
                   alpha: isDark ? 0.16 : 0.12,
@@ -169,10 +176,20 @@ class _ParentGradesTabState extends State<ParentGradesTab> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(
-                  Icons.assignment_outlined,
-                  size: 40,
-                  color: theme.colorScheme.primary,
+                Container(
+                  width: 66,
+                  height: 66,
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primary.withValues(
+                      alpha: isDark ? 0.18 : 0.1,
+                    ),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.assignment_outlined,
+                    size: 32,
+                    color: theme.colorScheme.primary,
+                  ),
                 ),
                 const SizedBox(height: 14),
                 const Text(
@@ -218,69 +235,168 @@ class _ParentGradesTabState extends State<ParentGradesTab> {
         ? (totalGrades / gradedSubjectsCount).round()
         : null;
 
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        // ── General Average & Summary Banner Card ──
-        Container(
-          padding: const EdgeInsets.all(18),
-          decoration: BoxDecoration(
-            color: theme.colorScheme.surface,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: theme.colorScheme.onSurface.withValues(
-                alpha: isDark ? 0.16 : 0.12,
-              ),
-            ),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 60,
-                height: 60,
-                decoration: BoxDecoration(
-                  color: (generalAverage != null && generalAverage >= 75)
-                      ? AppTheme.catGreen.withValues(alpha: isDark ? 0.2 : 0.12)
-                      : theme.colorScheme.primary.withValues(
-                          alpha: isDark ? 0.2 : 0.1,
-                        ),
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(
-                    color: (generalAverage != null && generalAverage >= 75)
-                        ? AppTheme.catGreen.withValues(alpha: 0.4)
-                        : theme.colorScheme.primary.withValues(alpha: 0.3),
-                  ),
+    return AppPullToRefresh(
+      onRefresh: () => _loadGrades(silent: true),
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(16),
+        children: [
+          // ── General Average & Summary Banner Card ──
+          Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surface,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: theme.colorScheme.onSurface.withValues(
+                  alpha: isDark ? 0.16 : 0.12,
                 ),
-                child: Center(
-                  child: Text(
-                    generalAverage != null ? '$generalAverage' : '—',
-                    style: TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.w900,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.03),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 60,
+                  height: 60,
+                  decoration: BoxDecoration(
+                    color: (generalAverage != null && generalAverage >= 75)
+                        ? AppTheme.catGreen.withValues(
+                            alpha: isDark ? 0.2 : 0.12,
+                          )
+                        : theme.colorScheme.primary.withValues(
+                            alpha: isDark ? 0.2 : 0.1,
+                          ),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
                       color: (generalAverage != null && generalAverage >= 75)
-                          ? AppTheme.catGreen
-                          : theme.colorScheme.primary,
+                          ? AppTheme.catGreen.withValues(alpha: 0.4)
+                          : theme.colorScheme.primary.withValues(alpha: 0.3),
                     ),
                   ),
-                ),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Official Report Card (${_offerings.length} Subjects)',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 15,
+                  child: Center(
+                    child: Text(
+                      generalAverage != null ? '$generalAverage' : '—',
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w900,
+                        color: (generalAverage != null && generalAverage >= 75)
+                            ? AppTheme.catGreen
+                            : theme.colorScheme.primary,
                       ),
                     ),
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Official Report Card (${_offerings.length} Subjects)',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        generalAverage != null
+                            ? 'General Average computed based on finalized grading periods.'
+                            : 'DepEd SHS Quarterly standing for ${student.firstName ?? student.fullName}.',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: theme.colorScheme.onSurface.withValues(
+                            alpha: 0.65,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // ── Subject Grade Cards List ──
+          ..._offerings.map((offering) {
+            final offId = offering['id']?.toString() ?? '';
+            final subjectsMap = _asMap(offering['subjects']);
+            final subjectName =
+                subjectsMap['subject_name']?.toString() ?? 'Subject';
+            final subjectCode = subjectsMap['subject_code']?.toString() ?? '';
+            final teacherMap = _asMap(offering['teacher_profiles']);
+            final teacherName = [
+              teacherMap['first_name']?.toString() ?? '',
+              teacherMap['last_name']?.toString() ?? '',
+            ].where((s) => s.isNotEmpty).join(' ');
+
+            final terms = _termGrades[offId] ?? {};
+            final q1 = terms[1]?['transmuted_grade']?.toString() ?? '—';
+            final q2 = terms[2]?['transmuted_grade']?.toString() ?? '—';
+            final q3 = terms[3]?['transmuted_grade']?.toString() ?? '—';
+
+            return Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surface,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: theme.colorScheme.onSurface.withValues(
+                    alpha: isDark ? 0.16 : 0.12,
+                  ),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          subjectName,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 15,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      if (subjectCode.isNotEmpty)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.primaryContainer
+                                .withValues(alpha: 0.4),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            subjectCode,
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: theme.colorScheme.primary,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                  if (teacherName.isNotEmpty) ...[
                     const SizedBox(height: 3),
                     Text(
-                      generalAverage != null
-                          ? 'General Average computed based on finalized grading periods.'
-                          : 'DepEd SHS Quarterly standing for ${student.firstName}.',
+                      'Teacher: $teacherName',
                       style: TextStyle(
                         fontSize: 12,
                         color: theme.colorScheme.onSurface.withValues(
@@ -289,109 +405,22 @@ class _ParentGradesTabState extends State<ParentGradesTab> {
                       ),
                     ),
                   ],
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 16),
-
-        // ── Subject Grade Cards List ──
-        ..._offerings.map((offering) {
-          final offId = offering['id']?.toString() ?? '';
-          final subjectsMap = _asMap(offering['subjects']);
-          final subjectName =
-              subjectsMap['subject_name']?.toString() ?? 'Subject';
-          final subjectCode = subjectsMap['subject_code']?.toString() ?? '';
-          final teacherMap = _asMap(offering['teacher_profiles']);
-          final teacherName = [
-            teacherMap['first_name']?.toString() ?? '',
-            teacherMap['last_name']?.toString() ?? '',
-          ].where((s) => s.isNotEmpty).join(' ');
-
-          final terms = _termGrades[offId] ?? {};
-          final q1 = terms[1]?['transmuted_grade']?.toString() ?? '—';
-          final q2 = terms[2]?['transmuted_grade']?.toString() ?? '—';
-          final q3 = terms[3]?['transmuted_grade']?.toString() ?? '—';
-
-          return Container(
-            margin: const EdgeInsets.only(bottom: 12),
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.surface,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(
-                color: theme.colorScheme.onSurface.withValues(
-                  alpha: isDark ? 0.16 : 0.12,
-                ),
-              ),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        subjectName,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 15,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    if (subjectCode.isNotEmpty)
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.primaryContainer.withValues(
-                            alpha: 0.4,
-                          ),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          subjectCode,
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                            color: theme.colorScheme.primary,
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-                if (teacherName.isNotEmpty) ...[
-                  const SizedBox(height: 3),
-                  Text(
-                    'Teacher: $teacherName',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: theme.colorScheme.onSurface.withValues(
-                        alpha: 0.65,
-                      ),
-                    ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      _buildTermGradeBox(theme, isDark, 'Quarter 1', q1),
+                      const SizedBox(width: 8),
+                      _buildTermGradeBox(theme, isDark, 'Quarter 2', q2),
+                      const SizedBox(width: 8),
+                      _buildTermGradeBox(theme, isDark, 'Quarter 3', q3),
+                    ],
                   ),
                 ],
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    _buildTermGradeBox(theme, isDark, 'Quarter 1', q1),
-                    const SizedBox(width: 8),
-                    _buildTermGradeBox(theme, isDark, 'Quarter 2', q2),
-                    const SizedBox(width: 8),
-                    _buildTermGradeBox(theme, isDark, 'Quarter 3', q3),
-                  ],
-                ),
-              ],
-            ),
-          );
-        }),
-      ],
+              ),
+            );
+          }),
+        ],
+      ),
     );
   }
 

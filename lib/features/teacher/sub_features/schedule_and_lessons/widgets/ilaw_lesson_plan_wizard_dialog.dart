@@ -279,7 +279,7 @@ class _IlawLessonPlanWizardDialogState
         _step = IlawWizardStep.reviewEdit;
         _inlineAlertIsError = false;
         _inlineAlertMessage =
-            'AI draft generated (Account Slot #${result.usedKeySlot ?? 1}). Review and edit any section below before approving.';
+            'AI draft generated. Review and edit any section below before approving.';
       });
       return;
     }
@@ -900,6 +900,7 @@ class _IlawLessonPlanWizardDialogState
   Widget _buildGradeDropdown(ThemeData theme) {
     return _buildDropdownField(
       theme: theme,
+      fieldKey: const Key('ilaw_grade_dropdown'),
       label: 'SHS Grade Level *',
       value: _selectedGrade,
       items: IlawLessonPlanValidator.allowedGrades,
@@ -918,6 +919,7 @@ class _IlawLessonPlanWizardDialogState
   Widget _buildQuarterDropdown(ThemeData theme) {
     return _buildDropdownField(
       theme: theme,
+      fieldKey: const Key('ilaw_quarter_dropdown'),
       label: 'Quarter *',
       value: _selectedQuarter,
       items: IlawLessonPlanValidator.allowedQuarters,
@@ -1835,6 +1837,7 @@ class _IlawLessonPlanWizardDialogState
 
   Widget _buildDropdownField({
     required ThemeData theme,
+    required Key fieldKey,
     required String label,
     required String value,
     required List<String> items,
@@ -1854,39 +1857,147 @@ class _IlawLessonPlanWizardDialogState
           ),
         ),
         const SizedBox(height: 6),
-        DropdownButtonFormField<String>(
-          initialValue: value,
-          items: items
-              .map(
-                (item) => DropdownMenuItem<String>(
-                  value: item,
-                  child: Text(item, style: const TextStyle(fontSize: 13.5)),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final menuWidth = constraints.maxWidth;
+            return MenuAnchor(
+              alignmentOffset: const Offset(0, 4),
+              style: MenuStyle(
+                backgroundColor: WidgetStatePropertyAll(
+                  theme.colorScheme.surface,
                 ),
-              )
-              .toList(),
-          onChanged: onChanged,
-          decoration: InputDecoration(
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 14,
-              vertical: 12,
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: BorderSide(
-                color: hasError
-                    ? _errorRed
-                    : theme.colorScheme.onSurface.withValues(alpha: 0.16),
-                width: hasError ? 1.5 : 1.0,
+                surfaceTintColor: const WidgetStatePropertyAll(
+                  Colors.transparent,
+                ),
+                elevation: const WidgetStatePropertyAll(6),
+                shadowColor: WidgetStatePropertyAll(
+                  Colors.black.withValues(alpha: 0.16),
+                ),
+                padding: const WidgetStatePropertyAll(
+                  EdgeInsets.symmetric(vertical: 4),
+                ),
+                minimumSize: WidgetStatePropertyAll(Size(menuWidth, 0)),
+                maximumSize: WidgetStatePropertyAll(Size(menuWidth, 240)),
+                side: WidgetStatePropertyAll(
+                  BorderSide(
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.12),
+                  ),
+                ),
+                shape: WidgetStatePropertyAll(
+                  RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
               ),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: BorderSide(
-                color: hasError ? _errorRed : theme.colorScheme.primary,
-                width: 1.5,
-              ),
-            ),
-          ),
+              menuChildren: items.map((item) {
+                final isSelected = item == value;
+                return SizedBox(
+                  width: menuWidth,
+                  child: MenuItemButton(
+                    onPressed: () => onChanged(item),
+                    style: ButtonStyle(
+                      padding: const WidgetStatePropertyAll(
+                        EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+                      ),
+                      backgroundColor: WidgetStateProperty.resolveWith((
+                        states,
+                      ) {
+                        if (isSelected) {
+                          return theme.colorScheme.primary.withValues(
+                            alpha: 0.10,
+                          );
+                        }
+                        if (states.contains(WidgetState.hovered)) {
+                          return theme.colorScheme.onSurface.withValues(
+                            alpha: 0.05,
+                          );
+                        }
+                        return Colors.transparent;
+                      }),
+                    ),
+                    trailingIcon: isSelected
+                        ? Icon(
+                            Icons.check,
+                            size: 16,
+                            color: theme.colorScheme.primary,
+                          )
+                        : null,
+                    child: Text(
+                      item,
+                      style: TextStyle(
+                        fontSize: 13.5,
+                        fontWeight: isSelected
+                            ? FontWeight.w600
+                            : FontWeight.w400,
+                        color: isSelected
+                            ? theme.colorScheme.primary
+                            : theme.colorScheme.onSurface,
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+              builder: (context, controller, child) {
+                final isOpen = controller.isOpen;
+                return InkWell(
+                  key: fieldKey,
+                  borderRadius: BorderRadius.circular(10),
+                  onTap: () {
+                    if (controller.isOpen) {
+                      controller.close();
+                    } else {
+                      controller.open();
+                    }
+                  },
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 12,
+                    ),
+                    decoration: BoxDecoration(
+                      color:
+                          theme.inputDecorationTheme.fillColor ??
+                          theme.colorScheme.surface,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: hasError
+                            ? _errorRed
+                            : (isOpen
+                                  ? theme.colorScheme.primary
+                                  : theme.colorScheme.onSurface.withValues(
+                                      alpha: 0.16,
+                                    )),
+                        width: hasError || isOpen ? 1.5 : 1.0,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            value,
+                            style: TextStyle(
+                              fontSize: 13.5,
+                              color: theme.colorScheme.onSurface,
+                            ),
+                          ),
+                        ),
+                        Icon(
+                          isOpen
+                              ? Icons.keyboard_arrow_up_rounded
+                              : Icons.keyboard_arrow_down_rounded,
+                          size: 20,
+                          color: theme.colorScheme.onSurface.withValues(
+                            alpha: 0.65,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            );
+          },
         ),
         if (hasError) ...[
           const SizedBox(height: 5),
