@@ -1,0 +1,325 @@
+{
+  "check1_literature_count_and_horizon": {
+    "total_count": 10,
+    "local_count": 5,
+    "foreign_count": 5,
+    "horizon_valid": true,
+    "studies": [
+      {
+        "author": "Holgado et al.",
+        "year": 2026,
+        "type": "Local",
+        "venue": "The Horizon",
+        "topic": "RFID Attendance"
+      },
+      {
+        "author": "Navarra & Antonio",
+        "year": 2025,
+        "type": "Local",
+        "venue": "Psychology and Education",
+        "topic": "Student Monitoring"
+      },
+      {
+        "author": "Mahinay & Encarnacion",
+        "year": 2024,
+        "type": "Local",
+        "venue": "IJARSCT",
+        "topic": "Grade Monitoring & Apriori"
+      },
+      {
+        "author": "Contreras & Mercado",
+        "year": 2024,
+        "type": "Local",
+        "venue": "IJRISS",
+        "topic": "Teacher Lesson Planning Tool"
+      },
+      {
+        "author": "Canlas & Ado",
+        "year": 2024,
+        "type": "Local",
+        "venue": "Technologique",
+        "topic": "Instructional Material Management"
+      },
+      {
+        "author": "Irhamna, Kasmini, & Khairuman",
+        "year": 2026,
+        "type": "Foreign",
+        "venue": "Jurnal Inotera",
+        "topic": "ESP32 RFID Attendance"
+      },
+      {
+        "author": "Jantan, Mohd Zainudin, & Mustafa@Dain",
+        "year": 2023,
+        "type": "Foreign",
+        "venue": "IJARBSS",
+        "topic": "Mobile Attendance App"
+      },
+      {
+        "author": "Jones",
+        "year": 2022,
+        "type": "Foreign",
+        "venue": "Frontiers in Education",
+        "topic": "Attendance & Engagement Analytics"
+      },
+      {
+        "author": "Edraga",
+        "year": 2026,
+        "type": "Foreign",
+        "venue": "Journal of Digital Educational Technology",
+        "topic": "AI-Assisted Lesson Planning"
+      },
+      {
+        "author": "Januhari, Setyanto, & Kusrini",
+        "year": 2025,
+        "type": "Foreign",
+        "venue": "AISM",
+        "topic": "Learning Repository & ISO 25010"
+      }
+    ]
+  },
+  "check2_methodologies_sample_metrics": {
+    "all_have_method": true,
+    "all_have_sample": true,
+    "all_have_quant": true,
+    "table_rows": [
+      {
+        "row": 1,
+        "author": "Holgado et al. (2026) [Local]",
+        "methodology": "Descriptive-developmental design; hardware prototyping with walk-through trial sessions and faculty evaluation.",
+        "sample_size": "Senior High School Department; trial scan batches and faculty evaluators.",
+        "quantitative_findings": "93.3% RFID walk-through detection accuracy; 100% backend data logging accuracy; faculty evaluation rated 'Strongly Agree' across usability and reliability.",
+        "has_method": true,
+        "has_sample": true,
+        "has_quant": true
+      },
+      {
+        "row": 2,
+        "author": "Navarra & Antonio (2025) [Local]",
+        "methodology": "Agile Software Development Lifecycle (7 sprints) combined with Descriptive-Evaluative Survey.",
+        "sample_size": "N = 85 respondents (teachers, parents, and secondary school students) at Isulan National High School.",
+        "quantitative_findings": "Overall system evaluation grand mean of 4.72 +/- 0.43 ('Very Functional / Highly Effective'); 95% stakeholder confirmation of process optimization.",
+        "has_method": true,
+        "has_sample": true,
+        "has_quant": true
+      },
+      {
+        "row": 3,
+        "author": "Mahinay & Encarnacion (2024) [Local]",
+        "methodology": "Descriptive-Developmental and evaluative design integrated with Apriori association-rule data mining.",
+        "sample_size": "N = 83 respondents (n = 75 students, n = 8 faculty members) at Saint Michael College of Caraga.",
+        "quantitative_findings": "Overall weighted mean perception score of 4.16 ('Agree'); calculation effectiveness rated 4.24; feedback mechanisms rated 4.12.",
+        "has_method": true,
+        "has_sample": true,
+        "has_quant": true
+      },
+      {
+        "row": 4,
+        "author": "Contreras & Mercado (2024) [Local]",
+        "methodology": "Quantitative pre-experimental repeated-measures design; paired-samples t-test across 4 academic quarters.",
+        "sample_size": "Secondary Science Teachers at Antonio A. Maceda Integrated School, Division of City Schools, Manila.",
+        "quantitative_findings": "Competency scores rose from Q1 baseline M = 78.10 (SD = 9.30) to Q3 M = 89.50 (SD = 9.10); paired t-test t = 4.45 > t_crit = 2.26 (p < 0.05); Q4 maintained M = 86.40.",
+        "has_method": true,
+        "has_sample": true,
+        "has_quant": true
+      },
+      {
+        "row": 5,
+        "author": "Canlas & Ado (2024) [Local]",
+        "methodology": "SDLC Waterfall methodology; ISO/IEC 25010 software quality evaluation; paired-samples t-test.",
+        "sample_size": "N = 120 respondents (faculty, academic administrators, program chairs, students) at PUP Manila.",
+        "quantitative_findings": "Grand mean of 4.56 ('Highly Acceptable') on ISO/IEC 25010; Security at 4.70, Functional Suitability at 4.53, Usability at 4.45; statistically significant latency reduction (p < 0.001).",
+        "has_method": true,
+        "has_sample": true,
+        "has_quant": true
+      },
+      {
+        "row": 6,
+        "author": "Irhamna, Kasmini, & Khairuman (2026) [Foreign]",
+        "methodology": "Research and Development (R&D) prototyping; Aiken's V expert content validation; empirical hardware latency testing.",
+        "sample_size": "Technical expert evaluators and N = 35 university student participants at Universitas Bina Bangsa Getsempena, Indonesia.",
+        "quantitative_findings": "Average RFID read-to-log latency of 0.10 seconds; Aiken's V validity index of 0.982 ('Very Valid'); 100% data transmission reliability under local buffering.",
+        "has_method": true,
+        "has_sample": true,
+        "has_quant": true
+      },
+      {
+        "row": 7,
+        "author": "Jantan, Mohd Zainudin, & Mustafa@Dain (2023) [Foreign]",
+        "methodology": "Iterative-incremental Agile development methodology; descriptive cross-sectional survey.",
+        "sample_size": "N = 140 respondents (lecturers and university students) at Universiti Poly-Tech Malaysia.",
+        "quantitative_findings": "87.9% of respondents strongly agreed that automated mobile attendance apps streamlined schedule tracking, attendance verification, and absenteeism detection.",
+        "has_method": true,
+        "has_sample": true,
+        "has_quant": true
+      },
+      {
+        "row": 8,
+        "author": "Jones (2022) [Foreign]",
+        "methodology": "Quantitative empirical correlation study; time-series digital learning analytics via VLE telemetry.",
+        "sample_size": "N = 31 undergraduate students enrolled in a digital learning cohort.",
+        "quantitative_findings": "Superficial click counts failed to predict performance (r = 0.12, p > 0.05), while objective completion metrics strongly correlated with final grades (r = 0.58, p < 0.01).",
+        "has_method": true,
+        "has_sample": true,
+        "has_quant": true
+      },
+      {
+        "row": 9,
+        "author": "Edraga (2026) [Foreign]",
+        "methodology": "Controlled experimental design; randomized two-group comparison; expert rubric evaluation across 4 pedagogical criteria.",
+        "sample_size": "N = 16 secondary pre-service teachers (n = 8 AI-assisted experimental, n = 8 manual control) at Northwest Samar State University.",
+        "quantitative_findings": "AI-assisted group achieved significantly higher scores in structural organization (M = 4.63 vs. 3.75) and content depth (M = 4.50 vs. 3.63); manual group scored higher in creativity (M = 4.38).",
+        "has_method": true,
+        "has_sample": true,
+        "has_quant": true
+      },
+      {
+        "row": 10,
+        "author": "Januhari, Setyanto, & Kusrini (2025) [Foreign]",
+        "methodology": "Quantitative empirical design; ISO/IEC 25010 Quality-in-Use model; Partial Least Squares Structural Equation Modeling (PLS-SEM).",
+        "sample_size": "N = 384 higher education students across diverse academic disciplines in Bali, Indonesia.",
+        "quantitative_findings": "Platform efficiency directly predicted user satisfaction (beta = 0.482, p < 0.001), accounting for 64.2% of satisfaction variance (R^2 = 0.642).",
+        "has_method": true,
+        "has_sample": true,
+        "has_quant": true
+      }
+    ]
+  },
+  "check3_teacher_workflows_proof": {
+    "lesson_planning": {
+      "contreras_mercado": true,
+      "edraga": true
+    },
+    "learning_materials": {
+      "canlas_ado": true,
+      "januhari": true
+    }
+  },
+  "check4_table1_matrix_validation": {
+    "num_rows": 11,
+    "num_cols": 6,
+    "study_rows": 10,
+    "correct_dimensions": true,
+    "has_blanket_negatives": false,
+    "flagged_phrases": []
+  },
+  "check5_frameworks_dm2003_ipso": {
+    "dm2003_citations_count": 5,
+    "dm1992_citations_count": 0,
+    "dm2003_year_correct": true,
+    "all_dm_dims_present": true,
+    "dm_dims_found": {
+      "System Quality": true,
+      "Information Quality": true,
+      "Service Quality": true,
+      "Use": true,
+      "User Satisfaction": true,
+      "Net Benefits": true
+    },
+    "all_ipso_present": true,
+    "ipso_stages_found": {
+      "Input": true,
+      "Process": true,
+      "System": true,
+      "Output": true
+    },
+    "fig1_present": true,
+    "fig2_present": true
+  },
+  "check6_smart_criteria_and_definitions": {
+    "smart_objs_count": 10,
+    "has_10_smart": true,
+    "all_sy_dated": true,
+    "all_9_defs_pass": true,
+    "def_found": {
+      "ESP32": true,
+      "RFID": true,
+      "Firebase Authentication": true,
+      "Supabase": true,
+      "Row-Level Security": true,
+      "Admin Portal": true,
+      "Teacher Portal": true,
+      "Student Portal": true,
+      "Parent Portal": true
+    }
+  },
+  "check7_active_dois_and_urls": [
+    {
+      "url": "https://doi.org/10.70838/pemj.350801",
+      "study": "Navarra & Antonio (2025)",
+      "status": "ACTIVE (HTTP 200)",
+      "resolved": "https://scimatic.org/show_manuscript/4911"
+    },
+    {
+      "url": "https://doi.org/10.47772/IJRISS.2024.803052S",
+      "study": "Contreras & Mercado (2024)",
+      "status": "ACTIVE (HTTP 200)",
+      "resolved": "https://rsisinternational.org/journals/ijriss/articles/utilization-of-weekly-lesson-plan-monitoring-tool-for-enhancing-competencies-of-science-teachers-in-instructional-planning/"
+    },
+    {
+      "url": "https://doi.org/10.48175/IJARSCT-18756",
+      "study": "Mahinay & Encarnacion (2024)",
+      "status": "ACTIVE (HTTP 200)",
+      "resolved": "https://ijarsct.co.in/Paper18756.pdf"
+    },
+    {
+      "url": "https://research-manila.letran.edu.ph/article/279",
+      "study": "Holgado et al. (2026)",
+      "status": "ACTIVE (HTTP 200)",
+      "resolved": "https://research-manila.letran.edu.ph/article/279"
+    },
+    {
+      "url": "https://digi-journalphils.com/article/imms-pup-2024",
+      "study": "Canlas & Ado (2024)",
+      "status": "404 NOT FOUND (Domain active, issue at /product/ or ResearchGate)",
+      "resolved": "https://digi-journalphils.com/article/imms-pup-2024"
+    },
+    {
+      "url": "https://doi.org/10.30935/jdet/17523",
+      "study": "Edraga (2026)",
+      "status": "ACTIVE (HTTP 200)",
+      "resolved": "https://www.jdet.net/article/analyzing-the-effect-of-chatgpt-on-lesson-plan-development-an-experimental-approach-17523"
+    },
+    {
+      "url": "https://doi.org/10.15408/aism.v8i1.45738",
+      "study": "Januhari, Setyanto, & Kusrini (2025)",
+      "status": "ACTIVE (HTTP 200)",
+      "resolved": "https://journal.uinjkt.ac.id/index.php/aism/article/view/45738"
+    },
+    {
+      "url": "https://doi.org/10.6007/IJARBSS/v13-i12/19902",
+      "study": "Jantan et al. (2023)",
+      "status": "ACTIVE (HTTP 200)",
+      "resolved": "https://hrmars.com/IJARBSS/article/view/19902/Assessing-Functionality-and-Usability-of-Smart-Attendance-Apps-for-Student-Monitoring-System"
+    },
+    {
+      "url": "https://doi.org/10.3389/feduc.2022.906601",
+      "study": "Jones (2022)",
+      "status": "ACTIVE (HTTP 200)",
+      "resolved": "https://www.frontiersin.org/journals/education/articles/10.3389/feduc.2022.906601/full"
+    },
+    {
+      "url": "https://inotera.poltas.ac.id/index.php/inotera/article/view/620",
+      "study": "Irhamna et al. (2026)",
+      "status": "ACTIVE (HTTP 200)",
+      "resolved": "https://inotera.poltas.ac.id/index.php/inotera/article/view/620"
+    },
+    {
+      "url": "https://doi.org/10.1080/07421222.2003.11045748",
+      "study": "DeLone & McLean (2003)",
+      "status": "AUTHENTIC / ACTIVE (Cloudflare/Paywall 403 on automated scraper)",
+      "resolved": "Taylor & Francis Journal of Management Information Systems"
+    },
+    {
+      "url": "https://www.iso.org/standard/78176.html",
+      "study": "ISO/IEC 25010:2023",
+      "status": "AUTHENTIC / ACTIVE (Cloudflare 403 on automated scraper)",
+      "resolved": "International Organization for Standardization"
+    },
+    {
+      "url": "https://www.psai.ph/docs/publications/tps/tps_2012_61_1_9.pdf",
+      "study": "Tejada & Punzalan (2012)",
+      "status": "ACTIVE (HTTP 200)",
+      "resolved": "https://www.psai.ph/docs/publications/tps/tps_2012_61_1_9.pdf"
+    }
+  ]
+}

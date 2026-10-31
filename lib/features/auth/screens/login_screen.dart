@@ -329,6 +329,13 @@ class _LoginScreenState extends State<LoginScreen> {
           AppRoutes.teacherFirstLogin,
           (route) => false,
         );
+      } else if (user.role == UserRole.parent) {
+        SyncCoordinator.instance.syncParentData(user.id);
+        Navigator.pushNamedAndRemoveUntil(
+          context,
+          AppRoutes.parentHome,
+          (route) => false,
+        );
       } else {
         Navigator.pushNamedAndRemoveUntil(
           context,
@@ -674,9 +681,9 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
         _buildSubSection(
           '2. User Responsibilities',
-          '• Teachers: Responsible for accurate input of grades, assessments, and securing their authentication credentials.\n'
-          '• Students: Must maintain academic integrity, provide accurate personal details, and ensure their RFID tags are only used by them.\n'
-          '• Parents: Granted access strictly for monitoring their child\'s academic progress and attendance.',
+          'â€¢ Teachers: Responsible for accurate input of grades, assessments, and securing their authentication credentials.\n'
+          'â€¢ Students: Must maintain academic integrity, provide accurate personal details, and ensure their RFID tags are only used by them.\n'
+          'â€¢ Parents: Granted access strictly for monitoring their child\'s academic progress and attendance.',
         ),
         _buildSubSection(
           '3. Acceptable Use',
@@ -712,10 +719,10 @@ class _LoginScreenState extends State<LoginScreen> {
         const SizedBox(height: 14),
         _buildSubSection(
           '1. Information We Collect',
-          '• Personal Information: Names, Student IDs (LRN), Emails, Contact Numbers, Birthdays, and Gender.\n'
-          '• Academic Data: Submissions, quiz/exam scores, calculated grades, and attendance records.\n'
-          '• RFID & Hardware Data: Attendance scan records from RFID cards read by the ESP32 scanner.\n'
-          '• Technical Data: Suspicious session events during assessments.',
+          'â€¢ Personal Information: Names, Student IDs (LRN), Emails, Contact Numbers, Birthdays, and Gender.\n'
+          'â€¢ Academic Data: Submissions, quiz/exam scores, calculated grades, and attendance records.\n'
+          'â€¢ RFID & Hardware Data: Attendance scan records from RFID cards read by the ESP32 scanner.\n'
+          'â€¢ Technical Data: Suspicious session events during assessments.',
         ),
         _buildSubSection(
           '2. How We Use the Information',

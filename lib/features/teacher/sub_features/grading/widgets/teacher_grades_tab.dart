@@ -83,33 +83,40 @@ class _TeacherGradesTabState extends State<TeacherGradesTab> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Quarterly Grades Computation',
-                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-              ),
-              Row(
-                children: [
-                  _buildGradesFilterDropdown(
-                    label: 'Section:',
-                    value: _gradesSectionFilter,
-                    items: ['All Sections', ...sections],
-                    onChanged: (val) =>
-                        setState(() => _gradesSectionFilter = val!),
-                  ),
-                  const SizedBox(width: 16),
-                  _buildGradesFilterDropdown(
-                    label: 'Ranking:',
-                    value: _gradesRankingOrder,
-                    items: ['None', 'Highest to Lowest', 'Lowest to Highest'],
-                    onChanged: (val) =>
-                        setState(() => _gradesRankingOrder = val!),
-                  ),
-                ],
-              ),
-            ],
+          SizedBox(
+            width: double.infinity,
+            child: Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 16,
+              runSpacing: 12,
+              children: [
+                const Text(
+                  'Quarterly Grades Computation',
+                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                ),
+                Wrap(
+                  spacing: 16,
+                  runSpacing: 8,
+                  children: [
+                    _buildGradesFilterDropdown(
+                      label: 'Section:',
+                      value: _gradesSectionFilter,
+                      items: ['All Sections', ...sections],
+                      onChanged: (val) =>
+                          setState(() => _gradesSectionFilter = val!),
+                    ),
+                    _buildGradesFilterDropdown(
+                      label: 'Ranking:',
+                      value: _gradesRankingOrder,
+                      items: ['None', 'Highest to Lowest', 'Lowest to Highest'],
+                      onChanged: (val) =>
+                          setState(() => _gradesRankingOrder = val!),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 16),
           Expanded(

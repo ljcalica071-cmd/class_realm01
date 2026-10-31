@@ -24,7 +24,6 @@ class AttendanceRecord {
   final String section;
   final DateTime date;
   final String timeIn;
-  final String? timeOut;
   final String? remarks;
   final AttendanceStatus status;
   final String method; // 'RFID (ESP32)' or 'Manual'
@@ -37,7 +36,6 @@ class AttendanceRecord {
     this.section = '',
     required this.date,
     required this.timeIn,
-    this.timeOut,
     this.remarks,
     required this.status,
     this.method = 'Manual',
@@ -51,7 +49,6 @@ class AttendanceRecord {
     String? section,
     DateTime? date,
     String? timeIn,
-    String? timeOut,
     String? remarks,
     AttendanceStatus? status,
     String? method,
@@ -64,12 +61,54 @@ class AttendanceRecord {
       section: section ?? this.section,
       date: date ?? this.date,
       timeIn: timeIn ?? this.timeIn,
-      timeOut: timeOut ?? this.timeOut,
       remarks: remarks ?? this.remarks,
       status: status ?? this.status,
       method: method ?? this.method,
       isSynced: isSynced ?? this.isSynced,
     );
+  }
+
+  factory AttendanceRecord.fromJson(Map<String, dynamic> json) {
+    AttendanceStatus parseStatus(dynamic val) {
+      if (val is AttendanceStatus) return val;
+      final s = val?.toString().toLowerCase().trim();
+      if (s == 'late') return AttendanceStatus.late;
+      if (s == 'absent') return AttendanceStatus.absent;
+      if (s == 'excused') return AttendanceStatus.excused;
+      return AttendanceStatus.present;
+    }
+
+    return AttendanceRecord(
+      id: json['id']?.toString() ?? '',
+      studentId: json['student_id']?.toString() ?? json['studentId']?.toString() ?? '',
+      studentName: json['student_name']?.toString() ?? json['studentName']?.toString() ?? '',
+      section: json['section']?.toString() ?? '',
+      date: json['date'] != null
+          ? DateTime.tryParse(json['date'].toString()) ?? DateTime.now()
+          : (json['attendance_date'] != null
+              ? DateTime.tryParse(json['attendance_date'].toString()) ?? DateTime.now()
+              : DateTime.now()),
+      timeIn: json['time_in']?.toString() ?? json['timeIn']?.toString() ?? '--:--',
+      remarks: json['remarks']?.toString(),
+      status: parseStatus(json['status']),
+      method: json['method']?.toString() ?? json['source']?.toString() ?? 'Manual',
+      isSynced: json['is_synced'] as bool? ?? json['isSynced'] as bool? ?? true,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'student_id': studentId,
+      'student_name': studentName,
+      'section': section,
+      'date': date.toIso8601String(),
+      'time_in': timeIn,
+      'remarks': remarks,
+      'status': status.name,
+      'method': method,
+      'is_synced': isSynced,
+    };
   }
 }
 
@@ -856,6 +895,44 @@ class ScheduleModel {
       wwWeight: wwWeight ?? this.wwWeight,
       ptWeight: ptWeight ?? this.ptWeight,
       exWeight: exWeight ?? this.exWeight,
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'subject': subject,
+      'section': section,
+      'room': room,
+      'dayOfWeek': dayOfWeek,
+      'startTime': startTime,
+      'endTime': endTime,
+      'sectionId': sectionId,
+      'subjectId': subjectId,
+      'teacherId': teacherId,
+      'gradeLevel': gradeLevel,
+      'wwWeight': wwWeight,
+      'ptWeight': ptWeight,
+      'exWeight': exWeight,
+    };
+  }
+
+  factory ScheduleModel.fromMap(Map<String, dynamic> map) {
+    return ScheduleModel(
+      id: map['id']?.toString() ?? '',
+      subject: map['subject']?.toString() ?? '',
+      section: map['section']?.toString() ?? '',
+      room: map['room']?.toString() ?? '',
+      dayOfWeek: map['dayOfWeek']?.toString() ?? 'Monday',
+      startTime: map['startTime']?.toString() ?? '',
+      endTime: map['endTime']?.toString() ?? '',
+      sectionId: map['sectionId']?.toString(),
+      subjectId: map['subjectId']?.toString(),
+      teacherId: map['teacherId']?.toString(),
+      gradeLevel: (map['gradeLevel'] as num?)?.toInt(),
+      wwWeight: (map['wwWeight'] as num?)?.toDouble(),
+      ptWeight: (map['ptWeight'] as num?)?.toDouble(),
+      exWeight: (map['exWeight'] as num?)?.toDouble(),
     );
   }
 }

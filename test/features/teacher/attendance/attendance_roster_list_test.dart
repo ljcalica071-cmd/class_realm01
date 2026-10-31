@@ -149,6 +149,8 @@ void main() {
       // Tapping load more reveals the remaining 15 females
       final loadMoreBtn = find.textContaining('Load More');
       expect(loadMoreBtn, findsOneWidget);
+      await tester.ensureVisible(loadMoreBtn);
+      await tester.pumpAndSettle();
       await tester.tap(loadMoreBtn);
       await tester.pumpAndSettle();
 

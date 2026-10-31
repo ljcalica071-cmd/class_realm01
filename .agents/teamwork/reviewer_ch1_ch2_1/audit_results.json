@@ -1,0 +1,69 @@
+{
+  "pilot_school": {
+    "hits": [
+      "Eduardo Barreto Sr. High School",
+      "Eduardo Barreto Sr. High School",
+      "Eduardo Barreto Sr. High School",
+      "Eduardo Barreto Sr. High School",
+      "Eduardo Barreto Sr. High School",
+      "Eduardo Barreto Sr. High School"
+    ],
+    "wrong_hits": [],
+    "exact_count": 6
+  },
+  "client": {
+    "hits": [
+      "Karen P. Gonzaga",
+      "Karen P. Gonzaga"
+    ],
+    "has_maam": true,
+    "has_title": true
+  },
+  "roles": {
+    "Admin": true,
+    "Teacher_web_app": true,
+    "Student_app": true,
+    "Parent_app": true
+  },
+  "boundaries": {
+    "admin_rollover_provisioning_only": true,
+    "admin_no_access_details": true,
+    "teacher_self_manage_rosters": true,
+    "exclude_registrar_principal": true,
+    "exclude_transfer_drop": true,
+    "preservation_and_export": true
+  },
+  "attendance": {
+    "rfid_specified": true,
+    "esp32_specified": true,
+    "nfc_fallback": true,
+    "permanent_manual_fallback": true
+  },
+  "smart": {
+    "sy_2026_2027": true,
+    "tap_latency": true,
+    "buffer_capacity": true,
+    "sync_latency": true,
+    "quiz_turnaround": true,
+    "psychometrics": true,
+    "push_notification": true,
+    "iso_25010": true
+  },
+  "policies": {
+    "parent_auth": true,
+    "offline_sync": true,
+    "duplicate_detection_idempotent": true,
+    "test_thresholds_cutoffs": true
+  },
+  "definitions": {
+    "ESP32": true,
+    "RFID": true,
+    "Firebase Authentication": true,
+    "Supabase": true,
+    "Row-Level Security": true,
+    "Admin Portal": true,
+    "Teacher Portal": true,
+    "Student Portal": true,
+    "Parent Portal": true
+  }
+}

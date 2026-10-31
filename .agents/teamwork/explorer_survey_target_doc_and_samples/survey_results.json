@@ -1,0 +1,753 @@
+{
+  "target_docx": {
+    "size": 75348,
+    "files": [
+      "[Content_Types].xml",
+      "_rels/",
+      "_rels/.rels",
+      "docProps/",
+      "docProps/app.xml",
+      "docProps/core.xml",
+      "docProps/custom.xml",
+      "word/",
+      "word/_rels/",
+      "word/_rels/document.xml.rels",
+      "word/_rels/header1.xml.rels",
+      "word/document.xml",
+      "word/endnotes.xml",
+      "word/fontTable.xml",
+      "word/footer1.xml"
+    ],
+    "styles": {
+      "1": {
+        "name": "Normal",
+        "font": "Arial",
+        "size": 11.0
+      },
+      "2": {
+        "name": "Default Paragraph Font",
+        "font": null,
+        "size": null
+      },
+      "3": {
+        "name": "Normal Table",
+        "font": null,
+        "size": null
+      },
+      "4": {
+        "name": "Normal (Web)",
+        "font": null,
+        "size": 12.0
+      },
+      "5": {
+        "name": "_Style 10",
+        "font": null,
+        "size": null
+      },
+      "6": {
+        "name": "TableNormal",
+        "font": null,
+        "size": null
+      }
+    },
+    "margins": [
+      {
+        "top": 1.598,
+        "left": 1.598,
+        "bottom": 1.201,
+        "right": 1.401
+      }
+    ],
+    "paragraphs": [
+      {
+        "idx": 0,
+        "style": "4",
+        "font": "Arial",
+        "size": 12.0,
+        "text": "INTEGRATED SENIOR HIGH SCHOOL ATTENDANCE, ACTIVITY AND REQUIREMENT TRACKING, TEACHER LESSON PLANNING, AND LEARNING MATER"
+      },
+      {
+        "idx": 6,
+        "style": "Normal",
+        "font": "Arial",
+        "size": 11.0,
+        "text": "A Capstone Project to the Faculty of the"
+      },
+      {
+        "idx": 7,
+        "style": "Normal",
+        "font": "Arial",
+        "size": 11.0,
+        "text": "College of Computing Studies"
+      },
+      {
+        "idx": 8,
+        "style": "Normal",
+        "font": "Arial",
+        "size": 11.0,
+        "text": "Laguna University"
+      },
+      {
+        "idx": 13,
+        "style": "Normal",
+        "font": "Arial",
+        "size": 11.0,
+        "text": "In Partial Fulfillment of the Requirements for the"
+      },
+      {
+        "idx": 14,
+        "style": "Normal",
+        "font": "Arial",
+        "size": 11.0,
+        "text": "Degree of Bachelor of Science in"
+      },
+      {
+        "idx": 15,
+        "style": "Normal",
+        "font": "Arial",
+        "size": 11.0,
+        "text": "Information Technology"
+      },
+      {
+        "idx": 20,
+        "style": "Normal",
+        "font": "Arial",
+        "size": 11.0,
+        "text": "Calica, Ljay H."
+      },
+      {
+        "idx": 21,
+        "style": "Normal",
+        "font": null,
+        "size": 11.0,
+        "text": "San Juan, John Rex G."
+      },
+      {
+        "idx": 28,
+        "style": "Normal",
+        "font": "Arial",
+        "size": 12.0,
+        "text": "CHAPTER I"
+      },
+      {
+        "idx": 29,
+        "style": "Normal",
+        "font": "Arial",
+        "size": 12.0,
+        "text": "INTRODUCTION"
+      },
+      {
+        "idx": 48,
+        "style": "Normal",
+        "font": "Arial",
+        "size": 12.0,
+        "text": "CHAPTER II"
+      },
+      {
+        "idx": 49,
+        "style": "Normal",
+        "font": "Arial",
+        "size": 12.0,
+        "text": "REVIEW OF RELATED LITERATURE AND SYSTEMS"
+      }
+    ]
+  },
+  "pptx": [
+    {
+      "slide": 1,
+      "texts": [
+        "CLASSREALM",
+        "Integrated Senior High School Attendance, Activity and Requirement Tracking,Teacher Lesson Planning, and Learning Materials Management System",
+        "\u201cOne Realm for Every Learning Journey.\u201d"
+      ]
+    },
+    {
+      "slide": 2,
+      "texts": [
+        "1. Introduction",
+        "System Overview and Client",
+        "CLASSREALM is an integrated educational management system for Senior High School.",
+        "It centralizes attendance (through rfid attendance), assessments (activities, quiz, summative test1, summative test2,  term examination), grades (auto grade cumputation), lesson planning(lesson plan guide generator), and learning materials (organizer of learning materials).",
+        "The system supports:Admin, Teacher (web, teacher web & app reponsive)Student, and Parent roles. (app)",
+        "Client: Ma\u2019am Karen P. Gonzaga, Senior High School Mathematics Teacher.",
+        "The client handles Grade 11 General Mathematics for 3 sections.",
+        "2"
+      ]
+    },
+    {
+      "slide": 3,
+      "texts": [
+        "2. Problem Statement",
+        "Current challenges experienced by the client",
+        "Academic records and teaching materials are stored across different files, applications, and platforms.",
+        "Attendance is manually recorded through index cards, making records harder to maintain and update.",
+        "Student scores and requirements require repeated manual recording and checking.",
+        "The client needs a centralized way to manage lessons, assessments, grades, attendance, and learning resources.",
+        ".",
+        "3"
+      ]
+    },
+    {
+      "slide": 4,
+      "texts": [
+        "3. Objectives",
+        "What the project aims to achieve",
+        "Develop an integrated system that centralizes major classroom and academic management tasks.",
+        "Provide efficient attendance recording through manual input and ESP32-RFID integration.",
+        "Streamline activities, requirements, quizzes, examinations, grading, and performance monitoring.",
+        "Support teacher lesson planning and organized management of learning materials.",
+        "Provide students and parents with appropriate access to academic information.",
+        "Generate useful reports and analytics to support academic decision-making.",
+        "4"
+      ]
+    },
+    {
+      "slide": 5,
+      "texts": [
+        "4. Major Features",
+        "Core capabilities of CLASSREALM",
+        "Classroom Management \u2013 manage academic setup, sections, subjects, schedules, and students.",
+        "Attendance Management \u2013 manual and ESP32-RFID attendance with offline-first synchronization.",
+        "Class Activities & Assessments \u2013 manage activities, requirements, quizzes, and examinations.",
+        "Exam Checker & Item Analysis \u2013 check objective responses and analyze exam performance.",
+        "Grades & Performance Analytics \u2013 calculate grades and monitor student/class performance.",
+        "Lesson Planning & Learning Materials \u2013 create lesson plans and organize authorized resources.",
+        "Student & Parent Access \u2013 provide appropriate access to academic information.",
+        "5"
+      ]
+    },
+    {
+      "slide": 6,
+      "texts": [
+        "5. Benefits of the System",
+        "How CLASSREALM helps its users",
+        "Centralized Records \u2013 reduces scattered files and repeated manual recording.",
+        "Improved Efficiency \u2013 simplifies common teaching and classroom-management tasks.",
+        "Better Monitoring \u2013 makes attendance, grades, requirements, and performance easier to track.",
+        "Organized Teaching Resources \u2013 keeps lesson plans and learning materials accessible to the teacher.",
+        "Improved Communication \u2013 gives students and parents access to relevant academic information.",
+        "Reliable Attendance Workflow \u2013 supports local recording and later synchronization when connectivity is limited.",
+        "6"
+      ]
+    },
+    {
+      "slide": 7,
+      "texts": [
+        "6. Project Overview",
+        "CLASSREALM \u2014 One Realm for Every Learning Journey",
+        "CLASSREALM brings essential Senior High School academic and classroom-management functions into one integrated platform.",
+        "The system is designed around the actual needs of the teacher, while providing appropriate student, parent, and administrator access.",
+        "Its goal is to reduce manual work, improve organization, and support better monitoring of student learning.",
+        "7"
+      ]
+    }
+  ],
+  "sample_ch1": {
+    "paragraphs": [
+      {
+        "idx": 0,
+        "text": "MOJ: INTEGRATED SCHOOL MANAGEMENT SYSTEM PLATFORM INTEGRATING ACADEMIC, ENROLLMENT, ATTENDANCE, AND "
+      },
+      {
+        "idx": 6,
+        "text": "A Capstone Project to the Faculty of the"
+      },
+      {
+        "idx": 7,
+        "text": "College of Computing Studies"
+      },
+      {
+        "idx": 8,
+        "text": "Laguna University"
+      },
+      {
+        "idx": 13,
+        "text": "In Partial Fulfillment of the Requirements for the"
+      },
+      {
+        "idx": 14,
+        "text": "Degree of Bachelor of Science in"
+      },
+      {
+        "idx": 15,
+        "text": "Information Technology"
+      },
+      {
+        "idx": 20,
+        "text": "Calantina, Jhon Vincent S."
+      },
+      {
+        "idx": 21,
+        "text": "Jacob, Xedric Jhover E."
+      },
+      {
+        "idx": 29,
+        "text": "CHAPTER I"
+      },
+      {
+        "idx": 30,
+        "text": "INTRODUCTION"
+      },
+      {
+        "idx": 32,
+        "text": "Educational institutions increasingly rely on integrated information systems to manage academic reco"
+      },
+      {
+        "idx": 33,
+        "text": "Project Context"
+      },
+      {
+        "idx": 34,
+        "text": "The Missionary Oratorians of Jesus College, Inc. is a private Catholic school located in Barangay Tu"
+      },
+      {
+        "idx": 35,
+        "text": "At present, the school's core administrative processes remain manual and paper-based. Statements of "
+      },
+      {
+        "idx": 36,
+        "text": "These manual processes have produced operational difficulties that go beyond simple inconvenience. B"
+      },
+      {
+        "idx": 37,
+        "text": "Taken together, these gaps reflect the school's need for a computer-based system capable of managing"
+      },
+      {
+        "idx": 38,
+        "text": "Purpose and Description"
+      },
+      {
+        "idx": 39,
+        "text": "The proposed system, MOJ, is an integrated, computer-based school management platform for the Missio"
+      },
+      {
+        "idx": 40,
+        "text": "Functionally, the system is built from a single Flutter codebase that delivers five role-based porta"
+      },
+      {
+        "idx": 41,
+        "text": "For the school, the system is intended to serve as its primary tool for modernizing day-to-day admin"
+      },
+      {
+        "idx": 42,
+        "text": "Objectives of the Study"
+      },
+      {
+        "idx": 43,
+        "text": "General Objective: To develop \u201cMOJ: Integrated School Management System Platform Integrating Academi"
+      },
+      {
+        "idx": 44,
+        "text": "Specific Objectives:"
+      },
+      {
+        "idx": 45,
+        "text": "1.To design and develop a Flutter-based cross-platform application that provides Registrar, Teacher,"
+      },
+      {
+        "idx": 46,
+        "text": "2.To design a relational database architecture on Supabase (PostgreSQL, Authentication, Storage, and"
+      },
+      {
+        "idx": 47,
+        "text": "3.To develop a digital enrollment module with online application and requirement upload, a registrar"
+      },
+      {
+        "idx": 48,
+        "text": "4.To develop an academic and attendance module in which the Admin sets up school years, sections, su"
+      },
+      {
+        "idx": 49,
+        "text": "5.To develop an assessment and grading module that supports manual and OMR-based checking of quiz an"
+      },
+      {
+        "idx": 50,
+        "text": "6.To develop a billing and payment module that applies fee structures per grade level, creates stude"
+      },
+      {
+        "idx": 51,
+        "text": "7.To design a Parent Portal that displays each child's schedule, attendance, grades, statement of ac"
+      },
+      {
+        "idx": 52,
+        "text": "8.To provide records and administration tools for Form 137/SF10 and academic reports, student promot"
+      },
+      {
+        "idx": 55,
+        "text": "Scope and Limitations of the Research"
+      },
+      {
+        "idx": 56,
+        "text": "This study covers the design and development of the proposed school management platform for the elem"
+      },
+      {
+        "idx": 57,
+        "text": "\u2022Five role-based portals (Registrar, Teacher, Cashier, Admin, and Parent), with a child-switcher for"
+      },
+      {
+        "idx": 58,
+        "text": "\u2022A digital enrollment module with document upload, registrar review, duplicate resolution, and paren"
+      },
+      {
+        "idx": 59,
+        "text": "\u2022Academic setup (school year, sections, subjects, class assignments, schedules, and section assignme"
+      },
+      {
+        "idx": 60,
+        "text": "\u2022Assessment creation, OMR-based scanning for quiz and examination checking, quarter grade computatio"
+      },
+      {
+        "idx": 61,
+        "text": "\u2022Billing and payments: fee structures, student charges, GCash payments through PayMongo checkout, ma"
+      },
+      {
+        "idx": 62,
+        "text": "\u2022In-app notifications and announcements for parents, and email messages sent by the authentication s"
+      },
+      {
+        "idx": 63,
+        "text": "\u2022Form 137/SF10 and academic reports, student promotion, enrollment-requirement clearance tracking, a"
+      },
+      {
+        "idx": 64,
+        "text": "\u2022A single Flutter codebase connected directly to Supabase, used within its free-tier limits, without"
+      },
+      {
+        "idx": 65,
+        "text": "The study is likewise bound by the following limitations:"
+      },
+      {
+        "idx": 66,
+        "text": "1.The system does not include a Library/Librarian module."
+      },
+      {
+        "idx": 67,
+        "text": "2.SMS notifications, QR-code payment verification, and a bullying or incident logging tool are not p"
+      },
+      {
+        "idx": 68,
+        "text": "3.Quiz and examination checking does not use a fully digital quiz-taking portal, since not all stude"
+      },
+      {
+        "idx": 69,
+        "text": "4.RFID attendance depends on the availability of the ESP32 readers and RFID cards, and on a stable n"
+      },
+      {
+        "idx": 70,
+        "text": "5.The system is developed and maintained by a two-member student development team within an academic"
+      },
+      {
+        "idx": 71,
+        "text": "6.The grading module computes a quarter grade from the activity, quiz, assignment/project, monthly e"
+      },
+      {
+        "idx": 72,
+        "text": "Definition of Terms"
+      },
+      {
+        "idx": 73,
+        "text": "For clarity, the following terms are defined based on how they are used within the proposed system:"
+      },
+      {
+        "idx": 74,
+        "text": "OMR (Optical Mark Recognition) \u2013 the scanning method used in this system to detect marked answers on"
+      },
+      {
+        "idx": 75,
+        "text": "RFID (Radio Frequency Identification) \u2013 the technology used for attendance: a student taps a card th"
+      },
+      {
+        "idx": 76,
+        "text": "ESP32 \u2013 the low-cost microcontroller with Wi-Fi used in the RFID readers to send each tap to the sys"
+      },
+      {
+        "idx": 77,
+        "text": "GCash / PayMongo \u2013 GCash is the e-wallet used by parents to pay school fees; PayMongo is the payment"
+      },
+      {
+        "idx": 78,
+        "text": "Statement of Account \u2013 the itemized digital record of a student's charges, payments, and balance, vi"
+      },
+      {
+        "idx": 79,
+        "text": "SF10 (School Form 10) \u2013 the student's permanent academic record; in this system, its data is generat"
+      },
+      {
+        "idx": 80,
+        "text": "Form 137 \u2013 the learner's permanent academic record containing the complete grade history; in this sy"
+      },
+      {
+        "idx": 81,
+        "text": "Registrar Portal \u2013 the interface used by the school registrar to review, approve, return for revisio"
+      },
+      {
+        "idx": 82,
+        "text": "Teacher Portal \u2013 the interface used by teachers to view class assignments and schedules, record clas"
+      },
+      {
+        "idx": 83,
+        "text": "Cashier Portal \u2013 the interface used by the school's cashier to create student charges, confirm verif"
+      },
+      {
+        "idx": 84,
+        "text": "Admin Portal \u2013 the interface used by the administrator to manage staff accounts, school year and aca"
+      },
+      {
+        "idx": 85,
+        "text": "Parent Portal \u2013 the interface used by parents to submit enrollment applications, view a child's sche"
+      },
+      {
+        "idx": 86,
+        "text": "Quarter Grade \u2013 the grade of a student in a subject for one of the four grading periods, computed fr"
+      },
+      {
+        "idx": 87,
+        "text": "Requirement Clearance \u2013 the tracking of the status of enrollment documents (for example, missing, to"
+      },
+      {
+        "idx": 88,
+        "text": "Supabase \u2013 the backend platform used in this system for the PostgreSQL database, user authentication"
+      },
+      {
+        "idx": 89,
+        "text": "Row-Level Security \u2013 a database feature that restricts which records each signed-in user may read or"
+      }
+    ]
+  },
+  "sample_ch2": {
+    "paragraphs": [
+      {
+        "idx": 0,
+        "text": "CHAPTER II"
+      },
+      {
+        "idx": 1,
+        "text": "REVIEW OF RELATED LITERATURE AND SYSTEMS"
+      },
+      {
+        "idx": 3,
+        "text": "Review of Related Literature and Systems"
+      },
+      {
+        "idx": 4,
+        "text": "This chapter presents a thematic synthesis of local and foreign literature and systems related to th"
+      },
+      {
+        "idx": 5,
+        "text": "Web-Based and Automated School Management Systems"
+      },
+      {
+        "idx": 6,
+        "text": "A recurring concern in the local literature is the replacement of paper-based school transactions wi"
+      },
+      {
+        "idx": 7,
+        "text": "At the basic education level, Sumugat et al. (2026) developed the E-Adviser Student Information Mana"
+      },
+      {
+        "idx": 8,
+        "text": "Internationally, Nikmah, Rasiman, and Violinda (2025) examined the effectiveness of a school managem"
+      },
+      {
+        "idx": 9,
+        "text": "Government-Mandated Basic Education Information Systems"
+      },
+      {
+        "idx": 10,
+        "text": "Philippine public schools operate under a parallel obligation to maintain nationally mandated inform"
+      },
+      {
+        "idx": 11,
+        "text": "Asio et al. (2022) conducted a mini-review of Education Management Information Systems (EMIS) and th"
+      },
+      {
+        "idx": 12,
+        "text": "Student Records Management Challenges and Data Governance"
+      },
+      {
+        "idx": 13,
+        "text": "Ri\u00f1o and Daing (2022) investigated the challenges encountered by 140 public secondary school teacher"
+      },
+      {
+        "idx": 14,
+        "text": "From an international perspective, Khan et al. (2025) developed an Intelligent Student Information S"
+      },
+      {
+        "idx": 15,
+        "text": "Integrated Financial and Academic Information Systems"
+      },
+      {
+        "idx": 16,
+        "text": "Mangariales et al. (2026) evaluated the Student Information and Accounting System (SIAS) at the Divi"
+      },
+      {
+        "idx": 17,
+        "text": "Complementing this, Kamal et al. (2026) conducted a systematic literature review, guided by the PRIS"
+      },
+      {
+        "idx": 18,
+        "text": "Institutional Efficiency and the Administrative Impact of Management Information Systems"
+      },
+      {
+        "idx": 19,
+        "text": "Pradana et al. (2026) conducted a PRISMA-guided systematic literature review of 24 empirical studies"
+      },
+      {
+        "idx": 20,
+        "text": "Synthesis"
+      },
+      {
+        "idx": 21,
+        "text": "The reviewed literature and systems converge on three consistent findings. First, locally developed,"
+      },
+      {
+        "idx": 22,
+        "text": "Table 1 presents a comparative matrix of five representative existing systems drawn from the reviewe"
+      },
+      {
+        "idx": 26,
+        "text": "Table 1"
+      },
+      {
+        "idx": 27,
+        "text": "Comparative Matrix of Existing Student Information Systems and the Proposed System"
+      },
+      {
+        "idx": 28,
+        "text": "[TABLE]"
+      },
+      {
+        "idx": 29,
+        "text": "Table 1 shows that while existing local and international systems individually address records manag"
+      },
+      {
+        "idx": 30,
+        "text": "Table 2"
+      },
+      {
+        "idx": 31,
+        "text": "Synthesis Matrix of the Reviewed Studies"
+      },
+      {
+        "idx": 32,
+        "text": "[TABLE]"
+      },
+      {
+        "idx": 33,
+        "text": "Table 2 groups six local and four foreign studies (60 and 40 percent) and links each finding to a de"
+      },
+      {
+        "idx": 34,
+        "text": "Theoretical Framework"
+      },
+      {
+        "idx": 35,
+        "text": "This study is anchored on the Input-Process-Storage-Output (IPSO) model, an extension of the classic"
+      },
+      {
+        "idx": 36,
+        "text": "Figure 1"
+      },
+      {
+        "idx": 37,
+        "text": "Input-Process-Storage-Output Diagram (IPSO) of MOJ"
+      },
+      {
+        "idx": 39,
+        "text": "Figure 1 illustrates the flow of data through MOJ: enrollment, RFID card taps, class attendance, ass"
+      },
+      {
+        "idx": 40,
+        "text": "The development of the proposed system is further guided by the Agile Model of the Systems Developme"
+      },
+      {
+        "idx": 41,
+        "text": "As a point of theoretical grounding, this study also draws \u2014 as permitted under the LU RDC \u201cClassic\u201d"
+      },
+      {
+        "idx": 42,
+        "text": "Conceptual Framework"
+      },
+      {
+        "idx": 43,
+        "text": "While the Theoretical Framework establishes the structural stages through which data moves, the Conc"
+      },
+      {
+        "idx": 44,
+        "text": "Figure 2"
+      },
+      {
+        "idx": 45,
+        "text": "Input-Process-Output Diagram (IPO) of MOJ"
+      },
+      {
+        "idx": 47,
+        "text": "Figure 2 shows that the Parent, Registrar, Teacher, Cashier, Admin, and the RFID readers supply the "
+      },
+      {
+        "idx": 48,
+        "text": "At the Input stage, parents register an account, submit an enrollment application, upload requiremen"
+      },
+      {
+        "idx": 49,
+        "text": "At the Process stage, the system authenticates users and resolves their role, checks applications ag"
+      },
+      {
+        "idx": 50,
+        "text": "At the Storage stage, validated records are committed to a Supabase PostgreSQL database with row-lev"
+      },
+      {
+        "idx": 51,
+        "text": "At the Output stage, the system presents enrollment status and student records, class rosters and sc"
+      },
+      {
+        "idx": 53,
+        "text": "References"
+      },
+      {
+        "idx": 54,
+        "text": "Asio, J. M. R., Leva, E. F., Lucero, L. C., & Cabrera, W. C. (2022). Education management informatio"
+      },
+      {
+        "idx": 55,
+        "text": "Grepon, B. G. S., Baran, N. T., Gumonan, K. M. V. C., Martinez, A. L. M., & Lacsa, M. L. E. (2021). "
+      },
+      {
+        "idx": 56,
+        "text": "Kamal, S. A. R., Rahmawati, D., Zulaikha, S., & Huda, S. A. (2026). Transforming student data govern"
+      },
+      {
+        "idx": 57,
+        "text": "Khan, N. A., Rashid, K. A., Siddiqi, A. M. U., Khalid, M. N., Hamdaoui, R., & Ahmed, M. (2025). Deve"
+      },
+      {
+        "idx": 58,
+        "text": "Lopez, A., & Lorejo, R. (2023). Effectiveness of Enhanced Basic Education Information System (EBEIS)"
+      },
+      {
+        "idx": 59,
+        "text": "Mangariales, G. O., Macabata, N. S., & Galay-Limos, J. A. (2026). Student Information and Accounting"
+      },
+      {
+        "idx": 60,
+        "text": "Nikmah, S. W., Rasiman, & Violinda, Q. (2025). Effectiveness of using school management information "
+      },
+      {
+        "idx": 61,
+        "text": "Pradana, R. M., Sasongko, D. P., Puspitasari, E. M., Wardhani, Y. F., Kristanto, A., & Trihantoyo, S"
+      },
+      {
+        "idx": 62,
+        "text": "Ri\u00f1o, J., & Daing, C. (2022). Challenges in handling student records and characteristics of student "
+      },
+      {
+        "idx": 63,
+        "text": "Royce, W. W. (1970). Managing the development of large software systems. Proceedings of IEEE WESCON,"
+      },
+      {
+        "idx": 64,
+        "text": "Sumugat, M. S. D. T., Pomperada, J. R., & Madrigal, D. V. (2026). E-Adviser student information mana"
+      }
+    ]
+  }
+}

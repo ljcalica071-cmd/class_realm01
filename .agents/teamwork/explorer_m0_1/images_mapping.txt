@@ -1,0 +1,30 @@
+
+Paragraph 202 has 1 blip(s):
+  r:embed=rId8 -> media/image3.png
+  Text: 
+  Prev Paragraph: Input-Process-Storage-Output Diagram (IPSO) of CLASSREALM
+  Next Paragraph: Figure 1 illustrates the flow of data through CLASSREALM: official student rosters, RFID card taps, plotted class schedules, assessment scores, grading criteria, and curriculum competencies are captured at the Input stage; validated, scored, computed, and synchronized at the Process stage; persisted in a role-protected Supabase database, secure file storage, and encrypted audit logs at the Storage stage; and rendered as audit-defensible attendance logs, DepEd E-Class Records, absence warning alerts, lesson plan guides, and multi-portal dashboards at the Output stage. A deficiency observed at the Output stage (for example, an inaccurate transmutated grade, duplicate attendance timestamp, or unreflected submission) can be traced backward through Storage and Process to its Input-stage origin.
+
+Paragraph 214 has 1 blip(s):
+  r:embed=rId9 -> media/image4.png
+  Text: 
+  Prev Paragraph: Input-Process-Output Diagram (IPO) of CLASSREALM
+  Next Paragraph: Figure 2 illustrates the Input-Process-Output flow of CLASSREALM. The Teacher, Students, and the Admin supply the inputs; the system’s core modules transform them through processing; and the outputs are returned to the same stakeholders. The dashed feedback arrow shows how stakeholders review the outputs and, when necessary, submit corrections or updates as new inputs.
+
+Paragraph 245 has 1 blip(s):
+  r:embed=rId10 -> media/image5.png
+  Text: 
+  Prev Paragraph: Agile Scrum Methodology Framework of CLASSREALM
+  Next Paragraph: Figure 3 illustrates the iterative Agile Scrum framework governing the development of CLASSREALM across four sequential phases: Sprint 0 (Requirements Elicitation and Backlog Definition), Sprint Iterations (Time-boxed bi-weekly development), Verification and Review (Daily synchronization and client sprint reviews), and System Release and Acceptability Evaluation. The dashed feedback loop at the bottom confirms that lessons learned during sprint retrospectives continuously refine the product backlog for subsequent development cycles.
+
+Paragraph 658 has 1 blip(s):
+  r:embed=rId11 -> media/image6.png
+  Text: 
+  Prev Paragraph: System Architecture and Data Interaction Topology of CLASSREALM
+  Next Paragraph: Figure 4 delineates the three-tier system architecture of CLASSREALM. The Edge Hardware Layer (left) stationed at the classroom entrance captures student RFID card scans and buffers records in SPIFFS flash during Wi-Fi outages. The Client Application Layer (center) delivers responsive web interfaces for the Admin and Teacher and dedicated Flutter mobile apps for Students and Parents. The Cloud Backend Layer (right) maintains persistent academic records under Supabase Row-Level Security (RLS) policies and executes scheduled serverless Edge Functions.
+
+Paragraph 662 has 1 blip(s):
+  r:embed=rId12 -> media/image7.png
+  Text: 
+  Prev Paragraph: Context Diagram (Level 0 DFD) of CLASSREALM
+  Next Paragraph: Figure 5 illustrates the Level 0 Context Diagram of CLASSREALM, establishing the operational boundary of Process 0 with respect to the four external entities: System Administrator, Client Teacher (Ma’am Karen P. Gonzaga), Grade 11 Student, and Parent/Guardian. Inbound data flows represent raw administrative and instructional inputs, while outbound flows represent verified academic deliverables and notifications.

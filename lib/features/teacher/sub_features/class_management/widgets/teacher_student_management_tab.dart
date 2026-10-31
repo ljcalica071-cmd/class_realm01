@@ -45,9 +45,33 @@ class _TeacherStudentManagementTabState
   int _currentPage = 1;
   final int _itemsPerPage = 20;
 
+  late final ScrollController _pinnedScrollController;
+  late final ScrollController _scrollableScrollController;
+  bool _isSyncingScroll = false;
+
   @override
   void initState() {
     super.initState();
+    _pinnedScrollController = ScrollController();
+    _scrollableScrollController = ScrollController();
+    _pinnedScrollController.addListener(() {
+      if (_isSyncingScroll) return;
+      _isSyncingScroll = true;
+      if (_scrollableScrollController.hasClients &&
+          _scrollableScrollController.offset != _pinnedScrollController.offset) {
+        _scrollableScrollController.jumpTo(_pinnedScrollController.offset);
+      }
+      _isSyncingScroll = false;
+    });
+    _scrollableScrollController.addListener(() {
+      if (_isSyncingScroll) return;
+      _isSyncingScroll = true;
+      if (_pinnedScrollController.hasClients &&
+          _pinnedScrollController.offset != _scrollableScrollController.offset) {
+        _pinnedScrollController.jumpTo(_scrollableScrollController.offset);
+      }
+      _isSyncingScroll = false;
+    });
     _loadFilters();
     _hydrateFromCache();
     _loadData();
@@ -90,19 +114,27 @@ class _TeacherStudentManagementTabState
           event: PostgresChangeEvent.all,
           schema: 'public',
           table: 'student_enrollments',
-          callback: (payload) => _loadData(),
+          callback: (payload) => _loadData(forceRefresh: true),
         )
         .onPostgresChanges(
           event: PostgresChangeEvent.all,
           schema: 'public',
           table: 'student_info',
-          callback: (payload) => _loadData(),
+          callback: (payload) => _loadData(forceRefresh: true),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'student_profiles',
+          callback: (payload) => _loadData(forceRefresh: true),
         )
         .subscribe();
   }
 
   @override
   void dispose() {
+    _pinnedScrollController.dispose();
+    _scrollableScrollController.dispose();
     if (_realtimeChannel != null) {
       Supabase.instance.client.removeChannel(_realtimeChannel!);
     }
@@ -134,7 +166,10 @@ class _TeacherStudentManagementTabState
     ]);
   }
 
-  Future<void> _loadData() async {
+  Future<void> _loadData({bool forceRefresh = false}) async {
+    if (forceRefresh) {
+      AppDataCache.instance.invalidatePrefix('teacher_students_');
+    }
     if (_activeStudents.isEmpty && _archivedStudents.isEmpty) {
       setState(() {
         _isLoading = true;
@@ -222,13 +257,10 @@ class _TeacherStudentManagementTabState
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final tableHeaderColor = theme.colorScheme.secondary;
+    final isDark = theme.brightness == Brightness.dark;
     final tableHeaderTextColor = theme.colorScheme.onSurface;
     final tableBorderColor = theme.colorScheme.onSurface.withValues(
       alpha: 0.08,
-    );
-    final alternateRowColor = theme.colorScheme.secondary.withValues(
-      alpha: theme.brightness == Brightness.dark ? 0.3 : 0.35,
     );
     // Calculate available sections based on selected subject
     List<String> availableSections = [];
@@ -262,6 +294,10 @@ class _TeacherStudentManagementTabState
                 _studentSearchQuery.toLowerCase(),
               ) ||
               (s.lrn?.toLowerCase().contains(
+                    _studentSearchQuery.toLowerCase(),
+                  ) ??
+                  false) ||
+              (s.rfidUid?.toLowerCase().contains(
                     _studentSearchQuery.toLowerCase(),
                   ) ??
                   false);
@@ -302,6 +338,9 @@ class _TeacherStudentManagementTabState
               (b.fullName.contains(' ') ? b.fullName.split(' ').first : '');
           cmp = aFirst.compareTo(bFirst);
           break;
+        case 'rfid':
+          cmp = (a.rfidUid ?? '').compareTo(b.rfidUid ?? '');
+          break;
         case 'lrn':
           cmp = (a.lrn ?? a.studentId ?? '').compareTo(
             b.lrn ?? b.studentId ?? '',
@@ -341,19 +380,17 @@ class _TeacherStudentManagementTabState
 
 
     const colNumWidth = 56.0;
-    const colLastNameWidth = 150.0;
-    const colFirstNameWidth = 140.0;
-    const colLrnWidth = 150.0;
+    const colNameWidth = 260.0;
+    const pinnedWidth = colNumWidth + colNameWidth;
+
+    const colLrnWidth = 160.0;
     const colGenderWidth = 110.0;
     const colBirthdateWidth = 160.0;
     const colEmailWidth = 240.0;
     const colStatusWidth = 180.0;
-    const colActionsWidth = 170.0;
+    const colActionsWidth = 145.0;
 
-    const totalTableWidth =
-        colNumWidth +
-        colLastNameWidth +
-        colFirstNameWidth +
+    const scrollableColsWidth =
         colLrnWidth +
         colGenderWidth +
         colBirthdateWidth +
@@ -544,7 +581,7 @@ class _TeacherStudentManagementTabState
                       ],
                     );
                     final archiveButton = SizedBox(
-                      height: 56,
+                      height: 44, // Fixed height for uniformity
                       child: OutlinedButton.icon(
                         style: OutlinedButton.styleFrom(
                           foregroundColor: _showArchivedStudents
@@ -592,24 +629,30 @@ class _TeacherStudentManagementTabState
                       crossAxisAlignment: WrapCrossAlignment.center,
                       alignment: WrapAlignment.end,
                       children: [
-                        AppButton.success(
-                          icon: LucideIcons.upload,
-                          label: 'Import Excel',
-                          onPressed: () => UnifiedEnrollStudentDialog.show(
-                            context,
-                            teacherSubjects: _teacherSubjectsData,
-                            initialTabIndex: 1, // File import tab
-                            onStudentCreated: _loadData,
+                        SizedBox(
+                          height: 44, // 10% Accent/Action styling
+                          child: AppButton.success(
+                            icon: LucideIcons.upload,
+                            label: 'Import Excel',
+                            onPressed: () => UnifiedEnrollStudentDialog.show(
+                              context,
+                              teacherSubjects: _teacherSubjectsData,
+                              initialTabIndex: 1, // File import tab
+                              onStudentCreated: _loadData,
+                            ),
                           ),
                         ),
-                        AppButton.primary(
-                          icon: LucideIcons.userPlus,
-                          label: 'Add Students',
-                          onPressed: () => UnifiedEnrollStudentDialog.show(
-                            context,
-                            teacherSubjects: _teacherSubjectsData,
-                            initialTabIndex: 0, // Manual add tab
-                            onStudentCreated: _loadData,
+                        SizedBox(
+                          height: 44,
+                          child: AppButton.primary(
+                            icon: LucideIcons.userPlus,
+                            label: 'Add Students',
+                            onPressed: () => UnifiedEnrollStudentDialog.show(
+                              context,
+                              teacherSubjects: _teacherSubjectsData,
+                              initialTabIndex: 0, // Manual add tab
+                              onStudentCreated: _loadData,
+                            ),
                           ),
                         ),
                         archiveButton,
@@ -660,517 +703,546 @@ class _TeacherStudentManagementTabState
                         ),
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(12),
-                          child: SingleChildScrollView(
-                            scrollDirection: Axis.horizontal,
-                            child: SizedBox(
-                              width: totalTableWidth,
-                              child: Column(
-                                children: [
-                                  Container(
-                                    height: 48,
-                                    decoration: BoxDecoration(
-                                      color: tableHeaderColor,
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        _buildHeaderCell(
-                                          width: colNumWidth,
-                                          child: Center(
-                                            child: Text(
-                                              '#',
+                          child: Column(
+                            children: [
+                              Expanded(
+                                child: displayList.isEmpty
+                                    ? Center(
+                                        child: Column(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.center,
+                                          children: [
+                                            Icon(
+                                              _showArchivedStudents
+                                                  ? Icons.archive_outlined
+                                                  : Icons.school_outlined,
+                                              size: 56,
+                                              color: Theme.of(context)
+                                                  .colorScheme
+                                                  .onSurface
+                                                  .withValues(alpha: 0.5),
+                                            ),
+                                            const SizedBox(height: 16),
+                                            Text(
+                                              _showArchivedStudents
+                                                  ? 'No archived students found.'
+                                                  : 'No students found for ${_teacherSubjects.contains(_selectedSubjectFilter) ? _selectedSubjectFilter : (_teacherSubjects.isNotEmpty ? _teacherSubjects.first : "this subject")} in $_selectedSectionFilter.',
+                                              textAlign: TextAlign.center,
                                               style: TextStyle(
-                                                color: tableHeaderTextColor,
-                                                fontWeight: FontWeight.bold,
-                                                fontSize: 13,
+                                                fontSize: 16,
+                                                fontWeight: FontWeight.w500,
+                                                color: Theme.of(context)
+                                                    .colorScheme
+                                                    .onSurface
+                                                    .withValues(alpha: 0.8),
                                               ),
                                             ),
-                                          ),
+                                          ],
                                         ),
-                                        _buildHeaderCell(
-                                          width: colLastNameWidth,
-                                          child: _buildClickableHeaderTitle(
-                                            'LAST NAME',
-                                            'lastName',
-                                          ),
-                                        ),
-                                        _buildHeaderCell(
-                                          width: colFirstNameWidth,
-                                          child: _buildClickableHeaderTitle(
-                                            'FIRST NAME',
-                                            'firstName',
-                                          ),
-                                        ),
-                                        _buildHeaderCell(
-                                          width: colLrnWidth,
-                                          child: _buildClickableHeaderTitle(
-                                            'LRN',
-                                            'lrn',
-                                          ),
-                                        ),
-                                        _buildHeaderCell(
-                                          width: colGenderWidth,
-                                          child: _buildClickableHeaderTitle(
-                                            'GENDER',
-                                            'gender',
-                                          ),
-                                        ),
-                                        _buildHeaderCell(
-                                          width: colBirthdateWidth,
-                                          child: _buildClickableHeaderTitle(
-                                            'BIRTHDATE',
-                                            'birthdate',
-                                          ),
-                                        ),
-                                        _buildHeaderCell(
-                                          width: colEmailWidth,
-                                          child: Text(
-                                            'EMAIL',
-                                            style: TextStyle(
-                                              color: tableHeaderTextColor,
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 13,
-                                            ),
-                                          ),
-                                        ),
-
-                                        _buildHeaderCell(
-                                          width: colStatusWidth,
-                                          child: _buildClickableHeaderTitle(
-                                            'STATUS',
-                                            'status',
-                                          ),
-                                        ),
-                                        _buildHeaderCell(
-                                          width: colActionsWidth,
-                                          hasRightBorder: false,
-                                          child: Center(
-                                            child: Text(
-                                              'ACTIONS',
-                                              style: TextStyle(
-                                                color: tableHeaderTextColor,
-                                                fontWeight: FontWeight.bold,
-                                                fontSize: 13,
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  Expanded(
-                                    child: displayList.isEmpty
-                                        ? Center(
-                                            child: Column(
-                                              mainAxisAlignment:
-                                                  MainAxisAlignment.center,
-                                              children: [
-                                                Icon(
-                                                  _showArchivedStudents
-                                                      ? Icons.archive_outlined
-                                                      : Icons.school_outlined,
-                                                  size: 56,
-                                                  color: Theme.of(context)
-                                                      .colorScheme
-                                                      .onSurface
-                                                      .withValues(alpha: 0.5),
+                                      )
+                                    : Row(
+                                        children: [
+                                          // ── PINNED STICKY LEFT SECTION (# + STUDENT NAME) ──
+                                          Container(
+                                            width: pinnedWidth,
+                                            decoration: BoxDecoration(
+                                              color: theme.colorScheme.surface, // 60% Background Surface Neutral
+                                              border: Border(
+                                                right: BorderSide(
+                                                  color: isDark
+                                                      ? theme.colorScheme.onSurface.withValues(alpha: 0.15)
+                                                      : const Color(0xFFCBD5E1),
+                                                  width: 1.5,
                                                 ),
-                                                const SizedBox(height: 16),
-                                                Text(
-                                                  _showArchivedStudents
-                                                      ? 'No archived students found.'
-                                                      : 'No students found for ${_teacherSubjects.contains(_selectedSubjectFilter) ? _selectedSubjectFilter : (_teacherSubjects.isNotEmpty ? _teacherSubjects.first : "this subject")} in $_selectedSectionFilter.',
-                                                  textAlign: TextAlign.center,
-                                                  style: TextStyle(
-                                                    fontSize: 16,
-                                                    fontWeight: FontWeight.w500,
-                                                    color: Theme.of(context)
-                                                        .colorScheme
-                                                        .onSurface
-                                                        .withValues(alpha: 0.8),
+                                              ),
+                                            ),
+                                            child: Column(
+                                              children: [
+                                                // Pinned Header
+                                                Container(
+                                                  height: 48,
+                                                  decoration: BoxDecoration(
+                                                    color: theme.colorScheme.primary.withValues(alpha: 0.1), // 30% Primary accent color for headers
+                                                    border: Border(
+                                                      bottom: BorderSide(
+                                                        color: theme.colorScheme.primary.withValues(alpha: 0.3),
+                                                      ),
+                                                    ),
+                                                  ),
+                                                  child: Row(
+                                                    children: [
+                                                      _buildHeaderCell(
+                                                        width: colNumWidth,
+                                                        child: Center(
+                                                          child: Text(
+                                                            '#',
+                                                            style: TextStyle(
+                                                              color: tableHeaderTextColor,
+                                                              fontWeight: FontWeight.bold,
+                                                              fontSize: 13,
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      ),
+                                                      _buildHeaderCell(
+                                                        width: colNameWidth - 1.5,
+                                                        child: _buildClickableHeaderTitle(
+                                                          'STUDENT NAME',
+                                                          'lastName',
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                                // Pinned Rows
+                                                Expanded(
+                                                  child: ListView.builder(
+                                                    controller: _pinnedScrollController,
+                                                    itemCount: paginatedList.length,
+                                                    itemBuilder: (ctx, i) {
+                                                      final s = paginatedList[i];
+                                                      final isSelected =
+                                                          _selectedStudentIds.contains(s.id);
+                                                      final lastName = s.lastName ??
+                                                          (s.fullName.contains(' ')
+                                                              ? s.fullName.split(' ').last
+                                                              : s.fullName);
+                                                      final firstName = s.firstName ??
+                                                          (s.fullName.contains(' ')
+                                                              ? s.fullName.split(' ').first
+                                                              : '');
+                                                      final middleInitial = (s.middleName != null &&
+                                                              s.middleName!.trim().isNotEmpty)
+                                                          ? '${s.middleName!.trim()[0].toUpperCase()}.'
+                                                          : '';
+                                                      final restOfName = [firstName, middleInitial]
+                                                          .where((e) => e.isNotEmpty)
+                                                          .join(' ');
+
+                                                      return Container(
+                                                        height: 52,
+                                                        decoration: BoxDecoration(
+                                                          color: isSelected
+                                                              ? theme.colorScheme.primary.withValues(alpha: 0.12)
+                                                              : (i % 2 == 1
+                                                                  ? theme.colorScheme.primary.withValues(alpha: 0.03) // 60/30 subtle row alternate
+                                                                  : theme.colorScheme.surface), // 60% base surface
+                                                          border: Border(
+                                                            bottom: BorderSide(
+                                                              color: tableBorderColor,
+                                                            ),
+                                                          ),
+                                                        ),
+                                                        child: Row(
+                                                          children: [
+                                                            _buildDataCell(
+                                                              width: colNumWidth,
+                                                              child: Center(
+                                                                child: Text(
+                                                                  '${startIndex + i + 1}',
+                                                                  style: TextStyle(
+                                                                    fontSize: 13,
+                                                                    color: theme.colorScheme.onSurface,
+                                                                  ),
+                                                                ),
+                                                              ),
+                                                            ),
+                                                            _buildDataCell(
+                                                              width: colNameWidth - 1.5,
+                                                              child: Text.rich(
+                                                                TextSpan(
+                                                                  children: [
+                                                                    TextSpan(
+                                                                      text: lastName,
+                                                                      style: TextStyle(
+                                                                        fontSize: 14,
+                                                                        fontWeight: FontWeight.bold,
+                                                                        color: theme.colorScheme.onSurface,
+                                                                      ),
+                                                                    ),
+                                                                    if (restOfName.isNotEmpty)
+                                                                      TextSpan(
+                                                                        text: ', $restOfName',
+                                                                        style: TextStyle(
+                                                                          fontSize: 13.5,
+                                                                          fontWeight: FontWeight.w500,
+                                                                          color: theme.colorScheme.onSurface,
+                                                                        ),
+                                                                      ),
+                                                                  ],
+                                                                ),
+                                                                overflow: TextOverflow.ellipsis,
+                                                                maxLines: 1,
+                                                              ),
+                                                            ),
+                                                          ],
+                                                        ),
+                                                      );
+                                                    },
                                                   ),
                                                 ),
                                               ],
                                             ),
-                                          )
-                                        : ListView.builder(
-                                            itemCount: paginatedList.length,
-                                            itemBuilder: (ctx, i) {
-                                              final s = paginatedList[i];
-                                              final isSelected =
-                                                  _selectedStudentIds.contains(
-                                                    s.id,
-                                                  );
-                                              final lastName =
-                                                  s.lastName ??
-                                                  (s.fullName.contains(' ')
-                                                      ? s.fullName
-                                                            .split(' ')
-                                                            .last
-                                                      : s.fullName);
-                                              final firstName =
-                                                  s.firstName ??
-                                                  (s.fullName.contains(' ')
-                                                      ? s.fullName
-                                                            .split(' ')
-                                                            .first
-                                                      : '');
-                                              final lrn =
-                                                  s.lrn ?? s.studentId ?? 'N/A';
-                                              final gender = s.gender ?? '—';
-                                              final birthdayLabel =
-                                                  s.birthday == null
-                                                  ? '—'
-                                                  : '${s.birthday!.year}-${s.birthday!.month.toString().padLeft(2, '0')}-${s.birthday!.day.toString().padLeft(2, '0')} (${_calculateAge(s.birthday!)})';
-
-                                              return Container(
-                                                height: 52,
-                                                decoration: BoxDecoration(
-                                                  color: isSelected
-                                                      ? theme
-                                                            .colorScheme
-                                                            .primary
-                                                            .withValues(
-                                                              alpha: 0.12,
-                                                            )
-                                                      : (i % 2 == 1
-                                                            ? alternateRowColor
-                                                            : theme
-                                                                  .colorScheme
-                                                                  .surface),
-                                                  border: Border(
-                                                    bottom: BorderSide(
-                                                      color: tableBorderColor,
-                                                    ),
-                                                  ),
-                                                ),
-                                                child: Row(
+                                          ),
+                                          // ── SCROLLABLE RIGHT SECTION (Horizontal Scroll) ──
+                                          Expanded(
+                                            child: SingleChildScrollView(
+                                              scrollDirection: Axis.horizontal,
+                                              child: SizedBox(
+                                                width: scrollableColsWidth,
+                                                child: Column(
                                                   children: [
-                                                    _buildDataCell(
-                                                      width: colNumWidth,
-                                                      child: Center(
-                                                        child: Text(
-                                                          '${startIndex + i + 1}',
-                                                          style: TextStyle(
-                                                            fontSize: 13,
-                                                            color:
-                                                                Theme.of(
-                                                                      context,
-                                                                    )
-                                                                    .colorScheme
-                                                                    .onSurface,
+                                                    // Scrollable Header
+                                                    Container(
+                                                      height: 48,
+                                                      decoration: BoxDecoration(
+                                                        color: theme.colorScheme.primary.withValues(alpha: 0.1),
+                                                        border: Border(
+                                                          bottom: BorderSide(
+                                                            color: theme.colorScheme.primary.withValues(alpha: 0.3),
                                                           ),
                                                         ),
                                                       ),
-                                                    ),
-                                                    _buildDataCell(
-                                                      width: colLastNameWidth,
-                                                      child: Text(
-                                                        lastName,
-                                                        style: TextStyle(
-                                                          fontSize: 13,
-                                                          fontWeight:
-                                                              FontWeight.w600,
-                                                          color: theme
-                                                              .colorScheme
-                                                              .onSurface,
-                                                        ),
-                                                        overflow: TextOverflow
-                                                            .ellipsis,
-                                                      ),
-                                                    ),
-                                                    _buildDataCell(
-                                                      width: colFirstNameWidth,
-                                                      child: Text(
-                                                        firstName,
-                                                        style: TextStyle(
-                                                          fontSize: 13,
-                                                          fontWeight:
-                                                              FontWeight.w600,
-                                                          color: theme
-                                                              .colorScheme
-                                                              .onSurface,
-                                                        ),
-                                                        overflow: TextOverflow
-                                                            .ellipsis,
-                                                      ),
-                                                    ),
-                                                    _buildDataCell(
-                                                      width: colLrnWidth,
-                                                      child: Text(
-                                                        lrn.replaceAll(' ', ''),
-                                                        maxLines: 1,
-                                                        style: TextStyle(
-                                                          fontSize: 13,
-                                                          fontFamily:
-                                                              'monospace',
-                                                          color: theme
-                                                              .colorScheme
-                                                              .onSurface
-                                                              .withValues(
-                                                                alpha: 0.8,
-                                                              ),
-                                                        ),
-                                                      ),
-                                                    ),
-                                                    _buildDataCell(
-                                                      width: colGenderWidth,
-                                                      child: Text(
-                                                        gender,
-                                                        style: TextStyle(
-                                                          fontSize: 13,
-                                                          color: theme
-                                                              .colorScheme
-                                                              .onSurface,
-                                                        ),
-                                                      ),
-                                                    ),
-                                                    _buildDataCell(
-                                                      width: colBirthdateWidth,
-                                                      child: Text(
-                                                        birthdayLabel,
-                                                        style: TextStyle(
-                                                          fontSize: 13,
-                                                          color: theme
-                                                              .colorScheme
-                                                              .onSurface,
-                                                        ),
-                                                      ),
-                                                    ),
-                                                    _buildDataCell(
-                                                      width: colEmailWidth,
-                                                      child: Text(
-                                                        s.email,
-                                                        style: TextStyle(
-                                                          fontSize: 13,
-                                                          color: theme
-                                                              .colorScheme
-                                                              .onSurface,
-                                                        ),
-                                                        overflow: TextOverflow
-                                                            .ellipsis,
-                                                      ),
-                                                    ),
-
-                                                    _buildDataCell(
-                                                      width: colStatusWidth,
-                                                      child:
-                                                          StatusBadge.fromAccountStatus(
-                                                            s.isArchived ? AccountStatus.archived : s.status,
-                                                          ),
-                                                    ),
-                                                    _buildDataCell(
-                                                      width: colActionsWidth,
-                                                      hasRightBorder: false,
                                                       child: Row(
-                                                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                                                         children: [
-                                                          if (!_showArchivedStudents) ...[
-                                                            IconButton(
-                                                              tooltip: s.status == AccountStatus.pendingFirstLogin
-                                                                  ? 'Cannot edit: Pending First Login'
-                                                                  : 'Edit Student Details',
-                                                              icon: Icon(
-                                                                Icons
-                                                                    .edit_outlined,
-                                                                color: s.status == AccountStatus.pendingFirstLogin
-                                                                    ? theme.colorScheme.onSurface.withValues(alpha: 0.25)
-                                                                    : const Color(0xFF64748B),
-                                                                size: 18,
-                                                              ),
-                                                              splashRadius: 18,
-                                                              onPressed: s.status == AccountStatus.pendingFirstLogin
-                                                                  ? () {
-                                                                      AppModals.showErrorDialog(
-                                                                        context: context,
-                                                                        title: 'Cannot Edit Student',
-                                                                        message:
-                                                                            'This student account has not completed their first login yet. Profiles can only be edited once the student has logged in and set up their account.',
-                                                                      );
-                                                                    }
-                                                                  : () =>
-                                                                      EditStudentDialog.show(
-                                                                        context,
-                                                                        student: s,
-                                                                        onStudentUpdated:
-                                                                            _loadData,
-                                                                      ),
+                                                          _buildHeaderCell(
+                                                            width: colLrnWidth,
+                                                            child: _buildClickableHeaderTitle(
+                                                              'LRN',
+                                                              'lrn',
                                                             ),
-                                                            IconButton(
-                                                              tooltip: 'Archive Student',
-                                                              icon: Icon(
-                                                                Icons
-                                                                    .archive_outlined,
-                                                                color: Color(
-                                                                  0xFF94A3B8,
+                                                          ),
+                                                          _buildHeaderCell(
+                                                            width: colGenderWidth,
+                                                            child: _buildClickableHeaderTitle(
+                                                              'GENDER',
+                                                              'gender',
+                                                            ),
+                                                          ),
+                                                          _buildHeaderCell(
+                                                            width: colBirthdateWidth,
+                                                            child: _buildClickableHeaderTitle(
+                                                              'BIRTHDATE',
+                                                              'birthdate',
+                                                            ),
+                                                          ),
+                                                          _buildHeaderCell(
+                                                            width: colEmailWidth,
+                                                            child: Text(
+                                                              'EMAIL',
+                                                              style: TextStyle(
+                                                                color: tableHeaderTextColor,
+                                                                fontWeight: FontWeight.bold,
+                                                                fontSize: 13,
+                                                              ),
+                                                            ),
+                                                          ),
+                                                          
+                                                          _buildHeaderCell(
+                                                            width: colStatusWidth,
+                                                            child: _buildClickableHeaderTitle(
+                                                              'STATUS',
+                                                              'status',
+                                                            ),
+                                                          ),
+                                                          _buildHeaderCell(
+                                                            width: colActionsWidth,
+                                                            hasRightBorder: false,
+                                                            child: Center(
+                                                              child: Text(
+                                                                'ACTIONS',
+                                                                style: TextStyle(
+                                                                  color: tableHeaderTextColor,
+                                                                  fontWeight: FontWeight.bold,
+                                                                  fontSize: 13,
                                                                 ),
-                                                                size: 18,
                                                               ),
-                                                              splashRadius: 18,
-                                                              onPressed: () async {
-                                                                final messenger =
-                                                                    ScaffoldMessenger.of(
-                                                                      context,
-                                                                    );
-                                                                final confirm = await AppModals.showArchiveCooldownDialog(
-                                                                  context:
-                                                                      context,
-                                                                  title: 'Archive Student',
-                                                                  message:
-                                                                      'Are you sure you want to archive ${s.fullName}? Their enrollment in this class will be archived. All grades and classwork submissions are preserved and can be restored anytime.',
-                                                                  confirmLabel:
-                                                                      'Archive',
-                                                                  confirmColor:
-                                                                      AppTheme
-                                                                          .catOrange,
-                                                                );
-                                                                if (confirm ==
-                                                                    true) {
-                                                                  await SupabaseStudentRepository()
-                                                                      .archiveStudent(
-                                                                        s.id,
-                                                                        s.enrolledSubjectId,
-                                                                        (s.status == AccountStatus.pendingFirstLogin)
-                                                                            ? 'pending_first_login'
-                                                                            : 'active',
-                                                                      );
-                                                                  _loadData();
-                                                                  if (context.mounted) {
-                                                                    AppModals.showSuccessDialog(
-                                                                      context: context,
-                                                                      title: 'Student Archived',
-                                                                      message: '${s.fullName} has been moved to archives.',
-                                                                    );
-                                                                  }
-                                                                }
-                                                              },
                                                             ),
-                                                          ] else ...[
-                                                            IconButton(
-                                                              tooltip: 'Restore Student',
-                                                              icon: Icon(
-                                                                Icons.restore,
-                                                                color: AppTheme
-                                                                    .catGreen,
-                                                                size: 18,
-                                                              ),
-                                                              splashRadius: 18,
-                                                              onPressed: () async {
-                                                                final confirm = await AppModals.showConfirmDialog(
-                                                                  context: context,
-                                                                  title: 'Restore Student',
-                                                                  message: 'Are you sure you want to restore ${s.fullName} to active enrollment in this class?',
-                                                                  confirmLabel: 'Restore',
-                                                                  confirmColor: Colors.green,
-                                                                );
-                                                                if (confirm == true) {
-                                                                  await SupabaseStudentRepository()
-                                                                      .restoreStudent(
-                                                                        s.id,
-                                                                        s.enrolledSubjectId,
-                                                                      );
-                                                                  _loadData();
-                                                                  if (context.mounted) {
-                                                                    AppModals.showSuccessDialog(
-                                                                      context:
-                                                                          context,
-                                                                      title: 'Restored',
-                                                                      message:
-                                                                          '${s.fullName} has been restored to active enrollment.',
-                                                                    );
-                                                                  }
-                                                                }
-                                                              },
-                                                            ),
-                                                          ],
+                                                          ),
                                                         ],
+                                                      ),
+                                                    ),
+                                                    // Scrollable Rows
+                                                    Expanded(
+                                                      child: ListView.builder(
+                                                        controller: _scrollableScrollController,
+                                                        itemCount: paginatedList.length,
+                                                        itemBuilder: (ctx, i) {
+                                                          final s = paginatedList[i];
+                                                          final isSelected =
+                                                              _selectedStudentIds.contains(s.id);
+                                                          final lrn = s.lrn ?? s.studentId ?? 'N/A';
+                                                          final gender = s.gender ?? '—';
+                                                          final birthdayLabel = s.birthday == null
+                                                              ? '—'
+                                                              : '${s.birthday!.year}-${s.birthday!.month.toString().padLeft(2, '0')}-${s.birthday!.day.toString().padLeft(2, '0')} (${_calculateAge(s.birthday!)})';
+
+                                                          return Container(
+                                                            height: 52,
+                                                            decoration: BoxDecoration(
+                                                              color: isSelected
+                                                                  ? theme.colorScheme.primary.withValues(alpha: 0.12)
+                                                                  : (i % 2 == 1
+                                                                      ? theme.colorScheme.primary.withValues(alpha: 0.03) // 60/30 subtle row alternate
+                                                                      : theme.colorScheme.surface),
+                                                              border: Border(
+                                                                bottom: BorderSide(
+                                                                  color: tableBorderColor,
+                                                                ),
+                                                              ),
+                                                            ),
+                                                            child: Row(
+                                                              children: [
+                                                                _buildDataCell(
+                                                                  width: colLrnWidth,
+                                                                  child: Text(
+                                                                    lrn.replaceAll(' ', ''),
+                                                                    maxLines: 1,
+                                                                    style: TextStyle(
+                                                                      fontSize: 13,
+                                                                      fontFamily: 'monospace',
+                                                                      color: theme.colorScheme.onSurface
+                                                                          .withValues(alpha: 0.8),
+                                                                    ),
+                                                                  ),
+                                                                ),
+                                                                _buildDataCell(
+                                                                  width: colGenderWidth,
+                                                                  child: Text(
+                                                                    gender,
+                                                                    style: TextStyle(
+                                                                      fontSize: 13,
+                                                                      color: theme.colorScheme.onSurface,
+                                                                    ),
+                                                                  ),
+                                                                ),
+                                                                _buildDataCell(
+                                                                  width: colBirthdateWidth,
+                                                                  child: Text(
+                                                                    birthdayLabel,
+                                                                    style: TextStyle(
+                                                                      fontSize: 13,
+                                                                      color: theme.colorScheme.onSurface,
+                                                                    ),
+                                                                  ),
+                                                                ),
+                                                                _buildDataCell(
+                                                                  width: colEmailWidth,
+                                                                  child: Text(
+                                                                    s.email,
+                                                                    style: TextStyle(
+                                                                      fontSize: 13,
+                                                                      color: theme.colorScheme.onSurface,
+                                                                    ),
+                                                                    overflow: TextOverflow.ellipsis,
+                                                                  ),
+                                                                ),
+                                                                
+                                                                _buildDataCell(
+                                                                  width: colStatusWidth,
+                                                                  child: StatusBadge.fromAccountStatus(
+                                                                    s.isArchived
+                                                                        ? AccountStatus.archived
+                                                                        : s.status,
+                                                                  ),
+                                                                ),
+                                                                _buildDataCell(
+                                                                  width: colActionsWidth,
+                                                                  hasRightBorder: false,
+                                                                  child: Row(
+                                                                    mainAxisAlignment:
+                                                                        MainAxisAlignment.spaceEvenly,
+                                                                    children: [
+                                                                      if (!_showArchivedStudents) ...[
+                                                                        
+                                                                        IconButton(
+                                                                          tooltip: s.status ==
+                                                                                  AccountStatus.pendingFirstLogin
+                                                                              ? 'Cannot edit: Pending First Login'
+                                                                              : 'Edit Student Details',
+                                                                          icon: Icon(
+                                                                            Icons.edit_outlined,
+                                                                            color: s.status ==
+                                                                                    AccountStatus.pendingFirstLogin
+                                                                                ? theme.colorScheme.onSurface
+                                                                                    .withValues(alpha: 0.25)
+                                                                                : const Color(0xFF64748B),
+                                                                            size: 18,
+                                                                          ),
+                                                                          splashRadius: 18,
+                                                                          onPressed: s.status ==
+                                                                                  AccountStatus.pendingFirstLogin
+                                                                              ? () {
+                                                                                  AppModals.showErrorDialog(
+                                                                                    context: context,
+                                                                                    title:
+                                                                                        'Cannot Edit Student',
+                                                                                    message:
+                                                                                        'This student account has not completed their first login yet. Profiles can only be edited once the student has logged in and set up their account.',
+                                                                                  );
+                                                                                }
+                                                                              : () => EditStudentDialog.show(
+                                                                                    context,
+                                                                                    student: s,
+                                                                                    onStudentUpdated:
+                                                                                        _loadData,
+                                                                                  ),
+                                                                        ),
+                                                                        IconButton(
+                                                                          tooltip: 'Archive Student',
+                                                                          icon: const Icon(
+                                                                            Icons.archive_outlined,
+                                                                            color: Color(0xFF94A3B8),
+                                                                            size: 18,
+                                                                          ),
+                                                                          splashRadius: 18,
+                                                                          onPressed: () async {
+                                                                            final confirm = await AppModals
+                                                                                .showArchiveCooldownDialog(
+                                                                              context: context,
+                                                                              title: 'Archive Student',
+                                                                              message:
+                                                                                  'Are you sure you want to archive ${s.fullName}? Their enrollment in this class will be archived. All grades and classwork submissions are preserved and can be restored anytime.',
+                                                                              confirmLabel: 'Archive',
+                                                                              confirmColor:
+                                                                                  AppTheme.catOrange,
+                                                                            );
+                                                                            if (confirm == true) {
+                                                                              await SupabaseStudentRepository()
+                                                                                  .archiveStudent(
+                                                                                s.id,
+                                                                                s.enrolledSubjectId,
+                                                                                (s.status ==
+                                                                                        AccountStatus.pendingFirstLogin)
+                                                                                    ? 'pending_first_login'
+                                                                                    : 'active',
+                                                                              );
+                                                                              _loadData();
+                                                                              if (context.mounted) {
+                                                                                AppModals.showSuccessDialog(
+                                                                                  context: context,
+                                                                                  title: 'Student Archived',
+                                                                                  message:
+                                                                                      '${s.fullName} has been moved to archives.',
+                                                                                );
+                                                                              }
+                                                                            }
+                                                                          },
+                                                                        ),
+                                                                      ] else ...[
+                                                                        IconButton(
+                                                                          tooltip: 'Restore Student',
+                                                                          icon: const Icon(
+                                                                            Icons.restore,
+                                                                            color: Color(0xFF10B981),
+                                                                            size: 18,
+                                                                          ),
+                                                                          splashRadius: 18,
+                                                                          onPressed: () async {
+                                                                            final confirm =
+                                                                                await AppModals.showConfirmDialog(
+                                                                              context: context,
+                                                                              title: 'Restore Student',
+                                                                              message:
+                                                                                  'Are you sure you want to restore ${s.fullName} to active status?',
+                                                                              confirmLabel: 'Restore',
+                                                                              confirmColor: Colors.green,
+                                                                            );
+                                                                            if (confirm == true) {
+                                                                              await SupabaseStudentRepository()
+                                                                                  .restoreStudent(s.id);
+                                                                              _loadData();
+                                                                              if (context.mounted) {
+                                                                                AppModals.showSuccessDialog(
+                                                                                  context: context,
+                                                                                  title: 'Restored',
+                                                                                  message:
+                                                                                      '${s.fullName} has been restored to active enrollment.',
+                                                                                );
+                                                                              }
+                                                                            }
+                                                                          },
+                                                                        ),
+                                                                      ],
+                                                                    ],
+                                                                  ),
+                                                                ),
+                                                              ],
+                                                            ),
+                                                          );
+                                                        },
                                                       ),
                                                     ),
                                                   ],
                                                 ),
-                                              );
-                                            },
+                                              ),
+                                            ),
                                           ),
-                                  ),
-                                  Container(
-                                    height: 52,
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 20,
+                                        ],
+                                      ),
+                              ),
+                              // ── FULL WIDTH PAGINATION FOOTER ──
+                              Container(
+                                height: 52,
+                                padding: const EdgeInsets.symmetric(horizontal: 20),
+                                decoration: BoxDecoration(
+                                  color: isDark ? theme.colorScheme.surface : const Color(0xFFF8FAFC),
+                                  border: Border(
+                                    top: BorderSide(
+                                      color: isDark
+                                          ? theme.colorScheme.onSurface.withValues(alpha: 0.12)
+                                          : const Color(0xFFE2E8F0),
                                     ),
-                                    decoration: BoxDecoration(
-                                      color: Color(0xFFF8FAFC),
-                                      border: Border(
-                                        top: BorderSide(
-                                          color: Color(0xFFE2E8F0),
-                                        ),
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      'Showing ${displayList.isEmpty ? 0 : startIndex + 1} to $endIndex of ${displayList.length} entries',
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w500,
+                                        color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
                                       ),
                                     ),
-                                    child: Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        Text(
-                                          'Showing ${displayList.isEmpty ? 0 : startIndex + 1} to $endIndex of ${displayList.length} entries',
-                                          style: TextStyle(
-                                            fontSize: 13,
-                                            fontWeight: FontWeight.w500,
-                                            color: Color(0xFF64748B),
+                                    if (totalPages > 1)
+                                      Row(
+                                        children: [
+                                          _buildPageButton(
+                                            'First',
+                                            () => setState(() => _currentPage = 1),
+                                            _currentPage > 1,
                                           ),
-                                        ),
-                                        if (totalPages > 1)
-                                          Row(
-                                            children: [
-                                              _buildPageButton(
-                                                'First',
-                                                () => setState(
-                                                  () => _currentPage = 1,
-                                                ),
-                                                _currentPage > 1,
-                                              ),
-                                              _buildPageButton(
-                                                '<',
-                                                () => setState(
-                                                  () => _currentPage--,
-                                                ),
-                                                _currentPage > 1,
-                                              ),
-                                              for (
-                                                int p = 1;
-                                                p <= totalPages;
-                                                p++
-                                              )
-                                                if (p >= _currentPage - 2 &&
-                                                    p <= _currentPage + 2)
-                                                  _buildPageButton(
-                                                    p.toString(),
-                                                    () => setState(
-                                                      () => _currentPage = p,
-                                                    ),
-                                                    true,
-                                                    isActive: p == _currentPage,
-                                                  ),
-                                              _buildPageButton(
-                                                '>',
-                                                () => setState(
-                                                  () => _currentPage++,
-                                                ),
-                                                _currentPage < totalPages,
-                                              ),
-                                              _buildPageButton(
-                                                'Last',
-                                                () => setState(
-                                                  () =>
-                                                      _currentPage = totalPages,
-                                                ),
-                                                _currentPage < totalPages,
-                                              ),
-                                            ],
+                                          _buildPageButton(
+                                            '<',
+                                            () => setState(() => _currentPage--),
+                                            _currentPage > 1,
                                           ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
+                                          for (int p = 1; p <= totalPages; p++)
+                                            if (p >= _currentPage - 2 && p <= _currentPage + 2)
+                                              _buildPageButton(
+                                                p.toString(),
+                                                () => setState(() => _currentPage = p),
+                                                true,
+                                                isActive: p == _currentPage,
+                                              ),
+                                          _buildPageButton(
+                                            '>',
+                                            () => setState(() => _currentPage++),
+                                            _currentPage < totalPages,
+                                          ),
+                                          _buildPageButton(
+                                            'Last',
+                                            () => setState(() => _currentPage = totalPages),
+                                            _currentPage < totalPages,
+                                          ),
+                                        ],
+                                      ),
+                                  ],
+                                ),
                               ),
-                            ),
+                            ],
                           ),
                         ),
                       ),
@@ -1258,71 +1330,6 @@ class _TeacherStudentManagementTabState
                                               title: 'Students Restored',
                                               message:
                                                   '$selectedCount student(s) restored to active enrollment.',
-                                            );
-                                          }
-                                        }
-                                      },
-                                    ),
-                                    if (false) const SizedBox(width: 8),
-                                    if (false) ElevatedButton.icon(
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: AppTheme.catRed,
-                                        foregroundColor: Colors.white,
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 16,
-                                          vertical: 8,
-                                        ),
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            20,
-                                          ),
-                                        ),
-                                      ),
-                                      icon: Icon(
-                                        Icons.delete_forever_outlined,
-                                        size: 16,
-                                      ),
-                                      label: Text(
-                                        'Permanent delete',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 13,
-                                        ),
-                                      ),
-                                      onPressed: () async {
-                                        final selectedCount =
-                                            _selectedStudentIds.length;
-                                        final confirm =
-                                            await AppModals.showConfirmDialog(
-                                              context: context,
-                                              title:
-                                                  'Permanently Delete Selected',
-                                              message:
-                                                  'Permanently delete $selectedCount selected student(s)? If any student has no other enrolled classes, their account and Firebase Auth login will be permanently erased. This action cannot be undone.',
-                                              confirmLabel: 'Permanent Delete',
-                                              confirmColor: AppTheme.catRed,
-                                            );
-                                        if (confirm == true) {
-                                          for (final id
-                                              in _selectedStudentIds) {
-                                            final student = displayList
-                                                .firstWhere(
-                                                  (st) => st.id == id,
-                                                );
-                                            await SupabaseStudentRepository()
-                                                .permanentlyDeleteStudent(
-                                                  id,
-                                                  student.enrolledSubjectId,
-                                                );
-                                          }
-                                          _selectedStudentIds.clear();
-                                          _loadData();
-                                          if (context.mounted) {
-                                            AppModals.showSuccessDialog(
-                                              context: context,
-                                              title: 'Students Deleted',
-                                              message:
-                                                  '$selectedCount student(s) permanently deleted.',
                                             );
                                           }
                                         }
@@ -1539,13 +1546,23 @@ class _TeacherStudentManagementTabState
     bool isActive = false,
   }) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     return InkWell(
       onTap: enabled && !isActive ? onTap : null,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
-          color: isActive ? theme.colorScheme.primary : Colors.white,
-          border: Border.all(color: Color(0xFFE2E8F0)),
+          color: isActive
+              ? theme.colorScheme.primary
+              : (isDark ? theme.colorScheme.surfaceContainerHighest : Colors.white),
+          border: Border.all(
+            color: isActive
+                ? theme.colorScheme.primary
+                : (isDark
+                    ? theme.colorScheme.onSurface.withValues(alpha: 0.15)
+                    : const Color(0xFFE2E8F0)),
+          ),
+          borderRadius: BorderRadius.circular(4),
         ),
         child: Text(
           label,
@@ -1554,7 +1571,9 @@ class _TeacherStudentManagementTabState
             fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
             color: isActive
                 ? Colors.white
-                : (enabled ? theme.colorScheme.primary : Colors.grey),
+                : (enabled
+                    ? (isDark ? theme.colorScheme.onSurface : theme.colorScheme.primary)
+                    : theme.colorScheme.onSurface.withValues(alpha: 0.3)),
           ),
         ),
       ),

@@ -3,7 +3,7 @@ import 'package:class_realm/models/academic_models.dart';
 import 'package:class_realm/models/attendance_workspace_models.dart';
 import 'package:class_realm/data/repositories/attendance_repository.dart';
 
-class TestAttendanceRepository implements AttendanceRepository {
+class TestAttendanceRepository extends AttendanceRepository {
   bool correctRecordCalled = false;
   String? passedRecordId;
   AttendanceStatus? passedNewStatus;
@@ -51,6 +51,7 @@ class TestAttendanceRepository implements AttendanceRepository {
     required String subjectOfferingId,
     required DateTime date,
     required List<AttendanceWorkspaceRecord> records,
+    List<String>? deletedStudentIds,
   }) async => throw UnimplementedError();
 
   @override

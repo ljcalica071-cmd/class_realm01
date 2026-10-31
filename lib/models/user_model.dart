@@ -13,6 +13,7 @@ class UserModel {
   final String? departmentOrSection;
   final String? studentId;
   final String? lrn;
+  final String? rfidUid;
   final String? linkedStudentId;
   final String? enrolledSubjectId;
   final String? enrolledSubjectName;
@@ -30,7 +31,7 @@ class UserModel {
   final String? parentGuardianContact;
   final String? password; // mock only — not for production
   final bool isSetupComplete;
-  
+
   // Teacher-specific / Profile fields
   final String? subjectSpecialization;
   final String? facebookLink;
@@ -49,6 +50,7 @@ class UserModel {
     this.departmentOrSection,
     this.studentId,
     this.lrn,
+    this.rfidUid,
     this.linkedStudentId,
     this.enrolledSubjectId,
     this.enrolledSubjectName,
@@ -72,6 +74,8 @@ class UserModel {
     this.consultationHours,
   });
 
+  bool get hasRfidAssigned => rfidUid != null && rfidUid!.trim().isNotEmpty;
+
   UserModel copyWith({
     String? id,
     String? username,
@@ -83,6 +87,8 @@ class UserModel {
     String? departmentOrSection,
     String? studentId,
     String? lrn,
+    String? rfidUid,
+    bool clearRfidUid = false,
     String? linkedStudentId,
     String? enrolledSubjectId,
     String? enrolledSubjectName,
@@ -116,6 +122,7 @@ class UserModel {
       departmentOrSection: departmentOrSection ?? this.departmentOrSection,
       studentId: studentId ?? this.studentId,
       lrn: lrn ?? this.lrn,
+      rfidUid: clearRfidUid ? null : (rfidUid ?? this.rfidUid),
       linkedStudentId: linkedStudentId ?? this.linkedStudentId,
       enrolledSubjectId: enrolledSubjectId ?? this.enrolledSubjectId,
       enrolledSubjectName: enrolledSubjectName ?? this.enrolledSubjectName,
@@ -131,9 +138,11 @@ class UserModel {
       parentGuardianName: parentGuardianName ?? this.parentGuardianName,
       parentGuardianRelationship:
           parentGuardianRelationship ?? this.parentGuardianRelationship,
-      parentGuardianContact: parentGuardianContact ?? this.parentGuardianContact,
+      parentGuardianContact:
+          parentGuardianContact ?? this.parentGuardianContact,
       password: password ?? this.password,
-      subjectSpecialization: subjectSpecialization ?? this.subjectSpecialization,
+      subjectSpecialization:
+          subjectSpecialization ?? this.subjectSpecialization,
       facebookLink: facebookLink ?? this.facebookLink,
       isFacebookPublic: isFacebookPublic ?? this.isFacebookPublic,
       isPhonePublic: isPhonePublic ?? this.isPhonePublic,
@@ -174,6 +183,7 @@ class UserModel {
       'departmentOrSection': departmentOrSection,
       'studentId': studentId,
       'lrn': lrn,
+      'rfidUid': rfidUid,
       'linkedStudentId': linkedStudentId,
       'enrolledSubjectId': enrolledSubjectId,
       'enrolledSubjectName': enrolledSubjectName,
@@ -216,6 +226,7 @@ class UserModel {
       departmentOrSection: json['departmentOrSection'] as String?,
       studentId: json['studentId'] as String?,
       lrn: json['lrn'] as String?,
+      rfidUid: json['rfidUid'] as String? ?? json['rfid_uid'] as String?,
       linkedStudentId: json['linkedStudentId'] as String?,
       enrolledSubjectId: json['enrolledSubjectId'] as String?,
       enrolledSubjectName: json['enrolledSubjectName'] as String?,

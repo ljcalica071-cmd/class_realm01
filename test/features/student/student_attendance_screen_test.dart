@@ -5,7 +5,7 @@ import 'package:class_realm/features/student/sub_features/schedule/screens/stude
 import 'package:class_realm/models/academic_models.dart';
 import 'package:class_realm/models/attendance_workspace_models.dart';
 
-class FakeStudentAttendanceRepository implements AttendanceRepository {
+class FakeStudentAttendanceRepository extends AttendanceRepository {
   AttendanceStudentSummary summary;
   List<AttendanceRecord> initialPageRows;
   List<AttendanceRecord> secondPageRows;
@@ -46,42 +46,64 @@ class FakeStudentAttendanceRepository implements AttendanceRepository {
   }
 
   @override
-  Future<List<AttendanceRecord>> getAttendanceForStudent(String studentId) async => [];
+  Future<List<AttendanceRecord>> getAttendanceForStudent(
+    String studentId,
+  ) async => [];
   @override
   Future<List<AttendanceRecord>> getAllAttendanceRecords() async => [];
   @override
-  Future<void> recordAttendance({required String studentId, required AttendanceStatus status}) async {}
+  Future<void> recordAttendance({
+    required String studentId,
+    required AttendanceStatus status,
+  }) async {}
   @override
   Future<void> toggleOfflineSync() async {}
   @override
   SyncStatus getSyncStatus() => SyncStatus.synced;
   @override
-  Future<AttendanceRosterResult> getAttendanceRosterAndDateRecords({required String subjectOfferingId, required DateTime date}) async =>
-      const AttendanceRosterResult(students: [], records: []);
+  Future<AttendanceRosterResult> getAttendanceRosterAndDateRecords({
+    required String subjectOfferingId,
+    required DateTime date,
+  }) async => const AttendanceRosterResult(students: [], records: []);
   @override
-  Future<void> saveAttendanceBatch({required String subjectOfferingId, required DateTime date, required List<AttendanceWorkspaceRecord> records}) async {}
+  Future<void> saveAttendanceBatch({
+    required String subjectOfferingId,
+    required DateTime date,
+    required List<AttendanceWorkspaceRecord> records,
+    List<String>? deletedStudentIds,
+  }) async {}
   @override
-  Future<AttendancePage<AttendanceWorkspaceRecord>> getAttendanceHistory(AttendanceHistoryFilter filter) async =>
-      AttendancePage(rows: [], nextOffset: 0, hasMore: false);
+  Future<AttendancePage<AttendanceWorkspaceRecord>> getAttendanceHistory(
+    AttendanceHistoryFilter filter,
+  ) async => AttendancePage(rows: [], nextOffset: 0, hasMore: false);
   @override
-  Future<AttendanceAnalyticsSummary> getAttendanceAnalytics({required String subjectOfferingId, required AttendanceDateRange dateRange}) async =>
-      AttendanceAnalyticsSummary(
-        presenceRate: null,
-        absencesAndExcuses: 0,
-        warningCount: 0,
-        presentCount: 0,
-        lateCount: 0,
-        absentCount: 0,
-        excusedCount: 0,
-        trendPoints: [],
-        atRiskStudents: [],
-      );
+  Future<AttendanceAnalyticsSummary> getAttendanceAnalytics({
+    required String subjectOfferingId,
+    required AttendanceDateRange dateRange,
+  }) async => AttendanceAnalyticsSummary(
+    presenceRate: null,
+    absencesAndExcuses: 0,
+    warningCount: 0,
+    presentCount: 0,
+    lateCount: 0,
+    absentCount: 0,
+    excusedCount: 0,
+    trendPoints: [],
+    atRiskStudents: [],
+  );
   @override
-  Future<void> correctAttendanceRecord({required String subjectOfferingId, required String recordId, required AttendanceStatus newStatus, required String reason}) async {}
+  Future<void> correctAttendanceRecord({
+    required String subjectOfferingId,
+    required String recordId,
+    required AttendanceStatus newStatus,
+    required String reason,
+  }) async {}
 }
 
 void main() {
-  testWidgets('renders server-computed summary header and logs', (tester) async {
+  testWidgets('renders server-computed summary header and logs', (
+    tester,
+  ) async {
     final fakeRepo = FakeStudentAttendanceRepository(
       summary: const AttendanceStudentSummary(
         studentId: 'student-1',
@@ -97,7 +119,6 @@ void main() {
           date: DateTime(2026, 10, i + 1),
           status: AttendanceStatus.present,
           timeIn: 'N/A',
-          timeOut: 'N/A',
           method: 'General Mathematics',
         ),
       ),
@@ -108,28 +129,31 @@ void main() {
           date: DateTime(2026, 9, 30),
           status: AttendanceStatus.late,
           timeIn: 'N/A',
-          timeOut: 'N/A',
           method: 'General Mathematics',
         ),
       ],
     );
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: StudentAttendanceScreen(repository: fakeRepo),
-      ),
+      MaterialApp(home: StudentAttendanceScreen(repository: fakeRepo)),
     );
 
     // Initial loading
     expect(find.byType(CircularProgressIndicator), findsNothing);
     await tester.pumpAndSettle();
 
-    // Verify summary values
+    // Verify summary values (Present, Late, Absent, Rate)
     expect(find.text('15'), findsOneWidget); // Present
-    expect(find.text('20'), findsOneWidget); // Total Days
     expect(find.text('75%'), findsOneWidget); // Rate
+    expect(find.text('General Mathematics'), findsWidgets);
+    expect(find.text('Manual'), findsWidgets);
 
     // Verify initial records and Load More button
+    await tester.scrollUntilVisible(
+      find.text('Load More Records'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
     expect(find.text('Load More Records'), findsOneWidget);
 
     // Tap Load More Records
@@ -142,21 +166,25 @@ void main() {
 
   testWidgets('renders error state on repository failure', (tester) async {
     final fakeRepo = FakeStudentAttendanceRepository(
-      summary: const AttendanceStudentSummary(studentId: '', presentCount: 0, totalDays: 0, presenceRate: 0),
+      summary: const AttendanceStudentSummary(
+        studentId: '',
+        presentCount: 0,
+        totalDays: 0,
+        presenceRate: 0,
+      ),
       initialPageRows: [],
       secondPageRows: [],
       shouldThrow: true,
     );
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: StudentAttendanceScreen(repository: fakeRepo),
-      ),
+      MaterialApp(home: StudentAttendanceScreen(repository: fakeRepo)),
     );
 
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('Error loading attendance'), findsOneWidget);
+    expect(find.text('Unable to Load Attendance'), findsOneWidget);
+    expect(find.textContaining('Network failure'), findsOneWidget);
     expect(find.text('Retry'), findsOneWidget);
   });
 }

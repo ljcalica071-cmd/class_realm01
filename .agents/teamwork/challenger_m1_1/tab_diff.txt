@@ -1,0 +1,12 @@
+﻿diff --git a/lib/features/teacher/sub_features/grading/widgets/teacher_gradebook_tab.dart b/lib/features/teacher/sub_features/grading/widgets/teacher_gradebook_tab.dart
+index 310c406..ea2be2c 100644
+--- a/lib/features/teacher/sub_features/grading/widgets/teacher_gradebook_tab.dart
++++ b/lib/features/teacher/sub_features/grading/widgets/teacher_gradebook_tab.dart
+@@ -1555,7 +1555,6 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
+             : theme.colorScheme.surface;
+ 
+         final finalGradeIndex = 3 + termCount;
+-        final descriptorIndex = finalGradeIndex + 1;
+         final remarkIndex = finalGradeIndex + 2;
+ 
+         return Container(

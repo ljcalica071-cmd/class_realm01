@@ -5,7 +5,7 @@ import 'package:class_realm/models/attendance_workspace_models.dart';
 import 'package:class_realm/data/repositories/attendance_repository.dart';
 import 'package:class_realm/features/teacher/sub_features/attendance/widgets/teacher_attendance_tab.dart';
 
-class TabMockAttendanceRepository implements AttendanceRepository {
+class TabMockAttendanceRepository extends AttendanceRepository {
   List<AttendanceRosterStudent> rosterStudents = [];
   List<AttendanceWorkspaceRecord> dateRecords = [];
   bool saveBatchCalled = false;
@@ -26,7 +26,7 @@ class TabMockAttendanceRepository implements AttendanceRepository {
   Future<void> saveAttendanceBatch({
     required String subjectOfferingId,
     required DateTime date,
-    required List<AttendanceWorkspaceRecord> records,
+    required List<AttendanceWorkspaceRecord> records, List<String>? deletedStudentIds,
   }) async {
     saveBatchCalled = true;
     savedBatchRecords = records;
@@ -79,8 +79,9 @@ class TabMockAttendanceRepository implements AttendanceRepository {
   Future<List<AttendanceRecord>> getAllAttendanceRecords() async => [];
 
   @override
-  Future<List<AttendanceRecord>> getAttendanceForStudent(String studentId) async =>
-      [];
+  Future<List<AttendanceRecord>> getAttendanceForStudent(
+    String studentId,
+  ) async => [];
 
   @override
   SyncStatus getSyncStatus() => SyncStatus.online;
@@ -103,86 +104,9 @@ void main() {
       mockRepo = TabMockAttendanceRepository();
     });
 
-    testWidgets('shows exact RFID Hardware Not Connected label', (tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: SingleChildScrollView(
-              child: TeacherAttendanceTab(
-                repository: mockRepo,
-                initialSubjects: const [
-                  {
-                    'id': 'sub-1',
-                    'subject_name': 'General Mathematics',
-                    'grade_level': 11,
-                    'section_name': 'STEM-11A',
-                  }
-                ],
-              ),
-            ),
-          ),
-        ),
-      );
-
-      await tester.pumpAndSettle();
-
-      expect(find.text('RFID Hardware Not Connected'), findsOneWidget);
-    });
-
-    testWidgets('switches between Take Attendance and History & Analytics views', (tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: SingleChildScrollView(
-              child: TeacherAttendanceTab(
-                repository: mockRepo,
-                initialSubjects: const [
-                  {
-                    'id': 'sub-1',
-                    'subject_name': 'General Mathematics',
-                    'grade_level': 11,
-                    'section_name': 'STEM-11A',
-                  }
-                ],
-              ),
-            ),
-          ),
-        ),
-      );
-
-      await tester.pumpAndSettle();
-
-      final historyBtn = find.text('History & Analytics');
-      expect(historyBtn, findsOneWidget);
-      await tester.tap(historyBtn);
-      await tester.pumpAndSettle();
-
-      // In History & Analytics view, Activity History is visible
-      expect(find.text('Activity History'), findsOneWidget);
-
-      final takeBtn = find.text('Take Attendance');
-      expect(takeBtn, findsOneWidget);
-      await tester.tap(takeBtn);
-      await tester.pumpAndSettle();
-
-      expect(find.text('RFID Hardware Not Connected'), findsOneWidget);
-    });
-
-    testWidgets('saves batch attendance without marking unselected students absent', (tester) async {
-      mockRepo.rosterStudents = [
-        AttendanceRosterStudent(
-          studentId: 's1',
-          firstName: 'Juan',
-          lastName: 'Dela Cruz',
-          gender: 'male',
-        ),
-        AttendanceRosterStudent(
-          studentId: 's2',
-          firstName: 'Maria',
-          lastName: 'Clara',
-          gender: 'female',
-        ),
-      ];
+    testWidgets('shows live RFID Ready scanner status badge', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1280, 1000));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
 
       await tester.pumpWidget(
         MaterialApp(
@@ -196,7 +120,7 @@ void main() {
                     'subject_name': 'General Mathematics',
                     'grade_level': 11,
                     'section_name': 'STEM-11A',
-                  }
+                  },
                 ],
               ),
             ),
@@ -206,22 +130,119 @@ void main() {
 
       await tester.pumpAndSettle();
 
-      // Mark s1 as Present
-      final markPresent = find.byTooltip('Mark Present').first;
-      await tester.tap(markPresent);
-      await tester.pumpAndSettle();
-
-      // Click Save Attendance button
-      final saveBtn = find.textContaining('Save Attendance');
-      expect(saveBtn, findsOneWidget);
-      await tester.tap(saveBtn);
-      await tester.pumpAndSettle();
-
-      expect(mockRepo.saveBatchCalled, isTrue);
-      // Only s1 was marked, s2 should NOT be silently marked absent!
-      expect(mockRepo.savedBatchRecords.length, 1);
-      expect(mockRepo.savedBatchRecords.first.studentId, 's1');
-      expect(mockRepo.savedBatchRecords.first.status, AttendanceStatus.present);
+      expect(find.text('RFID Ready'), findsOneWidget);
     });
+
+    testWidgets(
+      'switches between Take Attendance and Analytics & History views',
+      (tester) async {
+        await tester.binding.setSurfaceSize(const Size(1280, 1000));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: SingleChildScrollView(
+                child: TeacherAttendanceTab(
+                  repository: mockRepo,
+                  initialSubjects: const [
+                    {
+                      'id': 'sub-1',
+                      'subject_name': 'General Mathematics',
+                      'grade_level': 11,
+                      'section_name': 'STEM-11A',
+                    },
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+
+        await tester.pumpAndSettle();
+
+        final historyBtn = find.text('Analytics & History');
+        expect(historyBtn, findsOneWidget);
+        await tester.tap(historyBtn);
+        await tester.pumpAndSettle();
+
+        // In History & Analytics view, Attendance Audit & History Logs is visible
+        expect(find.text('Attendance Audit & History Logs'), findsOneWidget);
+
+        final takeBtn = find.text('Take Attendance');
+        expect(takeBtn, findsOneWidget);
+        await tester.tap(takeBtn);
+        await tester.pumpAndSettle();
+
+        expect(find.text('RFID Ready'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'saves batch attendance without marking unselected students absent',
+      (tester) async {
+        await tester.binding.setSurfaceSize(const Size(1280, 1000));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+
+        mockRepo.rosterStudents = [
+          AttendanceRosterStudent(
+            studentId: 's1',
+            firstName: 'Juan',
+            lastName: 'Dela Cruz',
+            gender: 'male',
+          ),
+          AttendanceRosterStudent(
+            studentId: 's2',
+            firstName: 'Maria',
+            lastName: 'Santos',
+            gender: 'female',
+          ),
+        ];
+
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: SingleChildScrollView(
+                child: TeacherAttendanceTab(
+                  repository: mockRepo,
+                  initialSubjects: const [
+                    {
+                      'id': 'sub-1',
+                      'subject_name': 'General Mathematics',
+                      'grade_level': 11,
+                      'section_name': 'STEM-11A',
+                    },
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+
+        await tester.pumpAndSettle();
+
+        // Mark s1 as Present
+        final markPresent = find.byTooltip('Mark Present').first;
+        await tester.ensureVisible(markPresent);
+        await tester.tap(markPresent);
+        await tester.pumpAndSettle();
+
+        // Click Save Attendance button
+        final saveBtn = find.textContaining('Save Attendance');
+        expect(saveBtn, findsOneWidget);
+        await tester.ensureVisible(saveBtn);
+        await tester.tap(saveBtn);
+        await tester.pumpAndSettle();
+
+        expect(mockRepo.saveBatchCalled, isTrue);
+        // Only s1 was marked, s2 should NOT be silently marked absent!
+        expect(mockRepo.savedBatchRecords.length, 1);
+        expect(mockRepo.savedBatchRecords.first.studentId, 's1');
+        expect(
+          mockRepo.savedBatchRecords.first.status,
+          AttendanceStatus.present,
+        );
+      },
+    );
   });
 }

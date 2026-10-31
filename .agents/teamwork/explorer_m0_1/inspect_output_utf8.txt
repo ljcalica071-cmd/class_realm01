@@ -1,0 +1,251 @@
+﻿================================================================================
+INSPECTING FORMATTING GUIDELINES DOC: c:\Users\Admin\AndroidStudioProjects\class_realm01\Capstone-1-and-Thesis-1-Document-FORMATS-1785742696-1.docx
+================================================================================
+Section 0:
+  Page Width: 8.50 in, Height: 11.00 in
+  Margins: Top=1.48 in, Bottom=1.08 in, Left=1.50 in, Right=0.82 in
+  Header=0.00 in, Footer=0.44 in
+
+--- FORMATTING DOC FULL TEXT ---
+[0][Normal][Arial 12.0pt] RDC MARGIN
+[1][Normal][Arial 12.0pt] Top: 1.6
+[2][Normal][Arial 12.0pt] Left: 1.6
+[3][Normal][Arial 12.0pt] Bottom: 1.2
+[4][Normal][Arial 12.0pt] Right: 1.4
+[5][Normal][Arial 12.0pt] Note:
+[6][Normal][Arial 12.0pt] Do not cut tables, unless it doesn�t fit the whole page.
+[19][Normal][Arial 12.0pt] Do not cut Title and content.
+[31][Normal][Arial 12.0pt] Each figure and table should have a description.
+[32][Normal][Arial 12.0pt] Each description must state what table # or figure # it describes.
+[49][Normal][Arial 12.0pt] CAPSTONE
+[50][Normal][Arial 12.0pt] TITLE HERE
+[52][Normal][Arial Nonept] (5 spaces)
+[56][Normal][Arial Nonept] A Capstone Project to the Faculty of the
+[57][Normal][Arial Nonept] College of Computing Studies
+[58][Normal][Arial Nonept] Laguna University
+[60][Normal][Arial Nonept] (4 spaces)
+[63][Normal][Arial Nonept] In Partial Fulfillment of the Requirements for the
+[64][Normal][Arial Nonept] Degree of Bachelor of Science in
+[65][Normal][Arial Nonept] Information Technology
+[68][Normal][Arial Nonept] (4 spaces)
+[70][Normal][Arial Nonept] Lname, Fname, M.I.
+[71][Normal][Arial Nonept] Lname, Fname, M.I.
+[72][Normal][Arial Nonept] Lname, Fname, M.I.
+[73][Normal][Arial Nonept] Lname, Fname, M.I.
+[76][Normal][Arial Nonept] (6 spaces)
+[81][Normal][Arial Nonept] TABLE OF CONTENTS
+[83][Normal][Arial Nonept] TABLE OF CONTENTS
+[85][Normal][Arial 12.0pt] LIST OF TABLES
+[87][Normal][Arial 12.0pt] LIST OF FIGURES
+[89][Normal][Arial 12.0pt] LIST OF APPENDICES
+[90][Normal][Arial 12.0pt] CHAPTER I
+[93][Normal][Arial 12.0pt] INTRODUCTION
+[95][Normal][Arial Nonept] The absence of a strong online presence presents various challenges beyond mere visibility. Essentially, it hampers a company's ability to capitalize on the vast opportunities offered by the digital realm. Moreover, a lack of online presence can undermine a company's credibility and legitimacy in the eyes of consumers. In today's competitive landscape, a professionally designed website serves as a digital storefront, demonstrating trustworthiness and professionalism. Companies neglecting this aspect risk being perceived as outdated or unreliable, which weakens consumer confidence and inhibits their ability to attract and retain clients.
+[96][Normal][Arial Nonept] The absence of a strong online presence presents various challenges beyond mere visibility. Essentially, it hampers a company's ability to capitalize on the vast opportunities offered by the digital realm. Moreover, a lack of online presence can undermine a company's credibility and legitimacy in the eyes of consumers. In today's competitive landscape, a professionally designed website serves as a digital storefront, demonstrating trustworthiness and professionalism. Companies neglecting this aspect risk being perceived as outdated or unreliable, which weakens consumer confidence and inhibits their ability to attract and retain clients.
+[98][Normal][Arial Nonept] Project Context
+[99][Normal][Arial Nonept] The absence of a strong online presence presents various challenges beyond mere visibility. Essentially, it hampers a company's ability to capitalize on the vast opportunities offered by the digital realm. Moreover, a lack of online presence can undermine a company's credibility and legitimacy in the eyes of consumers. In today's competitive landscape, a professionally designed website serves as a digital storefront, demonstrating trustworthiness and professionalism. Companies neglecting this aspect risk being perceived as outdated or unreliable, which weakens consumer confidence and inhibits their ability to attract and retain clients.
+[100][Normal][Arial Nonept] The absence of a strong online presence presents various challenges beyond mere visibility. Essentially, it hampers a company's ability to capitalize on the vast opportunities offered by the digital realm. Moreover, a lack of online presence can undermine a company's credibility and legitimacy in the eyes of consumers. In today's competitive landscape, a professionally designed website serves as a digital storefront, demonstrating trustworthiness and professionalism. Companies neglecting this aspect risk being perceived as outdated or unreliable, which weakens consumer confidence and inhibits their ability to attract and retain clients.
+[102][Normal][Arial Nonept] Table 1
+[103][Normal][Arial Nonept] Respondent of the study
+[105][Normal][Arial Nonept] Table description�
+[107][Normal][Arial Nonept] Theoretical Framework
+[108][Normal][Arial Nonept] The theoretical framework functioned as a guide for the researchers to methodically detect the rational problems and errors within the evolving system. The researchers used the input- process - storage - output diagram for the theoretical framework.
+[110][Normal][Arial Nonept] Figure 1
+[111][Normal][Arial Nonept] Input-Process-Output diagram (IPO)
+[113][Normal][Arial Nonept] Figure description�
+
+--- FORMATTING DOC TABLES ---
+Table 0 (35 rows, 2 cols):
+  Row 0:  | Page
+  Row 1: TITLE PAGE | 
+  Row 2: TABLE OF CONTENTS | 
+  Row 3: LIST OF TABLES | 
+  Row 4: LIST OF FIGURES | 
+  Row 5: LIST OF APPENDICES | 
+  Row 6:  | 
+  Row 7: CHAPTER I � INTRODUCTION | 
+  Row 8:  | 
+  Row 9: Project Context | 
+  Row 10: Purpose and Description | 
+  Row 11: Objectives of the Study | 
+  Row 12: Scope and Limitations of the Research | 
+  Row 13: Definition of Terms | 
+  Row 14:  | 
+  Row 15: CHAPTER II - REVIEW OF RELATED LITERATURE / SYSTEMS | 
+  Row 16:  | 
+  Row 17: Review of Related Literature / System | 
+  Row 18: Synthesis | 
+  Row 19: Theoretical Framework | 
+  Row 20: Conceptual Framework | 
+  Row 21:  | 
+  Row 22: CHAPTER III - METHODOLOGY | 
+  Row 23:  | 
+  Row 24: Research Design | 
+  Row 25: Population of Study | 
+  Row 26: Statistical Treatment of Data | 
+  Row 27: Data Collection Procedure | 
+  Row 28: Requirement Analysis | 
+  Row 29: Research Instrument | 
+  Row 30: Requirements Documentation | 
+  Row 31: Design of Software, Systems, Product and/or Processes | 
+  Row 32: Development and Testing | 
+  Row 33: Description of Prototype | 
+  Row 34: Implementation Plan | 
+Table 1 (34 rows, 2 cols):
+  Row 0:  | Page
+  Row 1: TITLE PAGE | 
+  Row 2: TABLE OF CONTENTS | 
+  Row 3: LIST OF TABLES | 
+  Row 4: LIST OF FIGURES | 
+  Row 5: LIST OF APPENDICES | 
+  Row 6:  | 
+  Row 7: CHAPTER I � INTRODUCTION | 
+  Row 8:  | 
+  Row 9: Project Context Research Problem and Objectives Scope and Limitations of the Research Definition of Terms | 
+  Row 10: CHAPTER II - REVIEW OF RELATED LITERATURE / SYSTEMS | 
+  Row 11:  | 
+  Row 12: Review of Related Literature / System | 
+  Row 13: Synthesis | 
+  Row 14: Theoretical Framework | 
+  Row 15: Conceptual Framework | 
+  Row 16:  | 
+  Row 17: CHAPTER III - METHODOLOGY | 
+  Row 18:  | 
+  Row 19: Research Design | 
+  Row 20: Population of Study | 
+  Row 21: Statistical Treatment of Data | 
+  Row 22: Data Collection Procedure | 
+  Row 23: Requirement Analysis | 
+  Row 24: Research Instrument | 
+  Row 25: Requirements Documentation | 
+  Row 26: Design of Software, Systems, Product and/or Processes | 
+  Row 27: Development and Testing | 
+  Row 28: Description of Prototype | 
+  Row 29: Implementation Plan | 
+  Row 30:  | 
+  Row 31:  | 
+  Row 32:  | 
+  Row 33:  | 
+Table 2 (4 rows, 3 cols):
+  Row 0: Table | Description | Page
+  Row 1: 1 | Table Title | 
+  Row 2: 2 | Table Title | 
+  Row 3: 3 | Table Title | 
+Table 3 (4 rows, 3 cols):
+  Row 0: Figure | Description | Page
+  Row 1: 1 | Figure Title | 
+  Row 2: 2 | Figure Title | 
+  Row 3: 3 | Figure Title | 
+Table 4 (13 rows, 3 cols):
+  Row 0: Table | Description | Page
+  Row 1: A | Approval Letter of Technical Adviser | 
+  Row 2: B C D E | Approval Letter for Respondents Approval Letter of Client Deployment Letter Software/System Evaluation | 
+  Row 3: F | Proposal Template | 
+  Row 4: G | Letter for Grammarian/Editor | 
+  Row 5: H | Certificate of Experts | 
+  Row 6: I | Curriculum Vitae of Experts | 
+  Row 7: J | Curriculum Vitae of Student Researchers | 
+  Row 8: K | Photo Documentary of System implementation | 
+  Row 9:  | ( with Respondents and Experts) | 
+  Row 10: L | LU:AA-FO-13 - Informed Consent Form | 
+  Row 11: M N | LU:AA-FO-127 - Approval Sheet LU:AA-FO-135 - Student Research Software and User Manual Acknowledgement Form | 
+  Row 12:  |  | 
+Table 5 (4 rows, 3 cols):
+  Row 0: UPPERCASE | UPPERCASE | UPPERCASE
+  Row 1: Sample | Sample | Sample
+  Row 2: Sample | Sample | Sample
+  Row 3: Sample | Sample | Sample
+================================================================================
+INSPECTING CAPSTONE DOC (CH1_CH2_CH3): c:\Users\Admin\AndroidStudioProjects\class_realm01\INTEGRATED_SENIOR_HIGH_SCHOOL_ATTENDANCE_CH1_CH2_CH3.docx
+================================================================================
+Section 0: Margins Top=1.60, Bottom=1.20, Left=1.60, Right=1.40
+Total Paragraphs: 270
+Total Words (body paragraphs): 9341
+Total Tables: 11
+App.xml metadata -> Pages: 58, Words: 12815, Paras: 0
+
+--- OUTLINE & WORD COUNTS PER SECTION ---
+[28] Normal: CHAPTER I -> 3 words, 2 paras
+[30] Normal: 1.1 Project Context -> 395 words, 5 paras
+[35] Normal: 1.2 Purpose and Description -> 439 words, 9 paras
+[44] Normal: 1.3 Objectives of the Study -> 5 words, 1 paras
+[45] Normal: 1.3.1 General Objective -> 68 words, 2 paras
+[47] Normal: 1.3.2 Specific Objectives -> 547 words, 12 paras
+[59] Normal: 1.4 Scope and Limitations of the Study -> 7 words, 1 paras
+[60] Normal: 1.4.1 Scope of the Study -> 331 words, 8 paras
+[68] Normal: 1.4.2 Boundaries and Limitations -> 385 words, 11 paras
+[79] Normal: 1.5 Quantifiable SMART Evaluation Criteria -> 233 words, 10 paras
+[89] Normal: 1.6 Definition of Terms -> 392 words, 12 paras
+[101] Normal: CHAPTER II -> 9 words, 2 paras
+[103] Normal: 2.1 Thematic Review of Related Literature -> 105 words, 2 paras
+[105] Normal: 2.1.1 Automated and Dual-Path Attendance Tracking Systems -> 474 words, 6 paras
+[111] Normal: 2.1.2 Automated Grading, Assessment Computation, and Academic Analytics -> 318 words, 4 paras
+[115] Normal: 2.1.3 Teacher Lesson Plan Guide Generation and Instructional Design -> 355 words, 4 paras
+[119] Normal: 2.1.4 Centralized Learning Materials Organization and Digital Repositories -> 276 words, 4 paras
+[123] Normal: 2.2 Synthesis of Related Literature -> 554 words, 8 paras
+[131] Normal: 2.3 Theoretical Framework -> 687 words, 13 paras
+[144] Normal: 2.4 Conceptual Framework -> 376 words, 11 paras
+[155] Normal: 2.5 References -> 2 words, 1 paras
+[156] Normal: 2.5.1 Local Literature and Studies -> 213 words, 6 paras
+[162] Normal: 2.5.2 Foreign Literature and Studies -> 155 words, 6 paras
+[168] Normal: 2.5.3 Institutional and Statutory Standards -> 62 words, 4 paras
+[172] Normal: CHAPTER III -> 3 words, 2 paras
+[174] Normal: 3.1 Research Design -> 607 words, 15 paras
+[189] Normal: 3.2 Population of Study -> 306 words, 6 paras
+[195] Normal: 3.3 Statistical Treatment of Data -> 244 words, 11 paras
+[206] Normal: 3.4 Data Collection Procedure -> 406 words, 8 paras
+[214] Normal: 3.5 Requirement Analysis -> 229 words, 9 paras
+[223] Normal: 3.6 Research Instrument -> 184 words, 7 paras
+[230] Normal: 3.7 Requirements Documentation -> 61 words, 4 paras
+[234] Normal: 3.8 Design of Software, Systems, Product and/or Processes -> 261 words, 13 paras
+[247] Normal: 3.9 Development and Testing -> 102 words, 5 paras
+[252] Normal: 3.10 Description of Prototype -> 298 words, 6 paras
+[258] Normal: 3.11 Implementation Plan -> 82 words, 5 paras
+[263] Normal: 3.12 References Cited in Chapter III -> 112 words, 7 paras
+================================================================================
+INSPECTING CAPSTONE DOC (ATTENDANCE): c:\Users\Admin\AndroidStudioProjects\class_realm01\INTEGRATED SENIOR HIGH SCHOOL ATTENDANCE.docx
+================================================================================
+Section 0: Margins Top=1.60, Bottom=1.20, Left=1.60, Right=1.40
+Total Paragraphs: 271
+Total Words (body paragraphs): 9387
+Total Tables: 11
+App.xml metadata -> Pages: 3, Words: 6, Paras: 0
+
+--- OUTLINE & WORD COUNTS PER SECTION ---
+[28] Normal: CHAPTER I -> 3 words, 2 paras
+[30] Normal: 1.1 Project Context -> 395 words, 5 paras
+[35] Normal: 1.2 Purpose and Description -> 439 words, 9 paras
+[44] Normal: 1.3 Objectives of the Study -> 5 words, 1 paras
+[45] Normal: 1.3.1 General Objective -> 68 words, 2 paras
+[47] Normal: 1.3.2 Specific Objectives -> 547 words, 12 paras
+[59] Normal: 1.4 Scope and Limitations of the Study -> 7 words, 1 paras
+[60] Normal: 1.4.1 Scope of the Study -> 331 words, 8 paras
+[68] Normal: 1.4.2 Boundaries and Limitations -> 385 words, 11 paras
+[79] Normal: 1.5 Quantifiable SMART Evaluation Criteria -> 233 words, 10 paras
+[89] Normal: 1.6 Definition of Terms -> 392 words, 12 paras
+[101] Normal: CHAPTER II -> 9 words, 2 paras
+[103] Normal: 2.1 Thematic Review of Related Literature -> 105 words, 2 paras
+[105] Normal: 2.1.1 Automated and Dual-Path Attendance Tracking Systems -> 474 words, 6 paras
+[111] Normal: 2.1.2 Automated Grading, Assessment Computation, and Academic Analytics -> 318 words, 4 paras
+[115] Normal: 2.1.3 Teacher Lesson Plan Guide Generation and Instructional Design -> 355 words, 4 paras
+[119] Normal: 2.1.4 Centralized Learning Materials Organization and Digital Repositories -> 276 words, 4 paras
+[123] Normal: 2.2 Synthesis of Related Literature -> 554 words, 8 paras
+[131] Normal: 2.3 Theoretical Framework -> 687 words, 13 paras
+[144] Normal: 2.4 Conceptual Framework -> 376 words, 11 paras
+[155] Normal: 2.5 References -> 2 words, 1 paras
+[156] Normal: 2.5.1 Local Literature and Studies -> 213 words, 6 paras
+[162] Normal: 2.5.2 Foreign Literature and Studies -> 155 words, 6 paras
+[168] Normal: 2.5.3 Institutional and Statutory Standards -> 62 words, 4 paras
+[172] Normal: CHAPTER III -> 3 words, 2 paras
+[174] Normal: 3.1 Research Design -> 607 words, 15 paras
+[189] Normal: 3.2 Population of Study -> 316 words, 6 paras
+[195] Normal: 3.3 Statistical Treatment of Data -> 244 words, 11 paras
+[206] Normal: 3.4 Data Collection Procedure -> 406 words, 8 paras
+[214] Normal: 3.5 Requirement Analysis -> 229 words, 9 paras
+[223] Normal: 3.6 Research Instrument -> 184 words, 7 paras
+[230] Normal: 3.7 Requirements Documentation -> 61 words, 4 paras
+[234] Normal: 3.8 Design of Software, Systems, Product and/or Processes -> 261 words, 13 paras
+[247] Normal: 3.9 Development and Testing -> 102 words, 5 paras
+[252] Normal: 3.10 Description of Prototype -> 298 words, 6 paras
+[258] Normal: 3.11 Implementation Plan -> 82 words, 5 paras
+[263] Normal: 3.12 References Cited in Chapter III -> 148 words, 8 paras

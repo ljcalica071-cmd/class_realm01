@@ -1,4 +1,5 @@
 import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
@@ -7,31 +8,28 @@ class DomainDeliverabilityResult {
   final bool isDeliverable;
   final String? error;
 
-  const DomainDeliverabilityResult({
-    required this.isDeliverable,
-    this.error,
-  });
+  const DomainDeliverabilityResult({required this.isDeliverable, this.error});
 }
 
 class AppValidators {
   /// Reusable input formatters for name fields (max 30 chars, no consecutive spaces/periods, capitalize first letter)
   static List<TextInputFormatter> get nameFormatters => [
-        LengthLimitingTextInputFormatter(30),
-        FilteringTextInputFormatter.allow(RegExp(r"[a-zA-Z\s\-\.]")),
-        _CleanInputFormatter(),
-      ];
+    LengthLimitingTextInputFormatter(30),
+    FilteringTextInputFormatter.allow(RegExp(r"[a-zA-Z\s\-\.]")),
+    _CleanInputFormatter(),
+  ];
 
   /// Reusable input formatters for email fields (max 60 chars total, no spaces)
   static List<TextInputFormatter> get emailFormatters => [
-        LengthLimitingTextInputFormatter(60),
-        FilteringTextInputFormatter.deny(RegExp(r'\s')),
-      ];
+    LengthLimitingTextInputFormatter(60),
+    FilteringTextInputFormatter.deny(RegExp(r'\s')),
+  ];
 
   /// Reusable input formatters for password fields (max 50 chars, no leading space, no consecutive spaces, allows identical characters)
   static List<TextInputFormatter> get passwordFormatters => [
-        LengthLimitingTextInputFormatter(50),
-        _PasswordInputFormatter(),
-      ];
+    LengthLimitingTextInputFormatter(50),
+    _PasswordInputFormatter(),
+  ];
 
   /// Name validator
   static String? validateName(String? value, String fieldName) {
@@ -79,7 +77,9 @@ class AppValidators {
     }
 
     // Local part constraints: alphanumeric and standard allowed symbols, no double dots
-    if (localPart.startsWith('.') || localPart.endsWith('.') || localPart.contains('..')) {
+    if (localPart.startsWith('.') ||
+        localPart.endsWith('.') ||
+        localPart.contains('..')) {
       return 'Invalid email username format.';
     }
 
@@ -112,13 +112,27 @@ class AppValidators {
     }
 
     // Disallow truncated TLD typo (e.g., .co when user intended .com, unless country-code like co.uk / co.za)
-    if (tld == 'co' && domainParts.length == 2 && 
-        (domainParts[0] == 'gmail' || domainParts[0] == 'yahoo' || domainParts[0] == 'hotmail' || domainParts[0] == 'outlook')) {
+    if (tld == 'co' &&
+        domainParts.length == 2 &&
+        (domainParts[0] == 'classrealm' ||
+            domainParts[0] == 'gmail' ||
+            domainParts[0] == 'yahoo' ||
+            domainParts[0] == 'hotmail' ||
+            domainParts[0] == 'outlook')) {
       return 'Did you mean @${domainParts[0]}.com? Please check domain extension.';
     }
 
     // Common email domain typos check
     const typoDomains = {
+      'classreal.com': 'classrealm.com',
+      'clasrealm.com': 'classrealm.com',
+      'classrelm.com': 'classrealm.com',
+      'classrealm.con': 'classrealm.com',
+      'classrealm.co': 'classrealm.com',
+      'clasreal.com': 'classrealm.com',
+      'classreallm.com': 'classrealm.com',
+      'classrealam.com': 'classrealm.com',
+      'class-realm.com': 'classrealm.com',
       'gmsil.com': 'gmail.com',
       'gamil.com': 'gmail.com',
       'gmial.com': 'gmail.com',
@@ -154,6 +168,7 @@ class AppValidators {
 
     // Dynamic fuzzy typo check against major providers (Levenshtein distance <= 2)
     const majorProviders = [
+      'classrealm.com',
       'gmail.com',
       'yahoo.com',
       'outlook.com',
@@ -208,7 +223,9 @@ class AppValidators {
 
   /// Real-time domain deliverability check using DNS-over-HTTPS (DoH).
   /// Verifies that the domain exists and has active MX records before dispatching verification codes.
-  static Future<DomainDeliverabilityResult> checkDomainDeliverability(String email) async {
+  static Future<DomainDeliverabilityResult> checkDomainDeliverability(
+    String email,
+  ) async {
     final clean = email.trim().toLowerCase();
     final parts = clean.split('@');
     if (parts.length != 2) {
@@ -233,7 +250,8 @@ class AppValidators {
     if (domainParts[0].length <= 1 && domainParts.last == 'com') {
       return DomainDeliverabilityResult(
         isDeliverable: false,
-        error: "The email domain '$domain' cannot receive emails (Address not found). Check for typos and try again.",
+        error:
+            "The email domain '$domain' cannot receive emails (Address not found). Check for typos and try again.",
       );
     }
 
@@ -256,8 +274,12 @@ class AppValidators {
 
     try {
       // 1. Query Google Public DNS over HTTPS for MX records
-      final uri = Uri.parse('https://dns.google/resolve?name=${Uri.encodeComponent(domain)}&type=MX');
-      final res = await http.get(uri).timeout(const Duration(milliseconds: 3500));
+      final uri = Uri.parse(
+        'https://dns.google/resolve?name=${Uri.encodeComponent(domain)}&type=MX',
+      );
+      final res = await http
+          .get(uri)
+          .timeout(const Duration(milliseconds: 3500));
 
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
@@ -267,7 +289,8 @@ class AppValidators {
         if (status == 3) {
           return DomainDeliverabilityResult(
             isDeliverable: false,
-            error: "The email domain '$domain' does not exist (Address not found). Check for typos and try again.",
+            error:
+                "The email domain '$domain' does not exist (Address not found). Check for typos and try again.",
           );
         }
 
@@ -278,7 +301,8 @@ class AppValidators {
           // Check for RFC 7505 Null MX and reject parked / squatter domains
           final validMx = mxRecords.where((r) {
             final dataStr = (r['data']?.toString().toLowerCase().trim() ?? '');
-            if (dataStr.isEmpty || dataStr == '.' || dataStr == '0 .') return false;
+            if (dataStr.isEmpty || dataStr == '.' || dataStr == '0 .')
+              return false;
             for (final kw in parkedKeywords) {
               if (dataStr.contains(kw)) return false;
             }
@@ -290,27 +314,34 @@ class AppValidators {
           } else {
             return DomainDeliverabilityResult(
               isDeliverable: false,
-              error: "The email domain '$domain' cannot receive emails (Address not found). Check for typos and try again.",
+              error:
+                  "The email domain '$domain' cannot receive emails (Address not found). Check for typos and try again.",
             );
           }
         }
 
         // If Status == 0 but no MX records exist, check A record to verify if domain even exists
-        final aUri = Uri.parse('https://dns.google/resolve?name=${Uri.encodeComponent(domain)}&type=A');
-        final aRes = await http.get(aUri).timeout(const Duration(milliseconds: 3000));
+        final aUri = Uri.parse(
+          'https://dns.google/resolve?name=${Uri.encodeComponent(domain)}&type=A',
+        );
+        final aRes = await http
+            .get(aUri)
+            .timeout(const Duration(milliseconds: 3000));
         if (aRes.statusCode == 200) {
           final aData = jsonDecode(aRes.body);
           if (aData['Status'] == 3) {
             return DomainDeliverabilityResult(
               isDeliverable: false,
-              error: "The email domain '$domain' does not exist (Address not found). Check for typos and try again.",
+              error:
+                  "The email domain '$domain' does not exist (Address not found). Check for typos and try again.",
             );
           }
           final aAnswers = aData['Answer'] as List<dynamic>?;
           if (aAnswers == null || aAnswers.isEmpty) {
             return DomainDeliverabilityResult(
               isDeliverable: false,
-              error: "The email domain '$domain' has no mail servers configured to receive emails.",
+              error:
+                  "The email domain '$domain' has no mail servers configured to receive emails.",
             );
           }
         }
@@ -319,22 +350,29 @@ class AppValidators {
       debugPrint('[Deliverability] Google DoH notice: $e');
       // 2. Fallback to Cloudflare DNS over HTTPS
       try {
-        final cfUri = Uri.parse('https://cloudflare-dns.com/dns-query?name=${Uri.encodeComponent(domain)}&type=MX');
-        final cfRes = await http.get(cfUri, headers: {'Accept': 'application/dns-json'}).timeout(const Duration(milliseconds: 3000));
+        final cfUri = Uri.parse(
+          'https://cloudflare-dns.com/dns-query?name=${Uri.encodeComponent(domain)}&type=MX',
+        );
+        final cfRes = await http
+            .get(cfUri, headers: {'Accept': 'application/dns-json'})
+            .timeout(const Duration(milliseconds: 3000));
         if (cfRes.statusCode == 200) {
           final cfData = jsonDecode(cfRes.body);
           if (cfData['Status'] == 3) {
             return DomainDeliverabilityResult(
               isDeliverable: false,
-              error: "The email domain '$domain' does not exist (Address not found). Check for typos and try again.",
+              error:
+                  "The email domain '$domain' does not exist (Address not found). Check for typos and try again.",
             );
           }
           final cfAnswers = cfData['Answer'] as List<dynamic>?;
           final cfMx = cfAnswers?.where((a) => a['type'] == 15).toList() ?? [];
           if (cfMx.isNotEmpty) {
             final validMx = cfMx.where((r) {
-              final dataStr = (r['data']?.toString().toLowerCase().trim() ?? '');
-              if (dataStr.isEmpty || dataStr == '.' || dataStr == '0 .') return false;
+              final dataStr =
+                  (r['data']?.toString().toLowerCase().trim() ?? '');
+              if (dataStr.isEmpty || dataStr == '.' || dataStr == '0 .')
+                return false;
               for (final kw in parkedKeywords) {
                 if (dataStr.contains(kw)) return false;
               }
@@ -343,7 +381,8 @@ class AppValidators {
             if (validMx.isEmpty) {
               return DomainDeliverabilityResult(
                 isDeliverable: false,
-                error: "The email domain '$domain' cannot receive emails (Address not found). Check for typos and try again.",
+                error:
+                    "The email domain '$domain' cannot receive emails (Address not found). Check for typos and try again.",
               );
             }
           }
@@ -419,7 +458,10 @@ class PasswordValidationResult {
 
 class _CleanInputFormatter extends TextInputFormatter {
   @override
-  TextEditingValue formatEditUpdate(TextEditingValue oldValue, TextEditingValue newValue) {
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
     String text = newValue.text;
 
     if (text.isEmpty) return newValue;
@@ -444,16 +486,16 @@ class _CleanInputFormatter extends TextInputFormatter {
       text = text[0].toUpperCase() + text.substring(1);
     }
 
-    return TextEditingValue(
-      text: text,
-      selection: newValue.selection,
-    );
+    return TextEditingValue(text: text, selection: newValue.selection);
   }
 }
 
 class _PasswordInputFormatter extends TextInputFormatter {
   @override
-  TextEditingValue formatEditUpdate(TextEditingValue oldValue, TextEditingValue newValue) {
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
     final text = newValue.text;
     if (text.isEmpty) return newValue;
 
@@ -477,13 +519,15 @@ extension BirthdayValidator on AppValidators {
 
     final today = DateTime.now();
     int age = today.year - date.year;
-    if (today.month < date.month || (today.month == date.month && today.day < date.day)) {
+    if (today.month < date.month ||
+        (today.month == date.month && today.day < date.day)) {
       age--;
     }
 
     // Role-specific age logic
     if (role == 'teacher' || role == 'parent') {
-      if (date.year <= 1950) return 'Birthdates from 1950 and below are not supported.';
+      if (date.year <= 1950)
+        return 'Birthdates from 1950 and below are not supported.';
       if (age < 18) return 'Must be at least 18 years old.';
     } else if (role == 'student') {
       if (age > 50) return 'Student cannot be older than 50 years old.';

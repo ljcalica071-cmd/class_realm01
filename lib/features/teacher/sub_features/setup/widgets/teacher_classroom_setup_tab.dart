@@ -110,7 +110,7 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
   final List<_SubjectClass> _archivedSectionsSubjects = [];
   int _archivedSectionsCount = 0;
 
-  // ── Form state ──
+  // â”€â”€ Form state â”€â”€
   SubjectTemplate? _selectedTemplate;
   final _subjectCtrl = TextEditingController();
   final _subjectFocus = FocusNode();
@@ -129,7 +129,7 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
 
   final List<_SectionRowDraft> _sectionRows = [];
 
-  // ── Validation state ──
+  // â”€â”€ Validation state â”€â”€
   bool _submitted = false;
   String? _subjectError;
   String? _termBlockError;
@@ -181,9 +181,9 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
     return defaultSubjectTemplates;
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Custom Constrained Dialog Helper (Prevents overly wide stretched dialogs)
-  // ─────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Future<T?> _showConstrainedDialog<T>({
     required BuildContext context,
     required Widget child,
@@ -230,7 +230,7 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // ── Top Header Card ──
+          // â”€â”€ Top Header Card â”€â”€
           Card(
             margin: EdgeInsets.zero,
             elevation: 0,
@@ -278,7 +278,7 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
                           ),
                           const SizedBox(height: 3),
                           Text(
-                            'SY $_currentSchoolYear · Trimester Curriculum',
+                            'SY $_currentSchoolYear Â· Trimester Curriculum',
                             style: TextStyle(
                               fontSize: 12,
                               color: theme.colorScheme.onSurface.withValues(
@@ -337,7 +337,7 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
 
           const SizedBox(height: 20),
 
-          // ── Section Title Bar ──
+          // â”€â”€ Section Title Bar â”€â”€
           LayoutBuilder(
             builder: (context, constraints) {
               final isNarrow = constraints.maxWidth < 720;
@@ -470,13 +470,13 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
 
           const SizedBox(height: 14),
 
-          // ── Add Subject Form (collapsible) ──
+          // â”€â”€ Add Subject Form (collapsible) â”€â”€
           if (_showAddForm && !_isViewingArchived) ...[
             _buildAddSubjectForm(),
             const SizedBox(height: 20),
           ],
 
-          // ── Main Content Area ──
+          // â”€â”€ Main Content Area â”€â”€
           _isLoadingSubjects
               ? LayoutBuilder(
                   builder: (context, constraints) {
@@ -505,9 +505,9 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
     );
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Handle Add Subject Click (Validates Max 10 without displaying "Max 10")
-  // ─────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   void _handleAddSubjectClick() {
     if (_subjects.length >= _maxSubjects) {
       _showLimitErrorDialog(
@@ -529,9 +529,9 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
     }
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Limit Notice Dialog
-  // ─────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   void _showLimitErrorDialog({required String title, required String message}) {
     _showConstrainedDialog(
       context: context,
@@ -589,9 +589,9 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
     );
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Active Subjects View
-  // ─────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Widget _buildActiveView() {
     if (_subjects.isEmpty) {
       return _buildEmptyClassroomState();
@@ -622,9 +622,9 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
     );
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Archived Subjects View & Empty State
-  // ─────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Widget _buildArchivedView() {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
@@ -711,9 +711,9 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
     );
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Responsive Redesigned Subject Card
-  // ─────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Widget _buildResponsiveSubjectCard(
     _SubjectClass subject, {
     required bool isArchived,
@@ -765,7 +765,7 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Header: Subject Info, Actions ──
+          // â”€â”€ Header: Subject Info, Actions â”€â”€
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -821,7 +821,7 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
 
           const SizedBox(height: 10),
 
-          // ── Stats Row: Total Sections & Total Students ──
+          // â”€â”€ Stats Row: Total Sections & Total Students â”€â”€
           Row(
             children: [
               Icon(LucideIcons.layers, size: 13, color: muted),
@@ -850,7 +850,7 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
 
           const SizedBox(height: 8),
 
-          // ── Grading Weights Pill Row ──
+          // â”€â”€ Grading Weights Pill Row â”€â”€
           Wrap(
             spacing: 6,
             runSpacing: 4,
@@ -880,7 +880,7 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
           ),
           const SizedBox(height: 8),
 
-          // ── Sections Area (Scrollable if many sections) ──
+          // â”€â”€ Sections Area (Scrollable if many sections) â”€â”€
           Expanded(
             child: ListView.separated(
               padding: EdgeInsets.zero,
@@ -973,7 +973,7 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
           ),
           const SizedBox(height: 10),
 
-          // ── Footer Action Buttons ──
+          // â”€â”€ Footer Action Buttons â”€â”€
           if (!isArchived)
             SizedBox(
               width: double.infinity,
@@ -1351,9 +1351,9 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
     );
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Add Subject Form
-  // ─────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Widget _buildAddSubjectForm() {
     final theme = Theme.of(context);
     final muted = theme.colorScheme.onSurface.withValues(alpha: 0.6);
@@ -2079,9 +2079,9 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
     );
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Section Row Management (Limit of 10 enforced via error message)
-  // ─────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   void _addSectionRow() {
     if (_sectionRows.length >= _maxSections) {
       _showLimitErrorDialog(
@@ -2203,11 +2203,76 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
         _isWeightValid;
   }
 
+  Map<String, _SubjectClass> _parseGrouped(
+    List<Map<String, dynamic>> rows, {
+    Map<String, int>? studentCounts,
+  }) {
+    final Map<String, _SubjectClass> grouped = {};
+    for (var row in rows) {
+      final id = row['id'].toString();
+      final subjectId = row['subject_id']?.toString() ?? id;
+      final name = row['subject_name'] ?? 'Subject';
+      final glInt = row['grade_level'];
+      final gl = 'Grade $glInt';
+      final secName = row['section_name'] ?? 'Section';
+      final studentCount = studentCounts?[id] ??
+          (row['student_count'] as num?)?.toInt() ??
+          0;
+      final ww = (row['ww_weight'] as num?)?.toInt() ?? 20;
+      final pt = (row['pt_weight'] as num?)?.toInt() ?? 50;
+      final ex = (row['ex_weight'] as num?)?.toInt() ?? 30;
+      final termsTaught = (row['terms_taught'] as num?)?.toInt() ?? 3;
+      final termBlock = row['term_block']?.toString() ?? '1ST, 2ND, 3RD';
+      final unitsPerTerm =
+          (row['units_per_term'] as num?)?.toDouble() ?? 2.0;
+      final st1Weight = (row['st1_weight'] as num?)?.toDouble() ?? 30.0;
+      final st2Weight = (row['st2_weight'] as num?)?.toDouble() ?? 30.0;
+      final teWeight = (row['te_weight'] as num?)?.toDouble() ?? 40.0;
+
+      final key = '${name}_$gl';
+      if (!grouped.containsKey(key)) {
+        grouped[key] = _SubjectClass(
+          id: id,
+          subjectId: subjectId,
+          name: name,
+          gradeLevel: gl,
+          wwWeight: ww,
+          ptWeight: pt,
+          exWeight: ex,
+          termsTaught: termsTaught,
+          termBlock: termBlock,
+          unitsPerTerm: unitsPerTerm,
+          st1Weight: st1Weight,
+          st2Weight: st2Weight,
+          teWeight: teWeight,
+          sections: [],
+        );
+      }
+      grouped[key]!.sections.add(
+        _ClassSection(
+          id: id,
+          name: secName,
+          studentCount: studentCount,
+        ),
+      );
+    }
+    return grouped;
+  }
+
   Future<void> _loadSubjects() async {
     final teacherId = AuthRepository.instance.currentUser?.id;
     if (teacherId == null) return;
 
-    setState(() => _isLoadingSubjects = true);
+    // Instant Frame-1 hydration from cache
+    final cachedRows = SubjectRepository.instance.getCachedTeacherSubjects(teacherId);
+    if (cachedRows.isNotEmpty && _subjects.isEmpty) {
+      final cachedGrouped = _parseGrouped(cachedRows);
+      _subjects.clear();
+      _subjects.addAll(cachedGrouped.values);
+      _isLoadingSubjects = false;
+    } else if (_subjects.isEmpty) {
+      setState(() => _isLoadingSubjects = true);
+    }
 
     try {
       final activeRows = await SubjectRepository.instance.getTeacherSubjects(
@@ -2229,68 +2294,12 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
       final activeStudentCounts = await SubjectRepository.instance
           .getOfferingStudentCounts(activeIds);
 
-      Map<String, _SubjectClass> parseGrouped(
-        List<Map<String, dynamic>> rows, {
-        Map<String, int>? studentCounts,
-      }) {
-        final Map<String, _SubjectClass> grouped = {};
-        for (var row in rows) {
-          final id = row['id'].toString();
-          final subjectId = row['subject_id']?.toString() ?? id;
-          final name = row['subject_name'] ?? 'Subject';
-          final glInt = row['grade_level'];
-          final gl = 'Grade $glInt';
-          final secName = row['section_name'] ?? 'Section';
-          final studentCount = studentCounts?[id] ??
-              (row['student_count'] as num?)?.toInt() ??
-              0;
-          final ww = (row['ww_weight'] as num?)?.toInt() ?? 20;
-          final pt = (row['pt_weight'] as num?)?.toInt() ?? 50;
-          final ex = (row['ex_weight'] as num?)?.toInt() ?? 30;
-          final termsTaught = (row['terms_taught'] as num?)?.toInt() ?? 3;
-          final termBlock = row['term_block']?.toString() ?? '1ST, 2ND, 3RD';
-          final unitsPerTerm =
-              (row['units_per_term'] as num?)?.toDouble() ?? 2.0;
-          final st1Weight = (row['st1_weight'] as num?)?.toDouble() ?? 30.0;
-          final st2Weight = (row['st2_weight'] as num?)?.toDouble() ?? 30.0;
-          final teWeight = (row['te_weight'] as num?)?.toDouble() ?? 40.0;
-
-          final key = '${name}_$gl';
-          if (!grouped.containsKey(key)) {
-            grouped[key] = _SubjectClass(
-              id: id,
-              subjectId: subjectId,
-              name: name,
-              gradeLevel: gl,
-              wwWeight: ww,
-              ptWeight: pt,
-              exWeight: ex,
-              termsTaught: termsTaught,
-              termBlock: termBlock,
-              unitsPerTerm: unitsPerTerm,
-              st1Weight: st1Weight,
-              st2Weight: st2Weight,
-              teWeight: teWeight,
-              sections: [],
-            );
-          }
-          grouped[key]!.sections.add(
-            _ClassSection(
-              id: id,
-              name: secName,
-              studentCount: studentCount,
-            ),
-          );
-        }
-        return grouped;
-      }
-
-      final activeGrouped = parseGrouped(
+      final activeGrouped = _parseGrouped(
         activeRows,
         studentCounts: activeStudentCounts,
       );
-      final archivedGrouped = parseGrouped(archivedRows);
-      final archivedSectionsGrouped = parseGrouped(archivedSectionRows);
+      final archivedGrouped = _parseGrouped(archivedRows);
+      final archivedSectionsGrouped = _parseGrouped(archivedSectionRows);
 
       if (mounted) {
         setState(() {
@@ -2495,12 +2504,12 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
     );
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Archive Modal (Constrained Max Width 440px)
-  // ─────────────────────────────────────────────────────────────────────────
-  // ─────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Archive Modal (Uses DRY _showActionConfirmationDialog)
-  // ─────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   void _confirmArchive(_SubjectClass subject) async {
     final confirmed = await _showActionConfirmationDialog(
       title: 'Archive Subject?',
@@ -2550,9 +2559,9 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
     }
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Restore Subject (Checks Active Limit of 10 and Asks Confirmation)
-  // ─────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   void _restoreSubject(_SubjectClass subject) async {
     if (_subjects.length >= _maxSubjects) {
       _showLimitErrorDialog(
@@ -2590,9 +2599,9 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
     }
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Permanent Delete Modal (Guarded by Academic Records Check)
-  // ─────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   void _confirmPermanentDelete(_SubjectClass subject) async {
     final teacherId = AuthRepository.instance.currentUser?.id;
     if (teacherId == null) return;
@@ -2662,9 +2671,9 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
     }
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Restore Single Section
-  // ─────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   void _restoreSection(_ClassSection sec, _SubjectClass parentSubject) async {
     final confirmed = await _showActionConfirmationDialog(
       title: 'Restore Section?',
@@ -2687,9 +2696,9 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
     }
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Permanent Delete Single Archived Section (Guarded by Academic Records)
-  // ─────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   void _confirmDeleteArchivedSection(
     _ClassSection sec,
     _SubjectClass parentSubject,
@@ -2748,9 +2757,9 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
     }
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Archived Sections View & Empty State
-  // ─────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Widget _buildArchivedSectionsView() {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
@@ -2836,9 +2845,9 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
     );
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Archived Section Subject Card
-  // ─────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Widget _buildArchivedSectionSubjectCard(
     _SubjectClass subject, {
     int index = 0,
@@ -2870,7 +2879,7 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Header: Grade badge, Archived Section Tag, Subject Name ──
+          // â”€â”€ Header: Grade badge, Archived Section Tag, Subject Name â”€â”€
           Row(
             children: [
               _buildBadge(subject.gradeLevel, isPrimary: true, compact: true),
@@ -2891,7 +2900,7 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
           ),
           const SizedBox(height: 10),
 
-          // ── Stats Row ──
+          // â”€â”€ Stats Row â”€â”€
           Row(
             children: [
               Icon(LucideIcons.layers, size: 13, color: muted),
@@ -2920,7 +2929,7 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
 
           const SizedBox(height: 8),
 
-          // ── Weights Badges ──
+          // â”€â”€ Weights Badges â”€â”€
           Wrap(
             spacing: 6,
             runSpacing: 4,
@@ -2950,7 +2959,7 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
           ),
           const SizedBox(height: 8),
 
-          // ── Archived Sections List ──
+          // â”€â”€ Archived Sections List â”€â”€
           Expanded(
             child: ListView.separated(
               padding: EdgeInsets.zero,
@@ -3083,7 +3092,7 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
           ),
           const SizedBox(height: 8),
 
-          // ── Card Footer Note ──
+          // â”€â”€ Card Footer Note â”€â”€
           Row(
             children: [
               const Icon(LucideIcons.info, size: 13, color: Color(0xFF487898)),
@@ -3104,9 +3113,9 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
     );
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Template Picker Dialog (Searchable & Filterable by Category & Cluster)
-  // ─────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   void _showTemplateModal() {
     final allTemplates = _availableTemplates;
     String searchQuery = '';

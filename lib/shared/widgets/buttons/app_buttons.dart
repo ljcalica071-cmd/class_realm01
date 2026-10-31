@@ -102,6 +102,18 @@ class AppButton extends StatelessWidget {
   })  : type = AppButtonType.outline,
         height = 42;
 
+  const AppButton.ghost({
+    super.key,
+    required this.label,
+    required this.onPressed,
+    this.icon,
+    this.isLoading = false,
+    this.width,
+    this.isSmall = false,
+    this.backgroundColor,
+  })  : type = AppButtonType.ghost,
+        height = 42;
+
   Color _bgColor(BuildContext context) {
     if (backgroundColor != null) return backgroundColor!;
     final primary = Theme.of(context).colorScheme.primary;

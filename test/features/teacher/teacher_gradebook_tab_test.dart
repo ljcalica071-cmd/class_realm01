@@ -88,10 +88,97 @@ void main() {
       expect(find.text('UNITS PER TERM'), findsNothing);
       expect(find.text('TOTAL UNITS EARNED'), findsNothing);
 
-      // 3. Gender headers and placeholders exist
-      expect(find.text('MALE'), findsOneWidget);
-      expect(find.text('FEMALE'), findsOneWidget);
+      // 3. Gender toggle buttons and active gender header exist
+      expect(find.text('MALE (0)'), findsOneWidget);
+      expect(find.text('Male'), findsOneWidget);
+      expect(find.text('Female'), findsOneWidget);
       expect(find.text('No students yet'), findsWidgets);
+
+      // Tapping Female toggle switches active gender section cleanly
+      await tester.tap(find.text('Female'));
+      await tester.pumpAndSettle();
+      expect(find.text('FEMALE (0)'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'gender filter switches cleanly between All, Male, and Female without duplicating rows or throwing assertions',
+    (tester) async {
+      tester.view.physicalSize = const Size(1400, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await tester.pumpWidget(buildGradebook());
+      await tester.pumpAndSettle();
+
+      // Initially on Term 1 with Male selected
+      expect(find.text('MALE (0)'), findsOneWidget);
+      expect(find.text('FEMALE (0)'), findsNothing);
+
+      // 1. Switch to Female filter
+      await tester.tap(find.text('Female'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('FEMALE (0)'), findsOneWidget);
+      expect(find.text('MALE (0)'), findsNothing);
+
+      // 2. Switch to All filter
+      await tester.tap(find.text('All'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('MALE (0)'), findsOneWidget);
+      expect(find.text('FEMALE (0)'), findsOneWidget);
+
+      // 3. Switch back to Male filter
+      await tester.tap(find.text('Male'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('MALE (0)'), findsOneWidget);
+      expect(find.text('FEMALE (0)'), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'assessment score columns dynamically expand from 5 up to 10 slots with inline "+" button',
+    (tester) async {
+      tester.view.physicalSize = const Size(1600, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await tester.pumpWidget(buildGradebook());
+      await tester.pumpAndSettle();
+
+      // Verify initial 5 Written Works slots and '+' button
+      final addWwFinder = find.byKey(const ValueKey('add-slot-ww'));
+      expect(addWwFinder, findsOneWidget);
+      expect(find.byTooltip('Add Written Work slot'), findsOneWidget);
+
+      // Verify column '5' is present
+      expect(find.widgetWithText(Container, '5'), findsWidgets);
+
+      // Increment WW slots one by one up to 10
+      for (int slot = 6; slot <= 10; slot++) {
+        await tester.tap(addWwFinder);
+        await tester.pumpAndSettle();
+      }
+
+      // At 10 slots, '+' button for WW should disappear
+      expect(find.byKey(const ValueKey('add-slot-ww')), findsNothing);
+      expect(find.byTooltip('Add Written Work slot'), findsNothing);
+
+      // Verify Performance Tasks '+' button exists and expand it up to 10
+      final addPtFinder = find.byKey(const ValueKey('add-slot-pt'));
+      expect(addPtFinder, findsOneWidget);
+      expect(find.byTooltip('Add Performance Task slot'), findsOneWidget);
+
+      for (int slot = 6; slot <= 10; slot++) {
+        await tester.tap(addPtFinder);
+        await tester.pumpAndSettle();
+      }
+
+      // At 10 slots, '+' button for PT should disappear
+      expect(find.byKey(const ValueKey('add-slot-pt')), findsNothing);
+      expect(find.byTooltip('Add Performance Task slot'), findsNothing);
     },
   );
 }

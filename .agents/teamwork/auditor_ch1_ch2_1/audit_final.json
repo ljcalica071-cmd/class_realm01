@@ -1,0 +1,213 @@
+{
+  "audit_timestamp_utc": "2026-10-30T01:07:36.204890+00:00",
+  "work_product": "c:\\Users\\Admin\\AndroidStudioProjects\\class_realm01\\INTEGRATED SENIOR HIGH SCHOOL ATTENDANCE.docx",
+  "auditor_archetype": "forensic_auditor",
+  "integrity_mode": "development",
+  "checks": {
+    "check_1_deliverable_authenticity": {
+      "file_size_bytes": 1093259,
+      "paragraph_count": 170,
+      "table_count": 1,
+      "words_in_paragraphs": 6225,
+      "words_in_tables": 938,
+      "total_words": 7163,
+      "embedded_media_assets": [
+        "word/media/image2.png",
+        "word/media/image1.png",
+        "word/media/image3.png",
+        "word/media/image4.png"
+      ],
+      "placeholder_count": 0,
+      "title_page_preserved": true,
+      "status": "PASS"
+    },
+    "check_2_file_isolation": {
+      "git_status_output": "M lib/core/services/app_data_cache.dart\n M lib/core/services/local_storage_service.dart\n M lib/core/services/session_activity_tracker.dart\n M lib/data/repositories/auth_repository.dart\n M lib/data/repositories/student_dashboard_repository.dart\n M lib/data/repositories/subject_repository.dart\n M lib/data/repositories/supabase_attendance_repository.dart\n M lib/data/repositories/supabase_parent_repository.dart\n M lib/data/repositories/supabase_student_repository.dart\n M lib/data/repositories/supabase_teacher_classwork_repository.dart\n M lib/features/admin/screens/admin_dashboard_screen.dart\n M lib/features/teacher/screens/teacher_dashboard_screen.dart\n M lib/features/teacher/sub_features/assessments/screens/create_requirement_flow.dart\n M lib/features/teacher/sub_features/class_management/widgets/add_parent_dialog.dart\n M lib/features/teacher/sub_features/class_management/widgets/teacher_parent_management_tab.dart\n M lib/features/teacher/sub_features/class_management/widgets/teacher_student_management_tab.dart\n M lib/features/teacher/sub_features/grading/widgets/teacher_grades_tab.dart\n M lib/features/teacher/sub_features/overview/widgets/teacher_dashboard_overview_tab.dart\n?? test/features/teacher/grading/\n?? test/scripts/",
+      "files_touched_during_authoring_compilation": [],
+      "touched_count": 0,
+      "status": "PASS"
+    },
+    "check_3_scholarship_authenticity": {
+      "studies": [
+        {
+          "citation": "Holgado et al. (2026)",
+          "type": "Philippine Local",
+          "in_narrative": true,
+          "in_matrix": true,
+          "in_references": true,
+          "doi_or_url": "https://research-manila.letran.edu.ph/article/279",
+          "empirically_verified_via_web": true
+        },
+        {
+          "citation": "Navarra & Antonio (2025)",
+          "type": "Philippine Local",
+          "in_narrative": true,
+          "in_matrix": true,
+          "in_references": true,
+          "doi_or_url": "https://doi.org/10.70838/pemj.350801",
+          "empirically_verified_via_web": true
+        },
+        {
+          "citation": "Mahinay & Encarnacion (2024)",
+          "type": "Philippine Local",
+          "in_narrative": true,
+          "in_matrix": true,
+          "in_references": true,
+          "doi_or_url": "https://doi.org/10.48175/IJARSCT-18756",
+          "empirically_verified_via_web": true
+        },
+        {
+          "citation": "Contreras & Mercado (2024)",
+          "type": "Philippine Local",
+          "in_narrative": true,
+          "in_matrix": true,
+          "in_references": true,
+          "doi_or_url": "https://doi.org/10.47772/IJRISS.2024.803052S",
+          "empirically_verified_via_web": true
+        },
+        {
+          "citation": "Canlas & Ado (2024)",
+          "type": "Philippine Local",
+          "in_narrative": true,
+          "in_matrix": true,
+          "in_references": true,
+          "doi_or_url": "https://digi-journalphils.com/article/imms-pup-2024",
+          "empirically_verified_via_web": true
+        },
+        {
+          "citation": "Irhamna, Kasmini, & Khairuman (2026)",
+          "type": "International",
+          "in_narrative": true,
+          "in_matrix": true,
+          "in_references": true,
+          "doi_or_url": "https://inotera.poltas.ac.id/index.php/inotera/article/view/620",
+          "empirically_verified_via_web": true
+        },
+        {
+          "citation": "Jantan, Mohd Zainudin, & Mustafa@Dain (2023)",
+          "type": "International",
+          "in_narrative": true,
+          "in_matrix": true,
+          "in_references": true,
+          "doi_or_url": "https://doi.org/10.6007/IJARBSS/v13-i12/19902",
+          "empirically_verified_via_web": true
+        },
+        {
+          "citation": "Jones (2022)",
+          "type": "International",
+          "in_narrative": true,
+          "in_matrix": true,
+          "in_references": true,
+          "doi_or_url": "https://doi.org/10.3389/feduc.2022.906601",
+          "empirically_verified_via_web": true
+        },
+        {
+          "citation": "Edraga (2026)",
+          "type": "International",
+          "in_narrative": true,
+          "in_matrix": true,
+          "in_references": true,
+          "doi_or_url": "https://doi.org/10.30935/jdet/17523",
+          "empirically_verified_via_web": true
+        },
+        {
+          "citation": "Januhari, Setyanto, & Kusrini (2025)",
+          "type": "International",
+          "in_narrative": true,
+          "in_matrix": true,
+          "in_references": true,
+          "doi_or_url": "https://doi.org/10.15408/aism.v8i1.45738",
+          "empirically_verified_via_web": true
+        }
+      ],
+      "all_10_present_and_verified": true,
+      "status": "PASS"
+    },
+    "check_4_definition_integrity": {
+      "terms": {
+        "ESP32": {
+          "found_in_section_1_6": true,
+          "text": "1. ESP32: A low-cost, low-power 32-bit dual-core microcontroller equipped with integrated 2.4 GHz Wi-Fi and Bluetooth connectivity, utilized in CLASSREALM as a standalone edge scanner that interfaces with an RFID module to capture student card UIDs, validate timestamps, buffer scans in non-volatile flash memory during network outages, and synchronize attendance logs to the cloud backend.",
+          "word_count": 55,
+          "tailored_to_classrealm": true
+        },
+        "RFID": {
+          "found_in_section_1_6": true,
+          "text": "2. RFID (Radio Frequency Identification): A contactless wireless communication technology operating via electromagnetic fields (specifically 13.56 MHz high frequency or 125 kHz low frequency) used in CLASSREALM to detect unique card identification codes (UIDs) mapped to student 12-digit Learner Reference Numbers (LRNs) for rapid classroom attendance logging.",
+          "word_count": 47,
+          "tailored_to_classrealm": true
+        },
+        "Firebase Authentication": {
+          "found_in_section_1_6": true,
+          "text": "3. Firebase Authentication: A cloud-based identity and access management service integrated into CLASSREALM to manage secure user credential validation, encrypted password storage, JSON Web Token (JWT) issuance, and first-time temporary password resets for administrators, teachers, students, and parents.",
+          "word_count": 38,
+          "tailored_to_classrealm": true
+        },
+        "Supabase": {
+          "found_in_section_1_6": true,
+          "text": "4. Supabase: An open-source Backend-as-a-Service (BaaS) built on PostgreSQL, serving as CLASSREALM\u2019s primary relational database for persistent academic records, real-time data replication, automated scheduled cron jobs (Edge Functions), and backend security enforcement.",
+          "word_count": 32,
+          "tailored_to_classrealm": true
+        },
+        "Row-Level Security": {
+          "found_in_section_1_6": true,
+          "text": "5. Row-Level Security (RLS): A PostgreSQL database access-control mechanism implemented in Supabase that programmatically restricts database rows returned by queries based on the authenticated user's role and unique ID, ensuring teachers only access their assigned classes and students/parents only access their authorized records.",
+          "word_count": 43,
+          "tailored_to_classrealm": true
+        },
+        "Admin Portal": {
+          "found_in_section_1_6": true,
+          "text": "6. Admin Portal: A restricted web management interface assigned exclusively to the client teacher, scoped strictly to provisioning and activating teacher accounts, managing user lifecycles, and executing annual academic year rollovers, without access to classroom instructional data or student grades.",
+          "word_count": 40,
+          "tailored_to_classrealm": true
+        },
+        "Teacher Portal": {
+          "found_in_section_1_6": true,
+          "text": "7. Teacher Portal: A comprehensive web and responsive desktop/tablet workspace empowering teachers to self-manage subject sections, plot class schedules, record attendance via dual RFID or permanent manual entry, administer quizzes, execute DepEd DO 15 grade calculations, generate lesson plans, and organize instructional materials.",
+          "word_count": 43,
+          "tailored_to_classrealm": true
+        },
+        "Student Portal": {
+          "found_in_section_1_6": true,
+          "text": "8. Student Portal: A dedicated mobile application interface allowing authenticated learners to verify daily attendance timestamps, track deadlines, submit electronic assignments, take objective online quizzes, and view transmutated quarterly grades under strict RLS isolation.",
+          "word_count": 34,
+          "tailored_to_classrealm": true
+        },
+        "Parent Portal": {
+          "found_in_section_1_6": true,
+          "text": "9. Parent Portal: A dedicated view-only mobile application interface enabling authorized parents and legal guardians to monitor their linked child's real-time attendance status, unexcused absence warnings, pending academic requirements, and quarterly performance summaries.",
+          "word_count": 33,
+          "tailored_to_classrealm": true
+        }
+      },
+      "all_9_verified_and_tailored": true,
+      "status": "PASS"
+    },
+    "check_5_scope_and_boundary_hardening": {
+      "admin_negative_boundaries": true,
+      "teacher_roster_self_management": true,
+      "registrar_principal_exclusions": true,
+      "transfer_drop_exclusions": true,
+      "permanent_manual_fallback": true,
+      "grade_record_preservation_export": true,
+      "status": "PASS"
+    },
+    "check_6_adviser_critique_resolution": {
+      "pilot_institution_named": true,
+      "pilot_institution_single_t": true,
+      "client_named": true,
+      "client_title": true,
+      "smart_criteria_section_present": true,
+      "smart_latency_metrics_present": true,
+      "manual_fallback_documented": true,
+      "blanket_lacks_found": [],
+      "synthesis_matrix_clean": true,
+      "delone_mclean_2003_cited": true,
+      "delone_mclean_dimensions": true,
+      "ipso_4_part_framework": true,
+      "system_mediating_stage_defined": true,
+      "status": "PASS"
+    }
+  },
+  "verdict": "CLEAN"
+}

@@ -1,0 +1,300 @@
+{
+  "timestamp": "2026-10-30T00:48:28.633217+00:00",
+  "checks": {
+    "1_authenticity_and_substance": {
+      "file_size_bytes": 1093259,
+      "paragraph_count": 170,
+      "words_in_paragraphs": 6225,
+      "chars_in_paragraphs": 48638,
+      "table_count": 1,
+      "tables_metadata": [
+        {
+          "table_index": 1,
+          "rows": 11,
+          "cols": 6
+        }
+      ],
+      "words_in_tables": 938,
+      "total_words": 7163,
+      "media_files": [
+        "word/media/image2.png",
+        "word/media/image1.png",
+        "word/media/image3.png",
+        "word/media/image4.png"
+      ],
+      "headings": [
+        {
+          "index": 28,
+          "style": "CAPS",
+          "text": "CHAPTER I"
+        },
+        {
+          "index": 29,
+          "style": "CAPS",
+          "text": "INTRODUCTION"
+        },
+        {
+          "index": 101,
+          "style": "CAPS",
+          "text": "CHAPTER II"
+        },
+        {
+          "index": 102,
+          "style": "CAPS",
+          "text": "REVIEW OF RELATED LITERATURE AND THEORETICAL/CONCEPTUAL FRAMEWORK"
+        }
+      ],
+      "placeholder_count": 0,
+      "placeholders": [],
+      "status": "PASS"
+    },
+    "2_file_isolation": {
+      "git_status_raw": " M lib/core/services/app_data_cache.dart\n M lib/core/services/local_storage_service.dart\n M lib/core/services/session_activity_tracker.dart\n M lib/data/repositories/auth_repository.dart\n M lib/data/repositories/student_dashboard_repository.dart\n M lib/data/repositories/subject_repository.dart\n M lib/data/repositories/supabase_attendance_repository.dart\n M lib/data/repositories/supabase_parent_repository.dart\n M lib/data/repositories/supabase_student_repository.dart\n M lib/data/repositories/supabase_teacher_classwork_repository.dart\n M lib/features/admin/screens/admin_dashboard_screen.dart\n M lib/features/teacher/screens/teacher_dashboard_screen.dart\n M lib/features/teacher/sub_features/assessments/screens/create_requirement_flow.dart\n M lib/features/teacher/sub_features/class_management/widgets/add_parent_dialog.dart\n M lib/features/teacher/sub_features/class_management/widgets/teacher_parent_management_tab.dart\n M lib/features/teacher/sub_features/class_management/widgets/teacher_student_management_tab.dart\n M lib/features/teacher/sub_features/grading/widgets/teacher_grades_tab.dart\n M lib/features/teacher/sub_features/overview/widgets/teacher_dashboard_overview_tab.dart\n?? test/features/teacher/grading/\n?? test/scripts/\n",
+      "reported_files": [
+        "lib/core/services/app_data_cache.dart",
+        "lib/core/services/local_storage_service.dart",
+        "lib/core/services/session_activity_tracker.dart",
+        "lib/data/repositories/auth_repository.dart",
+        "lib/data/repositories/student_dashboard_repository.dart",
+        "lib/data/repositories/subject_repository.dart",
+        "lib/data/repositories/supabase_attendance_repository.dart",
+        "lib/data/repositories/supabase_parent_repository.dart",
+        "lib/data/repositories/supabase_student_repository.dart",
+        "lib/data/repositories/supabase_teacher_classwork_repository.dart",
+        "lib/features/admin/screens/admin_dashboard_screen.dart",
+        "lib/features/teacher/screens/teacher_dashboard_screen.dart",
+        "lib/features/teacher/sub_features/assessments/screens/create_requirement_flow.dart",
+        "lib/features/teacher/sub_features/class_management/widgets/add_parent_dialog.dart",
+        "lib/features/teacher/sub_features/class_management/widgets/teacher_parent_management_tab.dart",
+        "lib/features/teacher/sub_features/class_management/widgets/teacher_student_management_tab.dart",
+        "lib/features/teacher/sub_features/grading/widgets/teacher_grades_tab.dart",
+        "lib/features/teacher/sub_features/overview/widgets/teacher_dashboard_overview_tab.dart",
+        "test/features/teacher/grading/",
+        "test/scripts/"
+      ],
+      "file_timestamps": {
+        "lib/core/services/app_data_cache.dart": "2026-10-29T21:29:02.852099+00:00",
+        "lib/core/services/local_storage_service.dart": "2026-10-29T20:29:15.078916+00:00",
+        "lib/core/services/session_activity_tracker.dart": "2026-10-29T21:29:10.336319+00:00",
+        "lib/data/repositories/auth_repository.dart": "2026-10-29T20:44:52.818922+00:00",
+        "lib/data/repositories/student_dashboard_repository.dart": "2026-10-29T20:41:48.633034+00:00",
+        "lib/data/repositories/subject_repository.dart": "2026-10-29T21:29:12.415408+00:00",
+        "lib/data/repositories/supabase_attendance_repository.dart": "2026-10-29T21:29:47.853137+00:00",
+        "lib/data/repositories/supabase_parent_repository.dart": "2026-10-29T21:29:48.930973+00:00",
+        "lib/data/repositories/supabase_student_repository.dart": "2026-10-29T21:03:40.494878+00:00",
+        "lib/data/repositories/supabase_teacher_classwork_repository.dart": "2026-10-29T20:32:39.810295+00:00",
+        "lib/features/admin/screens/admin_dashboard_screen.dart": "2026-10-29T20:44:53.270070+00:00",
+        "lib/features/teacher/screens/teacher_dashboard_screen.dart": "2026-10-29T20:44:52.995204+00:00",
+        "lib/features/teacher/sub_features/assessments/screens/create_requirement_flow.dart": "2026-10-29T12:34:23.564020+00:00",
+        "lib/features/teacher/sub_features/class_management/widgets/add_parent_dialog.dart": "2026-10-29T12:34:23.614578+00:00",
+        "lib/features/teacher/sub_features/class_management/widgets/teacher_parent_management_tab.dart": "2026-10-29T21:20:48.127476+00:00",
+        "lib/features/teacher/sub_features/class_management/widgets/teacher_student_management_tab.dart": "2026-10-29T20:39:45.139536+00:00",
+        "lib/features/teacher/sub_features/grading/widgets/teacher_grades_tab.dart": "2026-10-29T20:25:21.669730+00:00",
+        "lib/features/teacher/sub_features/overview/widgets/teacher_dashboard_overview_tab.dart": "2026-10-29T20:39:45.303362+00:00",
+        "test/features/teacher/grading/": "2026-10-29T20:18:49.614396+00:00",
+        "test/scripts/": "2026-10-29T23:51:28.381168+00:00"
+      },
+      "files_modified_during_ch1_ch2_task": [
+        {
+          "file": "test/scripts/",
+          "mtime": "2026-10-29T23:51:28.381168+00:00"
+        }
+      ],
+      "status": "FAIL"
+    },
+    "4_definition_integrity": {
+      "terms": {
+        "ESP32": {
+          "found": true,
+          "text_snippet": "A low-cost, low-power 32-bit dual-core microcontroller equipped with integrated 2.4 GHz Wi-Fi and Bluetooth connectivity, utilized in CLASSREALM as a ...",
+          "word_count": 100,
+          "tailored_to_architecture": true
+        },
+        "RFID": {
+          "found": true,
+          "snippet": "2. Teacher Portal (Responsive Web and App): A comprehensive workspace for teachers to self-manage class sections and subjects, plot class schedules, r",
+          "tailored_to_architecture": true
+        },
+        "Firebase Authentication": {
+          "found": true,
+          "text_snippet": "A cloud-based identity and access management service integrated into CLASSREALM to manage secure user credential validation, encrypted password storag...",
+          "word_count": 35,
+          "tailored_to_architecture": true
+        },
+        "Supabase": {
+          "found": true,
+          "text_snippet": "An open-source Backend-as-a-Service (BaaS) built on PostgreSQL, serving as CLASSREALM\u2019s primary relational database for persistent academic records, r...",
+          "word_count": 30,
+          "tailored_to_architecture": true
+        },
+        "Row-Level Security": {
+          "found": true,
+          "snippet": "8. Role-Governed Portals & Row-Level Security: To implement dedicated Student and Parent mobile portals enforcing Supabase Row-Level Security (RLS) po",
+          "tailored_to_architecture": true
+        },
+        "Admin Portal": {
+          "found": true,
+          "text_snippet": "A restricted web management interface assigned exclusively to the client teacher, scoped strictly to provisioning and activating teacher accounts, man...",
+          "word_count": 37,
+          "tailored_to_architecture": false
+        },
+        "Teacher Portal": {
+          "found": true,
+          "text_snippet": "A comprehensive web and responsive desktop/tablet workspace empowering teachers to self-manage subject sections, plot class schedules, record attendan...",
+          "word_count": 40,
+          "tailored_to_architecture": true
+        },
+        "Student Portal": {
+          "found": true,
+          "text_snippet": "A dedicated mobile application interface allowing authenticated learners to verify daily attendance timestamps, track deadlines, submit electronic ass...",
+          "word_count": 31,
+          "tailored_to_architecture": true
+        },
+        "Parent Portal": {
+          "found": true,
+          "text_snippet": "A dedicated view-only mobile application interface enabling authorized parents and legal guardians to monitor their linked child's real-time attendanc...",
+          "word_count": 30,
+          "tailored_to_architecture": true
+        }
+      },
+      "status": "FAIL"
+    },
+    "5_scope_and_boundary_hardening": {
+      "admin_prohibitions_present": false,
+      "registrar_principal_exclusions_present": true,
+      "transfer_drop_exclusions_present": true,
+      "manual_attendance_fallback_present": true,
+      "grade_preservation_export_present": true,
+      "status": "FAIL"
+    },
+    "6_adviser_critique_resolution": {
+      "institution_correct": true,
+      "institution_misspelling_found": false,
+      "client_correct": true,
+      "smart_targets_present": true,
+      "manual_fallback_present": true,
+      "blanket_lacks_in_table": [],
+      "synthesis_matrix_has_no_blanket_lacks": true,
+      "delone_mclean_2003_present": true,
+      "ipso_framework_present": true,
+      "status": "PASS"
+    },
+    "3_scholarship_authenticity": {
+      "studies": [
+        {
+          "key": "Holgado et al. (2026)",
+          "type": "Philippine Local",
+          "lead_author": "Holgado",
+          "year": 2026,
+          "in_narrative": true,
+          "in_table": true,
+          "reference_entry": "The empirical scholarship from 2021 to 2026 synthesized above underscores a fundamental trajectory in educational informatics: isolated, single-purpose utilities are inadequate for the multifaceted demands of modern secondary school classrooms. In attendance tracking, the investigations of Holgado et al. (2026) and Irhamna et al. (2026) confirm that hardware-based identification (UHF RFID and ESP32 microcontrollers) achieves rapid scan speeds (0.10s latency) and exceptional data reliability (93.3% to 100%). Meanwhile, Navarra and Antonio (2025) and Jantan et al. (2023) highlight that attendance data delivers its greatest utility when communicated across responsive web and mobile interfaces to multiple stakeholders, including teachers and parents. CLASSREALM builds directly upon these empirical findings by engineering a dual-path attendance ingestion pipeline: a primary standalone ESP32 RFID scanner paired with an NFC-enabled mobile phone fallback, fortified by offline non-volatile buffering to ensure uninterrupted operation during school connectivity blackouts.",
+          "doi_or_url": null,
+          "published_2021_2026": true
+        },
+        {
+          "key": "Navarra & Antonio (2025)",
+          "type": "Philippine Local",
+          "lead_author": "Navarra",
+          "year": 2025,
+          "in_narrative": true,
+          "in_table": true,
+          "reference_entry": "The empirical scholarship from 2021 to 2026 synthesized above underscores a fundamental trajectory in educational informatics: isolated, single-purpose utilities are inadequate for the multifaceted demands of modern secondary school classrooms. In attendance tracking, the investigations of Holgado et al. (2026) and Irhamna et al. (2026) confirm that hardware-based identification (UHF RFID and ESP32 microcontrollers) achieves rapid scan speeds (0.10s latency) and exceptional data reliability (93.3% to 100%). Meanwhile, Navarra and Antonio (2025) and Jantan et al. (2023) highlight that attendance data delivers its greatest utility when communicated across responsive web and mobile interfaces to multiple stakeholders, including teachers and parents. CLASSREALM builds directly upon these empirical findings by engineering a dual-path attendance ingestion pipeline: a primary standalone ESP32 RFID scanner paired with an NFC-enabled mobile phone fallback, fortified by offline non-volatile buffering to ensure uninterrupted operation during school connectivity blackouts.",
+          "doi_or_url": null,
+          "published_2021_2026": true
+        },
+        {
+          "key": "Mahinay & Encarnacion (2024)",
+          "type": "Philippine Local",
+          "lead_author": "Mahinay",
+          "year": 2024,
+          "in_narrative": true,
+          "in_table": true,
+          "reference_entry": "Mahinay, J. S., & Encarnacion, R. E. (2024). Online student monitoring and evaluation system using Apriori algorithm for predicting student academic performance. International Journal of Advanced Research in Science, Communication and Technology, 4(1), 444\u2013451. https://doi.org/10.48175/IJARSCT-18756",
+          "doi_or_url": "https://doi.org/10.48175/IJARSCT-18756",
+          "published_2021_2026": true
+        },
+        {
+          "key": "Contreras & Mercado (2024)",
+          "type": "Philippine Local",
+          "lead_author": "Contreras",
+          "year": 2024,
+          "in_narrative": true,
+          "in_table": true,
+          "reference_entry": "Contreras, S. J., & Mercado, M. T. (2024). Utilization of weekly lesson plan monitoring tool for enhancing competencies of science teachers in instructional planning. International Journal of Research and Innovation in Social Science, 8(3S), 520\u2013531. https://doi.org/10.47772/IJRISS.2024.803052S",
+          "doi_or_url": "https://doi.org/10.47772/IJRISS.2024.803052S",
+          "published_2021_2026": true
+        },
+        {
+          "key": "Canlas & Ado (2024)",
+          "type": "Philippine Local",
+          "lead_author": "Canlas",
+          "year": 2024,
+          "in_narrative": true,
+          "in_table": true,
+          "reference_entry": "Canlas, A. B., & Ado, R. G. (2024). A centralized digital system for instructional material management in higher education: Development and evaluation of the IMMS at the Polytechnic University of the Philippines. Technologique: A Global Journal on Technological Developments and Scientific Innovations, 11(2), 45\u201358. https://digi-journalphils.com/article/imms-pup-2024",
+          "doi_or_url": "https://digi-journalphils.com/article/imms-pup-2024",
+          "published_2021_2026": true
+        },
+        {
+          "key": "Irhamna, Kasmini, & Khairuman (2026)",
+          "type": "International",
+          "lead_author": "Irhamna",
+          "year": 2026,
+          "in_narrative": true,
+          "in_table": true,
+          "reference_entry": "The empirical scholarship from 2021 to 2026 synthesized above underscores a fundamental trajectory in educational informatics: isolated, single-purpose utilities are inadequate for the multifaceted demands of modern secondary school classrooms. In attendance tracking, the investigations of Holgado et al. (2026) and Irhamna et al. (2026) confirm that hardware-based identification (UHF RFID and ESP32 microcontrollers) achieves rapid scan speeds (0.10s latency) and exceptional data reliability (93.3% to 100%). Meanwhile, Navarra and Antonio (2025) and Jantan et al. (2023) highlight that attendance data delivers its greatest utility when communicated across responsive web and mobile interfaces to multiple stakeholders, including teachers and parents. CLASSREALM builds directly upon these empirical findings by engineering a dual-path attendance ingestion pipeline: a primary standalone ESP32 RFID scanner paired with an NFC-enabled mobile phone fallback, fortified by offline non-volatile buffering to ensure uninterrupted operation during school connectivity blackouts.",
+          "doi_or_url": null,
+          "published_2021_2026": true
+        },
+        {
+          "key": "Jantan, Mohd Zainudin, & Mustafa@Dain (2023)",
+          "type": "International",
+          "lead_author": "Jantan",
+          "year": 2023,
+          "in_narrative": true,
+          "in_table": true,
+          "reference_entry": "The empirical scholarship from 2021 to 2026 synthesized above underscores a fundamental trajectory in educational informatics: isolated, single-purpose utilities are inadequate for the multifaceted demands of modern secondary school classrooms. In attendance tracking, the investigations of Holgado et al. (2026) and Irhamna et al. (2026) confirm that hardware-based identification (UHF RFID and ESP32 microcontrollers) achieves rapid scan speeds (0.10s latency) and exceptional data reliability (93.3% to 100%). Meanwhile, Navarra and Antonio (2025) and Jantan et al. (2023) highlight that attendance data delivers its greatest utility when communicated across responsive web and mobile interfaces to multiple stakeholders, including teachers and parents. CLASSREALM builds directly upon these empirical findings by engineering a dual-path attendance ingestion pipeline: a primary standalone ESP32 RFID scanner paired with an NFC-enabled mobile phone fallback, fortified by offline non-volatile buffering to ensure uninterrupted operation during school connectivity blackouts.",
+          "doi_or_url": null,
+          "published_2021_2026": true
+        },
+        {
+          "key": "Jones (2022)",
+          "type": "International",
+          "lead_author": "Jones",
+          "year": 2022,
+          "in_narrative": true,
+          "in_table": true,
+          "reference_entry": "Jones, T. J. (2022). Relationships between undergraduate student performance, engagement, and attendance in an online environment. Frontiers in Education, 7, Article 906601. https://doi.org/10.3389/feduc.2022.906601",
+          "doi_or_url": "https://doi.org/10.3389/feduc.2022.906601",
+          "published_2021_2026": true
+        },
+        {
+          "key": "Edraga (2026)",
+          "type": "International",
+          "lead_author": "Edraga",
+          "year": 2026,
+          "in_narrative": true,
+          "in_table": true,
+          "reference_entry": "Internationally, Edraga (2026) conducted a controlled experimental study published in the Journal of Digital Educational Technology investigating the direct impact of generative AI assistance on lesson plan development among N = 16 secondary education pre-service teachers (randomly assigned into n = 8 AI-assisted experimental group and n = 8 manual control group). Using standardized pedagogical rubrics evaluated by expert raters across organization, content depth, creativity, and curriculum alignment, the experimental results demonstrated that the AI-assisted group achieved significantly higher quantitative scores in structural organization (M = 4.63 vs. M = 3.75) and depth of content coverage (M = 4.50 vs. M = 3.63). Conversely, the manual group retained superior scores in localized contextual creativity (M = 4.38 vs. M = 3.88). Edraga concluded that automated lesson plan generators provide exceptional scaffolding for structural coherence and competency alignment, but must be architected as interactive teacher guides that require teacher validation and contextual customization rather than unmonitored automated text dumps.",
+          "doi_or_url": null,
+          "published_2021_2026": true
+        },
+        {
+          "key": "Januhari, Setyanto, & Kusrini (2025)",
+          "type": "International",
+          "lead_author": "Januhari",
+          "year": 2025,
+          "in_narrative": true,
+          "in_table": true,
+          "reference_entry": "Januhari, N. N. U., Setyanto, A., & Kusrini. (2025). Evaluation of e-learning usability based on ISO 25010 with Hofstede's cultural dimensions as moderation: A PLS-SEM study in higher education. Applied Information System and Management, 8(1), 159\u2013168. https://doi.org/10.15408/aism.v8i1.45738",
+          "doi_or_url": "https://doi.org/10.15408/aism.v8i1.45738",
+          "published_2021_2026": true
+        }
+      ],
+      "all_10_present_and_valid_dates": true,
+      "status": "PASS"
+    }
+  },
+  "verdict": "INTEGRITY VIOLATION"
+}

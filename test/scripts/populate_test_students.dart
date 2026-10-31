@@ -2,7 +2,6 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:class_realm/data/repositories/supabase_student_repository.dart';
-import 'package:class_realm/core/services/firebase_auth_admin_service.dart';
 
 // IMPORTANT: You need to initialize Supabase and Firebase before running this in a real environment.
 // This is a standalone script structure.
@@ -23,6 +22,7 @@ void main() async {
       .eq('email', 'rexanjuan24@gmail.com') // Wait, in your screenshot, Naruto isn't there, but let's assume we find him by name or you hardcode it.
       .limit(1)
       .maybeSingle();
+  debugPrint('Teacher lookup result: ${teacherRes?['id']}');
       
   // For the sake of this script, you will need to replace these with the actual IDs 
   // if the auto-fetch fails, because I cannot see your live Supabase data.

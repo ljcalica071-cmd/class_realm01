@@ -47,12 +47,8 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog>
   bool _isVerifying = false;
   bool _submitted = false;
   String? _error;
-  String? _successMessage;
 
   String? _createdEmail;
-  String? _createdPassword;
-  String? _createdFullName;
-  bool _copied = false;
 
   Timer? _resendTimer;
   int _resendSecondsRemaining = 0;
@@ -210,8 +206,6 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog>
         _selectedIndex = _otpController.text.length.clamp(0, 5);
         _otpController.selection =
             TextSelection.collapsed(offset: _otpController.text.length);
-        _successMessage =
-            'An active verification code is already valid for ${_emailController.text.trim()}.';
       });
       Future.delayed(const Duration(milliseconds: 150), () {
         if (mounted) _otpFocusNode.requestFocus();
@@ -222,7 +216,6 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog>
     setState(() {
       _isLoading = true;
       _error = null;
-      _successMessage = null;
     });
 
     try {
@@ -266,9 +259,6 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog>
           _selectedIndex = _otpController.text.length.clamp(0, 5);
           _otpController.selection =
               TextSelection.collapsed(offset: _otpController.text.length);
-          _successMessage = res['reused'] == true
-              ? 'An active verification code is already valid for ${_emailController.text.trim()}.'
-              : 'A 6-digit verification OTP code has been sent to ${_emailController.text.trim()}.';
         });
         Future.delayed(const Duration(milliseconds: 150), () {
           if (mounted) _otpFocusNode.requestFocus();
@@ -290,7 +280,6 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog>
     setState(() {
       _isResending = true;
       _error = null;
-      _successMessage = null;
     });
 
     try {
@@ -325,8 +314,6 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog>
           _selectedIndex = 0;
           // Attempts are preserved across resends! Do not reset _failedAttempts to 0.
           _error = null;
-          _successMessage =
-              'A new 6-digit verification code has been sent to ${_emailController.text.trim()}.';
         });
         Future.delayed(const Duration(milliseconds: 150), () {
           if (mounted) _otpFocusNode.requestFocus();
@@ -378,9 +365,6 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog>
         setState(() {
           _step = TeacherCreationStep.success;
           _createdEmail = res['email']?.toString() ?? _emailController.text.trim();
-          _createdPassword = res['temporaryPassword']?.toString() ?? '';
-          _createdFullName = res['fullName']?.toString() ??
-              '${_firstNameController.text.trim()} ${_lastNameController.text.trim()}';
         });
       }
     } catch (error) {
@@ -711,16 +695,6 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog>
         ],
       ],
     );
-  }
-
-  void _copyCredentials() {
-    final text =
-        'ClassRealm Teacher Account\nEmail: $_createdEmail\nTemporary Password: $_createdPassword';
-    Clipboard.setData(ClipboardData(text: text));
-    setState(() => _copied = true);
-    Future.delayed(const Duration(seconds: 2), () {
-      if (mounted) setState(() => _copied = false);
-    });
   }
 
   String _messageFor(Object error) {
@@ -1455,8 +1429,7 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog>
                               setState(() {
                                 _step = TeacherCreationStep.details;
                                 _error = null;
-                                _successMessage = null;
-                              });
+                                                        });
                             },
                       icon: const Icon(LucideIcons.arrowLeft, size: 16),
                       label: const Text('Back'),

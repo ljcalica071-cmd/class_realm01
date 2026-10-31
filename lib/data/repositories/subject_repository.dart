@@ -1,4 +1,5 @@
 import 'package:class_realm/core/services/app_data_cache.dart';
+
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
@@ -203,7 +204,7 @@ class SubjectRepository {
         }
       }
     }
-    AppDataCache.instance.invalidatePrefix('teacher_subjects_${teacherId}');
+    AppDataCache.instance.invalidatePrefix('teacher_subjects_$teacherId');
   }
 
   /// Synchronously returns cached teacher subjects from local storage.
@@ -217,10 +218,13 @@ class SubjectRepository {
     String schoolYear = '2026-2027',
     bool onlyWithEnrolledStudents = false,
   }) async {
-    final cacheKey = 'teacher_subjects_${teacherId}_${schoolYear}_$onlyWithEnrolledStudents';
+    final cacheKey =
+        'teacher_subjects_${teacherId}_${schoolYear}_$onlyWithEnrolledStudents';
     final cached = AppDataCache.instance.getCached<List<Map<String, dynamic>>>(
       cacheKey,
-      (json) => (json as List).map((e) => Map<String, dynamic>.from(e as Map)).toList(),
+      (json) => (json as List)
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList(),
     );
     if (cached != null && AppDataCache.instance.isFresh(cacheKey)) {
       return cached;
@@ -264,7 +268,12 @@ class SubjectRepository {
         }).toList();
 
         if (onlyWithEnrolledStudents) {
-          return await _filterOfferingsWithEnrolledStudents(teacherId, results);
+          final filtered = await _filterOfferingsWithEnrolledStudents(
+            teacherId,
+            results,
+          );
+          unawaited(AppDataCache.instance.setCache(cacheKey, filtered));
+          return filtered;
         }
         return results;
       }
@@ -275,7 +284,10 @@ class SubjectRepository {
     // 2. Fallback / Initial fetch from cloud
     results = await _syncOfferingsFromCloud(teacherId, schoolYear);
     if (onlyWithEnrolledStudents) {
-      final filtered = await _filterOfferingsWithEnrolledStudents(teacherId, results);
+      final filtered = await _filterOfferingsWithEnrolledStudents(
+        teacherId,
+        results,
+      );
       unawaited(AppDataCache.instance.setCache(cacheKey, filtered));
       return filtered;
     }
@@ -301,14 +313,17 @@ class SubjectRepository {
           .where((id) => id != null && id.isNotEmpty)
           .toSet();
 
-      return offerings.where((m) => activeOfferingIds.contains(m['id'])).toList();
+      return offerings
+          .where((m) => activeOfferingIds.contains(m['id']))
+          .toList();
     } catch (enrollErr) {
       debugPrint('Error filtering offerings by cloud enrollments: $enrollErr');
       try {
         final activeIds = <String>{};
         for (final offering in offerings) {
           final offId = offering['id'].toString();
-          final localStudents = await AppDatabase.instance.getStudentsForOffering(offId);
+          final localStudents = await AppDatabase.instance
+              .getStudentsForOffering(offId);
           if (localStudents.isNotEmpty) {
             activeIds.add(offId);
           }
@@ -1304,10 +1319,10 @@ class SubjectRepository {
         int.tryParse(gradeLevel.replaceAll(RegExp(r'[^0-9]'), '')) ?? 11;
 
     // 1. Update subjects table
-    await _client.from('subjects').update({
-      'subject_name': cleanSubjectName,
-      'grade_level': gLevel,
-    }).eq('id', subjectId);
+    await _client
+        .from('subjects')
+        .update({'subject_name': cleanSubjectName, 'grade_level': gLevel})
+        .eq('id', subjectId);
 
     // 2. Resolve school year and term
     final sy = await _client
@@ -1324,13 +1339,14 @@ class SubjectRepository {
         .order('term_number')
         .limit(1)
         .maybeSingle();
-    final termId = termRow?['id']?.toString() ?? '1a66dbf9-7395-42df-960f-4e22c07e20d4';
+    final termId =
+        termRow?['id']?.toString() ?? '1a66dbf9-7395-42df-960f-4e22c07e20d4';
 
     final resolvedTermBlock = termsTaught == 3
         ? '1ST, 2ND, 3RD'
         : termBlock.trim().isEmpty
-            ? (termsTaught == 1 ? 'FIRST TERM' : '1ST & 2ND')
-            : termBlock;
+        ? (termsTaught == 1 ? 'FIRST TERM' : '1ST & 2ND')
+        : termBlock;
 
     // 3. Update existing offerings weights and term metadata
     final offeringUpdateData = {

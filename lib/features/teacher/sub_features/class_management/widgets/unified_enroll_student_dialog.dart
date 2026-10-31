@@ -106,73 +106,6 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
   List<_ParsedStudentRow> _alreadyEnrolledStudents = [];
   List<_InvalidStudentRow> _detectedInvalidRows = [];
 
-  int? get _calculatedAge {
-    if (_birthday == null) return null;
-    final now = DateTime.now();
-    int age = now.year - _birthday!.year;
-    if (now.month < _birthday!.month ||
-        (now.month == _birthday!.month && now.day < _birthday!.day)) {
-      age--;
-    }
-    return age;
-  }
-
-  Widget _buildAgeField(ThemeData theme) {
-    final age = _calculatedAge;
-    final text = age != null ? '$age yrs old' : 'Auto';
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Age',
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-            color: theme.colorScheme.onSurface,
-          ),
-        ),
-        const SizedBox(height: 6),
-        Container(
-          height: 48,
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          alignment: Alignment.centerLeft,
-          decoration: BoxDecoration(
-            color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: theme.colorScheme.outline.withValues(alpha: 0.25),
-            ),
-          ),
-          child: Row(
-            children: [
-              Icon(
-                LucideIcons.calendarCheck,
-                size: 15,
-                color: age != null
-                    ? theme.colorScheme.primary
-                    : theme.colorScheme.onSurface.withValues(alpha: 0.4),
-              ),
-              const SizedBox(width: 6),
-              Flexible(
-                child: Text(
-                  text,
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: age != null
-                        ? theme.colorScheme.onSurface
-                        : theme.colorScheme.onSurface.withValues(alpha: 0.45),
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
   Timer? _autoResumeTimer;
 
   void _startAutoResumeListener() {
@@ -3046,23 +2979,18 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                OutlinedButton(
+                AppSecondaryButton(
+                  label: 'Cancel',
+                  width: 130,
+                  height: 42,
                   onPressed: () => Navigator.of(context).pop(),
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    side: BorderSide(
-                      color: theme.colorScheme.outline.withValues(alpha: 0.3),
-                    ),
-                  ),
-                  child: const Text('Cancel'),
                 ),
                 const SizedBox(width: 12),
                 AppPrimaryButton(
                   label: _isSubmitting ? 'Enrolling...' : 'Enroll Student',
                   icon: LucideIcons.userPlus,
+                  width: 160,
+                  height: 42,
                   onPressed: _isSubmitting ? null : _submitSingleStudent,
                 ),
               ],
@@ -3700,69 +3628,6 @@ class _SectionLabel extends StatelessWidget {
   }
 }
 
-class _CredentialRow extends StatelessWidget {
-  final String label;
-  final String value;
-  final bool isCode;
-
-  const _CredentialRow({
-    required this.label,
-    required this.value,
-  }) : isCode = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 140,
-            child: Text(
-              label,
-              style: TextStyle(
-                fontSize: 13,
-                color: Theme.of(context).colorScheme.onSurface
-                    .withValues(alpha: 0.6),
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-          Expanded(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: isCode
-                    ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.08)
-                    : Theme.of(context).scaffoldBackgroundColor,
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(
-                  color: isCode
-                      ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.35)
-                      : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.12),
-                ),
-              ),
-              child: SelectableText(
-                value,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.bold,
-                  fontFamily: isCode ? 'monospace' : null,
-                  letterSpacing: isCode ? 1.0 : null,
-                  color: isCode
-                      ? Theme.of(context).colorScheme.primary
-                      : Theme.of(context).colorScheme.onSurface,
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _ParsedStudentRow {
   final int rowNumber;
   final String lrn;
@@ -3803,23 +3668,6 @@ class _InvalidStudentRow {
   });
 
   String get formattedMessage => 'Row $rowNumber ($fieldTag: $identifier): $reason';
-}
-
-class _ValidationProgressData {
-  final String phase;
-  final int validatedCount;
-  final int totalCount;
-  final String activeRecordName;
-
-  const _ValidationProgressData({
-    required this.phase,
-    required this.validatedCount,
-    required this.totalCount,
-    required this.activeRecordName,
-  });
-
-  double get progress => totalCount <= 0 ? 0.0 : (validatedCount / totalCount).clamp(0.0, 1.0);
-  int get percent => (progress * 100).toInt();
 }
 
 class _EnrollmentProgressData {

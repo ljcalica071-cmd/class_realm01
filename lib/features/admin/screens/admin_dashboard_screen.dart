@@ -245,6 +245,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   title: _getTitle(_selectedIndex),
                   adminUser: AuthRepository.instance.currentUser,
                 ),
+        if (_isLoading) const LinearProgressIndicator(minHeight: 3),
 
                 // Body content switch
                 Expanded(

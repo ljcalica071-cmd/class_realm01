@@ -1,14 +1,15 @@
-import 'package:class_realm/core/services/app_data_cache.dart';
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:drift/drift.dart' show Value;
-import 'package:class_realm/models/user_model.dart';
-import 'package:class_realm/data/repositories/student_repository.dart';
-import 'package:class_realm/data/datasources/local/app_database.dart';
+import 'package:class_realm/core/services/app_data_cache.dart';
 import 'package:class_realm/core/services/email_service.dart';
 import 'package:class_realm/core/services/firebase_auth_admin_service.dart';
+import 'package:class_realm/core/services/local_storage_service.dart';
+import 'package:class_realm/data/datasources/local/app_database.dart';
+import 'package:class_realm/data/repositories/student_repository.dart';
+import 'package:class_realm/models/user_model.dart';
+import 'package:drift/drift.dart' show Value;
+import 'package:flutter/foundation.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class StudentEnrollmentResult {
   final String studentId;
@@ -26,14 +27,46 @@ class SupabaseStudentRepository implements StudentRepository {
   final SupabaseClient _client;
 
   SupabaseStudentRepository({SupabaseClient? client})
-    : _client = client ?? Supabase.instance.client;
+      : _client = client ?? Supabase.instance.client;
+
+  static Map<String, String> _readLocalRfidOverrides() {
+    final raw = LocalStorageService.getJson('local_student_rfid_map');
+    if (raw is Map) {
+      final result = <String, String>{};
+      raw.forEach((key, value) {
+        final k = key?.toString() ?? '';
+        final v = value?.toString().trim() ?? '';
+        if (k.isNotEmpty && v.isNotEmpty) {
+          result[k] = v.toUpperCase();
+        }
+      });
+      return result;
+    }
+    return const <String, String>{};
+  }
+
+  static bool _isMissingRfidColumnError(Object error) {
+    if (error is PostgrestException) {
+      final code = (error.code ?? '').toUpperCase();
+      final msg = error.message.toLowerCase();
+      if (code == '42703' || code == 'PGRST204') return true;
+      if (msg.contains('rfid_uid') &&
+          (msg.contains('does not exist') || msg.contains('schema cache'))) {
+        return true;
+      }
+    }
+    final text = error.toString().toLowerCase();
+    return text.contains('rfid_uid') &&
+        (text.contains('42703') ||
+            text.contains('pgrst204') ||
+            text.contains('does not exist'));
+  }
 
   @override
   Future<List<UserModel>> getStudents({
     String? section,
     bool includeArchived = false,
   }) async {
-    // This will be replaced by the specific teacher's logic later
     return [];
   }
 
@@ -43,7 +76,8 @@ class SupabaseStudentRepository implements StudentRepository {
     bool includeArchived = false,
     void Function(List<UserModel> fresh)? onFreshData,
   }) async {
-    final cacheKey = 'teacher_students_${teacherId}_${subjectId ?? "all"}_$includeArchived';
+    final cacheKey =
+        'teacher_students_${teacherId}_${subjectId ?? "all"}_$includeArchived';
     final cached = AppDataCache.instance.getCached<List<UserModel>>(
       cacheKey,
       (json) => (json as List)
@@ -53,7 +87,8 @@ class SupabaseStudentRepository implements StudentRepository {
     if (cached != null && AppDataCache.instance.isFresh(cacheKey)) {
       return cached;
     }
-    // 1. Fetch live cloud students first to ensure real registered email and Supabase status
+
+    // 1. Fetch live cloud students first to ensure real registered email, RFID UID, and Supabase status
     try {
       final cloudStudents = await _syncStudentsFromCloud(
         teacherId: teacherId,
@@ -61,10 +96,12 @@ class SupabaseStudentRepository implements StudentRepository {
         includeArchived: includeArchived,
       );
       if (cloudStudents.isNotEmpty || includeArchived) {
-        unawaited(AppDataCache.instance.setCache(
-          cacheKey,
-          cloudStudents.map((u) => u.toJson()).toList(),
-        ));
+        unawaited(
+          AppDataCache.instance.setCache(
+            cacheKey,
+            cloudStudents.map((u) => u.toJson()).toList(),
+          ),
+        );
         onFreshData?.call(cloudStudents);
         return cloudStudents;
       }
@@ -75,46 +112,96 @@ class SupabaseStudentRepository implements StudentRepository {
     }
 
     // 2. FAST LOCAL DRIFT SQLITE READ (offline fallback)
-    try {
-      final List<LocalStudent> localStudents;
-      if (subjectId != null && subjectId.isNotEmpty) {
-        localStudents = await AppDatabase.instance.getStudentsForOffering(
-          subjectId,
-        );
-      } else {
-        localStudents = await AppDatabase.instance.getAllStudents();
-      }
-
-      if (localStudents.isNotEmpty) {
-        return localStudents.map((st) {
-          final fullName = [
-            st.firstName,
-            st.middleName,
-            st.lastName,
-          ].where((name) => name != null && name.trim().isNotEmpty).join(' ');
-
-          return UserModel(
-            id: st.studentId,
-            username: st.lrn ?? '',
-            fullName: fullName.isEmpty ? 'Student' : fullName,
-            role: UserRole.student,
-            email: '',
-            firstName: st.firstName,
-            middleName: st.middleName,
-            lastName: st.lastName,
-            gender: st.gender,
-            lrn: st.lrn,
-            departmentOrSection: st.departmentOrSection,
-            status: AccountStatus.active,
-            isArchived: false,
+    if (!kIsWeb) {
+      try {
+        final List<LocalStudent> localStudents;
+        if (subjectId != null && subjectId.isNotEmpty) {
+          localStudents = await AppDatabase.instance.getStudentsForOffering(
+            subjectId,
           );
-        }).toList();
+        } else {
+          localStudents = await AppDatabase.instance.getAllStudents();
+        }
+
+        if (localStudents.isNotEmpty) {
+          final localRfidMap = _readLocalRfidOverrides();
+          return localStudents.map((st) {
+            final fullName = [
+              st.firstName,
+              st.middleName,
+              st.lastName,
+            ].where((name) => name != null && name.trim().isNotEmpty).join(' ');
+
+            final resolvedRfid = (st.rfidUid != null &&
+                    st.rfidUid!.trim().isNotEmpty)
+                ? st.rfidUid!.trim().toUpperCase()
+                : localRfidMap[st.studentId];
+
+            return UserModel(
+              id: st.studentId,
+              studentId: st.studentId,
+              username: st.lrn ?? '',
+              fullName: fullName.isEmpty ? 'Student' : fullName,
+              role: UserRole.student,
+              email: '',
+              firstName: st.firstName,
+              middleName: st.middleName,
+              lastName: st.lastName,
+              gender: st.gender,
+              lrn: st.lrn,
+              rfidUid: resolvedRfid,
+              departmentOrSection: st.departmentOrSection,
+              status: AccountStatus.active,
+              isArchived: false,
+            );
+          }).toList();
+        }
+      } catch (e) {
+        debugPrint('Drift local students read notice: $e');
       }
-    } catch (e) {
-      debugPrint('Drift local students read notice: $e');
     }
 
+    if (cached != null) return cached;
     return [];
+  }
+
+  Future<List<dynamic>> _queryTeacherEnrollments({
+    required String teacherId,
+    required String? subjectId,
+    required bool includeArchived,
+    required bool includeRfidColumn,
+  }) async {
+    final profileColumns = includeRfidColumn
+        ? 'student_id, lrn, rfid_uid, first_name, middle_name, last_name, gender, birthday, users ( email, is_archived )'
+        : 'student_id, lrn, first_name, middle_name, last_name, gender, birthday, users ( email, is_archived )';
+
+    var query = _client
+        .from('student_enrollments')
+        .select('''
+          id, status, created_at,
+          student_profiles!inner (
+            $profileColumns
+          ),
+          subject_offerings!inner (
+            id, teacher_id,
+            subjects ( id, subject_name ),
+            sections ( id, section_name )
+          )
+        ''')
+        .eq('subject_offerings.teacher_id', teacherId);
+
+    if (subjectId != null && subjectId.isNotEmpty) {
+      query = query.eq('subject_offerings.id', subjectId);
+    }
+
+    if (!includeArchived) {
+      query = query.ilike('status', 'enrolled');
+    } else {
+      query = query.ilike('status', 'archived');
+    }
+
+    final res = await query;
+    return res as List<dynamic>;
   }
 
   Future<List<UserModel>> _syncStudentsFromCloud({
@@ -123,39 +210,38 @@ class SupabaseStudentRepository implements StudentRepository {
     bool includeArchived = false,
   }) async {
     try {
-      var query = _client
-          .from('student_enrollments')
-          .select('''
-            id, status, created_at,
-            student_profiles!inner ( 
-              student_id, lrn, first_name, middle_name, last_name, gender, birthday,
-              users ( email, is_archived )
-            ),
-            subject_offerings!inner ( 
-              id, teacher_id,
-              subjects ( id, subject_name ),
-              sections ( id, section_name )
-            )
-          ''')
-          .eq('subject_offerings.teacher_id', teacherId);
-
-      if (subjectId != null) {
-        query = query.eq('subject_offerings.id', subjectId);
+      bool cloudHasRfidColumn = true;
+      List<dynamic> response;
+      try {
+        response = await _queryTeacherEnrollments(
+          teacherId: teacherId,
+          subjectId: subjectId,
+          includeArchived: includeArchived,
+          includeRfidColumn: true,
+        );
+      } catch (err) {
+        if (_isMissingRfidColumnError(err)) {
+          cloudHasRfidColumn = false;
+          response = await _queryTeacherEnrollments(
+            teacherId: teacherId,
+            subjectId: subjectId,
+            includeArchived: includeArchived,
+            includeRfidColumn: false,
+          );
+        } else {
+          rethrow;
+        }
       }
 
-      if (!includeArchived) {
-        query = query.ilike('status', 'enrolled');
-      } else {
-        query = query.ilike('status', 'archived');
-      }
-
-      final response = await query;
-      if ((response as List).isEmpty) {
+      if (response.isEmpty) {
         return [];
       }
 
+      final localRfidFallback =
+          cloudHasRfidColumn ? const <String, String>{} : _readLocalRfidOverrides();
+
       // Collect student IDs to query student_settings for authoritative status
-      final studentIds = (response as List)
+      final studentIds = response
           .map(
             (r) => (r['student_profiles'] as Map?)?['student_id']?.toString(),
           )
@@ -182,27 +268,46 @@ class SupabaseStudentRepository implements StudentRepository {
         }
       }
 
-      final mapped = (response as List).map<UserModel>((row) {
+      final enrollmentCompanions = <LocalEnrollmentsCompanion>[];
+
+      final mapped = response.map<UserModel>((row) {
         final profile = row['student_profiles'] as Map<String, dynamic>? ?? {};
         final offering =
             row['subject_offerings'] as Map<String, dynamic>? ?? {};
         final sub = offering['subjects'] as Map<String, dynamic>? ?? {};
         final sec = offering['sections'] as Map<String, dynamic>? ?? {};
 
-        final fullName =
-            [
-                  profile['first_name'],
-                  profile['middle_name'],
-                  profile['last_name'],
-                ]
-                .where(
-                  (name) => name != null && name.toString().trim().isNotEmpty,
-                )
-                .join(' ');
+        final fullName = [
+          profile['first_name'],
+          profile['middle_name'],
+          profile['last_name'],
+        ]
+            .where((name) => name != null && name.toString().trim().isNotEmpty)
+            .join(' ');
 
         final usersData = profile['users'] as Map<String, dynamic>? ?? {};
         final studentId = profile['student_id']?.toString() ?? '';
         final realEmail = usersData['email']?.toString() ?? '';
+
+        final rawRfid = profile['rfid_uid']?.toString().trim();
+        final resolvedRfidUid = (rawRfid != null && rawRfid.isNotEmpty)
+            ? rawRfid.toUpperCase()
+            : localRfidFallback[studentId];
+
+        final enrollmentId = row['id']?.toString() ?? '';
+        final offeringId = offering['id']?.toString() ?? '';
+        if (enrollmentId.isNotEmpty &&
+            studentId.isNotEmpty &&
+            offeringId.isNotEmpty) {
+          enrollmentCompanions.add(
+            LocalEnrollmentsCompanion.insert(
+              id: enrollmentId,
+              studentId: studentId,
+              subjectOfferingId: offeringId,
+              status: Value(row['status']?.toString() ?? 'enrolled'),
+            ),
+          );
+        }
 
         final enrollmentStatus = row['status']?.toString().toLowerCase();
         final isEnrollmentArchived = enrollmentStatus == 'archived';
@@ -213,12 +318,11 @@ class SupabaseStudentRepository implements StudentRepository {
         if (isArchived) {
           accountStatus = AccountStatus.archived;
         } else {
-          final rawStatus =
-              (studentSettingsStatus[studentId] ??
-                      usersData['status']?.toString() ??
-                      'pending_first_login')
-                  .toLowerCase()
-                  .replaceAll(RegExp(r'[\s_-]'), '');
+          final rawStatus = (studentSettingsStatus[studentId] ??
+                  usersData['status']?.toString() ??
+                  'pending_first_login')
+              .toLowerCase()
+              .replaceAll(RegExp(r'[\s_-]'), '');
           if (rawStatus == 'active') {
             accountStatus = AccountStatus.active;
           } else if (rawStatus == 'pending' ||
@@ -233,6 +337,7 @@ class SupabaseStudentRepository implements StudentRepository {
 
         return UserModel(
           id: studentId,
+          studentId: studentId,
           username: profile['lrn']?.toString() ?? realEmail,
           fullName: fullName.isEmpty ? 'Student' : fullName,
           role: UserRole.student,
@@ -245,6 +350,7 @@ class SupabaseStudentRepository implements StudentRepository {
               ? DateTime.tryParse(profile['birthday'].toString())
               : null,
           lrn: profile['lrn']?.toString(),
+          rfidUid: resolvedRfidUid,
           departmentOrSection: sec['section_name']?.toString(),
           enrolledSubjectId:
               sub['id']?.toString() ?? offering['id']?.toString(),
@@ -254,89 +360,122 @@ class SupabaseStudentRepository implements StudentRepository {
         );
       }).toList();
 
-      // Batch persist to Drift SQLite safely without blocking data return on web
-      try {
-        final companions = mapped
-            .map(
-              (u) => LocalStudentsCompanion.insert(
-                studentId: u.id,
-                lrn: Value(u.lrn),
-                firstName: u.firstName ?? 'Student',
-                middleName: Value(u.middleName),
-                lastName: u.lastName ?? '',
-                gender: Value(u.gender ?? 'unspecified'),
-                departmentOrSection: Value(u.departmentOrSection),
-              ),
-            )
-            .toList();
+      // Batch persist to Drift SQLite safely on native platforms
+      if (!kIsWeb) {
+        try {
+          final companions = mapped
+              .map(
+                (u) => LocalStudentsCompanion.insert(
+                  studentId: u.id,
+                  lrn: Value(u.lrn),
+                  rfidUid: cloudHasRfidColumn
+                      ? Value(u.rfidUid)
+                      : (u.rfidUid != null
+                            ? Value(u.rfidUid)
+                            : const Value.absent()),
+                  firstName: u.firstName ?? 'Student',
+                  middleName: Value(u.middleName),
+                  lastName: u.lastName ?? '',
+                  gender: Value(u.gender ?? 'unspecified'),
+                  departmentOrSection: Value(u.departmentOrSection),
+                ),
+              )
+              .toList();
 
-        await AppDatabase.instance.batch((b) {
-          b.insertAllOnConflictUpdate(
-            AppDatabase.instance.localStudents,
-            companions,
-          );
-        });
-      } catch (dbErr) {
-        debugPrint('Drift local students save notice on web: $dbErr');
+          await AppDatabase.instance.upsertStudents(companions);
+          if (enrollmentCompanions.isNotEmpty) {
+            await AppDatabase.instance.upsertEnrollments(enrollmentCompanions);
+          }
+        } catch (dbErr) {
+          debugPrint('Drift local students save notice: $dbErr');
+        }
       }
 
       return mapped;
     } catch (e) {
       debugPrint('Error getting students for teacher: $e');
-      return [];
+      rethrow;
     }
   }
 
   @override
   Future<UserModel?> getStudentById(String id) async {
     try {
-      final row = await _client
-          .from('users')
-          .select('''
-            id,
-            email,
-            first_name,
-            middle_name,
-            last_name,
-            role,
-            account_status,
-            is_archived,
-            student_profiles ( lrn, gender, birthdate, grade_level )
-          ''')
-          .eq('id', id)
-          .maybeSingle();
-      if (row == null) return null;
-      final profile = row['student_profiles'] is Map
-          ? row['student_profiles'] as Map
-          : (row['student_profiles'] is List &&
-                    (row['student_profiles'] as List).isNotEmpty
-                ? (row['student_profiles'] as List).first as Map
-                : const <String, dynamic>{});
-      final fName = row['first_name']?.toString() ?? '';
-      final mName = row['middle_name']?.toString();
-      final lName = row['last_name']?.toString() ?? '';
+      Map<String, dynamic>? profileRow;
+      try {
+        profileRow = await _client
+            .from('student_profiles')
+            .select('''
+              student_id,
+              lrn,
+              rfid_uid,
+              first_name,
+              middle_name,
+              last_name,
+              gender,
+              birthday,
+              users ( id, email, role, is_archived )
+            ''')
+            .eq('student_id', id)
+            .maybeSingle();
+      } catch (err) {
+        if (_isMissingRfidColumnError(err)) {
+          profileRow = await _client
+              .from('student_profiles')
+              .select('''
+                student_id,
+                lrn,
+                first_name,
+                middle_name,
+                last_name,
+                gender,
+                birthday,
+                users ( id, email, role, is_archived )
+              ''')
+              .eq('student_id', id)
+              .maybeSingle();
+        } else {
+          rethrow;
+        }
+      }
+
+      if (profileRow == null) return null;
+
+      final usersData = profileRow['users'] is Map
+          ? Map<String, dynamic>.from(profileRow['users'] as Map)
+          : const <String, dynamic>{};
+
+      final fName = profileRow['first_name']?.toString() ?? '';
+      final mName = profileRow['middle_name']?.toString();
+      final lName = profileRow['last_name']?.toString() ?? '';
+      final rawRfid = profileRow['rfid_uid']?.toString().trim();
+      final localRfid = _readLocalRfidOverrides()[id];
+
       return UserModel(
-        id: row['id'].toString(),
-        username: row['email']?.toString() ?? '',
+        id: profileRow['student_id'].toString(),
+        studentId: profileRow['student_id'].toString(),
+        username: profileRow['lrn']?.toString() ??
+            usersData['email']?.toString() ??
+            '',
         fullName: [
           fName,
           mName,
           lName,
-        ].where((s) => s != null && s.isNotEmpty).join(' '),
-        email: row['email']?.toString() ?? '',
+        ].where((s) => s != null && s.trim().isNotEmpty).join(' '),
+        email: usersData['email']?.toString() ?? '',
         role: UserRole.student,
         firstName: fName,
         middleName: mName,
         lastName: lName,
-        lrn: profile['lrn']?.toString(),
-        gender: profile['gender']?.toString(),
-        birthday: profile['birthdate'] != null
-            ? DateTime.tryParse(profile['birthdate'].toString())
+        lrn: profileRow['lrn']?.toString(),
+        rfidUid: (rawRfid != null && rawRfid.isNotEmpty)
+            ? rawRfid.toUpperCase()
+            : localRfid,
+        gender: profileRow['gender']?.toString(),
+        birthday: profileRow['birthday'] != null
+            ? DateTime.tryParse(profileRow['birthday'].toString())
             : null,
-        gradeLevel: profile['grade_level'] != null
-            ? 'Grade ${profile['grade_level']}'
-            : null,
-        isArchived: row['is_archived'] == true,
+        isArchived: usersData['is_archived'] == true,
       );
     } catch (e) {
       debugPrint('Error fetching student by id $id: $e');
@@ -351,11 +490,11 @@ class SupabaseStudentRepository implements StudentRepository {
     required String lastName,
     required DateTime birthday,
     required String email,
-    required String studentId, // Using LRN as studentId passed here
+    required String studentId,
     required String gender,
     required String contactNumber,
   }) async {
-    return null; // Implemented inside add logic
+    return null;
   }
 
   Future<StudentEnrollmentResult> enrollStudent({
@@ -373,9 +512,9 @@ class SupabaseStudentRepository implements StudentRepository {
     final bdayStr =
         '${birthday.year.toString().padLeft(4, '0')}-${birthday.month.toString().padLeft(2, '0')}-${birthday.day.toString().padLeft(2, '0')}';
     final cleanLastName = lastName.toLowerCase().replaceAll(
-      RegExp(r'[^a-z0-9]'),
-      '',
-    );
+          RegExp(r'[^a-z0-9]'),
+          '',
+        );
     final tempPassword =
         '$cleanLastName${birthday.year}${birthday.month.toString().padLeft(2, '0')}${birthday.day.toString().padLeft(2, '0')}';
     final studentFullName = [
@@ -386,12 +525,26 @@ class SupabaseStudentRepository implements StudentRepository {
 
     // 0. Check if student already exists globally by LRN (ClassRealm Cross-Teacher Reuse)
     String? existingStudentId;
+    String? existingRfidUid;
     try {
-      final existingProfile = await _client
-          .from('student_profiles')
-          .select('student_id, first_name, last_name, lrn')
-          .eq('lrn', lrn)
-          .maybeSingle();
+      Map<String, dynamic>? existingProfile;
+      try {
+        existingProfile = await _client
+            .from('student_profiles')
+            .select('student_id, first_name, last_name, lrn, rfid_uid')
+            .eq('lrn', lrn)
+            .maybeSingle();
+      } catch (err) {
+        if (_isMissingRfidColumnError(err)) {
+          existingProfile = await _client
+              .from('student_profiles')
+              .select('student_id, first_name, last_name, lrn')
+              .eq('lrn', lrn)
+              .maybeSingle();
+        } else {
+          rethrow;
+        }
+      }
 
       if (existingProfile != null && existingProfile['student_id'] != null) {
         final existingFirst = (existingProfile['first_name'] ?? '')
@@ -418,6 +571,10 @@ class SupabaseStudentRepository implements StudentRepository {
         }
 
         existingStudentId = existingProfile['student_id'].toString();
+        final rawRfid = existingProfile['rfid_uid']?.toString().trim();
+        if (rawRfid != null && rawRfid.isNotEmpty) {
+          existingRfidUid = rawRfid.toUpperCase();
+        }
       }
     } catch (e) {
       if (e.toString().contains('LRN Conflict')) rethrow;
@@ -437,23 +594,27 @@ class SupabaseStudentRepository implements StudentRepository {
       }
 
       // Persist locally to Drift SQLite
-      try {
-        await AppDatabase.instance
-            .into(AppDatabase.instance.localStudents)
-            .insertOnConflictUpdate(
-              LocalStudentsCompanion.insert(
-                studentId: existingStudentId,
-                lrn: Value(lrn),
-                firstName: firstName,
-                middleName: Value(middleName),
-                lastName: lastName,
-                gender: Value(gender),
-              ),
-            );
-      } catch (_) {}
+      if (!kIsWeb) {
+        try {
+          await AppDatabase.instance.upsertStudents([
+            LocalStudentsCompanion.insert(
+              studentId: existingStudentId,
+              lrn: Value(lrn),
+              rfidUid: existingRfidUid != null
+                  ? Value(existingRfidUid)
+                  : const Value.absent(),
+              firstName: firstName,
+              middleName: Value(middleName),
+              lastName: lastName,
+              gender: Value(gender),
+            ),
+          ]);
+        } catch (_) {}
+      }
 
       AppDataCache.instance.invalidatePrefix('teacher_students_');
-    return StudentEnrollmentResult(
+      AppDataCache.instance.invalidatePrefix('attendance_');
+      return StudentEnrollmentResult(
         studentId: existingStudentId,
         createdAccount: false,
         tempPassword: null,
@@ -505,9 +666,6 @@ class SupabaseStudentRepository implements StudentRepository {
       });
     } catch (e) {
       debugPrint('Pure Dart enroll notice: $e');
-      // Concurrency / Race Condition Handler:
-      // If another teacher registered this student at the exact same millisecond,
-      // re-query student_profiles by LRN to recover their global student_id and enroll.
       try {
         final doubleCheck = await _client
             .from('student_profiles')
@@ -521,6 +679,8 @@ class SupabaseStudentRepository implements StudentRepository {
             'subject_offering_id': subjectId,
             'status': 'enrolled',
           });
+          AppDataCache.instance.invalidatePrefix('teacher_students_');
+          AppDataCache.instance.invalidatePrefix('attendance_');
           return StudentEnrollmentResult(
             studentId: winnerId,
             createdAccount: false,
@@ -533,20 +693,20 @@ class SupabaseStudentRepository implements StudentRepository {
     }
 
     // 2. Persist locally to Drift SQLite
-    try {
-      await AppDatabase.instance
-          .into(AppDatabase.instance.localStudents)
-          .insertOnConflictUpdate(
-            LocalStudentsCompanion.insert(
-              studentId: studentId,
-              lrn: Value(lrn),
-              firstName: firstName,
-              middleName: Value(middleName),
-              lastName: lastName,
-              gender: Value(gender),
-            ),
-          );
-    } catch (_) {}
+    if (!kIsWeb) {
+      try {
+        await AppDatabase.instance.upsertStudents([
+          LocalStudentsCompanion.insert(
+            studentId: studentId,
+            lrn: Value(lrn),
+            firstName: firstName,
+            middleName: Value(middleName),
+            lastName: lastName,
+            gender: Value(gender),
+          ),
+        ]);
+      } catch (_) {}
+    }
 
     // Send welcome email with student credentials if not skipped (e.g. In bulk queues)
     if (!skipEmail) {
@@ -562,6 +722,9 @@ class SupabaseStudentRepository implements StudentRepository {
         );
       }
     }
+
+    AppDataCache.instance.invalidatePrefix('teacher_students_');
+    AppDataCache.instance.invalidatePrefix('attendance_');
 
     return StudentEnrollmentResult(
       studentId: studentId,
@@ -609,6 +772,25 @@ class SupabaseStudentRepository implements StudentRepository {
     } catch (e) {
       debugPrint('Pure Dart student update notice: $e');
     }
+
+    if (!kIsWeb) {
+      try {
+        await (AppDatabase.instance.update(AppDatabase.instance.localStudents)
+              ..where((t) => t.studentId.equals(id)))
+            .write(
+          LocalStudentsCompanion(
+            lrn: Value(studentId),
+            firstName: Value(firstName),
+            middleName: Value(middleName.isEmpty ? null : middleName),
+            lastName: Value(lastName),
+            gender: Value(gender),
+          ),
+        );
+      } catch (_) {}
+    }
+
+    AppDataCache.instance.invalidatePrefix('teacher_students_');
+    AppDataCache.instance.invalidatePrefix('attendance_');
   }
 
   @override
@@ -640,8 +822,7 @@ class SupabaseStudentRepository implements StudentRepository {
               .eq('student_id', id)
               .maybeSingle();
           final currentStatus = cur?['status']?.toString();
-          final statusToSave =
-              (currentStatus != null &&
+          final statusToSave = (currentStatus != null &&
                   currentStatus.isNotEmpty &&
                   currentStatus != 'archived')
               ? currentStatus
@@ -663,6 +844,7 @@ class SupabaseStudentRepository implements StudentRepository {
       }
     }
     AppDataCache.instance.invalidatePrefix('teacher_students_');
+    AppDataCache.instance.invalidatePrefix('attendance_');
   }
 
   @override
@@ -689,11 +871,10 @@ class SupabaseStudentRepository implements StudentRepository {
             .eq('student_id', id)
             .maybeSingle();
         final prev = cur?['previous_status']?.toString();
-        // Restore exact status before archive, default to active, NEVER pending_first_login unless it was genuinely pending
         final targetStatus =
             (prev != null && prev.isNotEmpty && prev != 'archived')
-            ? prev
-            : 'active';
+                ? prev
+                : 'active';
 
         await _client
             .from('student_settings')
@@ -710,6 +891,7 @@ class SupabaseStudentRepository implements StudentRepository {
       debugPrint('Error restoring student account: $e');
     }
     AppDataCache.instance.invalidatePrefix('teacher_students_');
+    AppDataCache.instance.invalidatePrefix('attendance_');
   }
 
   @override
@@ -721,28 +903,26 @@ class SupabaseStudentRepository implements StudentRepository {
   @override
   Future<void> permanentlyDeleteStudent(String id, [String? subjectId]) async {
     try {
-      // 1. Delete enrollment from specified subject offering or all enrollments
       if (subjectId != null) {
         await _client.from('student_enrollments').delete().match({
           'student_id': id,
           'subject_offering_id': subjectId,
         });
 
-        // Check if student still has remaining enrollments in any other subject
         final remaining = await _client
             .from('student_enrollments')
             .select('id')
             .eq('student_id', id);
 
         if (remaining.isNotEmpty) {
-          // Student is still enrolled in other classes! Do not delete root profile or Auth account.
+          AppDataCache.instance.invalidatePrefix('teacher_students_');
+          AppDataCache.instance.invalidatePrefix('attendance_');
           return;
         }
       } else {
         await _client.from('student_enrollments').delete().eq('student_id', id);
       }
 
-      // 2. Unlink parents before deleting student record
       try {
         await _client
             .from('parent_student_links')
@@ -750,7 +930,6 @@ class SupabaseStudentRepository implements StudentRepository {
             .eq('student_id', id);
       } catch (_) {}
 
-      // 3. Delete student settings, profile, and users record
       try {
         await _client.from('student_settings').delete().eq('student_id', id);
       } catch (_) {}
@@ -761,14 +940,13 @@ class SupabaseStudentRepository implements StudentRepository {
         await _client.from('users').delete().eq('id', id);
       } catch (_) {}
 
-      // 4. Delete student from Firebase Authentication
       try {
         await FirebaseAuthAdminService.deleteUser(uid: id);
       } catch (fbErr) {
         debugPrint('Firebase Auth deletion notice for student $id: $fbErr');
       }
-
-      // Note: Linked parents are unlinked from this student above, but their parent accounts are preserved.
+      AppDataCache.instance.invalidatePrefix('teacher_students_');
+      AppDataCache.instance.invalidatePrefix('attendance_');
     } catch (e) {
       debugPrint('Error permanently deleting student $id: $e');
     }

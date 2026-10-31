@@ -52,6 +52,7 @@ class AuthResponsiveScaffold extends StatelessWidget {
       hintText: hintText,
       labelText: labelText,
       errorText: errorText,
+      errorMaxLines: 4,
       errorStyle: errorStyle ??
           const TextStyle(
             color: Color(0xFFDC2626),
@@ -204,7 +205,6 @@ class AuthResponsiveScaffold extends StatelessWidget {
         builder: (context) {
           final size = MediaQuery.sizeOf(context);
           final isDesktop = size.width >= 960;
-          final isTablet = size.width >= 640 && size.width < 960;
 
           return Scaffold(
             body: Stack(

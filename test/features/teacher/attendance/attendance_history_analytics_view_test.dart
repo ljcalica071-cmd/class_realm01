@@ -5,7 +5,7 @@ import 'package:class_realm/models/attendance_workspace_models.dart';
 import 'package:class_realm/data/repositories/attendance_repository.dart';
 import 'package:class_realm/features/teacher/sub_features/attendance/widgets/attendance_history_analytics_view.dart';
 
-class MockAttendanceRepository implements AttendanceRepository {
+class MockAttendanceRepository extends AttendanceRepository {
   AttendanceAnalyticsSummary? analyticsSummary;
   AttendancePage<AttendanceWorkspaceRecord>? historyPage;
   bool throwAnalyticsError = false;
@@ -106,6 +106,7 @@ class MockAttendanceRepository implements AttendanceRepository {
     required String subjectOfferingId,
     required DateTime date,
     required List<AttendanceWorkspaceRecord> records,
+    List<String>? deletedStudentIds,
   }) async => throw UnimplementedError();
 
   @override
@@ -147,6 +148,9 @@ void main() {
     });
 
     testWidgets('renders KPI cards, at-risk list, and paginated logs', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1280, 1000));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
@@ -162,21 +166,25 @@ void main() {
 
       await tester.pumpAndSettle();
 
-      // Check KPI values
+      // Check KPI values (6 redesigned KPI cards)
       expect(find.text('85.0%'), findsOneWidget); // Presence Rate
-      expect(find.text('5'), findsOneWidget); // Absences & Excuses
-      expect(find.text('1'), findsWidgets); // Warning count
+      expect(find.text('15'), findsWidgets); // Present
+      expect(find.text('3'), findsWidgets); // Absent
+      expect(find.text('1'), findsWidgets); // Early Warning count
 
       // Check At-Risk student display
       expect(find.text('Dela Cruz, Juan H.'), findsWidgets);
-      expect(find.text('3 Absences'), findsOneWidget);
+      expect(find.textContaining('3 Absences'), findsWidgets);
 
       // Check log row
       expect(find.text('rec-1'), findsNothing); // internal id not raw text
-      expect(find.text('manual'), findsOneWidget);
+      expect(find.text('Manual'), findsWidgets);
     });
 
     testWidgets('handles custom date range validation when start is after end', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1280, 1000));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
@@ -198,11 +206,14 @@ void main() {
       await tester.tap(customTab);
       await tester.pumpAndSettle();
 
-      expect(find.text('Start Date'), findsOneWidget);
-      expect(find.text('End Date'), findsOneWidget);
+      expect(find.textContaining('Start Date:'), findsOneWidget);
+      expect(find.textContaining('End Date:'), findsOneWidget);
     });
 
     testWidgets('handles correction dialog requiring a reason and updates record', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1280, 1000));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
@@ -221,26 +232,35 @@ void main() {
       // Tap Correct button
       final correctBtn = find.text('Correct');
       expect(correctBtn, findsOneWidget);
+      await tester.ensureVisible(correctBtn);
       await tester.tap(correctBtn);
       await tester.pumpAndSettle();
 
       // Dialog should be visible
       expect(find.text('Correct Attendance Record'), findsOneWidget);
-      expect(find.text('Reason is required'), findsNothing);
+      expect(
+        find.text('Please provide a reason for this attendance correction.'),
+        findsNothing,
+      );
 
-      // Try submitting without reason: Submit button is disabled or warns
-      final submitBtn = find.widgetWithText(ElevatedButton, 'Submit Correction');
+      // Try submitting without reason: shows inline validation error & zero SnackBars
+      final submitBtn = find.text('Save Correction');
       expect(submitBtn, findsOneWidget);
-      expect(tester.widget<ElevatedButton>(submitBtn).enabled, isFalse);
+      await tester.tap(submitBtn);
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('Please provide a reason for this attendance correction.'),
+        findsOneWidget,
+      );
+      expect(find.byType(SnackBar), findsNothing);
 
       // Enter a reason
       await tester.enterText(
-        find.byType(TextField),
+        find.byKey(const ValueKey('correction_reason_input')),
         'Medical certificate presented',
       );
       await tester.pumpAndSettle();
-
-      expect(tester.widget<ElevatedButton>(submitBtn).enabled, isTrue);
 
       // Tap submit
       await tester.tap(submitBtn);

@@ -1,0 +1,463 @@
+[
+  {
+    "body_idx": 0,
+    "type": "p",
+    "style": "4",
+    "jc": "center",
+    "ind": {
+      "left": "0"
+    },
+    "page_break": false,
+    "text": "INTEGRATED SENIOR HIGH SCHOOL ATTENDANCE, ACTIVITY AND REQUIREMENT TRACKING, TEACHER LESSON PLANNING, AND LEARNING MATERIALS MANAGEMENT SYSTEM"
+  },
+  {
+    "body_idx": 1,
+    "type": "p",
+    "style": "Normal",
+    "jc": null,
+    "ind": null,
+    "page_break": false,
+    "text": ""
+  },
+  {
+    "body_idx": 2,
+    "type": "p",
+    "style": "Normal",
+    "jc": null,
+    "ind": null,
+    "page_break": false,
+    "text": ""
+  },
+  {
+    "body_idx": 3,
+    "type": "p",
+    "style": "Normal",
+    "jc": null,
+    "ind": null,
+    "page_break": false,
+    "text": ""
+  },
+  {
+    "body_idx": 4,
+    "type": "p",
+    "style": "Normal",
+    "jc": null,
+    "ind": null,
+    "page_break": false,
+    "text": ""
+  },
+  {
+    "body_idx": 5,
+    "type": "p",
+    "style": "Normal",
+    "jc": null,
+    "ind": null,
+    "page_break": false,
+    "text": ""
+  },
+  {
+    "body_idx": 6,
+    "type": "p",
+    "style": "Normal",
+    "jc": "center",
+    "ind": null,
+    "page_break": false,
+    "text": "A Capstone Project to the Faculty of the"
+  },
+  {
+    "body_idx": 7,
+    "type": "p",
+    "style": "Normal",
+    "jc": "center",
+    "ind": null,
+    "page_break": false,
+    "text": "College of Computing Studies"
+  },
+  {
+    "body_idx": 8,
+    "type": "p",
+    "style": "Normal",
+    "jc": "center",
+    "ind": null,
+    "page_break": false,
+    "text": "Laguna University"
+  },
+  {
+    "body_idx": 9,
+    "type": "p",
+    "style": "Normal",
+    "jc": null,
+    "ind": null,
+    "page_break": false,
+    "text": ""
+  },
+  {
+    "body_idx": 10,
+    "type": "p",
+    "style": "Normal",
+    "jc": null,
+    "ind": null,
+    "page_break": false,
+    "text": ""
+  },
+  {
+    "body_idx": 11,
+    "type": "p",
+    "style": "Normal",
+    "jc": null,
+    "ind": null,
+    "page_break": false,
+    "text": ""
+  },
+  {
+    "body_idx": 12,
+    "type": "p",
+    "style": "Normal",
+    "jc": null,
+    "ind": null,
+    "page_break": false,
+    "text": ""
+  },
+  {
+    "body_idx": 13,
+    "type": "p",
+    "style": "Normal",
+    "jc": "center",
+    "ind": null,
+    "page_break": false,
+    "text": "In Partial Fulfillment of the Requirements for the"
+  },
+  {
+    "body_idx": 14,
+    "type": "p",
+    "style": "Normal",
+    "jc": "center",
+    "ind": null,
+    "page_break": false,
+    "text": "Degree of Bachelor of Science in"
+  },
+  {
+    "body_idx": 15,
+    "type": "p",
+    "style": "Normal",
+    "jc": "center",
+    "ind": null,
+    "page_break": false,
+    "text": "Information Technology"
+  },
+  {
+    "body_idx": 16,
+    "type": "p",
+    "style": "Normal",
+    "jc": null,
+    "ind": null,
+    "page_break": false,
+    "text": ""
+  },
+  {
+    "body_idx": 17,
+    "type": "p",
+    "style": "Normal",
+    "jc": null,
+    "ind": null,
+    "page_break": false,
+    "text": ""
+  },
+  {
+    "body_idx": 18,
+    "type": "p",
+    "style": "Normal",
+    "jc": null,
+    "ind": null,
+    "page_break": false,
+    "text": ""
+  },
+  {
+    "body_idx": 19,
+    "type": "p",
+    "style": "Normal",
+    "jc": null,
+    "ind": null,
+    "page_break": false,
+    "text": ""
+  },
+  {
+    "body_idx": 20,
+    "type": "p",
+    "style": "Normal",
+    "jc": "center",
+    "ind": null,
+    "page_break": false,
+    "text": "Calica, Ljay H."
+  },
+  {
+    "body_idx": 21,
+    "type": "p",
+    "style": "Normal",
+    "jc": "center",
+    "ind": null,
+    "page_break": false,
+    "text": "San Juan, John Rex G."
+  },
+  {
+    "body_idx": 22,
+    "type": "p",
+    "style": "Normal",
+    "jc": null,
+    "ind": null,
+    "page_break": false,
+    "text": ""
+  },
+  {
+    "body_idx": 23,
+    "type": "p",
+    "style": "Normal",
+    "jc": null,
+    "ind": null,
+    "page_break": false,
+    "text": ""
+  },
+  {
+    "body_idx": 24,
+    "type": "p",
+    "style": "Normal",
+    "jc": null,
+    "ind": null,
+    "page_break": false,
+    "text": ""
+  },
+  {
+    "body_idx": 25,
+    "type": "p",
+    "style": "Normal",
+    "jc": null,
+    "ind": null,
+    "page_break": false,
+    "text": ""
+  },
+  {
+    "body_idx": 26,
+    "type": "p",
+    "style": "Normal",
+    "jc": null,
+    "ind": null,
+    "page_break": false,
+    "text": ""
+  },
+  {
+    "body_idx": 27,
+    "type": "p",
+    "style": "Normal",
+    "jc": "center",
+    "ind": null,
+    "page_break": true,
+    "text": ""
+  },
+  {
+    "body_idx": 28,
+    "type": "p",
+    "style": "Normal",
+    "jc": "center",
+    "ind": null,
+    "page_break": false,
+    "text": "CHAPTER I"
+  },
+  {
+    "body_idx": 29,
+    "type": "p",
+    "style": "Normal",
+    "jc": "center",
+    "ind": null,
+    "page_break": false,
+    "text": "INTRODUCTION"
+  },
+  {
+    "body_idx": 30,
+    "type": "p",
+    "style": "Normal",
+    "jc": null,
+    "ind": null,
+    "page_break": false,
+    "text": ""
+  },
+  {
+    "body_idx": 31,
+    "type": "p",
+    "style": "Normal",
+    "jc": "left",
+    "ind": null,
+    "page_break": false,
+    "text": ""
+  },
+  {
+    "body_idx": 32,
+    "type": "p",
+    "style": "Normal",
+    "jc": "left",
+    "ind": null,
+    "page_break": false,
+    "text": ""
+  },
+  {
+    "body_idx": 33,
+    "type": "p",
+    "style": "Normal",
+    "jc": "left",
+    "ind": null,
+    "page_break": false,
+    "text": ""
+  },
+  {
+    "body_idx": 34,
+    "type": "p",
+    "style": "Normal",
+    "jc": "left",
+    "ind": null,
+    "page_break": false,
+    "text": ""
+  },
+  {
+    "body_idx": 35,
+    "type": "p",
+    "style": "Normal",
+    "jc": "left",
+    "ind": null,
+    "page_break": false,
+    "text": ""
+  },
+  {
+    "body_idx": 36,
+    "type": "p",
+    "style": "Normal",
+    "jc": "left",
+    "ind": null,
+    "page_break": false,
+    "text": ""
+  },
+  {
+    "body_idx": 37,
+    "type": "p",
+    "style": "Normal",
+    "jc": "left",
+    "ind": null,
+    "page_break": false,
+    "text": ""
+  },
+  {
+    "body_idx": 38,
+    "type": "p",
+    "style": "Normal",
+    "jc": "left",
+    "ind": null,
+    "page_break": false,
+    "text": ""
+  },
+  {
+    "body_idx": 39,
+    "type": "p",
+    "style": "Normal",
+    "jc": "left",
+    "ind": null,
+    "page_break": false,
+    "text": ""
+  },
+  {
+    "body_idx": 40,
+    "type": "p",
+    "style": "Normal",
+    "jc": "left",
+    "ind": null,
+    "page_break": false,
+    "text": ""
+  },
+  {
+    "body_idx": 41,
+    "type": "p",
+    "style": "Normal",
+    "jc": "left",
+    "ind": null,
+    "page_break": false,
+    "text": ""
+  },
+  {
+    "body_idx": 42,
+    "type": "p",
+    "style": "Normal",
+    "jc": "left",
+    "ind": null,
+    "page_break": false,
+    "text": ""
+  },
+  {
+    "body_idx": 43,
+    "type": "p",
+    "style": "Normal",
+    "jc": "left",
+    "ind": null,
+    "page_break": false,
+    "text": ""
+  },
+  {
+    "body_idx": 44,
+    "type": "p",
+    "style": "Normal",
+    "jc": "left",
+    "ind": null,
+    "page_break": false,
+    "text": ""
+  },
+  {
+    "body_idx": 45,
+    "type": "p",
+    "style": "Normal",
+    "jc": "left",
+    "ind": null,
+    "page_break": false,
+    "text": ""
+  },
+  {
+    "body_idx": 46,
+    "type": "p",
+    "style": "Normal",
+    "jc": "left",
+    "ind": null,
+    "page_break": false,
+    "text": ""
+  },
+  {
+    "body_idx": 47,
+    "type": "p",
+    "style": "Normal",
+    "jc": "left",
+    "ind": null,
+    "page_break": false,
+    "text": ""
+  },
+  {
+    "body_idx": 48,
+    "type": "p",
+    "style": "Normal",
+    "jc": "center",
+    "ind": null,
+    "page_break": false,
+    "text": "CHAPTER II"
+  },
+  {
+    "body_idx": 49,
+    "type": "p",
+    "style": "Normal",
+    "jc": "center",
+    "ind": null,
+    "page_break": false,
+    "text": "REVIEW OF RELATED LITERATURE AND SYSTEMS"
+  },
+  {
+    "body_idx": 50,
+    "type": "p",
+    "style": "Normal",
+    "jc": "left",
+    "ind": null,
+    "page_break": false,
+    "text": ""
+  }
+]

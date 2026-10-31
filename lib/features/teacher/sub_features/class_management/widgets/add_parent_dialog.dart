@@ -485,24 +485,11 @@ Instructions:
         Row(
           mainAxisAlignment: MainAxisAlignment.end,
           children: [
-            OutlinedButton(
-              style: OutlinedButton.styleFrom(
-                foregroundColor: Theme.of(context).colorScheme.onSurface
-                    .withValues(alpha: 0.7),
-                side: BorderSide(
-                  color: Theme.of(context).colorScheme.outline
-                      .withValues(alpha: 0.3),
-                ),
-                minimumSize: const Size(160, 44),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
+            AppSecondaryButton(
+              label: 'Cancel',
+              width: 140,
+              height: 44,
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text(
-                'Cancel',
-                style: TextStyle(fontWeight: FontWeight.w600),
-              ),
             ),
             const SizedBox(width: 12),
             AppPrimaryButton(

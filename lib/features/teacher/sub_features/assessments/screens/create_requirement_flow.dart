@@ -78,7 +78,6 @@ class _CreateRequirementFlowDialogState
   String? _selectedSubject;
   DateTime? _deadline;
   List<Map<String, dynamic>> _offerings = [];
-  bool _isLoadingOfferings = true;
 
   // New Fields for Database Modifications
   String _completionMode = 'online'; // 'online' or 'in_person'
@@ -97,10 +96,8 @@ class _CreateRequirementFlowDialogState
   bool _hasSubmitted = false;
   bool _isSubmitting = false;
   String? _fileError;
-  String? _offeringError;
   String? _deadlineError;
   String? _formSubmitError;
-  String? _columnError;
 
   // Gradebook columns already used by another active classwork for the
   // selected subject offering + category + term. These are disabled in the
@@ -133,7 +130,6 @@ class _CreateRequirementFlowDialogState
 
     if (widget.initialOfferings != null) {
       _offerings = List<Map<String, dynamic>>.from(widget.initialOfferings!);
-      _isLoadingOfferings = false;
       _initializeSelectedOffering();
       WidgetsBinding.instance.addPostFrameCallback(
         (_) => _loadOccupiedColumns(),
@@ -141,55 +137,6 @@ class _CreateRequirementFlowDialogState
     } else {
       _loadTeacherOfferings();
     }
-  }
-
-  int _parseGrade(dynamic g) {
-    if (g is int) return g;
-    return int.tryParse(g?.toString() ?? '') ?? 11;
-  }
-
-  List<String> get _availableGrades {
-    if (_offerings.isEmpty) return [];
-    final set = <String>{};
-    for (final o in _offerings) {
-      final g = o['grade_level']?.toString().trim();
-      if (g != null && g.isNotEmpty) {
-        set.add(g.startsWith('Grade') ? g : 'Grade $g');
-      }
-    }
-    final list = set.toList()..sort();
-    return list;
-  }
-
-  List<String> get _availableSubjects {
-    if (_offerings.isEmpty) return [];
-    final set = <String>{};
-    for (final o in _offerings) {
-      final g = o['grade_level']?.toString().trim();
-      final gradeLabel = g != null && g.startsWith('Grade') ? g : 'Grade $g';
-      if (_selectedGrade == null || gradeLabel == _selectedGrade) {
-        final sub = o['subject_name']?.toString().trim();
-        if (sub != null && sub.isNotEmpty) {
-          set.add(sub);
-        }
-      }
-    }
-    final list = set.toList()..sort();
-    return list;
-  }
-
-  List<Map<String, dynamic>> get _availableSections {
-    if (_offerings.isEmpty) return [];
-    return _offerings.where((o) {
-      final g = o['grade_level']?.toString().trim();
-      final gradeLabel = g != null && g.startsWith('Grade') ? g : 'Grade $g';
-      final matchesGrade =
-          _selectedGrade == null || gradeLabel == _selectedGrade;
-      final matchesSub =
-          _selectedSubject == null ||
-          o['subject_name']?.toString().trim() == _selectedSubject;
-      return matchesGrade && matchesSub;
-    }).toList();
   }
 
   String _termLabel(int term) {
@@ -316,7 +263,6 @@ class _CreateRequirementFlowDialogState
     try {
       final teacherId = AuthRepository.instance.currentUser?.id;
       if (teacherId == null) {
-        if (mounted) setState(() => _isLoadingOfferings = false);
         return;
       }
       final subjects = await SubjectRepository.instance.getTeacherSubjects(
@@ -325,12 +271,11 @@ class _CreateRequirementFlowDialogState
       if (!mounted) return;
       setState(() {
         _offerings = subjects;
-        _isLoadingOfferings = false;
-        _initializeSelectedOffering();
+          _initializeSelectedOffering();
       });
       _loadOccupiedColumns();
     } catch (_) {
-      if (mounted) setState(() => _isLoadingOfferings = false);
+      // Offerings load failed silently; empty state handles UI.
     }
   }
 
@@ -564,15 +509,7 @@ class _CreateRequirementFlowDialogState
         _gradebookColumnIndex != null &&
         !_occupiedColumns.contains(_gradebookColumnIndex);
 
-    if (!offeringValid) {
-      setState(() => _offeringError = 'Select a subject offering.');
-    } else {
-      setState(() => _offeringError = null);
-    }
-
-    // The column error is shown inline by the dropdown's own validator,
-    // so no second message is rendered under the Term field.
-    setState(() => _columnError = columnValid ? null : 'column');
+    // Inline dropdown validators render offering & column errors directly.
 
     if (_deadline == null) {
       setState(
@@ -656,7 +593,7 @@ class _CreateRequirementFlowDialogState
         gradebookColumnIndex: _gradebookColumnIndex,
       );
 
-      final savedActivity = await repo.saveActivity(
+      await repo.saveActivity(
         activity: task,
         subjectOfferingId: _selectedOfferingId!,
         fileBytes: _pickedFileBytes,
@@ -1162,7 +1099,6 @@ class _CreateRequirementFlowDialogState
                                             !_occupiedColumns.contains(val)) {
                                           setState(() {
                                             _gradebookColumnIndex = val;
-                                            _columnError = null;
                                           });
                                         }
                                       },

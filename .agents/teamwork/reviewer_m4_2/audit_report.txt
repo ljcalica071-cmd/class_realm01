@@ -1,0 +1,117 @@
+=================================================================
+AUDIT REPORT: CLASSREALM_Activities_2_and_4.docx
+=================================================================
+[INFO] File size: 2,525,444 bytes (2.41 MB)
+
+--- 1. Page Dimensions & Margins ---
+Section 1: Page 8.5" x 11.0", Margins: T=1.6", B=1.2", L=1.6", R=1.4"
+
+--- 2. Paragraphs & Typography ---
+Total paragraphs: 263
+Body paragraphs analyzed: 124
+Font issues detected: 0
+Line spacing issues detected: 101
+  Line spacing issue: p0: spacing=1.15, text='LAGUNA UNIVERSITY'
+  Line spacing issue: p2: spacing=1.15, text='BACHELOR OF SCIENCE IN INFORMA'
+  Line spacing issue: p3: spacing=1.15, text='CLASSREALM: AN INTEGRATED SENI'
+  Line spacing issue: p4: spacing=1.15, text='CONSOLIDATED CAPSTONE SYSTEM A'
+  Line spacing issue: p6: spacing=1.15, text='A Capstone Project Documentati'
+
+--- 3. Tables & XML Properties ---
+Total tables: 36
+Total rows: 442
+Rows with w:cantSplit: 442 / 442 (100.0%)
+Tables with w:tblHeader on row 0: 36 / 36 (100.0%)
+
+--- 4. Embedded Diagram Figures ---
+Total embedded image parts in package: 10
+  Image media/image1.png: 241,476 bytes (235.8 KB)
+  Image media/image2.png: 247,288 bytes (241.5 KB)
+  Image media/image3.png: 174,549 bytes (170.5 KB)
+  Image media/image4.png: 230,733 bytes (225.3 KB)
+  Image media/image5.png: 202,683 bytes (197.9 KB)
+  Image media/image6.png: 151,155 bytes (147.6 KB)
+  Image media/image7.png: 483,874 bytes (472.5 KB)
+  Image media/image8.png: 223,975 bytes (218.7 KB)
+  Image media/image9.png: 412,717 bytes (403.0 KB)
+  Image media/image10.png: 350,980 bytes (342.8 KB)
+Paragraphs containing drawing elements: 10
+
+--- 5. Captions Inspection ---
+Table captions found (58):
+  Table 1
+  Table 1 describes the operational roles and system boundaries of the seven stake
+  Table 2
+  Table 2 defines the ten core functional requirements (FR1 through FR10) that dri
+  Table 3
+  Table 3 details eight prioritized user stories (US-01 to US-08) representing the
+  Table 4
+  Table 4 outlines the functional decomposition of CLASSREALM into five major Leve
+  Table 5
+  Table 5 specifies the five persistent data stores (D1 to D5) utilized across the
+  ... total 58 table caption paragraphs
+
+Figure captions found (20):
+  Figure 1
+  Figure 1 illustrates the Context Diagram (Level 0 DFD) of CLASSREALM, depicting 
+  Figure 2
+  Figure 2 presents the Level 1 DFD Overview of CLASSREALM, decomposing the centra
+  Figure 3
+  Figure 3 illustrates the sub-process decomposition of Process 1.0 into four cons
+  Figure 4
+  Figure 4 details the operational flow of Process 2.0 across seven specialized su
+  Figure 5
+  Figure 5 delineates the architectural flow of Process 3.0 across six sub-process
+  ... total 20 figure caption paragraphs
+
+--- 6. Domain Integrity & Negative Artifact Search ---
+Total corpus word count: 12,292 words
+[FAIL] Negative classmate artifacts found: {'tuition': 2, 'optical mark': 3}
+
+Positive Domain Entity Checks:
+  [PASS] 'Karen P. Gonzaga': 9 occurrences
+  [PASS] 'Eduardo Barretto': 7 occurrences
+  [PASS] 'ESP32': 26 occurrences
+  [PASS] 'RC522': 9 occurrences
+  [PASS] 'Drift': 7 occurrences
+  [PASS] 'SQLite': 5 occurrences
+  [PASS] 'Supabase': 25 occurrences
+  [PASS] 'Firebase': 16 occurrences
+  [PASS] 'DepEd': 72 occurrences
+  [PASS] 'DO 8': 2 occurrences
+  [PASS] 'DO 15': 2 occurrences
+  [PASS] 'STEM 11-A': 3 occurrences
+  [PASS] 'Juan Dela Cruz': 5 occurrences
+  [PASS] 'Maria Dela Cruz': 1 occurrences
+  [PASS] 'General Mathematics': 4 occurrences
+  [PASS] 'Quarter 1': 3 occurrences
+  [PASS] 'Written Work': 6 occurrences
+  [PASS] 'Performance Task': 5 occurrences
+  [PASS] 'Quarterly Exam': 4 occurrences
+
+--- 7. Section Structure Verification ---
+  [PASS] ACTIVITY #2: REQUIREMENTS TO PROCESS MODELING
+  [FAIL] PART A: REQUIREMENTS ANALYSIS & STAKEHOLDER MAPPING
+  [FAIL] PART B: PROCESS MODELING & DATA FLOW DIAGRAMS
+  [FAIL] PART C: REQUIREMENTS TRACEABILITY, MODEL VERIFICATION, AND TECHNICAL NOTES
+  [PASS] ACTIVITY #4: INTEGRATED UML AND DATA MODELING
+  [FAIL] PART A: SYSTEM ARCHITECTURE & DESIGN BASIS
+  [FAIL] PART B: DATA MODELING (ENTITY-RELATIONSHIP DIAGRAM & DATA DICTIONARY)
+  [FAIL] PART C: BEHAVIORAL MODELING (USE CASE DIAGRAM & DETAILED SPECIFICATIONS)
+  [FAIL] PART D: STRUCTURAL MODELING (DOMAIN CLASS DIAGRAM & ARCHITECTURAL MAPPING)
+  [FAIL] PART E: CONCRETE RUNTIME OBJECT MODELING
+  [FAIL] PART F: MULTI-MODEL INTEGRATION, CONSISTENCY VERIFICATION, AND VALIDATION
+
+--- 8. Table Number Sequencing & Completeness ---
+Activity #2 Table Count: 7 expected, verified in data.
+Activity #4 Table Count: 29 expected, verified in data.
+Total Document Tables: 36 (7 + 29 = 36).
+
+--- 9. Figure Number Sequencing & Embeds ---
+Activity #2 Figures: Figures 1 to 6 (Level 0 Context, Level 1 Overview, Sub-procs 1.0 to 4.0).
+Activity #4 Figures: Figures 7 to 10 (ERD, Use Case Diagram, Class Diagram, Object Diagram).
+Total Document Figures: 10 diagrams embedded.
+
+=================================================================
+AUDIT COMPLETE
+=================================================================

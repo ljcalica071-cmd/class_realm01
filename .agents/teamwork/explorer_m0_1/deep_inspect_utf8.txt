@@ -1,0 +1,138 @@
+﻿================================================================================
+DEEP FORMATTING ANALYSIS: c:\Users\Admin\AndroidStudioProjects\class_realm01\Capstone-1-and-Thesis-1-Document-FORMATS-1785742696-1.docx
+================================================================================
+Style: Normal
+  Font: Arial, Size: 12.0
+  Line spacing: 1.5, Indent: 0 in, Before: 0 pt, After: 0 pt, Align: None
+  Sample: RDC MARGIN...
+
+--- SAMPLE BODY PARAGRAPHS ---
+Text (89 w): The absence of a strong online presence presents various challenges be...
+  Style: Normal, Font: Arial, Size: None
+  Line spacing: 1.5, Indent: 0.5 in, Align: JUSTIFY (3)
+  Space Before: 0, Space After: 0
+  w:spacing: line=360, lineRule=auto, before=None, after=None
+  w:ind: firstLine=720, left=None
+Text (89 w): The absence of a strong online presence presents various challenges be...
+  Style: Normal, Font: Arial, Size: None
+  Line spacing: 1.5, Indent: 0.5 in, Align: JUSTIFY (3)
+  Space Before: 0, Space After: 0
+  w:spacing: line=360, lineRule=auto, before=None, after=None
+  w:ind: firstLine=720, left=None
+Text (89 w): The absence of a strong online presence presents various challenges be...
+  Style: Normal, Font: Arial, Size: None
+  Line spacing: 1.5, Indent: 0.5 in, Align: JUSTIFY (3)
+  Space Before: 0, Space After: 0
+  w:spacing: line=360, lineRule=auto, before=None, after=None
+  w:ind: firstLine=720, left=None
+Text (89 w): The absence of a strong online presence presents various challenges be...
+  Style: Normal, Font: Arial, Size: None
+  Line spacing: 1.5, Indent: 0.5 in, Align: JUSTIFY (3)
+  Space Before: 0, Space After: 0
+  w:spacing: line=360, lineRule=auto, before=None, after=None
+  w:ind: firstLine=720, left=None
+Text (37 w): The theoretical framework functioned as a guide for the researchers to...
+  Style: Normal, Font: Arial, Size: None
+  Line spacing: 1.5, Indent: 0.5 in, Align: None
+  Space Before: 0, Space After: 0
+  w:spacing: line=360, lineRule=auto, before=None, after=None
+  w:ind: firstLine=720, left=None
+
+--- TABLE XML PROPERTIES ---
+Table 0: 35 rows, 2 cols
+  Row 0: tblHeader=False, cantSplit=False
+  Row 1: cantSplit=False
+Table 1: 34 rows, 2 cols
+  Row 0: tblHeader=False, cantSplit=False
+  Row 1: cantSplit=False
+Table 2: 4 rows, 3 cols
+  Row 0: tblHeader=False, cantSplit=False
+  Row 1: cantSplit=False
+Table 3: 4 rows, 3 cols
+  Row 0: tblHeader=False, cantSplit=False
+  Row 1: cantSplit=False
+Table 4: 13 rows, 3 cols
+  Row 0: tblHeader=False, cantSplit=False
+  Row 1: cantSplit=False
+Table 5: 4 rows, 3 cols
+  Row 0: tblHeader=False, cantSplit=False
+  Row 1: cantSplit=False
+================================================================================
+DEEP FORMATTING ANALYSIS: c:\Users\Admin\AndroidStudioProjects\class_realm01\INTEGRATED_SENIOR_HIGH_SCHOOL_ATTENDANCE_CH1_CH2_CH3.docx
+================================================================================
+Style: Normal (Web)
+  Font: Arial, Size: 12.0
+  Line spacing: None, Indent: 0 in, Before: 0 pt, After: 0 pt, Align: CENTER (1)
+  Sample: INTEGRATED SENIOR HIGH SCHOOL ATTENDANCE, ACTIVITY AND REQUIREMENT TRACKING, TEA...
+
+Style: Normal
+  Font: Arial, Size: 11.0
+  Line spacing: 1.15, Indent: 0 in, Before: 0 pt, After: 0 pt, Align: CENTER (1)
+  Sample: A Capstone Project to the Faculty of the...
+
+--- SAMPLE BODY PARAGRAPHS ---
+Text (65 w): In the contemporary Philippine basic education system, Senior High Sch...
+  Style: Normal, Font: Arial, Size: 11.0
+  Line spacing: 1.5, Indent: 0.5 in, Align: JUSTIFY (3)
+  Space Before: 0, Space After: 0
+  w:spacing: line=360, lineRule=auto, before=0, after=0
+  w:ind: firstLine=720, left=None
+Text (129 w): The institutional client for this study, Ma�am Karen P. Gonzaga, is a ...
+  Style: Normal, Font: Arial, Size: 11.0
+  Line spacing: 1.5, Indent: 0.5 in, Align: JUSTIFY (3)
+  Space Before: 0, Space After: 0
+  w:spacing: line=360, lineRule=auto, before=0, after=0
+  w:ind: firstLine=720, left=None
+Text (104 w): Parallel administrative bottlenecks compromise assessment and instruct...
+  Style: Normal, Font: Arial, Size: 11.0
+  Line spacing: 1.5, Indent: 0.5 in, Align: JUSTIFY (3)
+  Space Before: 0, Space After: 0
+  w:spacing: line=360, lineRule=auto, before=0, after=0
+  w:ind: firstLine=720, left=None
+Text (94 w): These classroom operational delays are further exacerbated by pedagogi...
+  Style: Normal, Font: Arial, Size: 11.0
+  Line spacing: 1.5, Indent: 0.5 in, Align: JUSTIFY (3)
+  Space Before: 0, Space After: 0
+  w:spacing: line=360, lineRule=auto, before=0, after=0
+  w:ind: firstLine=720, left=None
+Text (64 w): The primary purpose of this capstone research is to design, develop, a...
+  Style: Normal, Font: Arial, Size: 11.0
+  Line spacing: 1.5, Indent: 0.5 in, Align: JUSTIFY (3)
+  Space Before: 0, Space After: 0
+  w:spacing: line=360, lineRule=auto, before=0, after=0
+  w:ind: firstLine=720, left=None
+
+--- TABLE XML PROPERTIES ---
+Table 0: 11 rows, 6 cols
+  Row 0: tblHeader=True, cantSplit=True
+  Row 1: cantSplit=True
+Table 1: 7 rows, 5 cols
+  Row 0: tblHeader=True, cantSplit=True
+  Row 1: cantSplit=True
+Table 2: 5 rows, 5 cols
+  Row 0: tblHeader=True, cantSplit=True
+  Row 1: cantSplit=True
+Table 3: 6 rows, 4 cols
+  Row 0: tblHeader=True, cantSplit=True
+  Row 1: cantSplit=True
+Table 4: 11 rows, 6 cols
+  Row 0: tblHeader=True, cantSplit=True
+  Row 1: cantSplit=True
+Table 5: 14 rows, 6 cols
+  Row 0: tblHeader=True, cantSplit=True
+  Row 1: cantSplit=True
+Table 6: 10 rows, 5 cols
+  Row 0: tblHeader=True, cantSplit=True
+  Row 1: cantSplit=True
+Table 7: 10 rows, 7 cols
+  Row 0: tblHeader=True, cantSplit=True
+  Row 1: cantSplit=True
+Table 8: 11 rows, 5 cols
+  Row 0: tblHeader=True, cantSplit=True
+  Row 1: cantSplit=True
+Table 9: 9 rows, 6 cols
+  Row 0: tblHeader=True, cantSplit=True
+  Row 1: cantSplit=True
+Table 10: 10 rows, 6 cols
+  Row 0: tblHeader=True, cantSplit=True
+  Row 1: cantSplit=True

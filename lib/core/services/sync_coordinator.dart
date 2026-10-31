@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:drift/drift.dart';
 import 'package:class_realm/data/datasources/local/app_database.dart';
+import 'package:class_realm/data/repositories/supabase_attendance_repository.dart';
 
 class SyncCoordinator {
   static final SyncCoordinator instance = SyncCoordinator._internal();
@@ -328,6 +329,7 @@ class SyncCoordinator {
     _isSyncing = true;
 
     try {
+      await SupabaseAttendanceRepository.instance.syncOfflineAttendanceQueue();
       final pendingItems = await _db.getPendingSyncQueue();
       if (pendingItems.isEmpty) {
         _isSyncing = false;

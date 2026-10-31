@@ -52,11 +52,10 @@ This document serves as the official reference for the technologies and architec
 ---
 
 ## 6. Hardware & IoT Integration
-* **ESP32 Microcontroller**
-* **RFID Scanner Module (RC522 / PN532)**
-* **RFID Tags (for students)**
-  * **Purpose:** Portable hardware used by the teacher for scanning student IDs in the classroom.
-  * **Classroom Mesh / Hotspot:** Communicates over local classroom Wi-Fi directly to the teacher's device, persisting attendance instantly to the local Drift SQLite database even without an active internet connection.
+* **USB Keyboard-Wedge RFID Reader & ESP32 Microcontroller + RC522 Scanner Module**
+* **13.56MHz RFID Cards / Tags (for students)**
+  * **Purpose:** Plug-and-play classroom hardware for instant student attendance tapping, paired with a manual teacher roster fallback.
+  * **Pure Dart + PostgreSQL RPC (Zero `.ts` Edge Functions):** USB Keyboard-Wedge readers stream UID keystrokes directly into the Flutter desktop/web workspace, while ESP32 + RC522 units call PostgreSQL RPCs (`record_rfid_attendance`, `record_rfid_attendance_batch`), persisting offline scans to Drift SQLite (`offline_sync_queue`) when internet is unavailable and running end-of-day auto-absent reconciliation natively via PostgreSQL `pg_cron` (`fn_trigger_daily_auto_absent`).
 
 ---
 

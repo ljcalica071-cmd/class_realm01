@@ -2308,6 +2308,17 @@ class $LocalStudentsTable extends LocalStudents
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _rfidUidMeta = const VerificationMeta(
+    'rfidUid',
+  );
+  @override
+  late final GeneratedColumn<String> rfidUid = GeneratedColumn<String>(
+    'rfid_uid',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _firstNameMeta = const VerificationMeta(
     'firstName',
   );
@@ -2366,6 +2377,7 @@ class $LocalStudentsTable extends LocalStudents
   List<GeneratedColumn> get $columns => [
     studentId,
     lrn,
+    rfidUid,
     firstName,
     middleName,
     lastName,
@@ -2396,6 +2408,12 @@ class $LocalStudentsTable extends LocalStudents
       context.handle(
         _lrnMeta,
         lrn.isAcceptableOrUnknown(data['lrn']!, _lrnMeta),
+      );
+    }
+    if (data.containsKey('rfid_uid')) {
+      context.handle(
+        _rfidUidMeta,
+        rfidUid.isAcceptableOrUnknown(data['rfid_uid']!, _rfidUidMeta),
       );
     }
     if (data.containsKey('first_name')) {
@@ -2452,6 +2470,10 @@ class $LocalStudentsTable extends LocalStudents
         DriftSqlType.string,
         data['${effectivePrefix}lrn'],
       ),
+      rfidUid: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}rfid_uid'],
+      ),
       firstName: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}first_name'],
@@ -2484,6 +2506,7 @@ class $LocalStudentsTable extends LocalStudents
 class LocalStudent extends DataClass implements Insertable<LocalStudent> {
   final String studentId;
   final String? lrn;
+  final String? rfidUid;
   final String firstName;
   final String? middleName;
   final String lastName;
@@ -2492,6 +2515,7 @@ class LocalStudent extends DataClass implements Insertable<LocalStudent> {
   const LocalStudent({
     required this.studentId,
     this.lrn,
+    this.rfidUid,
     required this.firstName,
     this.middleName,
     required this.lastName,
@@ -2504,6 +2528,9 @@ class LocalStudent extends DataClass implements Insertable<LocalStudent> {
     map['student_id'] = Variable<String>(studentId);
     if (!nullToAbsent || lrn != null) {
       map['lrn'] = Variable<String>(lrn);
+    }
+    if (!nullToAbsent || rfidUid != null) {
+      map['rfid_uid'] = Variable<String>(rfidUid);
     }
     map['first_name'] = Variable<String>(firstName);
     if (!nullToAbsent || middleName != null) {
@@ -2521,6 +2548,9 @@ class LocalStudent extends DataClass implements Insertable<LocalStudent> {
     return LocalStudentsCompanion(
       studentId: Value(studentId),
       lrn: lrn == null && nullToAbsent ? const Value.absent() : Value(lrn),
+      rfidUid: rfidUid == null && nullToAbsent
+          ? const Value.absent()
+          : Value(rfidUid),
       firstName: Value(firstName),
       middleName: middleName == null && nullToAbsent
           ? const Value.absent()
@@ -2541,6 +2571,7 @@ class LocalStudent extends DataClass implements Insertable<LocalStudent> {
     return LocalStudent(
       studentId: serializer.fromJson<String>(json['studentId']),
       lrn: serializer.fromJson<String?>(json['lrn']),
+      rfidUid: serializer.fromJson<String?>(json['rfidUid']),
       firstName: serializer.fromJson<String>(json['firstName']),
       middleName: serializer.fromJson<String?>(json['middleName']),
       lastName: serializer.fromJson<String>(json['lastName']),
@@ -2556,6 +2587,7 @@ class LocalStudent extends DataClass implements Insertable<LocalStudent> {
     return <String, dynamic>{
       'studentId': serializer.toJson<String>(studentId),
       'lrn': serializer.toJson<String?>(lrn),
+      'rfidUid': serializer.toJson<String?>(rfidUid),
       'firstName': serializer.toJson<String>(firstName),
       'middleName': serializer.toJson<String?>(middleName),
       'lastName': serializer.toJson<String>(lastName),
@@ -2567,6 +2599,7 @@ class LocalStudent extends DataClass implements Insertable<LocalStudent> {
   LocalStudent copyWith({
     String? studentId,
     Value<String?> lrn = const Value.absent(),
+    Value<String?> rfidUid = const Value.absent(),
     String? firstName,
     Value<String?> middleName = const Value.absent(),
     String? lastName,
@@ -2575,6 +2608,7 @@ class LocalStudent extends DataClass implements Insertable<LocalStudent> {
   }) => LocalStudent(
     studentId: studentId ?? this.studentId,
     lrn: lrn.present ? lrn.value : this.lrn,
+    rfidUid: rfidUid.present ? rfidUid.value : this.rfidUid,
     firstName: firstName ?? this.firstName,
     middleName: middleName.present ? middleName.value : this.middleName,
     lastName: lastName ?? this.lastName,
@@ -2587,6 +2621,7 @@ class LocalStudent extends DataClass implements Insertable<LocalStudent> {
     return LocalStudent(
       studentId: data.studentId.present ? data.studentId.value : this.studentId,
       lrn: data.lrn.present ? data.lrn.value : this.lrn,
+      rfidUid: data.rfidUid.present ? data.rfidUid.value : this.rfidUid,
       firstName: data.firstName.present ? data.firstName.value : this.firstName,
       middleName: data.middleName.present
           ? data.middleName.value
@@ -2604,6 +2639,7 @@ class LocalStudent extends DataClass implements Insertable<LocalStudent> {
     return (StringBuffer('LocalStudent(')
           ..write('studentId: $studentId, ')
           ..write('lrn: $lrn, ')
+          ..write('rfidUid: $rfidUid, ')
           ..write('firstName: $firstName, ')
           ..write('middleName: $middleName, ')
           ..write('lastName: $lastName, ')
@@ -2617,6 +2653,7 @@ class LocalStudent extends DataClass implements Insertable<LocalStudent> {
   int get hashCode => Object.hash(
     studentId,
     lrn,
+    rfidUid,
     firstName,
     middleName,
     lastName,
@@ -2629,6 +2666,7 @@ class LocalStudent extends DataClass implements Insertable<LocalStudent> {
       (other is LocalStudent &&
           other.studentId == this.studentId &&
           other.lrn == this.lrn &&
+          other.rfidUid == this.rfidUid &&
           other.firstName == this.firstName &&
           other.middleName == this.middleName &&
           other.lastName == this.lastName &&
@@ -2639,6 +2677,7 @@ class LocalStudent extends DataClass implements Insertable<LocalStudent> {
 class LocalStudentsCompanion extends UpdateCompanion<LocalStudent> {
   final Value<String> studentId;
   final Value<String?> lrn;
+  final Value<String?> rfidUid;
   final Value<String> firstName;
   final Value<String?> middleName;
   final Value<String> lastName;
@@ -2648,6 +2687,7 @@ class LocalStudentsCompanion extends UpdateCompanion<LocalStudent> {
   const LocalStudentsCompanion({
     this.studentId = const Value.absent(),
     this.lrn = const Value.absent(),
+    this.rfidUid = const Value.absent(),
     this.firstName = const Value.absent(),
     this.middleName = const Value.absent(),
     this.lastName = const Value.absent(),
@@ -2658,6 +2698,7 @@ class LocalStudentsCompanion extends UpdateCompanion<LocalStudent> {
   LocalStudentsCompanion.insert({
     required String studentId,
     this.lrn = const Value.absent(),
+    this.rfidUid = const Value.absent(),
     required String firstName,
     this.middleName = const Value.absent(),
     required String lastName,
@@ -2670,6 +2711,7 @@ class LocalStudentsCompanion extends UpdateCompanion<LocalStudent> {
   static Insertable<LocalStudent> custom({
     Expression<String>? studentId,
     Expression<String>? lrn,
+    Expression<String>? rfidUid,
     Expression<String>? firstName,
     Expression<String>? middleName,
     Expression<String>? lastName,
@@ -2680,6 +2722,7 @@ class LocalStudentsCompanion extends UpdateCompanion<LocalStudent> {
     return RawValuesInsertable({
       if (studentId != null) 'student_id': studentId,
       if (lrn != null) 'lrn': lrn,
+      if (rfidUid != null) 'rfid_uid': rfidUid,
       if (firstName != null) 'first_name': firstName,
       if (middleName != null) 'middle_name': middleName,
       if (lastName != null) 'last_name': lastName,
@@ -2693,6 +2736,7 @@ class LocalStudentsCompanion extends UpdateCompanion<LocalStudent> {
   LocalStudentsCompanion copyWith({
     Value<String>? studentId,
     Value<String?>? lrn,
+    Value<String?>? rfidUid,
     Value<String>? firstName,
     Value<String?>? middleName,
     Value<String>? lastName,
@@ -2703,6 +2747,7 @@ class LocalStudentsCompanion extends UpdateCompanion<LocalStudent> {
     return LocalStudentsCompanion(
       studentId: studentId ?? this.studentId,
       lrn: lrn ?? this.lrn,
+      rfidUid: rfidUid ?? this.rfidUid,
       firstName: firstName ?? this.firstName,
       middleName: middleName ?? this.middleName,
       lastName: lastName ?? this.lastName,
@@ -2720,6 +2765,9 @@ class LocalStudentsCompanion extends UpdateCompanion<LocalStudent> {
     }
     if (lrn.present) {
       map['lrn'] = Variable<String>(lrn.value);
+    }
+    if (rfidUid.present) {
+      map['rfid_uid'] = Variable<String>(rfidUid.value);
     }
     if (firstName.present) {
       map['first_name'] = Variable<String>(firstName.value);
@@ -2749,6 +2797,7 @@ class LocalStudentsCompanion extends UpdateCompanion<LocalStudent> {
     return (StringBuffer('LocalStudentsCompanion(')
           ..write('studentId: $studentId, ')
           ..write('lrn: $lrn, ')
+          ..write('rfidUid: $rfidUid, ')
           ..write('firstName: $firstName, ')
           ..write('middleName: $middleName, ')
           ..write('lastName: $lastName, ')
@@ -3929,6 +3978,38 @@ class $LocalAttendanceRecordsTable extends LocalAttendanceRecords
     type: DriftSqlType.string,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _recordingMethodMeta = const VerificationMeta(
+    'recordingMethod',
+  );
+  @override
+  late final GeneratedColumn<String> recordingMethod = GeneratedColumn<String>(
+    'recording_method',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('Manual'),
+  );
+  static const VerificationMeta _timeInMeta = const VerificationMeta('timeIn');
+  @override
+  late final GeneratedColumn<String> timeIn = GeneratedColumn<String>(
+    'time_in',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _deviceIdMeta = const VerificationMeta(
+    'deviceId',
+  );
+  @override
+  late final GeneratedColumn<String> deviceId = GeneratedColumn<String>(
+    'device_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _remarksMeta = const VerificationMeta(
     'remarks',
   );
@@ -3980,6 +4061,9 @@ class $LocalAttendanceRecordsTable extends LocalAttendanceRecords
     subjectOfferingId,
     attendanceDate,
     status,
+    recordingMethod,
+    timeIn,
+    deviceId,
     remarks,
     source,
     recordedBy,
@@ -4040,6 +4124,27 @@ class $LocalAttendanceRecordsTable extends LocalAttendanceRecords
     } else if (isInserting) {
       context.missing(_statusMeta);
     }
+    if (data.containsKey('recording_method')) {
+      context.handle(
+        _recordingMethodMeta,
+        recordingMethod.isAcceptableOrUnknown(
+          data['recording_method']!,
+          _recordingMethodMeta,
+        ),
+      );
+    }
+    if (data.containsKey('time_in')) {
+      context.handle(
+        _timeInMeta,
+        timeIn.isAcceptableOrUnknown(data['time_in']!, _timeInMeta),
+      );
+    }
+    if (data.containsKey('device_id')) {
+      context.handle(
+        _deviceIdMeta,
+        deviceId.isAcceptableOrUnknown(data['device_id']!, _deviceIdMeta),
+      );
+    }
     if (data.containsKey('remarks')) {
       context.handle(
         _remarksMeta,
@@ -4093,6 +4198,18 @@ class $LocalAttendanceRecordsTable extends LocalAttendanceRecords
         DriftSqlType.string,
         data['${effectivePrefix}status'],
       )!,
+      recordingMethod: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}recording_method'],
+      )!,
+      timeIn: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}time_in'],
+      ),
+      deviceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}device_id'],
+      ),
       remarks: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}remarks'],
@@ -4125,6 +4242,9 @@ class LocalAttendanceRecord extends DataClass
   final String subjectOfferingId;
   final String attendanceDate;
   final String status;
+  final String recordingMethod;
+  final String? timeIn;
+  final String? deviceId;
   final String? remarks;
   final String source;
   final String? recordedBy;
@@ -4135,6 +4255,9 @@ class LocalAttendanceRecord extends DataClass
     required this.subjectOfferingId,
     required this.attendanceDate,
     required this.status,
+    required this.recordingMethod,
+    this.timeIn,
+    this.deviceId,
     this.remarks,
     required this.source,
     this.recordedBy,
@@ -4148,6 +4271,13 @@ class LocalAttendanceRecord extends DataClass
     map['subject_offering_id'] = Variable<String>(subjectOfferingId);
     map['attendance_date'] = Variable<String>(attendanceDate);
     map['status'] = Variable<String>(status);
+    map['recording_method'] = Variable<String>(recordingMethod);
+    if (!nullToAbsent || timeIn != null) {
+      map['time_in'] = Variable<String>(timeIn);
+    }
+    if (!nullToAbsent || deviceId != null) {
+      map['device_id'] = Variable<String>(deviceId);
+    }
     if (!nullToAbsent || remarks != null) {
       map['remarks'] = Variable<String>(remarks);
     }
@@ -4166,6 +4296,13 @@ class LocalAttendanceRecord extends DataClass
       subjectOfferingId: Value(subjectOfferingId),
       attendanceDate: Value(attendanceDate),
       status: Value(status),
+      recordingMethod: Value(recordingMethod),
+      timeIn: timeIn == null && nullToAbsent
+          ? const Value.absent()
+          : Value(timeIn),
+      deviceId: deviceId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deviceId),
       remarks: remarks == null && nullToAbsent
           ? const Value.absent()
           : Value(remarks),
@@ -4188,6 +4325,9 @@ class LocalAttendanceRecord extends DataClass
       subjectOfferingId: serializer.fromJson<String>(json['subjectOfferingId']),
       attendanceDate: serializer.fromJson<String>(json['attendanceDate']),
       status: serializer.fromJson<String>(json['status']),
+      recordingMethod: serializer.fromJson<String>(json['recordingMethod']),
+      timeIn: serializer.fromJson<String?>(json['timeIn']),
+      deviceId: serializer.fromJson<String?>(json['deviceId']),
       remarks: serializer.fromJson<String?>(json['remarks']),
       source: serializer.fromJson<String>(json['source']),
       recordedBy: serializer.fromJson<String?>(json['recordedBy']),
@@ -4203,6 +4343,9 @@ class LocalAttendanceRecord extends DataClass
       'subjectOfferingId': serializer.toJson<String>(subjectOfferingId),
       'attendanceDate': serializer.toJson<String>(attendanceDate),
       'status': serializer.toJson<String>(status),
+      'recordingMethod': serializer.toJson<String>(recordingMethod),
+      'timeIn': serializer.toJson<String?>(timeIn),
+      'deviceId': serializer.toJson<String?>(deviceId),
       'remarks': serializer.toJson<String?>(remarks),
       'source': serializer.toJson<String>(source),
       'recordedBy': serializer.toJson<String?>(recordedBy),
@@ -4216,6 +4359,9 @@ class LocalAttendanceRecord extends DataClass
     String? subjectOfferingId,
     String? attendanceDate,
     String? status,
+    String? recordingMethod,
+    Value<String?> timeIn = const Value.absent(),
+    Value<String?> deviceId = const Value.absent(),
     Value<String?> remarks = const Value.absent(),
     String? source,
     Value<String?> recordedBy = const Value.absent(),
@@ -4226,6 +4372,9 @@ class LocalAttendanceRecord extends DataClass
     subjectOfferingId: subjectOfferingId ?? this.subjectOfferingId,
     attendanceDate: attendanceDate ?? this.attendanceDate,
     status: status ?? this.status,
+    recordingMethod: recordingMethod ?? this.recordingMethod,
+    timeIn: timeIn.present ? timeIn.value : this.timeIn,
+    deviceId: deviceId.present ? deviceId.value : this.deviceId,
     remarks: remarks.present ? remarks.value : this.remarks,
     source: source ?? this.source,
     recordedBy: recordedBy.present ? recordedBy.value : this.recordedBy,
@@ -4244,6 +4393,11 @@ class LocalAttendanceRecord extends DataClass
           ? data.attendanceDate.value
           : this.attendanceDate,
       status: data.status.present ? data.status.value : this.status,
+      recordingMethod: data.recordingMethod.present
+          ? data.recordingMethod.value
+          : this.recordingMethod,
+      timeIn: data.timeIn.present ? data.timeIn.value : this.timeIn,
+      deviceId: data.deviceId.present ? data.deviceId.value : this.deviceId,
       remarks: data.remarks.present ? data.remarks.value : this.remarks,
       source: data.source.present ? data.source.value : this.source,
       recordedBy: data.recordedBy.present
@@ -4263,6 +4417,9 @@ class LocalAttendanceRecord extends DataClass
           ..write('subjectOfferingId: $subjectOfferingId, ')
           ..write('attendanceDate: $attendanceDate, ')
           ..write('status: $status, ')
+          ..write('recordingMethod: $recordingMethod, ')
+          ..write('timeIn: $timeIn, ')
+          ..write('deviceId: $deviceId, ')
           ..write('remarks: $remarks, ')
           ..write('source: $source, ')
           ..write('recordedBy: $recordedBy, ')
@@ -4278,6 +4435,9 @@ class LocalAttendanceRecord extends DataClass
     subjectOfferingId,
     attendanceDate,
     status,
+    recordingMethod,
+    timeIn,
+    deviceId,
     remarks,
     source,
     recordedBy,
@@ -4292,6 +4452,9 @@ class LocalAttendanceRecord extends DataClass
           other.subjectOfferingId == this.subjectOfferingId &&
           other.attendanceDate == this.attendanceDate &&
           other.status == this.status &&
+          other.recordingMethod == this.recordingMethod &&
+          other.timeIn == this.timeIn &&
+          other.deviceId == this.deviceId &&
           other.remarks == this.remarks &&
           other.source == this.source &&
           other.recordedBy == this.recordedBy &&
@@ -4305,6 +4468,9 @@ class LocalAttendanceRecordsCompanion
   final Value<String> subjectOfferingId;
   final Value<String> attendanceDate;
   final Value<String> status;
+  final Value<String> recordingMethod;
+  final Value<String?> timeIn;
+  final Value<String?> deviceId;
   final Value<String?> remarks;
   final Value<String> source;
   final Value<String?> recordedBy;
@@ -4316,6 +4482,9 @@ class LocalAttendanceRecordsCompanion
     this.subjectOfferingId = const Value.absent(),
     this.attendanceDate = const Value.absent(),
     this.status = const Value.absent(),
+    this.recordingMethod = const Value.absent(),
+    this.timeIn = const Value.absent(),
+    this.deviceId = const Value.absent(),
     this.remarks = const Value.absent(),
     this.source = const Value.absent(),
     this.recordedBy = const Value.absent(),
@@ -4328,6 +4497,9 @@ class LocalAttendanceRecordsCompanion
     required String subjectOfferingId,
     required String attendanceDate,
     required String status,
+    this.recordingMethod = const Value.absent(),
+    this.timeIn = const Value.absent(),
+    this.deviceId = const Value.absent(),
     this.remarks = const Value.absent(),
     this.source = const Value.absent(),
     this.recordedBy = const Value.absent(),
@@ -4344,6 +4516,9 @@ class LocalAttendanceRecordsCompanion
     Expression<String>? subjectOfferingId,
     Expression<String>? attendanceDate,
     Expression<String>? status,
+    Expression<String>? recordingMethod,
+    Expression<String>? timeIn,
+    Expression<String>? deviceId,
     Expression<String>? remarks,
     Expression<String>? source,
     Expression<String>? recordedBy,
@@ -4356,6 +4531,9 @@ class LocalAttendanceRecordsCompanion
       if (subjectOfferingId != null) 'subject_offering_id': subjectOfferingId,
       if (attendanceDate != null) 'attendance_date': attendanceDate,
       if (status != null) 'status': status,
+      if (recordingMethod != null) 'recording_method': recordingMethod,
+      if (timeIn != null) 'time_in': timeIn,
+      if (deviceId != null) 'device_id': deviceId,
       if (remarks != null) 'remarks': remarks,
       if (source != null) 'source': source,
       if (recordedBy != null) 'recorded_by': recordedBy,
@@ -4370,6 +4548,9 @@ class LocalAttendanceRecordsCompanion
     Value<String>? subjectOfferingId,
     Value<String>? attendanceDate,
     Value<String>? status,
+    Value<String>? recordingMethod,
+    Value<String?>? timeIn,
+    Value<String?>? deviceId,
     Value<String?>? remarks,
     Value<String>? source,
     Value<String?>? recordedBy,
@@ -4382,6 +4563,9 @@ class LocalAttendanceRecordsCompanion
       subjectOfferingId: subjectOfferingId ?? this.subjectOfferingId,
       attendanceDate: attendanceDate ?? this.attendanceDate,
       status: status ?? this.status,
+      recordingMethod: recordingMethod ?? this.recordingMethod,
+      timeIn: timeIn ?? this.timeIn,
+      deviceId: deviceId ?? this.deviceId,
       remarks: remarks ?? this.remarks,
       source: source ?? this.source,
       recordedBy: recordedBy ?? this.recordedBy,
@@ -4407,6 +4591,15 @@ class LocalAttendanceRecordsCompanion
     }
     if (status.present) {
       map['status'] = Variable<String>(status.value);
+    }
+    if (recordingMethod.present) {
+      map['recording_method'] = Variable<String>(recordingMethod.value);
+    }
+    if (timeIn.present) {
+      map['time_in'] = Variable<String>(timeIn.value);
+    }
+    if (deviceId.present) {
+      map['device_id'] = Variable<String>(deviceId.value);
     }
     if (remarks.present) {
       map['remarks'] = Variable<String>(remarks.value);
@@ -4434,10 +4627,460 @@ class LocalAttendanceRecordsCompanion
           ..write('subjectOfferingId: $subjectOfferingId, ')
           ..write('attendanceDate: $attendanceDate, ')
           ..write('status: $status, ')
+          ..write('recordingMethod: $recordingMethod, ')
+          ..write('timeIn: $timeIn, ')
+          ..write('deviceId: $deviceId, ')
           ..write('remarks: $remarks, ')
           ..write('source: $source, ')
           ..write('recordedBy: $recordedBy, ')
           ..write('syncStatus: $syncStatus, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $LocalAttendanceCutoffsTable extends LocalAttendanceCutoffs
+    with TableInfo<$LocalAttendanceCutoffsTable, LocalAttendanceCutoff> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $LocalAttendanceCutoffsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _subjectOfferingIdMeta = const VerificationMeta(
+    'subjectOfferingId',
+  );
+  @override
+  late final GeneratedColumn<String> subjectOfferingId =
+      GeneratedColumn<String>(
+        'subject_offering_id',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: true,
+      );
+  static const VerificationMeta _presentStartMinsBeforeMeta =
+      const VerificationMeta('presentStartMinsBefore');
+  @override
+  late final GeneratedColumn<int> presentStartMinsBefore = GeneratedColumn<int>(
+    'present_start_mins_before',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(15),
+  );
+  static const VerificationMeta _presentGraceMinsMeta = const VerificationMeta(
+    'presentGraceMins',
+  );
+  @override
+  late final GeneratedColumn<int> presentGraceMins = GeneratedColumn<int>(
+    'present_grace_mins',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(15),
+  );
+  static const VerificationMeta _lateCutoffMinsMeta = const VerificationMeta(
+    'lateCutoffMins',
+  );
+  @override
+  late final GeneratedColumn<int> lateCutoffMins = GeneratedColumn<int>(
+    'late_cutoff_mins',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(45),
+  );
+  static const VerificationMeta _absentCutoffMinsMeta = const VerificationMeta(
+    'absentCutoffMins',
+  );
+  @override
+  late final GeneratedColumn<int> absentCutoffMins = GeneratedColumn<int>(
+    'absent_cutoff_mins',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(60),
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    subjectOfferingId,
+    presentStartMinsBefore,
+    presentGraceMins,
+    lateCutoffMins,
+    absentCutoffMins,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'local_attendance_cutoffs';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<LocalAttendanceCutoff> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('subject_offering_id')) {
+      context.handle(
+        _subjectOfferingIdMeta,
+        subjectOfferingId.isAcceptableOrUnknown(
+          data['subject_offering_id']!,
+          _subjectOfferingIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_subjectOfferingIdMeta);
+    }
+    if (data.containsKey('present_start_mins_before')) {
+      context.handle(
+        _presentStartMinsBeforeMeta,
+        presentStartMinsBefore.isAcceptableOrUnknown(
+          data['present_start_mins_before']!,
+          _presentStartMinsBeforeMeta,
+        ),
+      );
+    }
+    if (data.containsKey('present_grace_mins')) {
+      context.handle(
+        _presentGraceMinsMeta,
+        presentGraceMins.isAcceptableOrUnknown(
+          data['present_grace_mins']!,
+          _presentGraceMinsMeta,
+        ),
+      );
+    }
+    if (data.containsKey('late_cutoff_mins')) {
+      context.handle(
+        _lateCutoffMinsMeta,
+        lateCutoffMins.isAcceptableOrUnknown(
+          data['late_cutoff_mins']!,
+          _lateCutoffMinsMeta,
+        ),
+      );
+    }
+    if (data.containsKey('absent_cutoff_mins')) {
+      context.handle(
+        _absentCutoffMinsMeta,
+        absentCutoffMins.isAcceptableOrUnknown(
+          data['absent_cutoff_mins']!,
+          _absentCutoffMinsMeta,
+        ),
+      );
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {subjectOfferingId};
+  @override
+  LocalAttendanceCutoff map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return LocalAttendanceCutoff(
+      subjectOfferingId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}subject_offering_id'],
+      )!,
+      presentStartMinsBefore: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}present_start_mins_before'],
+      )!,
+      presentGraceMins: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}present_grace_mins'],
+      )!,
+      lateCutoffMins: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}late_cutoff_mins'],
+      )!,
+      absentCutoffMins: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}absent_cutoff_mins'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $LocalAttendanceCutoffsTable createAlias(String alias) {
+    return $LocalAttendanceCutoffsTable(attachedDatabase, alias);
+  }
+}
+
+class LocalAttendanceCutoff extends DataClass
+    implements Insertable<LocalAttendanceCutoff> {
+  final String subjectOfferingId;
+  final int presentStartMinsBefore;
+  final int presentGraceMins;
+  final int lateCutoffMins;
+  final int absentCutoffMins;
+  final DateTime updatedAt;
+  const LocalAttendanceCutoff({
+    required this.subjectOfferingId,
+    required this.presentStartMinsBefore,
+    required this.presentGraceMins,
+    required this.lateCutoffMins,
+    required this.absentCutoffMins,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['subject_offering_id'] = Variable<String>(subjectOfferingId);
+    map['present_start_mins_before'] = Variable<int>(presentStartMinsBefore);
+    map['present_grace_mins'] = Variable<int>(presentGraceMins);
+    map['late_cutoff_mins'] = Variable<int>(lateCutoffMins);
+    map['absent_cutoff_mins'] = Variable<int>(absentCutoffMins);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  LocalAttendanceCutoffsCompanion toCompanion(bool nullToAbsent) {
+    return LocalAttendanceCutoffsCompanion(
+      subjectOfferingId: Value(subjectOfferingId),
+      presentStartMinsBefore: Value(presentStartMinsBefore),
+      presentGraceMins: Value(presentGraceMins),
+      lateCutoffMins: Value(lateCutoffMins),
+      absentCutoffMins: Value(absentCutoffMins),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory LocalAttendanceCutoff.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return LocalAttendanceCutoff(
+      subjectOfferingId: serializer.fromJson<String>(json['subjectOfferingId']),
+      presentStartMinsBefore: serializer.fromJson<int>(
+        json['presentStartMinsBefore'],
+      ),
+      presentGraceMins: serializer.fromJson<int>(json['presentGraceMins']),
+      lateCutoffMins: serializer.fromJson<int>(json['lateCutoffMins']),
+      absentCutoffMins: serializer.fromJson<int>(json['absentCutoffMins']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'subjectOfferingId': serializer.toJson<String>(subjectOfferingId),
+      'presentStartMinsBefore': serializer.toJson<int>(presentStartMinsBefore),
+      'presentGraceMins': serializer.toJson<int>(presentGraceMins),
+      'lateCutoffMins': serializer.toJson<int>(lateCutoffMins),
+      'absentCutoffMins': serializer.toJson<int>(absentCutoffMins),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  LocalAttendanceCutoff copyWith({
+    String? subjectOfferingId,
+    int? presentStartMinsBefore,
+    int? presentGraceMins,
+    int? lateCutoffMins,
+    int? absentCutoffMins,
+    DateTime? updatedAt,
+  }) => LocalAttendanceCutoff(
+    subjectOfferingId: subjectOfferingId ?? this.subjectOfferingId,
+    presentStartMinsBefore:
+        presentStartMinsBefore ?? this.presentStartMinsBefore,
+    presentGraceMins: presentGraceMins ?? this.presentGraceMins,
+    lateCutoffMins: lateCutoffMins ?? this.lateCutoffMins,
+    absentCutoffMins: absentCutoffMins ?? this.absentCutoffMins,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  LocalAttendanceCutoff copyWithCompanion(
+    LocalAttendanceCutoffsCompanion data,
+  ) {
+    return LocalAttendanceCutoff(
+      subjectOfferingId: data.subjectOfferingId.present
+          ? data.subjectOfferingId.value
+          : this.subjectOfferingId,
+      presentStartMinsBefore: data.presentStartMinsBefore.present
+          ? data.presentStartMinsBefore.value
+          : this.presentStartMinsBefore,
+      presentGraceMins: data.presentGraceMins.present
+          ? data.presentGraceMins.value
+          : this.presentGraceMins,
+      lateCutoffMins: data.lateCutoffMins.present
+          ? data.lateCutoffMins.value
+          : this.lateCutoffMins,
+      absentCutoffMins: data.absentCutoffMins.present
+          ? data.absentCutoffMins.value
+          : this.absentCutoffMins,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('LocalAttendanceCutoff(')
+          ..write('subjectOfferingId: $subjectOfferingId, ')
+          ..write('presentStartMinsBefore: $presentStartMinsBefore, ')
+          ..write('presentGraceMins: $presentGraceMins, ')
+          ..write('lateCutoffMins: $lateCutoffMins, ')
+          ..write('absentCutoffMins: $absentCutoffMins, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    subjectOfferingId,
+    presentStartMinsBefore,
+    presentGraceMins,
+    lateCutoffMins,
+    absentCutoffMins,
+    updatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is LocalAttendanceCutoff &&
+          other.subjectOfferingId == this.subjectOfferingId &&
+          other.presentStartMinsBefore == this.presentStartMinsBefore &&
+          other.presentGraceMins == this.presentGraceMins &&
+          other.lateCutoffMins == this.lateCutoffMins &&
+          other.absentCutoffMins == this.absentCutoffMins &&
+          other.updatedAt == this.updatedAt);
+}
+
+class LocalAttendanceCutoffsCompanion
+    extends UpdateCompanion<LocalAttendanceCutoff> {
+  final Value<String> subjectOfferingId;
+  final Value<int> presentStartMinsBefore;
+  final Value<int> presentGraceMins;
+  final Value<int> lateCutoffMins;
+  final Value<int> absentCutoffMins;
+  final Value<DateTime> updatedAt;
+  final Value<int> rowid;
+  const LocalAttendanceCutoffsCompanion({
+    this.subjectOfferingId = const Value.absent(),
+    this.presentStartMinsBefore = const Value.absent(),
+    this.presentGraceMins = const Value.absent(),
+    this.lateCutoffMins = const Value.absent(),
+    this.absentCutoffMins = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  LocalAttendanceCutoffsCompanion.insert({
+    required String subjectOfferingId,
+    this.presentStartMinsBefore = const Value.absent(),
+    this.presentGraceMins = const Value.absent(),
+    this.lateCutoffMins = const Value.absent(),
+    this.absentCutoffMins = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : subjectOfferingId = Value(subjectOfferingId);
+  static Insertable<LocalAttendanceCutoff> custom({
+    Expression<String>? subjectOfferingId,
+    Expression<int>? presentStartMinsBefore,
+    Expression<int>? presentGraceMins,
+    Expression<int>? lateCutoffMins,
+    Expression<int>? absentCutoffMins,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (subjectOfferingId != null) 'subject_offering_id': subjectOfferingId,
+      if (presentStartMinsBefore != null)
+        'present_start_mins_before': presentStartMinsBefore,
+      if (presentGraceMins != null) 'present_grace_mins': presentGraceMins,
+      if (lateCutoffMins != null) 'late_cutoff_mins': lateCutoffMins,
+      if (absentCutoffMins != null) 'absent_cutoff_mins': absentCutoffMins,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  LocalAttendanceCutoffsCompanion copyWith({
+    Value<String>? subjectOfferingId,
+    Value<int>? presentStartMinsBefore,
+    Value<int>? presentGraceMins,
+    Value<int>? lateCutoffMins,
+    Value<int>? absentCutoffMins,
+    Value<DateTime>? updatedAt,
+    Value<int>? rowid,
+  }) {
+    return LocalAttendanceCutoffsCompanion(
+      subjectOfferingId: subjectOfferingId ?? this.subjectOfferingId,
+      presentStartMinsBefore:
+          presentStartMinsBefore ?? this.presentStartMinsBefore,
+      presentGraceMins: presentGraceMins ?? this.presentGraceMins,
+      lateCutoffMins: lateCutoffMins ?? this.lateCutoffMins,
+      absentCutoffMins: absentCutoffMins ?? this.absentCutoffMins,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (subjectOfferingId.present) {
+      map['subject_offering_id'] = Variable<String>(subjectOfferingId.value);
+    }
+    if (presentStartMinsBefore.present) {
+      map['present_start_mins_before'] = Variable<int>(
+        presentStartMinsBefore.value,
+      );
+    }
+    if (presentGraceMins.present) {
+      map['present_grace_mins'] = Variable<int>(presentGraceMins.value);
+    }
+    if (lateCutoffMins.present) {
+      map['late_cutoff_mins'] = Variable<int>(lateCutoffMins.value);
+    }
+    if (absentCutoffMins.present) {
+      map['absent_cutoff_mins'] = Variable<int>(absentCutoffMins.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('LocalAttendanceCutoffsCompanion(')
+          ..write('subjectOfferingId: $subjectOfferingId, ')
+          ..write('presentStartMinsBefore: $presentStartMinsBefore, ')
+          ..write('presentGraceMins: $presentGraceMins, ')
+          ..write('lateCutoffMins: $lateCutoffMins, ')
+          ..write('absentCutoffMins: $absentCutoffMins, ')
+          ..write('updatedAt: $updatedAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -6232,6 +6875,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
       $LocalParentStudentLinksTable(this);
   late final $LocalAttendanceRecordsTable localAttendanceRecords =
       $LocalAttendanceRecordsTable(this);
+  late final $LocalAttendanceCutoffsTable localAttendanceCutoffs =
+      $LocalAttendanceCutoffsTable(this);
   late final $LocalSchedulesTable localSchedules = $LocalSchedulesTable(this);
   late final $LocalAssessmentsTable localAssessments = $LocalAssessmentsTable(
     this,
@@ -6256,6 +6901,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     localParents,
     localParentStudentLinks,
     localAttendanceRecords,
+    localAttendanceCutoffs,
     localSchedules,
     localAssessments,
     localStudentScores,
@@ -7500,6 +8146,7 @@ typedef $$LocalStudentsTableCreateCompanionBuilder =
     LocalStudentsCompanion Function({
       required String studentId,
       Value<String?> lrn,
+      Value<String?> rfidUid,
       required String firstName,
       Value<String?> middleName,
       required String lastName,
@@ -7511,6 +8158,7 @@ typedef $$LocalStudentsTableUpdateCompanionBuilder =
     LocalStudentsCompanion Function({
       Value<String> studentId,
       Value<String?> lrn,
+      Value<String?> rfidUid,
       Value<String> firstName,
       Value<String?> middleName,
       Value<String> lastName,
@@ -7535,6 +8183,11 @@ class $$LocalStudentsTableFilterComposer
 
   ColumnFilters<String> get lrn => $composableBuilder(
     column: $table.lrn,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get rfidUid => $composableBuilder(
+    column: $table.rfidUid,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -7583,6 +8236,11 @@ class $$LocalStudentsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get rfidUid => $composableBuilder(
+    column: $table.rfidUid,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get firstName => $composableBuilder(
     column: $table.firstName,
     builder: (column) => ColumnOrderings(column),
@@ -7623,6 +8281,9 @@ class $$LocalStudentsTableAnnotationComposer
 
   GeneratedColumn<String> get lrn =>
       $composableBuilder(column: $table.lrn, builder: (column) => column);
+
+  GeneratedColumn<String> get rfidUid =>
+      $composableBuilder(column: $table.rfidUid, builder: (column) => column);
 
   GeneratedColumn<String> get firstName =>
       $composableBuilder(column: $table.firstName, builder: (column) => column);
@@ -7677,6 +8338,7 @@ class $$LocalStudentsTableTableManager
               ({
                 Value<String> studentId = const Value.absent(),
                 Value<String?> lrn = const Value.absent(),
+                Value<String?> rfidUid = const Value.absent(),
                 Value<String> firstName = const Value.absent(),
                 Value<String?> middleName = const Value.absent(),
                 Value<String> lastName = const Value.absent(),
@@ -7686,6 +8348,7 @@ class $$LocalStudentsTableTableManager
               }) => LocalStudentsCompanion(
                 studentId: studentId,
                 lrn: lrn,
+                rfidUid: rfidUid,
                 firstName: firstName,
                 middleName: middleName,
                 lastName: lastName,
@@ -7697,6 +8360,7 @@ class $$LocalStudentsTableTableManager
               ({
                 required String studentId,
                 Value<String?> lrn = const Value.absent(),
+                Value<String?> rfidUid = const Value.absent(),
                 required String firstName,
                 Value<String?> middleName = const Value.absent(),
                 required String lastName,
@@ -7706,6 +8370,7 @@ class $$LocalStudentsTableTableManager
               }) => LocalStudentsCompanion.insert(
                 studentId: studentId,
                 lrn: lrn,
+                rfidUid: rfidUid,
                 firstName: firstName,
                 middleName: middleName,
                 lastName: lastName,
@@ -8380,6 +9045,9 @@ typedef $$LocalAttendanceRecordsTableCreateCompanionBuilder =
       required String subjectOfferingId,
       required String attendanceDate,
       required String status,
+      Value<String> recordingMethod,
+      Value<String?> timeIn,
+      Value<String?> deviceId,
       Value<String?> remarks,
       Value<String> source,
       Value<String?> recordedBy,
@@ -8393,6 +9061,9 @@ typedef $$LocalAttendanceRecordsTableUpdateCompanionBuilder =
       Value<String> subjectOfferingId,
       Value<String> attendanceDate,
       Value<String> status,
+      Value<String> recordingMethod,
+      Value<String?> timeIn,
+      Value<String?> deviceId,
       Value<String?> remarks,
       Value<String> source,
       Value<String?> recordedBy,
@@ -8431,6 +9102,21 @@ class $$LocalAttendanceRecordsTableFilterComposer
 
   ColumnFilters<String> get status => $composableBuilder(
     column: $table.status,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get recordingMethod => $composableBuilder(
+    column: $table.recordingMethod,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get timeIn => $composableBuilder(
+    column: $table.timeIn,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get deviceId => $composableBuilder(
+    column: $table.deviceId,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -8489,6 +9175,21 @@ class $$LocalAttendanceRecordsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get recordingMethod => $composableBuilder(
+    column: $table.recordingMethod,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get timeIn => $composableBuilder(
+    column: $table.timeIn,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get deviceId => $composableBuilder(
+    column: $table.deviceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get remarks => $composableBuilder(
     column: $table.remarks,
     builder: (column) => ColumnOrderings(column),
@@ -8537,6 +9238,17 @@ class $$LocalAttendanceRecordsTableAnnotationComposer
 
   GeneratedColumn<String> get status =>
       $composableBuilder(column: $table.status, builder: (column) => column);
+
+  GeneratedColumn<String> get recordingMethod => $composableBuilder(
+    column: $table.recordingMethod,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get timeIn =>
+      $composableBuilder(column: $table.timeIn, builder: (column) => column);
+
+  GeneratedColumn<String> get deviceId =>
+      $composableBuilder(column: $table.deviceId, builder: (column) => column);
 
   GeneratedColumn<String> get remarks =>
       $composableBuilder(column: $table.remarks, builder: (column) => column);
@@ -8606,6 +9318,9 @@ class $$LocalAttendanceRecordsTableTableManager
                 Value<String> subjectOfferingId = const Value.absent(),
                 Value<String> attendanceDate = const Value.absent(),
                 Value<String> status = const Value.absent(),
+                Value<String> recordingMethod = const Value.absent(),
+                Value<String?> timeIn = const Value.absent(),
+                Value<String?> deviceId = const Value.absent(),
                 Value<String?> remarks = const Value.absent(),
                 Value<String> source = const Value.absent(),
                 Value<String?> recordedBy = const Value.absent(),
@@ -8617,6 +9332,9 @@ class $$LocalAttendanceRecordsTableTableManager
                 subjectOfferingId: subjectOfferingId,
                 attendanceDate: attendanceDate,
                 status: status,
+                recordingMethod: recordingMethod,
+                timeIn: timeIn,
+                deviceId: deviceId,
                 remarks: remarks,
                 source: source,
                 recordedBy: recordedBy,
@@ -8630,6 +9348,9 @@ class $$LocalAttendanceRecordsTableTableManager
                 required String subjectOfferingId,
                 required String attendanceDate,
                 required String status,
+                Value<String> recordingMethod = const Value.absent(),
+                Value<String?> timeIn = const Value.absent(),
+                Value<String?> deviceId = const Value.absent(),
                 Value<String?> remarks = const Value.absent(),
                 Value<String> source = const Value.absent(),
                 Value<String?> recordedBy = const Value.absent(),
@@ -8641,6 +9362,9 @@ class $$LocalAttendanceRecordsTableTableManager
                 subjectOfferingId: subjectOfferingId,
                 attendanceDate: attendanceDate,
                 status: status,
+                recordingMethod: recordingMethod,
+                timeIn: timeIn,
+                deviceId: deviceId,
                 remarks: remarks,
                 source: source,
                 recordedBy: recordedBy,
@@ -8674,6 +9398,254 @@ typedef $$LocalAttendanceRecordsTableProcessedTableManager =
         >,
       ),
       LocalAttendanceRecord,
+      PrefetchHooks Function()
+    >;
+typedef $$LocalAttendanceCutoffsTableCreateCompanionBuilder =
+    LocalAttendanceCutoffsCompanion Function({
+      required String subjectOfferingId,
+      Value<int> presentStartMinsBefore,
+      Value<int> presentGraceMins,
+      Value<int> lateCutoffMins,
+      Value<int> absentCutoffMins,
+      Value<DateTime> updatedAt,
+      Value<int> rowid,
+    });
+typedef $$LocalAttendanceCutoffsTableUpdateCompanionBuilder =
+    LocalAttendanceCutoffsCompanion Function({
+      Value<String> subjectOfferingId,
+      Value<int> presentStartMinsBefore,
+      Value<int> presentGraceMins,
+      Value<int> lateCutoffMins,
+      Value<int> absentCutoffMins,
+      Value<DateTime> updatedAt,
+      Value<int> rowid,
+    });
+
+class $$LocalAttendanceCutoffsTableFilterComposer
+    extends Composer<_$AppDatabase, $LocalAttendanceCutoffsTable> {
+  $$LocalAttendanceCutoffsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get subjectOfferingId => $composableBuilder(
+    column: $table.subjectOfferingId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get presentStartMinsBefore => $composableBuilder(
+    column: $table.presentStartMinsBefore,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get presentGraceMins => $composableBuilder(
+    column: $table.presentGraceMins,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get lateCutoffMins => $composableBuilder(
+    column: $table.lateCutoffMins,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get absentCutoffMins => $composableBuilder(
+    column: $table.absentCutoffMins,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$LocalAttendanceCutoffsTableOrderingComposer
+    extends Composer<_$AppDatabase, $LocalAttendanceCutoffsTable> {
+  $$LocalAttendanceCutoffsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get subjectOfferingId => $composableBuilder(
+    column: $table.subjectOfferingId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get presentStartMinsBefore => $composableBuilder(
+    column: $table.presentStartMinsBefore,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get presentGraceMins => $composableBuilder(
+    column: $table.presentGraceMins,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get lateCutoffMins => $composableBuilder(
+    column: $table.lateCutoffMins,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get absentCutoffMins => $composableBuilder(
+    column: $table.absentCutoffMins,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$LocalAttendanceCutoffsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $LocalAttendanceCutoffsTable> {
+  $$LocalAttendanceCutoffsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get subjectOfferingId => $composableBuilder(
+    column: $table.subjectOfferingId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get presentStartMinsBefore => $composableBuilder(
+    column: $table.presentStartMinsBefore,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get presentGraceMins => $composableBuilder(
+    column: $table.presentGraceMins,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get lateCutoffMins => $composableBuilder(
+    column: $table.lateCutoffMins,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get absentCutoffMins => $composableBuilder(
+    column: $table.absentCutoffMins,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$LocalAttendanceCutoffsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $LocalAttendanceCutoffsTable,
+          LocalAttendanceCutoff,
+          $$LocalAttendanceCutoffsTableFilterComposer,
+          $$LocalAttendanceCutoffsTableOrderingComposer,
+          $$LocalAttendanceCutoffsTableAnnotationComposer,
+          $$LocalAttendanceCutoffsTableCreateCompanionBuilder,
+          $$LocalAttendanceCutoffsTableUpdateCompanionBuilder,
+          (
+            LocalAttendanceCutoff,
+            BaseReferences<
+              _$AppDatabase,
+              $LocalAttendanceCutoffsTable,
+              LocalAttendanceCutoff
+            >,
+          ),
+          LocalAttendanceCutoff,
+          PrefetchHooks Function()
+        > {
+  $$LocalAttendanceCutoffsTableTableManager(
+    _$AppDatabase db,
+    $LocalAttendanceCutoffsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$LocalAttendanceCutoffsTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$LocalAttendanceCutoffsTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$LocalAttendanceCutoffsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> subjectOfferingId = const Value.absent(),
+                Value<int> presentStartMinsBefore = const Value.absent(),
+                Value<int> presentGraceMins = const Value.absent(),
+                Value<int> lateCutoffMins = const Value.absent(),
+                Value<int> absentCutoffMins = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => LocalAttendanceCutoffsCompanion(
+                subjectOfferingId: subjectOfferingId,
+                presentStartMinsBefore: presentStartMinsBefore,
+                presentGraceMins: presentGraceMins,
+                lateCutoffMins: lateCutoffMins,
+                absentCutoffMins: absentCutoffMins,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String subjectOfferingId,
+                Value<int> presentStartMinsBefore = const Value.absent(),
+                Value<int> presentGraceMins = const Value.absent(),
+                Value<int> lateCutoffMins = const Value.absent(),
+                Value<int> absentCutoffMins = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => LocalAttendanceCutoffsCompanion.insert(
+                subjectOfferingId: subjectOfferingId,
+                presentStartMinsBefore: presentStartMinsBefore,
+                presentGraceMins: presentGraceMins,
+                lateCutoffMins: lateCutoffMins,
+                absentCutoffMins: absentCutoffMins,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$LocalAttendanceCutoffsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $LocalAttendanceCutoffsTable,
+      LocalAttendanceCutoff,
+      $$LocalAttendanceCutoffsTableFilterComposer,
+      $$LocalAttendanceCutoffsTableOrderingComposer,
+      $$LocalAttendanceCutoffsTableAnnotationComposer,
+      $$LocalAttendanceCutoffsTableCreateCompanionBuilder,
+      $$LocalAttendanceCutoffsTableUpdateCompanionBuilder,
+      (
+        LocalAttendanceCutoff,
+        BaseReferences<
+          _$AppDatabase,
+          $LocalAttendanceCutoffsTable,
+          LocalAttendanceCutoff
+        >,
+      ),
+      LocalAttendanceCutoff,
       PrefetchHooks Function()
     >;
 typedef $$LocalSchedulesTableCreateCompanionBuilder =
@@ -9666,6 +10638,11 @@ class $AppDatabaseManager {
       $$LocalAttendanceRecordsTableTableManager(
         _db,
         _db.localAttendanceRecords,
+      );
+  $$LocalAttendanceCutoffsTableTableManager get localAttendanceCutoffs =>
+      $$LocalAttendanceCutoffsTableTableManager(
+        _db,
+        _db.localAttendanceCutoffs,
       );
   $$LocalSchedulesTableTableManager get localSchedules =>
       $$LocalSchedulesTableTableManager(_db, _db.localSchedules);

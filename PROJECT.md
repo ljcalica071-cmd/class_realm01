@@ -272,3 +272,81 @@ Before any release or production deployment:
    ```powershell
    flutter test
    ```
+
+
+---
+
+## 10. Feature Inventory (R1–R6 Overhaul)
+
+| # | Feature | Description | Milestone | Source |
+|---|---------|-------------|-----------|--------|
+| F1.1 | 5-Slot Score Columns | Reduce default assessment score columns from 10 to 5 per category | M1 | R1 |
+| F1.2 | Inline '+' Expansion Button | Inline '+' button in sub-headers up to 10 slots, hiding when 10 slots reached | M1 | R1 |
+| F1.3 | Fix Duplicate Key Crash | Eliminate duplicate rows/keys `[gradebook-row-zV0ZGShD46TGOcXrfsLIX1Jd45j2-true]` | M1 | R1 |
+| F1.4 | Fix Filter Duplication & Assertion | Symmetrical gender filtering ('All', 'Male', 'Female') without duplicate headers | M1 | R1 |
+| F2.1 | Manage Students Font Standard | Standardize student names to legible, consistent 13.5–14pt font | M2 | R2 |
+| F2.2 | Manage Parents Font Standard | Standardize parent names to legible, consistent 13.5–14pt font | M2 | R2 |
+| F2.3 | Remove Checkbox Column | Remove unnecessary checkbox column adjacent to '#' in Manage Parents | M2 | R2 |
+| F2.4 | Birthday Column Replacement | Replace 'SECTION' with 'BIRTHDAY' column (YYYY-MM-DD) in Manage Parents | M2 | R2 |
+| F2.5 | Specific Subject Filter | Remove 'All Subjects' option; teachers select only specific assigned subjects | M2 | R2 |
+| F2.6 | Table Header Overflow Fix | Eliminate horizontal RenderFlex overflow stripes in Manage Parents table headers | M2 | R2 |
+| F3.1 | Attendance Typography & LRN Removal | Increase student name font to 14pt and remove LRN label underneath | M3 | R3 |
+| F3.2 | Attendance Roster Lazy Loading | Load students lazily in batches of 20 per scroll | M3 | R3 |
+| F3.3 | Inline RFID Tap-to-Link | Inline "Waiting for RFID..." badge capturing 8-char UID without popup modal | M3 | R3 |
+| F3.4 | Action Button Reorganization | "Save Attendance" beside "Auto Absent", "Cut off rules" before "Take Attendance" | M3 | R3 |
+| F3.5 | Filter Container Integration | Rename to "Analytics & History", embed date filters & export in filter box | M3 | R3 |
+| F3.6 | Active Schedule Filtering | Filter dropdowns strictly list grades, subjects, sections with active schedules | M3 | R3 |
+| F4.1 | Audit Log 20-Item Pagination | Structured pagination (20 items/page) with full First/Prev/Page/Next/Last controls | M4 | R4 |
+| F4.2 | Full Student Names in Audit Logs | Display "Lastname, Firstname Middlename" instead of raw alphanumeric IDs | M4 | R4 |
+| F4.3 | Dedicated Time In & Method Columns | Place Time In and Attendance Method in dedicated separate table columns | M4 | R4 |
+| F5.1 | Client-Side Performance Caching | Frame-1 caching for Classroom Setup, Gradebook, Directory, Materials, Schedule | M5 | R5 |
+| F5.2 | Cross-Viewport Responsiveness | Ensure layouts adapt responsively without overflow stripes across screens | M5 | R5 |
+| F5.3 | 60-30-10 Color Rule Adherence | Strict adherence to background (60%), surface (30%), accent (10%) tokens | M5 | R5 |
+| F6.1 | Student Portal Views | View-only attendance history and personal schedule in Student Portal | M6 | R6 |
+| F6.2 | Parent Portal Child Attendance & Schedule | Connect linked child's attendance & schedule in Parent Portal | M6 | R6 |
+| F6.3 | Multi-Tier Absence Push Notifications | Automated in-app & FCM push alerts at exactly 3, 5, and 10 absences | M6 | R6 |
+| FE.1 | E2E Opaque-Box Test Suite | Comprehensive 4-Tier test suite verifying all R1–R6 requirements | E2E Track | All |
+
+---
+
+## 11. Milestones & Execution Plan
+
+| # | Milestone Name | Scope | Dependencies | Status |
+|---|----------------|-------|--------------|--------|
+| M1 | Gradebook Optimization & Crash Fixes | `teacher_gradebook_tab.dart`, `gradebook_grid_cell.dart` | None | PLANNED |
+| M2 | Manage Students & Parents UI Polish | `teacher_student_management_tab.dart`, `teacher_parent_management_tab.dart` | None | PLANNED |
+| M3 | Attendance Improvements & Inline RFID | `attendance_roster_table.dart`, `teacher_attendance_tab.dart` | None | PLANNED |
+| M4 | Attendance Audit & History Logs Refactoring | `attendance_history_analytics_view.dart`, `attendance_workspace_models.dart`, `supabase_attendance_repository.dart` | M3 | PLANNED |
+| M5 | Performance Caching & Responsiveness | `AppDataCache`, `teacher_classroom_setup_tab.dart`, `teacher_gradebook_tab.dart`, `teacher_parent_management_tab.dart`, `supabase_learning_material_repository.dart`, `supabase_schedule_repository.dart` | M1, M2 | PLANNED |
+| M6 | Student & Parent Portals & Multi-Tier Alerts | `parent_home_screen.dart`, `parent_attendance_tab.dart`, `supabase_attendance_repository.dart`, `firebase_auth_admin_service.dart` | M3, M4 | PLANNED |
+| E2E | E2E Testing Suite (Tiers 1–4) | Requirement-driven opaque-box test suite (`test/e2e/`) | None (Parallel) | IN_PROGRESS |
+
+---
+
+## 12. Cross-Module Interface Contracts
+
+### 1. `AttendanceWorkspaceRecord` (M3 ↔ M4 ↔ M6)
+- Properties:
+  - `studentName` / `formattedStudentName`: getter returning `"Lastname, Firstname Middlename"`.
+  - `timeIn`: nullable `String` formatted as `"hh:mm a"`.
+  - `source`: `AttendanceSource` enum (`manual`, `rfid`, `system`).
+- Contract: M4 and M6 consume this contract without altering underlying database schema.
+
+### 2. `AppDataCache` SWR Keys (M1 ↔ M2 ↔ M5)
+- Standardized keys:
+  - Subjects: `'teacher_subjects_${teacherId}_${schoolYear}'`
+  - Students: `'teacher_students_${teacherId}_all_false'`
+  - Parents: `'teacher_parents_${teacherId}_all_false'`
+  - Schedules: `'teacher_schedules_${teacherId}'`
+  - Folders: `'teacher_material_folders_${offeringId}'`
+- Contract: Repository mutations must call `AppDataCache.instance.invalidatePrefix(...)` to guarantee cache consistency.
+
+### 3. Inline RFID Tap-to-Link (M3 ↔ Hardware Keyboard)
+- Callback: `onStartInlineLinkRfid(AttendanceRosterStudent student)`
+- State: `_inlineLinkingStudentId`
+- Hardware key listener: routes 8–14 character buffered UID to `_repository.assignStudentRfid(studentId, uid, forceReassign: true)` without launching any modal dialog.
+
+### 4. Multi-Tier Absence Push Notification (M6 ↔ FCM / Supabase)
+- Trigger: `saveAttendanceBatch()` and `correctAttendanceRecord()`
+- Thresholds: Exactly 3 (Early Warning), 5 (Second Warning), 10 (Final Warning) cumulative absences per subject offering.
+- Deliverables: Insert into `public.notifications` & `public.notification_recipients`, and post FCM v1 push notification to `parent_${studentId}` and `admin_alerts`.

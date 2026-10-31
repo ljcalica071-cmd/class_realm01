@@ -1,84 +1,74 @@
-The user requested: "Gusto ko maraming agents yung gagalaw para sa system natin para mabilis matapos yung sa attendance feature." Create a comprehensive end-to-end design and implementation plan document for the Attendance Feature redesign, teacher RFID assignment, dual-path offline scanning (ESP32 hardware scanner and NFC mobile app fallback with ESP32 build guide), schedule-bound automated attendance status recording, table-based roster redesign, multi-platform responsive views (Teacher Web/App, Student App, Parent App), and an exhaustive edge-case validation matrix.
+Implement production-ready fixes and enhancements across the teacher, student, and parent modules in Class Realm: resolve Gradebook column rendering lag and filter duplication crashes, polish Manage Students and Manage Parents tables, streamline attendance with inline RFID tap-to-link, paginated audit logs, caching, responsive layouts following the 60-30-10 color rule, and build student/parent portal views with automated 3/5/10-absence push notifications.
 
 Working directory: c:\Users\Admin\AndroidStudioProjects\class_realm01
 Integrity mode: development
 
 ## Requirements
 
-### R1. Comprehensive Architecture & Implementation Plan Deliverable
-Produce a complete architectural, functional, and UI/UX implementation plan document saved in `docs/` (without modifying application source code). The document must detail data models, validation logic, offline sync protocols, hardware build guides, responsive screen specifications, and phased rollout tasks.
+### R1. Gradebook Optimization and Crash/Duplication Fixes
+- Reduce default score column slots from 10 to 5 per assessment category, providing an inline "+" button on subsequent columns to add slots up to a maximum of 10 (the "+" button disappears once 10 slots are reached) to eliminate UI lag.
+- Resolve the Flutter crash caused by duplicate keys (`Duplicate keys found. Column(direction: vertical...) has multiple children with key [gradebook-row-zV0ZGShD46TGOcXrfsLIX1Jd45j2-true]`) in `teacher_gradebook_tab.dart`.
+- Fix the assertion failure and column duplication bug when toggling gender filters ('All', 'Male', 'Female'): filtering must strictly display the corresponding learners without duplicating sticky/header columns or repeating '# LEARNERS NAMES' horizontally across the table.
 
-### R2. Teacher RFID Assignment & Recording Method Indicator
-Design the workflow for teachers to assign physical RFID cards directly to students across Teacher Web and Mobile:
-- Enforce unique RFID assignments with conflict detection (prevent duplicate card assignment across students).
-- Provide an assignment modal supporting both keyboard/USB scanner input and phone NFC taps.
-- In attendance logs, display an explicit indicator for each record showing whether it was recorded via "RFID" or "Manual".
+### R2. Manage Students and Manage Parents UI Polish
+- Standardize learner name text sizes in Manage Students and parent name text sizes in Manage Parents to an equal, legible, and consistent size.
+- In the Manage Parents directory table:
+  - Remove the checkbox column adjacent to '#'.
+  - Replace the 'SECTION' column with a 'BIRTHDAY' column.
+  - Remove the 'All Subjects' option from the subject filter dropdown so teachers select only specific assigned subjects.
+  - Fix table header horizontal overflow rendering artifacts.
 
-### R3. Schedule-Connected Auto-Status, Cutoff Validation & 11:59 PM Auto-Absent
-Specify the automated attendance evaluation engine strictly bound to plotted class schedules:
-- Scans outside the plotted class schedule window or on non-scheduled days are blocked.
-- Teacher-configurable cutoff thresholds for Present, Late, and Absent with strict chronological validation (Present window starts at/before class start; Late cutoff is strictly after Present cutoff; Absent cutoff is strictly after Late cutoff and within class hours; no inverted or overlapping thresholds).
-- Daily automated backend job (Supabase Edge Function / cron trigger at 23:59) that marks unscanned students as Absent only if their subject/section had an active scheduled class on that day; never generate absences on non-scheduled days or holidays, and never overwrite existing Present, Late, or Excused marks.
+### R3. Attendance Tab Improvements & Inline RFID Tap-to-Link
+- Increase student name text size in the attendance list to match the readable standard size, and remove the LRN label displayed underneath student names.
+- Implement lazy loading in the attendance student list (loading 20 students per batch).
+- Implement an inline tap-to-link workflow for RFID cards without opening a popup modal: clicking "Link RFID" displays an inline "Waiting for RFID..." indicator on the student row that listens for card reader input (8-character UID keystrokes), automatically links the card to the student, and confirms completion.
+- Reorganize action buttons: place the "Save Attendance" button directly beside the "Auto Absent" button, and move the "Cut off rules" button before the "Take Attendance" button.
+- Rename "History & Analytics" to "Analytics & History", and integrate "This Week", "This Month", "Custom", and "Export" buttons inside the filter container box next to Grade, Subject, and Section on the right-hand side. Filter dropdowns must only list grades, subjects, and sections with active schedules.
 
-### R4. Dual-Path Offline Attendance Capture & ESP32 Hardware Guide
-Architect an offline-first attendance collection pipeline:
-- Primary hardware device: Standalone ESP32 RFID scanner that operates independently with local non-volatile storage when offline or when the teacher's laptop is closed, queuing scans and synchronizing to Supabase when connectivity returns.
-- Mobile phone fallback: Teacher mobile app with NFC capability allowing any compatible NFC-enabled smartphone to scan student RFID cards and record attendance offline with local caching and auto-sync on reconnect.
-- Hardware build tutorial: Step-by-step guide detailing ESP32 hardware assembly, components (ESP32 DevKit, RC522 / PN532 RFID reader, buzzer, status LEDs, battery/power circuit), wiring pinouts, firmware architecture, and offline buffering/retry logic.
+### R4. Attendance Audit & History Logs Refactoring
+- Replace lazy loading with pagination displaying 20 records per page, matching the pagination pattern in Manage Students.
+- Display student full names in format "Lastname, Firstname Middlename" instead of raw/random IDs (e.g. "JrZ...").
+- Display Time In and Attendance Method (e.g., Manual vs RFID) in dedicated, separate table columns rather than placed under the student name.
 
-### R5. Roster Table UI/UX Redesign & 60-30-10 Theming
-Redesign the student roster interface into a clean, unified, and compact table layout following the 60-30-10 color rule and responsive design across Web and Mobile:
-- Alphabetical student ordering by default.
-- Remove the circular avatar/initials badge beside student names.
-- Category filters for gender (default grouped view of Male and Female sections, with filter options for All, Male Only, and Female Only).
-- Relocate "Save Attendance" action to the persistent top header action bar, eliminating excessive scrolling.
+### R5. Performance Caching, Responsiveness, and Visual Hierarchy
+- Implement client-side caching for slower modules (Classroom Setup, Gradebook, Manage Students, Manage Parents, Learning Materials, and My Schedule) so navigation and data retrieval are fast without redundant reload states.
+- Ensure all teacher-side screens adapt responsively across supported viewports without overflow stripes or broken layouts.
+- Strictly adhere to the 60-30-10 color rule across updated layouts.
 
-### R6. Multi-Platform Attendance History & Analytics (Teacher, Student, Parent)
-Specify responsive history and analytics views:
-- Teacher view (Web & Mobile): Section-level KPIs (Attendance Rate, Total Absences & Excuses, Attendance Warnings for students with >= 3 absences, Attendance Trend, Status Breakdown bars), date range filtering (This week, This month, Custom), and per-student drill-downs.
-- Student App: Dedicated view-only personal history and analytics dashboard strictly scoped via Row Level Security (RLS) to the logged-in student's own records, featuring a polished, user-friendly empty state when no attendance records exist yet.
-- Parent App: Dedicated view-only child history and analytics dashboard strictly scoped via RLS to their linked child's records, featuring a polished empty state.
-
-### R7. Strict UI Error Presentation & Comprehensive Validation Matrix
-Enforce user-friendly error handling and an exhaustive validation and edge-case matrix:
-- UI Error Presentation Rule: Zero raw, technical, or database error messages shown to users. Use strictly Inline Input Errors (red border + helper text directly under the input field) or Modal Dialogs (for scanner, conflict, and hardware alerts). Strictly prohibit SnackBars, floating toasts, and top/bottom banners.
-- Explicit edge-case specifications covering:
-  1. RFID Assignment: Duplicate card already assigned, corrupted/invalid UID format, card replacement/reassignment confirmation, scanner timeout/read failure, NFC unavailable/disabled.
-  2. Schedule Guarding: Scanning on non-scheduled days, scanning before class window opens, scanning after class ends.
-  3. Live Attendance: Unregistered card tapped, student card from a different section/grade tapped, duplicate scans by the same student in the same class session (idempotent; do not overwrite timestamp or downgrade status), offline scan vs manual teacher override conflict resolution (deterministic rules).
-  4. 11:59 PM Auto-Absent: Skipping non-scheduled days/holidays, preserving existing marks.
+### R6. Student & Parent Portals and Multi-Tier Absence Push Notifications
+- Implement student portal views for Attendance history and My Schedule.
+- Implement parent portal views allowing parents/guardians to inspect their linked child's schedule and attendance records.
+- Implement automated push notification alerts to admin and parents upon student reaching 3 absences (early warning), 5 absences (second warning), and 10 absences (final warning), integrated via the existing FCM architecture.
 
 ## Acceptance Criteria
 
-### Plan Deliverables & File Isolation
-- [ ] A dedicated implementation plan document is created under `docs/` detailing data schemas, API contracts, hardware diagrams, UI specifications, and phased rollout tasks.
-- [ ] No application code files are modified during this planning run.
+### Gradebook
+- [ ] Initial assessment score columns render 5 slots with a "+" button that increments columns up to 10 and hides thereafter.
+- [ ] Switching between All, Male, and Female filters displays only matching rows without throwing duplicate key errors or duplicating sticky columns and header titles.
+- [ ] Gradebook scrolling and interactions operate smoothly without perceptible lag or redundant re-renders.
 
-### RFID Setup & Attendance Tracking
-- [ ] Specification details teacher RFID assignment modal supporting both USB/keyboard scanner and phone NFC scanning.
-- [ ] Duplicate RFID assignment is detected and prevented with clear, friendly inline or modal feedback.
-- [ ] Attendance data model and logs include an explicit recording method attribute distinguishing "RFID" from "Manual".
-- [ ] Roster table replaces individual boxed cards with a unified data table, removes circular avatars, provides gender category filters (All, Male Only, Female Only), and positions "Save Attendance" in the top header.
+### Directory Management (Manage Students & Manage Parents)
+- [ ] Student names in Manage Students and parent names in Manage Parents render with equal, readable font sizes.
+- [ ] Manage Parents table has no checkbox column next to '#', displays 'BIRTHDAY' instead of 'SECTION', and contains no 'All Subjects' option in the subject dropdown.
+- [ ] Table headers render cleanly without horizontal overflow stripes.
 
-### Schedule Guarding & Auto-Status Rules
-- [ ] Attendance recording is locked and scans are rejected on dates and times without an active matching class schedule.
-- [ ] Teacher cutoff configuration enforces strict validation: Present window starts at/before class start, Late cutoff is after Present cutoff, and Absent threshold is after Late cutoff within class duration.
-- [ ] Server-side 23:59 scheduled cron job logic is specified to mark unscanned students as Absent only for classes scheduled on that date, preserving existing marks and skipping non-scheduled days.
+### Attendance & RFID
+- [ ] Attendance list loads students lazily in batches of 20, student names are clearly readable, and LRN labels are removed from underneath names.
+- [ ] Clicking "Link RFID" displays an inline "Waiting for RFID..." indicator on the student item without a modal popup, automatically capturing the scanned 8-character UID and saving the link.
+- [ ] "Save Attendance" is positioned next to "Auto Absent", and "Cut off rules" is positioned before "Take Attendance".
+- [ ] Filter box in Analytics & History contains "This Week", "This Month", "Custom", and "Export" on the right side, and only lists grades, subjects, and sections with existing schedules.
 
-### Dual-Path Hardware & Mobile Offline Architecture
-- [ ] ESP32 hardware architecture specification includes circuit wiring/pinout diagrams, bill of materials, and firmware operational flow.
-- [ ] Offline queuing and conflict-free synchronization mechanism is defined for both ESP32 hardware and mobile phone NFC fallback.
-- [ ] Complete step-by-step tutorial document covers building, wiring, flashing, and testing the ESP32 RFID scanner.
+### Audit & History Logs
+- [ ] Audit logs display paginated at 20 items per page with functional page navigation controls.
+- [ ] Student records display full names (Lastname, Firstname Middlename) rather than alphanumeric IDs.
+- [ ] Time In and Method are displayed in dedicated, separate columns.
 
-### Cross-Platform Responsive Views & Access Control
-- [ ] Teacher attendance management and analytics are specified with responsive layouts for both Web and Mobile.
-- [ ] Student App attendance history & analytics is specified as view-only, strictly restricted via Supabase RLS to the authenticated student's own records, and includes a polished empty state.
-- [ ] Parent App attendance history & analytics is specified as view-only, strictly restricted via Supabase RLS to the linked child's records, and includes a polished empty state.
+### Caching, Responsiveness, & Styling
+- [ ] Classroom Setup, Gradebook, Manage Students, Manage Parents, Learning Materials, and My Schedule utilize caching for quick revisitation without blocking loading states.
+- [ ] Teacher interface layouts adapt responsively without overflow errors across window resizes.
+- [ ] Color usage conforms to the 60-30-10 palette distribution.
 
-### Error Presentation & Validation Matrix
-- [ ] Plan enforces zero technical error messages, using exclusively inline errors (under form inputs) or modal dialogs (for scanner/action alerts), strictly prohibiting SnackBars, toasts, and banners.
-- [ ] Plan includes an exhaustive scenario matrix covering unregistered cards, cross-section card taps, duplicate scans (idempotent), offline sync conflicts with manual teacher edits, schedule cutoff validations, and scanner timeouts with exact user-facing friendly messages.
-- [ ] UI designs follow the 60-30-10 color rule.
-
-## Verification Resources
-- [ ] Existing project test suites and Supabase schema fixtures (`class_realm01`).
+### Student & Parent Portals & Notifications
+- [ ] Student portal displays student schedule and personal attendance history.
+- [ ] Parent portal displays linked children's schedules and attendance records.
+- [ ] Push notifications are automatically dispatched to admin and parent devices upon a student reaching exactly 3, 5, and 10 cumulative absences.

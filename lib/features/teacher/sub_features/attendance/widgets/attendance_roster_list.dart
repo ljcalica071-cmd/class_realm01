@@ -106,7 +106,52 @@ class _AttendanceRosterListState extends State<AttendanceRosterList> {
       );
     }
 
-    if (widget.errorMessage != null || widget.students.isEmpty) {
+    if (widget.errorMessage != null) {
+      return Container(
+        margin: const EdgeInsets.symmetric(vertical: 16),
+        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 40),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surface,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: theme.colorScheme.error.withValues(alpha: 0.3),
+          ),
+        ),
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.error_outline_rounded,
+                color: theme.colorScheme.error,
+                size: 38,
+              ),
+              const SizedBox(height: 14),
+              Text(
+                widget.errorMessage!,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: theme.colorScheme.onSurface,
+                ),
+              ),
+              if (widget.onRetry != null) ...[
+                const SizedBox(height: 16),
+                AppButton.outline(
+                  label: 'Retry',
+                  icon: LucideIcons.refreshCw,
+                  isSmall: true,
+                  onPressed: widget.onRetry!,
+                ),
+              ],
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (widget.students.isEmpty) {
       return Container(
         margin: const EdgeInsets.symmetric(vertical: 16),
         padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 48),

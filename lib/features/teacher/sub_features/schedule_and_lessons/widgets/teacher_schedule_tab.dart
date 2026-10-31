@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import 'package:class_realm/core/theme/app_theme.dart';
+import 'package:class_realm/core/services/app_data_cache.dart';
 import 'package:class_realm/models/academic_models.dart';
 import 'package:class_realm/shared/widgets/shared_widgets.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
@@ -29,14 +30,36 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
   @override
   void initState() {
     super.initState();
+    _hydrateFromCache();
     _loadData();
   }
 
+  void _hydrateFromCache() {
+    final teacherId = AuthRepository.instance.currentUser?.id;
+    if (teacherId == null || teacherId.isEmpty) return;
+
+    final cachedOfferings = SubjectRepository.instance.getCachedTeacherSubjects(teacherId);
+    final cachedSchedules = AppDataCache.instance.getCached<List<ScheduleModel>>(
+      'teacher_schedules_$teacherId',
+      (json) => (json as List)
+          .map((e) => ScheduleModel.fromMap(Map<String, dynamic>.from(e as Map)))
+          .toList(),
+    );
+
+    if ((cachedSchedules != null && cachedSchedules.isNotEmpty) || cachedOfferings.isNotEmpty) {
+      _liveSchedules = cachedSchedules ?? [];
+      _teacherOfferings = cachedOfferings;
+      _isLoading = false;
+    }
+  }
+
   Future<void> _loadData() async {
-    setState(() {
-      _isLoading = true;
-      _loadError = null;
-    });
+    if (_liveSchedules.isEmpty) {
+      setState(() {
+        _isLoading = true;
+        _loadError = null;
+      });
+    }
     try {
       final teacherId = _requireTeacherId();
 
@@ -48,20 +71,28 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
       final fetchedSchedules = results[0] as List<ScheduleModel>;
       final fetchedOfferings = results[1] as List<Map<String, dynamic>>;
 
+      if (!mounted) return;
       setState(() {
         _liveSchedules = fetchedSchedules;
         _teacherOfferings = fetchedOfferings;
         _isLoading = false;
       });
+
+      AppDataCache.instance.set(
+        'teacher_schedules_$teacherId',
+        fetchedSchedules.map((s) => s.toMap()).toList(),
+      );
     } catch (e) {
       debugPrint('Schedule load notice: $e');
       if (!mounted) return;
-      setState(() {
-        _liveSchedules = [];
-        _teacherOfferings = [];
-        _loadError = null;
-        _isLoading = false;
-      });
+      if (_liveSchedules.isEmpty) {
+        setState(() {
+          _liveSchedules = [];
+          _teacherOfferings = [];
+          _loadError = null;
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -588,7 +619,7 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Section: ${s.section} • Room: ${s.room.isEmpty ? "TBD" : s.room} • Grading: WW ${s.wwWeight?.toInt() ?? 20}% / PT ${s.ptWeight?.toInt() ?? 50}% / EX ${s.exWeight?.toInt() ?? 30}%',
+                      'Section: ${s.section} â€¢ Room: ${s.room.isEmpty ? "TBD" : s.room} â€¢ Grading: WW ${s.wwWeight?.toInt() ?? 20}% / PT ${s.ptWeight?.toInt() ?? 50}% / EX ${s.exWeight?.toInt() ?? 30}%',
                       style: TextStyle(
                         fontSize: 13,
                         color: theme.colorScheme.onSurface.withValues(
@@ -606,7 +637,7 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
                         ),
                         const SizedBox(width: 6),
                         Text(
-                          '${s.dayOfWeek} • ${s.startTime} - ${s.endTime} (${s.durationMinutes} mins)',
+                          '${s.dayOfWeek} â€¢ ${s.startTime} - ${s.endTime} (${s.durationMinutes} mins)',
                           style: TextStyle(
                             fontWeight: FontWeight.w600,
                             fontSize: 13,

@@ -79,6 +79,7 @@ class LocalSubjectOfferings extends Table {
 class LocalStudents extends Table {
   TextColumn get studentId => text()();
   TextColumn get lrn => text().nullable()();
+  TextColumn get rfidUid => text().nullable()();
   TextColumn get firstName => text()();
   TextColumn get middleName => text().nullable()();
   TextColumn get lastName => text()();
@@ -123,7 +124,7 @@ class LocalParentStudentLinks extends Table {
 }
 
 // =========================================================================
-// 4. Attendance & Schedules
+// 4. Attendance, Cutoffs & Schedules
 // =========================================================================
 
 class LocalAttendanceRecords extends Table {
@@ -132,6 +133,10 @@ class LocalAttendanceRecords extends Table {
   TextColumn get subjectOfferingId => text()();
   TextColumn get attendanceDate => text()();
   TextColumn get status => text()(); // present, absent, late, excused
+  TextColumn get recordingMethod =>
+      text().withDefault(const Constant('Manual'))(); // Manual, RFID, System
+  TextColumn get timeIn => text().nullable()();
+  TextColumn get deviceId => text().nullable()();
   TextColumn get remarks => text().nullable()();
   TextColumn get source => text().withDefault(const Constant('manual'))();
   TextColumn get recordedBy => text().nullable()();
@@ -139,6 +144,22 @@ class LocalAttendanceRecords extends Table {
 
   @override
   Set<Column> get primaryKey => {id};
+}
+
+class LocalAttendanceCutoffs extends Table {
+  TextColumn get subjectOfferingId => text()();
+  IntColumn get presentStartMinsBefore =>
+      integer().withDefault(const Constant(15))();
+  IntColumn get presentGraceMins =>
+      integer().withDefault(const Constant(15))();
+  IntColumn get lateCutoffMins =>
+      integer().withDefault(const Constant(45))();
+  IntColumn get absentCutoffMins =>
+      integer().withDefault(const Constant(60))();
+  DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {subjectOfferingId};
 }
 
 class LocalSchedules extends Table {
@@ -187,7 +208,7 @@ class LocalStudentScores extends Table {
 
 class OfflineSyncQueue extends Table {
   TextColumn get id => text()();
-  TextColumn get action => text()(); // e.g. save_attendance, create_parent, submit_quiz
+  TextColumn get action => text()(); // e.g. batch_save, record_rfid_attendance
   TextColumn get targetTable => text()();
   TextColumn get payloadJson => text()();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
