@@ -1,4 +1,5 @@
 ﻿import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -50,35 +51,9 @@ class _TeacherParentManagementTabState
   int _currentPage = 1;
   final int _itemsPerPage = 20;
 
-  late final ScrollController _pinnedScrollController;
-  late final ScrollController _scrollableScrollController;
-  bool _isSyncingScroll = false;
-
   @override
   void initState() {
     super.initState();
-    _pinnedScrollController = ScrollController();
-    _scrollableScrollController = ScrollController();
-    _pinnedScrollController.addListener(() {
-      if (_isSyncingScroll) return;
-      _isSyncingScroll = true;
-      if (_scrollableScrollController.hasClients &&
-          _scrollableScrollController.offset !=
-              _pinnedScrollController.offset) {
-        _scrollableScrollController.jumpTo(_pinnedScrollController.offset);
-      }
-      _isSyncingScroll = false;
-    });
-    _scrollableScrollController.addListener(() {
-      if (_isSyncingScroll) return;
-      _isSyncingScroll = true;
-      if (_pinnedScrollController.hasClients &&
-          _pinnedScrollController.offset !=
-              _scrollableScrollController.offset) {
-        _pinnedScrollController.jumpTo(_scrollableScrollController.offset);
-      }
-      _isSyncingScroll = false;
-    });
     _loadFilters();
     _hydrateFromCache();
     _loadData();
@@ -158,8 +133,6 @@ class _TeacherParentManagementTabState
 
   @override
   void dispose() {
-    _pinnedScrollController.dispose();
-    _scrollableScrollController.dispose();
     if (_realtimeChannel != null) {
       try {
         Supabase.instance.client.removeChannel(_realtimeChannel!);
@@ -189,9 +162,14 @@ class _TeacherParentManagementTabState
     ]);
   }
 
-  String _formatDate(DateTime dt) {
-    return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
+  int _calculateAge(DateTime birthday) {
+    final today = DateTime.now();
+    var age = today.year - birthday.year;
+    final birthdayThisYear = DateTime(today.year, birthday.month, birthday.day);
+    if (today.isBefore(birthdayThisYear)) age--;
+    return age;
   }
+
 
   Future<void> _loadData() async {
     if (_activeParents.isEmpty && _archivedParents.isEmpty) {
@@ -374,6 +352,15 @@ class _TeacherParentManagementTabState
             b.parentGuardianRelationship ?? '',
           );
           break;
+        case 'birthdate':
+          if (a.birthday == null) {
+            cmp = b.birthday == null ? 0 : 1;
+          } else if (b.birthday == null) {
+            cmp = -1;
+          } else {
+            cmp = a.birthday!.compareTo(b.birthday!);
+          }
+          break;
         case 'username':
           cmp = a.username.compareTo(b.username);
           break;
@@ -397,23 +384,6 @@ class _TeacherParentManagementTabState
     // Selection check
     paginatedList.isNotEmpty &&
         paginatedList.every((p) => _selectedParentIds.contains(p.id));
-
-    const colNumWidth = 56.0;
-    const colNameWidth = 260.0;
-    const pinnedWidth = colNumWidth + colNameWidth;
-
-    const colRelWidth = 140.0;
-    const colStudentWidth = 220.0;
-    const colBirthdayWidth = 130.0;
-    const colStatusWidth = 130.0;
-    const colActionsWidth = 180.0;
-
-    const scrollableColsWidth =
-        colRelWidth +
-        colStudentWidth +
-        colBirthdayWidth +
-        colStatusWidth +
-        colActionsWidth;
 
     return Stack(
       children: [
@@ -729,466 +699,284 @@ class _TeacherParentManagementTabState
                               child: Column(
                                 children: [
                                   Expanded(
-                                    child: Stack(
-                                      children: [
-                                        Row(
-                                          children: [
-                                            // ── PINNED STICKY LEFT SECTION (Checkbox, #, PARENT NAME) ──
-                                            Container(
-                                              width: pinnedWidth,
-                                              decoration: BoxDecoration(
-                                                color: theme.colorScheme.surface, // 60% Background Surface Neutral
-                                                border: Border(
-                                                  right: BorderSide(
-                                                    color:
-                                                        theme.brightness ==
-                                                            Brightness.dark
-                                                        ? theme
-                                                              .colorScheme
-                                                              .onSurface
-                                                              .withValues(
-                                                                alpha: 0.15,
-                                                              )
-                                                        : const Color(
-                                                            0xFFCBD5E1,
+                                    child: LayoutBuilder(
+                                      builder: (context, constraints) {
+                                        const colNumWidth = 56.0;
+                                        const colRelWidth = 140.0;
+                                        const colBirthdateWidth = 160.0;
+                                        const colStatusWidth = 130.0;
+                                        const colActionsWidth = 140.0;
+
+                                        const baseFixed = colNumWidth +
+                                            colRelWidth +
+                                            colBirthdateWidth +
+                                            colStatusWidth +
+                                            colActionsWidth;
+                                        const baseNameWidth = 260.0;
+                                        const baseStudentWidth = 220.0;
+                                        const baseTotal =
+                                            baseFixed + baseNameWidth + baseStudentWidth;
+
+                                        final extraWidth = math.max(
+                                          0.0,
+                                          constraints.maxWidth - baseTotal,
+                                        );
+                                        final colNameWidth =
+                                            baseNameWidth + (extraWidth * 0.5);
+                                        final colStudentWidth =
+                                            baseStudentWidth + (extraWidth * 0.5);
+                                        final totalTableWidth = math.max(
+                                          constraints.maxWidth,
+                                          baseTotal,
+                                        );
+
+                                        return SingleChildScrollView(
+                                          scrollDirection: Axis.horizontal,
+                                          child: SizedBox(
+                                            width: totalTableWidth,
+                                            child: Column(
+                                              children: [
+                                                // ── UNIFIED TABLE HEADER ──
+                                                Container(
+                                                  height: 48,
+                                                  decoration: BoxDecoration(
+                                                    color: theme.colorScheme.primary.withValues(alpha: 0.1),
+                                                    border: Border(
+                                                      bottom: BorderSide(
+                                                        color: theme.colorScheme.primary.withValues(alpha: 0.3),
+                                                      ),
+                                                    ),
+                                                  ),
+                                                  child: Row(
+                                                    children: [
+                                                      _buildHeaderCell(
+                                                        width: colNumWidth,
+                                                        child: Center(
+                                                          child: Text(
+                                                            '#',
+                                                            style: TextStyle(
+                                                              color: tableHeaderTextColor,
+                                                              fontWeight: FontWeight.bold,
+                                                              fontSize: 13,
+                                                            ),
                                                           ),
-                                                    width: 1.5,
+                                                        ),
+                                                      ),
+                                                      _buildHeaderCell(
+                                                        width: colNameWidth,
+                                                        child: _buildClickableHeaderTitle(
+                                                          'PARENT / GUARDIAN NAME',
+                                                          'lastName',
+                                                        ),
+                                                      ),
+                                                      _buildHeaderCell(
+                                                        width: colRelWidth,
+                                                        child: _buildClickableHeaderTitle(
+                                                          'RELATIONSHIP',
+                                                          'relationship',
+                                                        ),
+                                                      ),
+                                                      _buildHeaderCell(
+                                                        width: colStudentWidth,
+                                                        child: Text(
+                                                          'LINKED STUDENT',
+                                                          style: TextStyle(
+                                                            color: tableHeaderTextColor,
+                                                            fontWeight: FontWeight.bold,
+                                                            fontSize: 13,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                      _buildHeaderCell(
+                                                        width: colBirthdateWidth,
+                                                        child: _buildClickableHeaderTitle(
+                                                          'BIRTHDATE',
+                                                          'birthdate',
+                                                        ),
+                                                      ),
+                                                      _buildHeaderCell(
+                                                        width: colStatusWidth,
+                                                        child: _buildClickableHeaderTitle(
+                                                          'STATUS',
+                                                          'status',
+                                                        ),
+                                                      ),
+                                                      _buildHeaderCell(
+                                                        width: colActionsWidth,
+                                                        hasRightBorder: false,
+                                                        child: Center(
+                                                          child: Text(
+                                                            'ACTIONS',
+                                                            style: TextStyle(
+                                                              color: tableHeaderTextColor,
+                                                              fontWeight: FontWeight.bold,
+                                                              fontSize: 13,
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ],
                                                   ),
                                                 ),
-                                              ),
-                                              child: Column(
-                                                children: [
-                                                  // Pinned Header
-                                                  Container(
-                                                    height: 48,
-                                                    decoration: BoxDecoration(
-                                                      color: theme
-                                                          .colorScheme
-                                                          .primary
-                                                          .withValues(
-                                                            alpha: 0.1,
-                                                          ), // 30% Primary accent color for headers
-                                                      border: Border(
-                                                        bottom: BorderSide(
-                                                          color: theme
-                                                              .colorScheme
-                                                              .primary
-                                                              .withValues(
-                                                                alpha: 0.3,
-                                                              ),
-                                                        ),
-                                                      ),
-                                                    ),
-                                                    child: Row(
-                                                      children: [
-                                                        _buildHeaderCell(
-                                                          width: colNumWidth,
-                                                          child: Center(
-                                                            child: Text(
-                                                              '#',
-                                                              style: TextStyle(
-                                                                color:
-                                                                    tableHeaderTextColor,
-                                                                fontWeight:
-                                                                    FontWeight
-                                                                        .bold,
-                                                                fontSize: 13,
-                                                              ),
-                                                            ),
-                                                          ),
-                                                        ),
-                                                        _buildHeaderCell(
-                                                          width: colNameWidth - 1.5, hasRightBorder: false,
-                                                          child:
-                                                              _buildClickableHeaderTitle(
-                                                                'PARENT NAME',
-                                                                'lastName',
-                                                              ),
-                                                        ),
-                                                      ],
-                                                    ),
-                                                  ),
-                                                  // Pinned Rows
-                                                  Expanded(
-                                                    child: displayList.isEmpty
-                                                        ? const SizedBox()
-                                                        : ListView.builder(
-                                                            controller:
-                                                                _pinnedScrollController,
-                                                            itemCount:
-                                                                paginatedList
-                                                                    .length,
-                                                            itemBuilder: (ctx, i) {
-                                                              final p =
-                                                                  paginatedList[i];
-                                                              final isSelected =
-                                                                  _selectedParentIds
-                                                                      .contains(
-                                                                        p.id,
-                                                                      );
 
-                                                              final lastName =
-                                                                  p.lastName ??
-                                                                  (p.fullName
-                                                                          .contains(
-                                                                            ' ',
-                                                                          )
-                                                                      ? p.fullName
-                                                                            .split(
-                                                                              ' ',
-                                                                            )
-                                                                            .last
-                                                                      : p.fullName);
-                                                              final firstName =
-                                                                  p.firstName ??
-                                                                  (p.fullName
-                                                                          .contains(
-                                                                            ' ',
-                                                                          )
-                                                                      ? p.fullName
-                                                                            .split(
-                                                                              ' ',
-                                                                            )
-                                                                            .first
-                                                                      : '');
-                                                              final middleInitial =
-                                                                  (p.middleName !=
-                                                                          null &&
-                                                                      p.middleName!
-                                                                          .trim()
-                                                                          .isNotEmpty)
-                                                                  ? '${p.middleName!.trim()[0].toUpperCase()}.'
-                                                                  : '';
-                                                              final restOfName =
-                                                                  [
-                                                                        firstName,
-                                                                        middleInitial,
-                                                                      ]
-                                                                      .where(
-                                                                        (e) => e
-                                                                            .isNotEmpty,
-                                                                      )
-                                                                      .join(
-                                                                        ' ',
-                                                                      );
-
-                                                              return Container(
-                                                                height: 52,
-                                                                decoration: BoxDecoration(
-                                                                  color:
-                                                                      isSelected
-                                                                      ? theme
-                                                                            .colorScheme
-                                                                            .primary
-                                                                            .withValues(
-                                                                              alpha: 0.12,
-                                                                            )
-                                                                      : (i % 2 ==
-                                                                                1
-                                                                            ? theme.colorScheme.primary.withValues(alpha: 0.03) // 60/30 subtle row alternate
-                                                                            : theme.colorScheme.surface), // 60% base surface
-                                                                  border: Border(
-                                                                    bottom: BorderSide(
-                                                                      color:
-                                                                          tableBorderColor,
-                                                                    ),
-                                                                  ),
-                                                                ),
-                                                                child: Row(
-                                                                  children: [
-                                                                    _buildDataCell(
-                                                                      width:
-                                                                          colNumWidth,
-                                                                      child: Center(
-                                                                        child: Text(
-                                                                          '${startIndex + i + 1}',
-                                                                          style: const TextStyle(
-                                                                            fontSize:
-                                                                                13,
-                                                                          ),
-                                                                        ),
-                                                                      ),
-                                                                    ),
-                                                                    _buildDataCell(
-                                                                      width: colNameWidth - 1.5, child: Text.rich(
-                                                                        TextSpan(
-                                                                          children: [
-                                                                            TextSpan(
-                                                                              text: lastName,
-                                                                              style: TextStyle(
-                                                                                fontSize: 14,
-                                                                                fontWeight: FontWeight.bold,
-                                                                                color: theme.colorScheme.onSurface,
-                                                                              ),
-                                                                            ),
-                                                                            if (restOfName.isNotEmpty)
-                                                                              TextSpan(
-                                                                                text: ', $restOfName',
-                                                                                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: theme.colorScheme.onSurface),
-                                                                              ),
-                                                                          ],
-                                                                        ),
-                                                                        overflow:
-                                                                            TextOverflow.ellipsis,
-                                                                        maxLines:
-                                                                            1,
-                                                                      ),
-                                                                    ),
-                                                                  ],
-                                                                ),
-                                                              );
-                                                            },
-                                                          ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                            // ── SCROLLABLE RIGHT SECTION (Horizontal Scroll) ──
-                                            Expanded(
-                                              child: SingleChildScrollView(
-                                                scrollDirection:
-                                                    Axis.horizontal,
-                                                child: SizedBox(
-                                                  width: scrollableColsWidth,
-                                                  child: Column(
-                                                    children: [
-                                                      // Scrollable Header
-                                                      Container(
-                                                        height: 48,
-                                                        decoration: BoxDecoration(
-                                                          color: theme
-                                                              .colorScheme
-                                                              .primary
-                                                              .withValues(
-                                                                alpha: 0.1,
+                                                // ── TABLE CONTENT OR EMPTY STATE ──
+                                                Expanded(
+                                                  child: displayList.isEmpty
+                                                      ? Center(
+                                                          child: Column(
+                                                            mainAxisAlignment: MainAxisAlignment.center,
+                                                            children: [
+                                                              Icon(
+                                                                _showArchivedParents
+                                                                    ? Icons.archive_outlined
+                                                                    : Icons.family_restroom,
+                                                                size: 56,
+                                                                color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
                                                               ),
-                                                          border: Border(
-                                                            bottom: BorderSide(
-                                                              color: theme
-                                                                  .colorScheme
-                                                                  .primary
-                                                                  .withValues(
-                                                                    alpha: 0.3,
-                                                                  ),
-                                                            ),
-                                                          ),
-                                                        ),
-                                                        child: Row(
-                                                          children: [
-                                                            _buildHeaderCell(
-                                                              width:
-                                                                  colRelWidth,
-                                                              hasRightBorder:
-                                                                  false,
-                                                              child:
-                                                                  _buildClickableHeaderTitle(
-                                                                    'RELATIONSHIP',
-                                                                    'relationship',
-                                                                  ),
-                                                            ),
-                                                            _buildHeaderCell(
-                                                              width:
-                                                                  colStudentWidth,
-                                                              child: Text(
-                                                                'LINKED STUDENT',
+                                                              const SizedBox(height: 16),
+                                                              Text(
+                                                                _showArchivedParents
+                                                                    ? 'No archived parents found.'
+                                                                    : 'No parent accounts found for the current filters.',
+                                                                textAlign: TextAlign.center,
                                                                 style: TextStyle(
-                                                                  color:
-                                                                      tableHeaderTextColor,
-                                                                  fontWeight:
-                                                                      FontWeight
-                                                                          .bold,
-                                                                  fontSize: 13,
+                                                                  fontSize: 16,
+                                                                  fontWeight: FontWeight.w500,
+                                                                  color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
                                                                 ),
                                                               ),
-                                                            ),
-                                                            _buildHeaderCell(
-                                                              width:
-                                                                  colBirthdayWidth,
-                                                              child: Text(
-                                                                'BIRTHDAY',
-                                                                style: TextStyle(
-                                                                  color:
-                                                                      tableHeaderTextColor,
-                                                                  fontWeight:
-                                                                      FontWeight
-                                                                          .bold,
-                                                                  fontSize: 13,
-                                                                ),
-                                                              ),
-                                                            ),
-                                                            _buildHeaderCell(
-                                                              width:
-                                                                  colStatusWidth,
-                                                              hasRightBorder:
-                                                                  false,
-                                                              child:
-                                                                  _buildClickableHeaderTitle(
-                                                                    'STATUS',
-                                                                    'status',
-                                                                  ),
-                                                            ),
-                                                            _buildHeaderCell(
-                                                              width:
-                                                                  colActionsWidth,
-                                                              hasRightBorder:
-                                                                  false,
-                                                              child: Center(
-                                                                child: Text(
-                                                                  'ACTIONS',
-                                                                  style: TextStyle(
-                                                                    color:
-                                                                        tableHeaderTextColor,
-                                                                    fontWeight:
-                                                                        FontWeight
-                                                                            .bold,
-                                                                    fontSize:
-                                                                        13,
-                                                                  ),
-                                                                ),
-                                                              ),
-                                                            ),
-                                                          ],
-                                                        ),
-                                                      ),
-                                                      // Scrollable Rows
-                                                      Expanded(
-                                                        child: ListView.builder(
-                                                          controller:
-                                                              _scrollableScrollController,
-                                                          itemCount:
-                                                              paginatedList
-                                                                  .length,
+                                                            ],
+                                                          ),
+                                                        )
+                                                      : ListView.builder(
+                                                          itemCount: paginatedList.length,
                                                           itemBuilder: (ctx, i) {
-                                                            final p =
-                                                                paginatedList[i];
-                                                            final isSelected =
-                                                                _selectedParentIds
-                                                                    .contains(
-                                                                      p.id,
-                                                                    );
+                                                            final p = paginatedList[i];
+                                                            final isSelected = _selectedParentIds.contains(p.id);
 
-                                                            final linkedStudent =
-                                                                _enrolledStudents
-                                                                    .where(
-                                                                      (user) =>
-                                                                          user.id ==
-                                                                          p.linkedStudentId,
-                                                                    )
-                                                                    .firstOrNull;
+                                                            final lastName = p.lastName ??
+                                                                (p.fullName.contains(' ')
+                                                                    ? p.fullName.split(' ').last
+                                                                    : p.fullName);
+                                                            final firstName = p.firstName ??
+                                                                (p.fullName.contains(' ')
+                                                                    ? p.fullName.split(' ').first
+                                                                    : '');
+                                                            final middleInitial = (p.middleName != null &&
+                                                                    p.middleName!.trim().isNotEmpty)
+                                                                ? '${p.middleName!.trim()[0].toUpperCase()}.'
+                                                                : '';
+                                                            final restOfName = [firstName, middleInitial]
+                                                                .where((e) => e.isNotEmpty)
+                                                                .join(' ');
 
+                                                            final linkedStudent = _enrolledStudents
+                                                                .where((user) => user.id == p.linkedStudentId)
+                                                                .firstOrNull;
                                                             final studentName =
-                                                                linkedStudent
-                                                                    ?.fullName ??
-                                                                'Unlinked Student';
-                                                            // ignore: unused_local_variable
-                                                            final section =
-                                                                linkedStudent
-                                                                    ?.departmentOrSection ??
-                                                                p.departmentOrSection ??
-                                                                'â€”';
+                                                                linkedStudent?.fullName ?? 'Unlinked Student';
+
+                                                            final birthdateText = p.birthday != null
+                                                                ? '${p.birthday!.year}-${p.birthday!.month.toString().padLeft(2, '0')}-${p.birthday!.day.toString().padLeft(2, '0')} (${_calculateAge(p.birthday!)})'
+                                                                : '\u2014';
 
                                                             return Container(
                                                               height: 52,
                                                               decoration: BoxDecoration(
-                                                                color:
-                                                                    isSelected
-                                                                    ? theme
-                                                                          .colorScheme
-                                                                          .primary
-                                                                          .withValues(
-                                                                            alpha:
-                                                                                0.12,
-                                                                          )
-                                                                    : (i % 2 ==
-                                                                              1
-                                                                          ? theme.colorScheme.primary.withValues(
-                                                                              alpha: 0.03,
-                                                                            ) // 60/30 subtle row alternate
-                                                                          : theme.colorScheme.surface),
+                                                                color: isSelected
+                                                                    ? theme.colorScheme.primary.withValues(alpha: 0.12)
+                                                                    : (i % 2 == 1
+                                                                        ? theme.colorScheme.primary.withValues(alpha: 0.03)
+                                                                        : theme.colorScheme.surface),
                                                                 border: Border(
                                                                   bottom: BorderSide(
-                                                                    color:
-                                                                        tableBorderColor,
+                                                                    color: tableBorderColor,
                                                                   ),
                                                                 ),
                                                               ),
                                                               child: Row(
                                                                 children: [
                                                                   _buildDataCell(
-                                                                    width:
-                                                                        colRelWidth,
-                                                                    child: Text(
-                                                                      p.parentGuardianRelationship ?? 'Parent/Guardian',
-                                                                      style: const TextStyle(
-                                                                        fontSize:
-                                                                            13,
+                                                                    width: colNumWidth,
+                                                                    child: Center(
+                                                                      child: Text(
+                                                                        '${startIndex + i + 1}',
+                                                                        style: const TextStyle(fontSize: 13),
                                                                       ),
                                                                     ),
                                                                   ),
                                                                   _buildDataCell(
-                                                                    width:
-                                                                        colStudentWidth,
+                                                                    width: colNameWidth,
+                                                                    child: Text.rich(
+                                                                      TextSpan(
+                                                                        children: [
+                                                                          TextSpan(
+                                                                            text: lastName,
+                                                                            style: TextStyle(
+                                                                              fontSize: 14,
+                                                                              fontWeight: FontWeight.bold,
+                                                                              color: theme.colorScheme.onSurface,
+                                                                            ),
+                                                                          ),
+                                                                          if (restOfName.isNotEmpty)
+                                                                            TextSpan(
+                                                                              text: ', $restOfName',
+                                                                              style: TextStyle(
+                                                                                fontSize: 13,
+                                                                                fontWeight: FontWeight.w500,
+                                                                                color: theme.colorScheme.onSurface,
+                                                                              ),
+                                                                            ),
+                                                                        ],
+                                                                      ),
+                                                                      overflow: TextOverflow.ellipsis,
+                                                                      maxLines: 1,
+                                                                    ),
+                                                                  ),
+                                                                  _buildDataCell(
+                                                                    width: colRelWidth,
+                                                                    child: Text(
+                                                                      p.parentGuardianRelationship ?? 'Parent/Guardian',
+                                                                      style: const TextStyle(fontSize: 13),
+                                                                    ),
+                                                                  ),
+                                                                  _buildDataCell(
+                                                                    width: colStudentWidth,
                                                                     child: Text(
                                                                       studentName,
                                                                       style: TextStyle(
-                                                                        fontSize:
-                                                                            13,
-                                                                        color: theme
-                                                                            .colorScheme
-                                                                            .primary,
-                                                                        fontWeight:
-                                                                            FontWeight.bold,
+                                                                        fontSize: 13,
+                                                                        color: theme.colorScheme.primary,
+                                                                        fontWeight: FontWeight.bold,
                                                                       ),
-                                                                      overflow:
-                                                                          TextOverflow
-                                                                              .ellipsis,
+                                                                      overflow: TextOverflow.ellipsis,
                                                                     ),
                                                                   ),
                                                                   _buildDataCell(
-                                                                    width:
-                                                                        colBirthdayWidth,
+                                                                    width: colBirthdateWidth,
                                                                     child: Text(
-                                                                      p.birthday !=
-                                                                              null
-                                                                          ? _formatDate(
-                                                                              p.birthday!,
-                                                                            )
-                                                                          : 'â€”',
-                                                                      style: const TextStyle(
-                                                                        fontSize:
-                                                                            13,
-                                                                      ),
+                                                                      birthdateText,
+                                                                      style: const TextStyle(fontSize: 13),
                                                                     ),
                                                                   ),
                                                                   _buildDataCell(
-                                                                    width:
-                                                                        colStatusWidth,
-                                                                    child: StatusBadge.fromAccountStatus(
-                                                                      p.status,
-                                                                    ),
+                                                                    width: colStatusWidth,
+                                                                    child: StatusBadge.fromAccountStatus(p.status),
                                                                   ),
                                                                   _buildDataCell(
-                                                                    width:
-                                                                        colActionsWidth,
-                                                                    hasRightBorder:
-                                                                        false,
+                                                                    width: colActionsWidth,
+                                                                    hasRightBorder: false,
                                                                     child: Row(
-                                                                      mainAxisAlignment:
-                                                                          MainAxisAlignment
-                                                                              .spaceEvenly,
+                                                                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                                                                       children: [
                                                                         IconButton(
                                                                           tooltip: 'Access Credentials Slip',
                                                                           icon: const Icon(
                                                                             Icons.badge_outlined,
-                                                                            size:
-                                                                                18,
-                                                                            color: Color(
-                                                                              0xFF64748B,
-                                                                            ),
+                                                                            size: 18,
+                                                                            color: Color(0xFF64748B),
                                                                           ),
-                                                                          splashRadius:
-                                                                              18,
+                                                                          splashRadius: 18,
                                                                           onPressed: () => _showCredentialSlip(
                                                                             p,
                                                                             studentName,
@@ -1198,41 +986,27 @@ class _TeacherParentManagementTabState
                                                                           tooltip: 'Edit Parent Details',
                                                                           icon: const Icon(
                                                                             Icons.edit_outlined,
-                                                                            size:
-                                                                                18,
-                                                                            color: Color(
-                                                                              0xFF64748B,
-                                                                            ),
+                                                                            size: 18,
+                                                                            color: Color(0xFF64748B),
                                                                           ),
-                                                                          splashRadius:
-                                                                              18,
-                                                                          onPressed: () =>
-                                                                              _showEditParentDialog(
-                                                                                p,
-                                                                              ),
+                                                                          splashRadius: 18,
+                                                                          onPressed: () => _showEditParentDialog(p),
                                                                         ),
                                                                         IconButton(
-                                                                          tooltip:
-                                                                              _showArchivedParents
+                                                                          tooltip: _showArchivedParents
                                                                               ? 'Restore Parent'
                                                                               : 'Archive Parent',
                                                                           icon: Icon(
                                                                             _showArchivedParents
                                                                                 ? Icons.restore
                                                                                 : Icons.archive_outlined,
-                                                                            size:
-                                                                                18,
-                                                                            color:
-                                                                                _showArchivedParents
+                                                                            size: 18,
+                                                                            color: _showArchivedParents
                                                                                 ? const Color(0xFF10B981)
                                                                                 : const Color(0xFF94A3B8),
                                                                           ),
-                                                                          splashRadius:
-                                                                              18,
-                                                                          onPressed: () =>
-                                                                              _toggleArchiveParent(
-                                                                                p,
-                                                                              ),
+                                                                          splashRadius: 18,
+                                                                          onPressed: () => _toggleArchiveParent(p),
                                                                         ),
                                                                         if (_showArchivedParents)
                                                                           IconButton(
@@ -1242,11 +1016,8 @@ class _TeacherParentManagementTabState
                                                                               size: 18,
                                                                               color: Colors.redAccent,
                                                                             ),
-                                                                            splashRadius:
-                                                                                18,
-                                                                            onPressed: () => _permanentlyDeleteParent(
-                                                                              p,
-                                                                            ),
+                                                                            splashRadius: 18,
+                                                                            onPressed: () => _permanentlyDeleteParent(p),
                                                                           ),
                                                                       ],
                                                                     ),
@@ -1256,58 +1027,12 @@ class _TeacherParentManagementTabState
                                                             );
                                                           },
                                                         ),
-                                                      ),
-                                                    ],
-                                                  ),
                                                 ),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-
-                                        // ── EMPTY STATE OVERLAY (if empty) ──
-                                        if (displayList.isEmpty)
-                                          Positioned.fill(
-                                            top: 48, // Below header
-                                            child: Center(
-                                              child: Column(
-                                                mainAxisAlignment:
-                                                    MainAxisAlignment.center,
-                                                children: [
-                                                  Icon(
-                                                    _showArchivedParents
-                                                        ? Icons.archive_outlined
-                                                        : Icons.family_restroom,
-                                                    size: 56,
-                                                    color: theme
-                                                        .colorScheme
-                                                        .onSurface
-                                                        .withValues(alpha: 0.5),
-                                                  ),
-                                                  const SizedBox(height: 16),
-                                                  Text(
-                                                    _showArchivedParents
-                                                        ? 'No archived parents found.'
-                                                        : 'No parent accounts found for the current filters.',
-                                                    textAlign: TextAlign.center,
-                                                    style: TextStyle(
-                                                      fontSize: 16,
-                                                      fontWeight:
-                                                          FontWeight.w500,
-                                                      color: theme
-                                                          .colorScheme
-                                                          .onSurface
-                                                          .withValues(
-                                                            alpha: 0.8,
-                                                          ),
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
+                                              ],
                                             ),
                                           ),
-                                        // ── END OF EMPTY STATE ──
-                                      ],
+                                        );
+                                      },
                                     ),
                                   ),
                                   // ── FULL WIDTH PAGINATION FOOTER ──
@@ -1477,7 +1202,7 @@ class _TeacherParentManagementTabState
         border: hasRightBorder
             ? Border(
                 right: BorderSide(
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.06),
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.12),
                 ),
               )
             : null,

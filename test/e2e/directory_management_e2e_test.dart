@@ -58,7 +58,7 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(find.byType(TeacherParentManagementTab), findsOneWidget);
-        expect(find.text('PARENT NAME'), findsWidgets);
+        expect(find.textContaining('PARENT / GUARDIAN NAME'), findsWidgets);
       },
     );
 

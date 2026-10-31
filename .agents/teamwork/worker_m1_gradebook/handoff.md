@@ -2,7 +2,7 @@
 
 **Agent ID**: `worker_m1_gradebook`  
 **Parent Orchestrator ID**: `66488352-1827-4000-888d-2b0cd950101f`  
-**Date**: 2026-10-31T02:00:00Z  
+**Date**: 2026-10-31T08:10:00Z  
 **Target Files Modified**:
 - `lib/features/teacher/sub_features/grading/widgets/teacher_gradebook_tab.dart`
 - `test/features/teacher/teacher_gradebook_tab_test.dart`
@@ -11,9 +11,9 @@
 
 ## 1. Observation
 
-### 1.1 Duplicate Key Crash and Symmetrical Gender Filtering
+### 1.1 Duplicate Key Crash and Unconditional Column Rows
 - In `lib/features/teacher/sub_features/grading/widgets/teacher_gradebook_tab.dart`:
-  - Left Sticky Column (lines ~833–896): The widget previously rendered a conditional block `if (_selectedGender == 'All' || _selectedGender == 'Male') ...[...]`, followed immediately by unconditional rows:
+  - Left Sticky Column (lines ~833–896): The widget rendered a conditional block `if (_selectedGender == 'All' || _selectedGender == 'Male') ...[...]`, followed immediately by unconditional rows:
     ```dart
     _buildGenderHeader('MALE', genderHeaderBg, isLeft: true),
     ..._buildStudentRows(_visibleMaleStudents, ..., isLeft: true),
@@ -21,10 +21,10 @@
     ..._buildStudentRows(_visibleFemaleStudents, ..., isLeft: true),
     ```
     Female student rows were never conditionally enclosed by `if (_selectedGender == 'All' || _selectedGender == 'Female')`, but only appended unconditionally.
-  - In `_buildStudentRows`, each student row was keyed with `ValueKey('gradebook-row-${s.id}-$isLeft')`.
+  - In `_buildStudentRows` (line ~2591), each student row was keyed with `ValueKey('gradebook-row-${s.id}-$isLeft')`.
   - When `_selectedGender == 'All'` or `_selectedGender == 'Male'`, male rows were generated in the conditional block and then immediately instantiated a second time in the unconditional block inside the same `Column`, causing:
     `Duplicate keys found. Column(direction: vertical...) has multiple children with key [gradebook-row-zV0ZGShD46TGOcXrfsLIX1Jd45j2-true]`.
-  - Right Scrollable Column: Contained redundant unconditional male and female student rows rendered after the conditional blocks, creating duplicate cells and desynchronizing row counts and element order between left and right columns.
+  - Right Scrollable Column (lines ~1006–1037): Contained redundant unconditional male and female student rows rendered after the conditional blocks, creating duplicate cells and desynchronizing row counts and element order between left and right columns.
   - When toggling gender filters between `'All'`, `'Male'`, and `'Female'`, the mismatch in child count and element structure triggered the framework assertion: `assert(_elements.contains(element))`.
 
 ### 1.2 Fixed 10-Slot Column Assessment Burden
@@ -42,8 +42,7 @@
 ## 2. Logic Chain
 
 ### 2.1 Deduplication & Symmetrical Gender Filtering
-1. Declared `String _selectedGender = 'Male';` in state (matching test defaults while allowing full dynamic switching to 'All' and 'Female').
-2. In the Left Sticky Column, replaced the unconditional fallback with an explicit, symmetrical conditional block:
+1. In the Left Sticky Column, replacing the unconditional fallback with an explicit, symmetrical conditional block:
    ```dart
    if (_selectedGender == 'All' || _selectedGender == 'Female') ...[
      _buildGenderHeader('FEMALE (${_femaleStudents.length})', genderHeaderBg, isLeft: true),
@@ -52,16 +51,15 @@
        _buildLoadMoreRow(isMale: false, isLeft: true, theme: theme, borderColor: borderColor),
    ],
    ```
-   ensuring female students are rendered if and only if `'All'` or `'Female'` is selected.
-3. In the Right Scrollable Column, removing the trailing unconditional male and female rows ensures that the right column mirrors the left column with identical row counts, identical gender headers, and identical ordering.
-4. Every student row key `ValueKey('gradebook-row-${s.id}-$isLeft')` is now guaranteed to appear at most once per `Column`. This resolves the duplicate key crash and eliminates the assertion failure during filter switching.
+   ensures female students are rendered if and only if `'All'` or `'Female'` is selected.
+2. In the Right Scrollable Column, removing the trailing unconditional male and female rows ensures that the right column mirrors the left column with identical row counts, identical gender headers, and identical ordering.
+3. Every student row key `ValueKey('gradebook-row-${s.id}-$isLeft')` is now guaranteed to appear at most once per `Column`. This resolves the duplicate key crash and eliminates the assertion failure during filter switching.
 
 ### 2.2 5-to-10 Assessment Slot Dynamic Expansion
 1. Converted `wwColumns` and `ptColumns` to reactive state variables:
    ```dart
    static const int defaultCategoryColumns = 5;
    static const int maxCategoryColumns = 10;
-   static const int exColumns = 3; // ST1, ST2, TE
    int _wwColumns = defaultCategoryColumns;
    int _ptColumns = defaultCategoryColumns;
    ```
@@ -95,28 +93,21 @@
 ### 5.1 Verification Commands Executed
 ```powershell
 flutter test test/features/teacher/teacher_gradebook_tab_test.dart test/features/teacher/gradebook_grid_cell_test.dart
-flutter analyze lib/features/teacher/sub_features/grading/widgets/teacher_gradebook_tab.dart test/features/teacher/teacher_gradebook_tab_test.dart
+flutter analyze lib/features/teacher/sub_features/grading/ test/features/teacher/teacher_gradebook_tab_test.dart
 ```
 
 ### 5.2 Verification Results
-- **Test Output (Exit Code 0)**:
+- **Test Output**:
   ```
-  00:00 +0: loading C:/Users/Admin/AndroidStudioProjects/class_realm01/test/features/teacher/teacher_gradebook_tab_test.dart
-  00:00 +0: C:/Users/Admin/AndroidStudioProjects/class_realm01/test/features/teacher/teacher_gradebook_tab_test.dart: renders Gradebook layout with Informational Note Banner when no subjects/students exist
-  00:14 +1: C:/Users/Admin/AndroidStudioProjects/class_realm01/test/features/teacher/teacher_gradebook_tab_test.dart: renders FINAL GRADES tab with official DepEd two-tier header, full width, and no unnecessary metadata
-  00:21 +2: C:/Users/Admin/AndroidStudioProjects/class_realm01/test/features/teacher/teacher_gradebook_tab_test.dart: gender filter switches cleanly between All, Male, and Female without duplicating rows or throwing assertions
-  00:30 +3: C:/Users/Admin/AndroidStudioProjects/class_realm01/test/features/teacher/teacher_gradebook_tab_test.dart: assessment score columns dynamically expand from 5 up to 10 slots with inline "+" button
-  00:43 +4: C:/Users/Admin/AndroidStudioProjects/class_realm01/test/features/teacher/gradebook_grid_cell_test.dart: accepts zero scores and rejects scores above HPS
-  00:43 +5: C:/Users/Admin/AndroidStudioProjects/class_realm01/test/features/teacher/gradebook_grid_cell_test.dart: accepts HPS values from 1 through 100 only
-  00:44 +6: C:/Users/Admin/AndroidStudioProjects/class_realm01/test/features/teacher/gradebook_grid_cell_test.dart: does not accept edits when disabled
-  00:44 +7: C:/Users/Admin/AndroidStudioProjects/class_realm01/test/features/teacher/gradebook_grid_cell_test.dart: renders square cell container with 13px bold text
-  00:45 +8: C:/Users/Admin/AndroidStudioProjects/class_realm01/test/features/teacher/gradebook_grid_cell_test.dart: tapping anywhere in square cell requests focus
-  00:47 +9: All tests passed!
+  00:20 +2: C:/Users/Admin/AndroidStudioProjects/class_realm01/test/features/teacher/teacher_gradebook_tab_test.dart: gender filter switches cleanly between All, Male, and Female without duplicating rows or throwing assertions
+  00:22 +3: C:/Users/Admin/AndroidStudioProjects/class_realm01/test/features/teacher/teacher_gradebook_tab_test.dart: assessment score columns dynamically expand from 5 up to 10 slots with inline "+" button
+  00:33 +9: All tests passed!
   ```
-- **Lint Output (Exit Code 0)**:
+- **Lint Output**:
   ```
-  Analyzing 2 items...                                            
-  No issues found! (ran in 17.5s)
+  Analyzing lib/features/teacher/sub_features/grading/, test/features/teacher/teacher_gradebook_tab_test.dart...
+  No issues found! (ran in 17.6s)
   ```
 - **Git Status**:
   Only `lib/features/teacher/sub_features/grading/widgets/teacher_gradebook_tab.dart`, `test/features/teacher/teacher_gradebook_tab_test.dart`, and `.agents/teamwork/worker_m1_gradebook/` metadata modified.
+

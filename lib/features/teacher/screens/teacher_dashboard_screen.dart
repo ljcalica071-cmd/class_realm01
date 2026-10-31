@@ -37,6 +37,7 @@ class TeacherDashboardScreen extends StatefulWidget {
 
 class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   late int _selectedIndex = widget.initialSelectedIndex;
+  final Set<int> _loadedTabIndices = {};
   bool _isSidebarExpanded = true;
   final String _selectedClassSection = 'All Sections';
   ActivityModel? _viewingSubmissionsFor;
@@ -91,7 +92,10 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   }
 
   void _onSelectTab(int index) {
-    setState(() => _selectedIndex = index);
+    setState(() {
+      _selectedIndex = index;
+      _loadedTabIndices.add(index);
+    });
     LocalStorageService.saveActiveDashboardTab('teacher', index);
     final route = _routeForIndex(index);
     LocalStorageService.saveLastActiveRoute(route);
@@ -105,6 +109,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     _selectedIndex = (widget.initialSelectedIndex != 0)
         ? widget.initialSelectedIndex
         : (savedTab > 0 ? savedTab : 0);
+    _loadedTabIndices.add(_selectedIndex);
     final currentRoute = _routeForIndex(_selectedIndex);
     LocalStorageService.saveLastActiveRoute(currentRoute);
     updateBrowserUrl(currentRoute);
@@ -502,21 +507,27 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
       Expanded(
         child: Container(
           color: Colors.transparent, // Inherits Scaffold 60% Background
-          child: StaggeredEntrance(
-            key: ValueKey(_selectedIndex),
-            index: 0,
-            duration: const Duration(milliseconds: 280),
-            child: _buildTeacherBodyContent(
-              activeStudents,
-              archivedStudents,
-              parents,
-              activities,
-              quizzesAndExams,
-              lessonPlans,
-              materials,
-              criteria,
-              examReviews,
-            ),
+          child: IndexedStack(
+            index: (_selectedIndex >= 0 && _selectedIndex < 20)
+                ? _selectedIndex
+                : 0,
+            children: List<Widget>.generate(20, (idx) {
+              if (!_loadedTabIndices.contains(idx)) {
+                return const SizedBox.shrink();
+              }
+              return _buildTeacherBodyContent(
+                idx,
+                activeStudents,
+                archivedStudents,
+                parents,
+                activities,
+                quizzesAndExams,
+                lessonPlans,
+                materials,
+                criteria,
+                examReviews,
+              );
+            }),
           ),
         ),
       ),
@@ -697,6 +708,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   }
 
   Widget _buildTeacherBodyContent(
+    int tabIndex,
     List<UserModel> activeStudents,
     List<UserModel> archivedStudents,
     List<UserModel> parents,
@@ -707,7 +719,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     List<GradingCriteria> criteria,
     List<ExamSubmissionReview> examReviews,
   ) {
-    switch (_selectedIndex) {
+    switch (tabIndex) {
       case 0:
         return TeacherDashboardOverviewTab(
           activeStudents: activeStudents,
