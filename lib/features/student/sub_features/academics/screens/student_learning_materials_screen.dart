@@ -1,9 +1,11 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:loading_animation_widget/loading_animation_widget.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/data/repositories/learning_material_repository.dart';
 import 'package:class_realm/data/repositories/supabase_learning_material_repository.dart';
+import 'package:class_realm/shared/widgets/shared_widgets.dart';
 
 class StudentLearningMaterialsScreen extends StatefulWidget {
   const StudentLearningMaterialsScreen({super.key});
@@ -51,9 +53,19 @@ class _StudentLearningMaterialsScreenState
     }).toList();
   }
 
-  Future<void> _loadStudentEnrolledClasses() async {
+  Future<void> _refreshMaterials() async {
+    if (_allEnrolledSubjects.isEmpty || _selectedSubject == null) {
+      await _loadStudentEnrolledClasses(silent: true);
+    } else {
+      await _loadMaterialsForOffering(silent: true);
+    }
+  }
+
+  Future<void> _loadStudentEnrolledClasses({bool silent = false}) async {
     setState(() {
-      _isLoading = true;
+      if (!silent) {
+        _isLoading = true;
+      }
       _errorMessage = null;
     });
 
@@ -61,7 +73,8 @@ class _StudentLearningMaterialsScreenState
     if (user == null || user.id.isEmpty) {
       setState(() {
         _isLoading = false;
-        _errorMessage = 'Please log in as a student to view your learning materials.';
+        _errorMessage =
+            'Please log in as a student to view your learning materials.';
       });
       return;
     }
@@ -108,11 +121,15 @@ class _StudentLearningMaterialsScreenState
         final term = offering['terms'] as Map<String, dynamic>? ?? {};
 
         final isSyCurrent = sy['is_current'] == true;
-        final isOfferingArchived = offering['is_archived'] == true || sy['is_archived'] == true;
+        final isOfferingArchived =
+            offering['is_archived'] == true || sy['is_archived'] == true;
         final isPastOrArchived = !isSyCurrent || isOfferingArchived;
 
         mapped.add({
-          'offering_id': offering['id']?.toString() ?? e['subject_offering_id']?.toString() ?? '',
+          'offering_id':
+              offering['id']?.toString() ??
+              e['subject_offering_id']?.toString() ??
+              '',
           'subject_name': sub['subject_name']?.toString() ?? 'Subject',
           'subject_code': sub['subject_code']?.toString() ?? '',
           'grade_level': sub['grade_level'] ?? sec['grade_level'] ?? 11,
@@ -128,24 +145,33 @@ class _StudentLearningMaterialsScreenState
       setState(() {
         _allEnrolledSubjects = mapped;
         final available = _filteredSubjects;
-        _selectedSubject = available.isNotEmpty ? available.first : null;
+        final previousId = _selectedSubject?['offering_id'];
+        _selectedSubject = available.firstWhere(
+          (s) => s['offering_id'] == previousId,
+          orElse: () => available.isNotEmpty ? available.first : {},
+        );
+        if (_selectedSubject != null && _selectedSubject!.isEmpty) {
+          _selectedSubject = null;
+        }
       });
 
       if (_selectedSubject != null) {
-        await _loadMaterialsForOffering();
+        await _loadMaterialsForOffering(silent: silent);
       } else {
         setState(() => _isLoading = false);
       }
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _errorMessage = 'Unable to load enrolled classes: $e';
+        if (!silent || _allEnrolledSubjects.isEmpty) {
+          _errorMessage = 'Unable to load enrolled classes: $e';
+        }
         _isLoading = false;
       });
     }
   }
 
-  Future<void> _loadMaterialsForOffering() async {
+  Future<void> _loadMaterialsForOffering({bool silent = false}) async {
     if (_selectedSubject == null) {
       setState(() {
         _folders = [];
@@ -156,7 +182,9 @@ class _StudentLearningMaterialsScreenState
     }
 
     final offeringId = _selectedSubject!['offering_id'] as String;
-    setState(() => _isLoading = true);
+    if (!silent) {
+      setState(() => _isLoading = true);
+    }
 
     try {
       // 1. Fetch folders for this offering
@@ -166,15 +194,18 @@ class _StudentLearningMaterialsScreenState
       );
 
       // Strict ancestor folder visibility: only show folders that are visible & not archived
-      final visibleFolders = allFolders.where((f) => f.isVisibleToStudents && !f.isArchived).toList();
+      final visibleFolders = allFolders
+          .where((f) => f.isVisibleToStudents && !f.isArchived)
+          .toList();
 
       // 2. Fetch materials using hierarchical visibility check and server UTC time
       List<ClassRealmMaterial> visibleMaterials = [];
       if (_currentFolder != null) {
-        final rawMaterials = await _materialRepo.getStudentMaterialsWithHierarchy(
-          subjectOfferingId: offeringId,
-          folderId: _currentFolder!.id,
-        );
+        final rawMaterials = await _materialRepo
+            .getStudentMaterialsWithHierarchy(
+              subjectOfferingId: offeringId,
+              folderId: _currentFolder!.id,
+            );
 
         // Irregular Student Deduplication (Edge Case #30):
         // Deduplicate materials by storage_path_url and fileName so identical shared records don't repeat
@@ -192,12 +223,15 @@ class _StudentLearningMaterialsScreenState
       setState(() {
         _folders = visibleFolders;
         _materials = visibleMaterials;
+        _errorMessage = null;
         _isLoading = false;
       });
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _errorMessage = 'Failed to load materials: $e';
+        if (!silent || (_folders.isEmpty && _materials.isEmpty)) {
+          _errorMessage = 'Failed to load materials: $e';
+        }
         _isLoading = false;
       });
     }
@@ -239,7 +273,8 @@ class _StudentLearningMaterialsScreenState
       if (material.isRichTextLesson) {
         _showStudentAlert(
           title: 'Lesson Module Ready',
-          message: 'This lesson module is built directly into the app and is always accessible offline inside the reader.',
+          message:
+              'This lesson module is built directly into the app and is always accessible offline inside the reader.',
         );
         return;
       }
@@ -247,13 +282,15 @@ class _StudentLearningMaterialsScreenState
       if (material.isEmbedUrl) {
         _showStudentAlert(
           title: 'Cloud Document Link',
-          message: 'This is an online cloud document / presentation. You can open and view it anytime with an internet connection.',
+          message:
+              'This is an online cloud document / presentation. You can open and view it anytime with an internet connection.',
         );
         return;
       }
 
       // Storage download attempt
-      if (material.storagePathUrl.isEmpty || !material.storagePathUrl.startsWith('http')) {
+      if (material.storagePathUrl.isEmpty ||
+          !material.storagePathUrl.startsWith('http')) {
         throw Exception('Cloud storage address is not currently reachable.');
       }
 
@@ -261,18 +298,23 @@ class _StudentLearningMaterialsScreenState
       await Future.delayed(const Duration(milliseconds: 600));
 
       if (!mounted) return;
-      _showToast('Offline copy prepared! You can access it anytime.', isError: false);
+      _showToast(
+        'Offline copy prepared! You can access it anytime.',
+        isError: false,
+      );
     } on FileSystemException {
       // Edge Case #26: Storage full / Disk error
       _showStudentAlert(
         title: 'Storage Full',
-        message: 'Unable to save offline copy. Please check if your device has enough free storage space.',
+        message:
+            'Unable to save offline copy. Please check if your device has enough free storage space.',
       );
     } catch (e) {
       // Edge Case #1 & #20: Graceful fallback
       _showStudentAlert(
         title: 'Document Notice',
-        message: 'The cloud storage server is temporarily unreachable. Your study notes and chapter content remain fully readable in the viewer.',
+        message:
+            'The cloud storage server is temporarily unreachable. Your study notes and chapter content remain fully readable in the viewer.',
       );
     } finally {
       if (mounted) {
@@ -333,7 +375,12 @@ class _StudentLearningMaterialsScreenState
         elevation: 0,
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? Center(
+              child: LoadingAnimationWidget.staggeredDotsWave(
+                color: theme.colorScheme.primary,
+                size: 42,
+              ),
+            )
           : Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -343,50 +390,61 @@ class _StudentLearningMaterialsScreenState
                 // Folder Breadcrumbs
                 if (_folderStack.isNotEmpty) _buildBreadcrumbs(theme),
 
-                // Main Content
+                // Main Content with Branded Mobile Swipe-Down Refresh
                 Expanded(
-                  child: _errorMessage != null
-                      ? _buildErrorView(theme)
-                      : (_folders.isEmpty && _materials.isEmpty)
-                          ? _buildEmptyState(theme)
-                          : RefreshIndicator(
-                              onRefresh: _loadMaterialsForOffering,
-                              child: ListView(
-                                padding: const EdgeInsets.all(16),
-                                children: [
-                                  // Folders
-                                  if (_folders.isNotEmpty) ...[
-                                    Text(
-                                      'MODULE FOLDERS (${_folders.length})',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.bold,
-                                        letterSpacing: 0.8,
-                                        color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                                      ),
-                                    ),
-                                    const SizedBox(height: 8),
-                                    ..._folders.map((f) => _buildFolderCard(f, theme)),
-                                    const SizedBox(height: 16),
-                                  ],
+                  child: AppPullToRefresh(
+                    onRefresh: _refreshMaterials,
+                    child: _errorMessage != null
+                        ? AppPullToRefresh.scrollableState(
+                            child: _buildErrorView(theme),
+                          )
+                        : (_folders.isEmpty && _materials.isEmpty)
+                        ? AppPullToRefresh.scrollableState(
+                            child: _buildEmptyState(theme),
+                          )
+                        : ListView(
+                            physics: const AlwaysScrollableScrollPhysics(),
+                            padding: const EdgeInsets.all(16),
+                            children: [
+                              // Folders
+                              if (_folders.isNotEmpty) ...[
+                                Text(
+                                  'MODULE FOLDERS (${_folders.length})',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    letterSpacing: 0.8,
+                                    color: theme.colorScheme.onSurface
+                                        .withValues(alpha: 0.6),
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                ..._folders.map(
+                                  (f) => _buildFolderCard(f, theme),
+                                ),
+                                const SizedBox(height: 16),
+                              ],
 
-                                  // Learning Materials & Notes
-                                  if (_materials.isNotEmpty) ...[
-                                    Text(
-                                      'LEARNING DOCUMENTS & LESSONS (${_materials.length})',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.bold,
-                                        letterSpacing: 0.8,
-                                        color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                                      ),
-                                    ),
-                                    const SizedBox(height: 8),
-                                    ..._materials.map((m) => _buildMaterialCard(m, theme)),
-                                  ],
-                                ],
-                              ),
-                            ),
+                              // Learning Materials & Notes
+                              if (_materials.isNotEmpty) ...[
+                                Text(
+                                  'LEARNING DOCUMENTS & LESSONS (${_materials.length})',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    letterSpacing: 0.8,
+                                    color: theme.colorScheme.onSurface
+                                        .withValues(alpha: 0.6),
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                ..._materials.map(
+                                  (m) => _buildMaterialCard(m, theme),
+                                ),
+                              ],
+                            ],
+                          ),
+                  ),
                 ),
               ],
             ),
@@ -405,87 +463,53 @@ class _StudentLearningMaterialsScreenState
       decoration: BoxDecoration(
         color: theme.colorScheme.surface,
         border: Border(
-          bottom: BorderSide(color: theme.colorScheme.onSurface.withValues(alpha: 0.08)),
+          bottom: BorderSide(
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.08),
+          ),
         ),
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
               // Grade Badge
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 5,
+                ),
                 decoration: BoxDecoration(
-                  color: theme.colorScheme.primary.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(6),
+                  color: theme.colorScheme.primary.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
                   'GRADE $activeGrade',
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
-                    fontSize: 12,
+                    fontSize: 11.5,
                     color: theme.colorScheme.primary,
                   ),
                 ),
               ),
-              const SizedBox(width: 12),
-
-              // Subject Dropdown with Irregular student Section & Term details
-              Expanded(
-                child: availableSubjects.isEmpty
-                    ? Text(
-                        _showArchivedClasses
-                            ? 'No archived classes found'
-                            : 'No current enrolled classes',
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                      )
-                    : DropdownButtonHideUnderline(
-                        child: DropdownButton<Map<String, dynamic>>(
-                          value: availableSubjects.contains(_selectedSubject)
-                              ? _selectedSubject
-                              : availableSubjects.first,
-                          isExpanded: true,
-                          items: availableSubjects.map((sub) {
-                            final s = sub['subject_name'] ?? 'Subject';
-                            final sec = sub['section_name'] ?? '';
-                            final term = sub['term_name'] ?? '';
-                            final isIrreg = sub['is_irregular'] == true;
-                            return DropdownMenuItem(
-                              value: sub,
-                              child: Text(
-                                '$s — Section $sec • $term ${isIrreg ? "(Irregular)" : ""}',
-                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            );
-                          }).toList(),
-                          onChanged: (newSub) {
-                            if (newSub == null || newSub == _selectedSubject) return;
-                            setState(() {
-                              _selectedSubject = newSub;
-                              _folderStack.clear();
-                              _currentFolder = null;
-                            });
-                            _loadMaterialsForOffering();
-                          },
-                        ),
-                      ),
-              ),
-
-              const SizedBox(width: 8),
-
+              const Spacer(),
               // Current vs Past Classes Toggle (Edge Case #17)
               Tooltip(
                 message: _showArchivedClasses
                     ? 'Switch to Current Classes'
                     : 'Switch to Past / Archived Classes for Review',
                 child: FilterChip(
+                  visualDensity: VisualDensity.compact,
                   label: Text(
-                    _showArchivedClasses ? 'Past Classes (Review)' : 'Current Classes',
+                    _showArchivedClasses
+                        ? 'Past Classes (Review)'
+                        : 'Current Classes',
                     style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.bold,
-                      color: _showArchivedClasses ? Colors.orange.shade800 : theme.colorScheme.primary,
+                      color: _showArchivedClasses
+                          ? Colors.orange.shade800
+                          : theme.colorScheme.primary,
                     ),
                   ),
                   selected: _showArchivedClasses,
@@ -493,7 +517,9 @@ class _StudentLearningMaterialsScreenState
                     setState(() {
                       _showArchivedClasses = val;
                       final filtered = _filteredSubjects;
-                      _selectedSubject = filtered.isNotEmpty ? filtered.first : null;
+                      _selectedSubject = filtered.isNotEmpty
+                          ? filtered.first
+                          : null;
                       _folderStack.clear();
                       _currentFolder = null;
                     });
@@ -503,6 +529,81 @@ class _StudentLearningMaterialsScreenState
               ),
             ],
           ),
+          const SizedBox(height: 10),
+          // Subject Dropdown with Irregular student Section & Term details
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surfaceContainerHighest.withValues(
+                alpha: 0.35,
+              ),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.1),
+              ),
+            ),
+            child: availableSubjects.isEmpty
+                ? Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.class_outlined,
+                          size: 16,
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            _showArchivedClasses
+                                ? 'No archived classes found'
+                                : 'No current enrolled classes',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                : DropdownButtonHideUnderline(
+                    child: DropdownButton<Map<String, dynamic>>(
+                      value: availableSubjects.contains(_selectedSubject)
+                          ? _selectedSubject
+                          : availableSubjects.first,
+                      isExpanded: true,
+                      items: availableSubjects.map((sub) {
+                        final s = sub['subject_name'] ?? 'Subject';
+                        final sec = sub['section_name'] ?? '';
+                        final term = sub['term_name'] ?? '';
+                        final isIrreg = sub['is_irregular'] == true;
+                        return DropdownMenuItem(
+                          value: sub,
+                          child: Text(
+                            '$s — Section $sec • $term ${isIrreg ? "(Irregular)" : ""}',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        );
+                      }).toList(),
+                      onChanged: (newSub) {
+                        if (newSub == null || newSub == _selectedSubject) {
+                          return;
+                        }
+                        setState(() {
+                          _selectedSubject = newSub;
+                          _folderStack.clear();
+                          _currentFolder = null;
+                        });
+                        _loadMaterialsForOffering();
+                      },
+                    ),
+                  ),
+          ),
         ],
       ),
     );
@@ -510,35 +611,43 @@ class _StudentLearningMaterialsScreenState
 
   Widget _buildBreadcrumbs(ThemeData theme) {
     return Container(
+      width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
-      child: Row(
-        children: [
-          InkWell(
-            onTap: () => _navigateBackTo(-1),
-            child: const Row(
-              children: [
-                Icon(Icons.home_outlined, size: 16),
-                SizedBox(width: 4),
-                Text('Root', style: TextStyle(fontSize: 12)),
-              ],
-            ),
-          ),
-          for (int i = 0; i < _folderStack.length; i++) ...[
-            const Icon(Icons.chevron_right, size: 16, color: Colors.grey),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
             InkWell(
-              onTap: () => _navigateBackTo(i),
-              child: Text(
-                _folderStack[i].folderName,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: i == _folderStack.length - 1 ? FontWeight.bold : FontWeight.normal,
-                  color: i == _folderStack.length - 1 ? theme.colorScheme.primary : theme.colorScheme.onSurface,
-                ),
+              onTap: () => _navigateBackTo(-1),
+              child: const Row(
+                children: [
+                  Icon(Icons.home_outlined, size: 16),
+                  SizedBox(width: 4),
+                  Text('Root', style: TextStyle(fontSize: 12)),
+                ],
               ),
             ),
+            for (int i = 0; i < _folderStack.length; i++) ...[
+              const Icon(Icons.chevron_right, size: 16, color: Colors.grey),
+              InkWell(
+                onTap: () => _navigateBackTo(i),
+                child: Text(
+                  _folderStack[i].folderName,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: i == _folderStack.length - 1
+                        ? FontWeight.bold
+                        : FontWeight.normal,
+                    color: i == _folderStack.length - 1
+                        ? theme.colorScheme.primary
+                        : theme.colorScheme.onSurface,
+                  ),
+                ),
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
@@ -549,13 +658,21 @@ class _StudentLearningMaterialsScreenState
       elevation: 0,
       color: theme.colorScheme.surface,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(10),
-        side: BorderSide(color: theme.colorScheme.onSurface.withValues(alpha: 0.08)),
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(
+          color: theme.colorScheme.onSurface.withValues(alpha: 0.09),
+        ),
       ),
       child: ListTile(
-        leading: const Icon(Icons.folder, color: Colors.amber, size: 30),
-        title: Text(folder.folderName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-        subtitle: Text('${folder.fileCount} materials available', style: const TextStyle(fontSize: 11)),
+        leading: const Icon(Icons.folder_rounded, color: Colors.amber, size: 30),
+        title: Text(
+          folder.folderName,
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+        ),
+        subtitle: Text(
+          '${folder.fileCount} materials available',
+          style: const TextStyle(fontSize: 11.5),
+        ),
         trailing: const Icon(Icons.chevron_right, size: 20),
         onTap: () => _navigateToFolder(folder),
       ),
@@ -570,24 +687,30 @@ class _StudentLearningMaterialsScreenState
       elevation: 0,
       color: theme.colorScheme.surface,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: theme.colorScheme.onSurface.withValues(alpha: 0.08)),
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(
+          color: theme.colorScheme.onSurface.withValues(alpha: 0.09),
+        ),
       ),
       child: InkWell(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(14),
         // ZERO edit or delete controls! Opens strictly read-only In-App Reader Modal
         onTap: () => _openStudentReaderModal(material),
         child: Padding(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.all(13),
           child: Row(
             children: [
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
                   color: _getFormatColor(ext).withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(10),
                 ),
-                child: Icon(_getFormatIcon(ext), color: _getFormatColor(ext), size: 26),
+                child: Icon(
+                  _getFormatIcon(ext),
+                  color: _getFormatColor(ext),
+                  size: 26,
+                ),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -596,7 +719,10 @@ class _StudentLearningMaterialsScreenState
                   children: [
                     Text(
                       material.displayName,
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                      ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -605,14 +731,20 @@ class _StudentLearningMaterialsScreenState
                       '${material.fileExtension} • ${material.formattedSize}',
                       style: TextStyle(
                         fontSize: 11,
-                        color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.6,
+                        ),
                       ),
                     ),
                   ],
                 ),
               ),
               // Read / View Icon
-              Icon(Icons.chrome_reader_mode_outlined, color: theme.colorScheme.primary, size: 22),
+              Icon(
+                Icons.chrome_reader_mode_outlined,
+                color: theme.colorScheme.primary,
+                size: 22,
+              ),
             ],
           ),
         ),
@@ -621,53 +753,75 @@ class _StudentLearningMaterialsScreenState
   }
 
   Widget _buildEmptyState(ThemeData theme) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.folder_open_outlined, size: 56, color: theme.colorScheme.onSurface.withValues(alpha: 0.2)),
-            const SizedBox(height: 12),
-            const Text(
-              'No Learning Materials Found',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'No published materials available in this folder yet.',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurface.withValues(alpha: 0.5)),
-            ),
-          ],
+    final isDark = theme.brightness == Brightness.dark;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(28),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: theme.colorScheme.onSurface.withValues(
+            alpha: isDark ? 0.14 : 0.09,
+          ),
         ),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 66,
+            height: 66,
+            decoration: BoxDecoration(
+              color: theme.colorScheme.primary.withValues(
+                alpha: isDark ? 0.18 : 0.1,
+              ),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              Icons.folder_open_rounded,
+              size: 32,
+              color: theme.colorScheme.primary,
+            ),
+          ),
+          const SizedBox(height: 14),
+          const Text(
+            'No Learning Materials Found',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'No published materials available in this folder yet.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 12.5,
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+            ),
+          ),
+        ],
       ),
     );
   }
 
   Widget _buildErrorView(ThemeData theme) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.error_outline, size: 48, color: Colors.red),
-            const SizedBox(height: 12),
-            Text(
-              _errorMessage!,
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 15),
-            ),
-            const SizedBox(height: 16),
-            ElevatedButton.icon(
-              icon: const Icon(Icons.refresh),
-              label: const Text('Retry'),
-              onPressed: _loadStudentEnrolledClasses,
-            ),
-          ],
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Icon(Icons.error_outline, size: 48, color: Colors.red),
+        const SizedBox(height: 12),
+        Text(
+          _errorMessage!,
+          textAlign: TextAlign.center,
+          style: const TextStyle(fontSize: 15),
         ),
-      ),
+        const SizedBox(height: 16),
+        ElevatedButton.icon(
+          icon: const Icon(Icons.refresh),
+          label: const Text('Retry'),
+          onPressed: _loadStudentEnrolledClasses,
+        ),
+      ],
     );
   }
 
@@ -724,10 +878,7 @@ class _StudentMaterialReaderModal extends StatelessWidget {
       backgroundColor: theme.colorScheme.surface,
       insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
       child: ConstrainedBox(
-        constraints: const BoxConstraints(
-          maxWidth: 780,
-          maxHeight: 680,
-        ),
+        constraints: const BoxConstraints(maxWidth: 780, maxHeight: 680),
         child: Padding(
           padding: const EdgeInsets.all(20),
           child: Column(
@@ -742,7 +893,11 @@ class _StudentMaterialReaderModal extends StatelessWidget {
                       color: _getFormatColor(ext).withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: Icon(_getFormatIcon(ext), color: _getFormatColor(ext), size: 24),
+                    child: Icon(
+                      _getFormatIcon(ext),
+                      color: _getFormatColor(ext),
+                      size: 24,
+                    ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -751,13 +906,21 @@ class _StudentMaterialReaderModal extends StatelessWidget {
                       children: [
                         Text(
                           material.displayName,
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
                         Text(
                           '${material.fileExtension} • ${material.formattedSize}',
-                          style: TextStyle(fontSize: 11, color: theme.colorScheme.onSurface.withValues(alpha: 0.6)),
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: theme.colorScheme.onSurface.withValues(
+                              alpha: 0.6,
+                            ),
+                          ),
                         ),
                       ],
                     ),
@@ -780,7 +943,9 @@ class _StudentMaterialReaderModal extends StatelessWidget {
                   decoration: BoxDecoration(
                     color: Colors.blue.withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.blue.withValues(alpha: 0.2)),
+                    border: Border.all(
+                      color: Colors.blue.withValues(alpha: 0.2),
+                    ),
                   ),
                   child: const Row(
                     children: [
@@ -789,7 +954,10 @@ class _StudentMaterialReaderModal extends StatelessWidget {
                       Expanded(
                         child: Text(
                           'Cloud Document / Presentation. Direct document view prepared below.',
-                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
                     ],
@@ -805,11 +973,22 @@ class _StudentMaterialReaderModal extends StatelessWidget {
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.notes, size: 48, color: theme.colorScheme.onSurface.withValues(alpha: 0.3)),
+                            Icon(
+                              Icons.notes,
+                              size: 48,
+                              color: theme.colorScheme.onSurface.withValues(
+                                alpha: 0.3,
+                              ),
+                            ),
                             const SizedBox(height: 8),
                             Text(
                               'No study notes or chapter content attached to this document.',
-                              style: TextStyle(color: theme.colorScheme.onSurface.withValues(alpha: 0.6), fontSize: 13),
+                              style: TextStyle(
+                                color: theme.colorScheme.onSurface.withValues(
+                                  alpha: 0.6,
+                                ),
+                                fontSize: 13,
+                              ),
                             ),
                           ],
                         ),
@@ -817,9 +996,15 @@ class _StudentMaterialReaderModal extends StatelessWidget {
                     : Container(
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
-                          color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+                          color: isDark
+                              ? const Color(0xFF0F172A)
+                              : const Color(0xFFF8FAFC),
                           borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: theme.colorScheme.onSurface.withValues(alpha: 0.08)),
+                          border: Border.all(
+                            color: theme.colorScheme.onSurface.withValues(
+                              alpha: 0.08,
+                            ),
+                          ),
                         ),
                         child: ListView.builder(
                           itemCount: paragraphs.length,
@@ -831,7 +1016,9 @@ class _StudentMaterialReaderModal extends StatelessWidget {
                                 p,
                                 style: TextStyle(
                                   // Theme-adaptive contrast (WCAG AA compliant, Edge Case #22)
-                                  color: isDark ? const Color(0xFFE2E8F0) : const Color(0xFF1E293B),
+                                  color: isDark
+                                      ? const Color(0xFFE2E8F0)
+                                      : const Color(0xFF1E293B),
                                   fontSize: 14,
                                   height: 1.6,
                                   letterSpacing: 0.2,
@@ -850,13 +1037,21 @@ class _StudentMaterialReaderModal extends StatelessWidget {
                 children: [
                   OutlinedButton.icon(
                     icon: isDownloading
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2),
+                        ? SizedBox(
+                            width: 18,
+                            height: 14,
+                            child: LoadingAnimationWidget.staggeredDotsWave(
+                              color: theme.colorScheme.primary,
+                              size: 16,
+                            ),
                           )
-                        : const Icon(Icons.download_for_offline_outlined, size: 18),
-                    label: Text(isDownloading ? 'Saving Offline...' : 'Save Offline Copy'),
+                        : const Icon(
+                            Icons.download_for_offline_outlined,
+                            size: 18,
+                          ),
+                    label: Text(
+                      isDownloading ? 'Saving Offline...' : 'Save Offline Copy',
+                    ),
                     onPressed: isDownloading ? null : onDownloadRequested,
                   ),
                   const Spacer(),

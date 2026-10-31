@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:loading_animation_widget/loading_animation_widget.dart';
 import 'package:class_realm/core/theme/app_theme.dart';
 import 'package:class_realm/core/services/app_data_cache.dart';
 import 'package:class_realm/core/services/local_storage_service.dart';
@@ -71,7 +72,11 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
     }
   }
 
-  Future<void> _loadLinkedStudents() async {
+  Future<void> _refreshParentPortal() async {
+    await _loadLinkedStudents(silent: true);
+  }
+
+  Future<void> _loadLinkedStudents({bool silent = false}) async {
     final parent = AuthRepository.instance.currentUser;
     if (parent == null) {
       if (mounted) setState(() => _isLoadingStudents = false);
@@ -84,7 +89,11 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
       if (!mounted) return;
       setState(() {
         _linkedStudents = students;
-        _isLoadingStudents = false;
+        if (!silent) {
+          _isLoadingStudents = false;
+        } else {
+          _isLoadingStudents = false;
+        }
       });
       AppDataCache.instance.set(
         'parent_linked_students_${parent.id}',
@@ -93,7 +102,7 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
 
       if (students.isNotEmpty) {
         final safeIndex = _selectedChildIndex % students.length;
-        _loadChildAttendance(students[safeIndex].id);
+        await _loadChildAttendance(students[safeIndex].id, silent: silent);
       }
     } catch (e) {
       debugPrint('Error loading linked students: $e');
@@ -103,9 +112,14 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
     }
   }
 
-  Future<void> _loadChildAttendance(String studentId) async {
+  Future<void> _loadChildAttendance(
+    String studentId, {
+    bool silent = false,
+  }) async {
     if (studentId.isEmpty) return;
-    _hydrateAttendanceFromCache(studentId);
+    if (!silent) {
+      _hydrateAttendanceFromCache(studentId);
+    }
 
     try {
       final records = await SupabaseAttendanceRepository.instance
@@ -164,6 +178,7 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
               linkedStudent: linkedStudent,
               allChildren: linkedStudents,
               attendance: _childAttendance,
+              onRefresh: _refreshParentPortal,
               onSelectChild: (child) {
                 final idx = linkedStudents.indexWhere((c) => c.id == child.id);
                 if (idx != -1) {
@@ -173,17 +188,28 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
               onOpenAttendance: () => setState(() => _currentIndex = 1),
               onOpenGrades: () => setState(() => _currentIndex = 2),
             ),
-            ParentAttendanceTab(attendance: _childAttendance),
+            ParentAttendanceTab(
+              attendance: _childAttendance,
+              onRefresh: _refreshParentPortal,
+            ),
             ParentGradesTab(student: linkedStudent),
             const ParentNotificationsTab(),
-            ParentProfileTab(parent: parent, linkedStudent: linkedStudent),
+            ParentProfileTab(
+              parent: parent,
+              linkedStudent: linkedStudent,
+              onRefresh: _refreshParentPortal,
+            ),
           ]
         : [
             _buildNoChildEmptyState(theme),
             _buildNoChildEmptyState(theme),
             _buildNoChildEmptyState(theme),
-            _buildNoChildEmptyState(theme),
-            ParentProfileTab(parent: parent, linkedStudent: null),
+            const ParentNotificationsTab(),
+            ParentProfileTab(
+              parent: parent,
+              linkedStudent: null,
+              onRefresh: _refreshParentPortal,
+            ),
           ];
 
     return SessionActivityTracker(
@@ -288,8 +314,9 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
                 Expanded(
                   child: _isLoadingStudents
                       ? Center(
-                          child: CircularProgressIndicator(
+                          child: LoadingAnimationWidget.staggeredDotsWave(
                             color: theme.colorScheme.primary,
+                            size: 42,
                           ),
                         )
                       : StaggeredEntrance(
@@ -350,44 +377,58 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
   }
 
   Widget _buildNoChildEmptyState(ThemeData theme) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(28),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              width: 76,
-              height: 76,
-              decoration: BoxDecoration(
-                color: theme.colorScheme.primary.withValues(alpha: 0.1),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                Icons.family_restroom_outlined,
-                size: 38,
-                color: theme.colorScheme.primary,
+    final isDark = theme.brightness == Brightness.dark;
+    return AppPullToRefresh(
+      onRefresh: _refreshParentPortal,
+      child: AppPullToRefresh.scrollableState(
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(28),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surface,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+              color: theme.colorScheme.onSurface.withValues(
+                alpha: isDark ? 0.14 : 0.09,
               ),
             ),
-            const SizedBox(height: 18),
-            Text(
-              'No Linked Student Found',
-              textAlign: TextAlign.center,
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-                fontSize: 18,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 74,
+                height: 74,
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primary.withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.family_restroom_outlined,
+                  size: 36,
+                  color: theme.colorScheme.primary,
+                ),
               ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Your parent account has not been linked to a student yet. Contact the school administrator to connect your account to your childâ€™s LRN.',
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-                height: 1.5,
+              const SizedBox(height: 18),
+              Text(
+                'No Linked Student Found',
+                textAlign: TextAlign.center,
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 18,
+                ),
               ),
-            ),
-          ],
+              const SizedBox(height: 8),
+              Text(
+                "Your parent account has not been linked to a student yet. Contact the school administrator to connect your account to your child's LRN.",
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                  height: 1.5,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

@@ -4,6 +4,7 @@ import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/models/academic_models.dart';
 import 'package:class_realm/features/parent/sub_features/child_details/widgets/parent_schedule_view.dart';
 import 'package:class_realm/features/parent/sub_features/communications/widgets/parent_teacher_contact_view.dart';
+import 'package:class_realm/shared/widgets/shared_widgets.dart';
 
 class ParentStudentOverviewTab extends StatelessWidget {
   final UserModel? linkedStudent;
@@ -13,6 +14,7 @@ class ParentStudentOverviewTab extends StatelessWidget {
   final List<AttendanceRecord> attendance;
   final VoidCallback? onOpenAttendance;
   final VoidCallback? onOpenGrades;
+  final Future<void> Function()? onRefresh;
 
   const ParentStudentOverviewTab({
     super.key,
@@ -23,6 +25,7 @@ class ParentStudentOverviewTab extends StatelessWidget {
     this.attendance = const [],
     this.onOpenAttendance,
     this.onOpenGrades,
+    this.onRefresh,
   });
 
   @override
@@ -31,10 +34,10 @@ class ParentStudentOverviewTab extends StatelessWidget {
     final isDark = theme.brightness == Brightness.dark;
 
     if (linkedStudent == null) {
-      return const Center(
-        child: Padding(
-          padding: EdgeInsets.all(24),
-          child: Text(
+      return AppPullToRefresh(
+        onRefresh: onRefresh,
+        child: AppPullToRefresh.scrollableState(
+          child: const Text(
             'No linked student found. Please contact the school administrator.',
             textAlign: TextAlign.center,
           ),
@@ -60,360 +63,410 @@ class ParentStudentOverviewTab extends StatelessWidget {
         ? (((presentCount + lateCount) / totalAccounted) * 100).round()
         : (excusedCount > 0 ? 100 : 0);
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // ── Child Selection Chips Bar (When multiple children are linked) ──
-          if (allChildren != null && allChildren!.length > 1) ...[
-            Container(
-              padding: const EdgeInsets.all(14),
-              margin: const EdgeInsets.only(bottom: 16),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surface,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(
-                  color: theme.colorScheme.onSurface.withValues(
-                    alpha: isDark ? 0.16 : 0.12,
-                  ),
-                ),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.family_restroom_rounded,
-                        size: 18,
-                        color: theme.colorScheme.primary,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Select Active Child (${allChildren!.length} Linked)',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 13,
-                          color: theme.colorScheme.onSurface,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: allChildren!.map((child) {
-                      final isSelected = child.id == linkedStudent?.id;
-                      return InkWell(
-                        onTap: () {
-                          if (onSelectChild != null) onSelectChild!(child);
-                        },
-                        borderRadius: BorderRadius.circular(999),
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 180),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 8,
-                          ),
-                          decoration: BoxDecoration(
-                            color: isSelected
-                                ? theme.colorScheme.primary
-                                : theme.colorScheme.surfaceContainerHighest
-                                      .withValues(alpha: 0.5),
-                            borderRadius: BorderRadius.circular(999),
-                            border: Border.all(
-                              color: isSelected
-                                  ? theme.colorScheme.primary
-                                  : theme.colorScheme.onSurface.withValues(
-                                      alpha: 0.15,
-                                    ),
-                              width: isSelected ? 1.5 : 1,
-                            ),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              CircleAvatar(
-                                radius: 10,
-                                backgroundColor: isSelected
-                                    ? Colors.white.withValues(alpha: 0.25)
-                                    : theme.colorScheme.primary.withValues(
-                                        alpha: 0.15,
-                                      ),
-                                child: Text(
-                                  (child.firstName != null &&
-                                          child.firstName!.isNotEmpty)
-                                      ? child.firstName![0].toUpperCase()
-                                      : 'S',
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
-                                    color: isSelected
-                                        ? Colors.white
-                                        : theme.colorScheme.primary,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                child.fullName,
-                                style: TextStyle(
-                                  fontSize: 12.5,
-                                  fontWeight: isSelected
-                                      ? FontWeight.w700
-                                      : FontWeight.w500,
-                                  color: isSelected
-                                      ? Colors.white
-                                      : theme.colorScheme.onSurface,
-                                ),
-                              ),
-                              if (isSelected) ...[
-                                const SizedBox(width: 6),
-                                const Icon(
-                                  Icons.check_circle_rounded,
-                                  size: 14,
-                                  color: Colors.white,
-                                ),
-                              ],
-                            ],
-                          ),
-                        ),
-                      );
-                    }).toList(),
-                  ),
-                ],
-              ),
-            ),
-          ],
-
-          // ── Linked Student Profile Banner Card ──
-          Container(
-            padding: const EdgeInsets.all(18),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.surface,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: theme.colorScheme.onSurface.withValues(
-                  alpha: isDark ? 0.16 : 0.12,
-                ),
-              ),
-            ),
-            child: Row(
-              children: [
-                CircleAvatar(
-                  backgroundColor: theme.colorScheme.primary.withValues(
-                    alpha: isDark ? 0.2 : 0.1,
-                  ),
-                  radius: 26,
-                  child: Text(
-                    (linkedStudent?.firstName != null &&
-                            linkedStudent!.firstName!.isNotEmpty)
-                        ? linkedStudent!.firstName![0].toUpperCase()
-                        : 'S',
-                    style: TextStyle(
-                      color: theme.colorScheme.primary,
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
+    return AppPullToRefresh(
+      onRefresh: onRefresh,
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // ── Child Selection Chips Bar (When multiple children are linked) ──
+            if (allChildren != null && allChildren!.length > 1) ...[
+              Container(
+                padding: const EdgeInsets.all(14),
+                margin: const EdgeInsets.only(bottom: 16),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surface,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: theme.colorScheme.onSurface.withValues(
+                      alpha: isDark ? 0.16 : 0.12,
                     ),
                   ),
                 ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.family_restroom_rounded,
+                          size: 18,
+                          color: theme.colorScheme.primary,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Select Active Child (${allChildren!.length} Linked)',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 13,
+                            color: theme.colorScheme.onSurface,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: allChildren!.map((child) {
+                        final isSelected = child.id == linkedStudent?.id;
+                        return InkWell(
+                          onTap: () {
+                            if (onSelectChild != null) onSelectChild!(child);
+                          },
+                          borderRadius: BorderRadius.circular(999),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 180),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 8,
+                            ),
+                            decoration: BoxDecoration(
+                              color: isSelected
+                                  ? theme.colorScheme.primary
+                                  : theme.colorScheme.surfaceContainerHighest
+                                        .withValues(alpha: 0.5),
+                              borderRadius: BorderRadius.circular(999),
+                              border: Border.all(
+                                color: isSelected
+                                    ? theme.colorScheme.primary
+                                    : theme.colorScheme.onSurface.withValues(
+                                        alpha: 0.15,
+                                      ),
+                                width: isSelected ? 1.5 : 1,
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                CircleAvatar(
+                                  radius: 10,
+                                  backgroundColor: isSelected
+                                      ? Colors.white.withValues(alpha: 0.25)
+                                      : theme.colorScheme.primary.withValues(
+                                          alpha: 0.15,
+                                        ),
+                                  child: Text(
+                                    (child.firstName != null &&
+                                            child.firstName!.isNotEmpty)
+                                        ? child.firstName![0].toUpperCase()
+                                        : 'S',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                      color: isSelected
+                                          ? Colors.white
+                                          : theme.colorScheme.primary,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  child.fullName,
+                                  style: TextStyle(
+                                    fontSize: 12.5,
+                                    fontWeight: isSelected
+                                        ? FontWeight.w700
+                                        : FontWeight.w500,
+                                    color: isSelected
+                                        ? Colors.white
+                                        : theme.colorScheme.onSurface,
+                                  ),
+                                ),
+                                if (isSelected) ...[
+                                  const SizedBox(width: 6),
+                                  const Icon(
+                                    Icons.check_circle_rounded,
+                                    size: 14,
+                                    color: Colors.white,
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+
+            // ── Polished Linked Student Hero Banner Card ──
+            Container(
+              clipBehavior: Clip.antiAlias,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    theme.colorScheme.primary,
+                    theme.colorScheme.primary.withValues(alpha: 0.85),
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: theme.colorScheme.primary.withValues(alpha: 0.24),
+                    blurRadius: 14,
+                    offset: const Offset(0, 6),
+                  ),
+                ],
+              ),
+              child: Stack(
+                children: [
+                  Positioned(
+                    right: -20,
+                    top: -24,
+                    child: Container(
+                      width: 96,
+                      height: 96,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Colors.white.withValues(alpha: 0.08),
+                      ),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.all(18),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(2.5),
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.35),
+                              width: 1.5,
+                            ),
+                          ),
+                          child: CircleAvatar(
+                            backgroundColor: Colors.white.withValues(
+                              alpha: 0.2,
+                            ),
+                            radius: 26,
                             child: Text(
-                              linkedStudent!.fullName,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+                              (linkedStudent?.firstName != null &&
+                                      linkedStudent!.firstName!.isNotEmpty)
+                                  ? linkedStudent!.firstName![0].toUpperCase()
+                                  : 'S',
                               style: const TextStyle(
-                                fontSize: 17,
+                                color: Colors.white,
+                                fontSize: 21,
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
                           ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 3,
-                            ),
-                            decoration: BoxDecoration(
-                              color: theme.colorScheme.primary.withValues(
-                                alpha: 0.1,
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      linkedStudent!.fullName,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 9,
+                                      vertical: 3.5,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white.withValues(
+                                        alpha: 0.2,
+                                      ),
+                                      borderRadius: BorderRadius.circular(999),
+                                    ),
+                                    child: Text(
+                                      linkedStudent!
+                                              .parentGuardianRelationship ??
+                                          'Child',
+                                      style: const TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w700,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Text(
-                              linkedStudent!.parentGuardianRelationship ??
-                                  'Child',
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700,
-                                color: theme.colorScheme.primary,
+                              const SizedBox(height: 5),
+                              Text(
+                                '${linkedStudent!.departmentOrSection?.isNotEmpty == true ? linkedStudent!.departmentOrSection : "Enrolled"} • LRN: ${linkedStudent!.lrn ?? linkedStudent!.studentId ?? "N/A"}',
+                                style: TextStyle(
+                                  fontSize: 12.5,
+                                  color: Colors.white.withValues(alpha: 0.85),
+                                ),
                               ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '${linkedStudent!.departmentOrSection?.isNotEmpty == true ? linkedStudent!.departmentOrSection : "Enrolled"} • LRN: ${linkedStudent!.lrn ?? linkedStudent!.studentId ?? "N/A"}',
-                        style: TextStyle(
-                          fontSize: 12.5,
-                          color: theme.colorScheme.onSurface.withValues(
-                            alpha: 0.65,
+                            ],
                           ),
                         ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 18),
+
+            // ── 3/5/10 Absence Early Warning Tier Alert (If Applicable) ──
+            if (absentCount >= 3)
+              _buildAbsenceAlert(theme, isDark, absentCount),
+
+            // ── Attendance Snapshot (Present, Late, Absent, Rate) ──
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Attendance Snapshot',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                ),
+                if (onOpenAttendance != null)
+                  TextButton.icon(
+                    onPressed: onOpenAttendance,
+                    icon: const Icon(Icons.arrow_forward_rounded, size: 16),
+                    label: const Text('View Logs'),
+                    style: TextButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                      textStyle: const TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w700,
                       ),
-                    ],
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                _buildStatCard(
+                  theme,
+                  isDark,
+                  'Present',
+                  '$presentCount',
+                  AppTheme.catGreen,
+                ),
+                const SizedBox(width: 8),
+                _buildStatCard(
+                  theme,
+                  isDark,
+                  'Late',
+                  '$lateCount',
+                  AppTheme.catOrange,
+                ),
+                const SizedBox(width: 8),
+                _buildStatCard(
+                  theme,
+                  isDark,
+                  'Absent',
+                  '$absentCount',
+                  AppTheme.catRed,
+                ),
+                const SizedBox(width: 8),
+                _buildStatCard(
+                  theme,
+                  isDark,
+                  'Rate',
+                  '$rate%',
+                  AppTheme.catBlue,
+                ),
+              ],
+            ),
+            const SizedBox(height: 22),
+
+            // ── Quick Access Features Grid ──
+            const Text(
+              'Quick Actions & Monitoring',
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: _buildActionCard(
+                    theme: theme,
+                    isDark: isDark,
+                    icon: Icons.calendar_month_rounded,
+                    color: AppTheme.catBlue,
+                    title: 'Class Schedule',
+                    subtitle: 'Weekly timetable',
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              ParentScheduleView(linkedStudent: linkedStudent),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _buildActionCard(
+                    theme: theme,
+                    isDark: isDark,
+                    icon: Icons.assignment_turned_in_rounded,
+                    color: AppTheme.catTeal,
+                    title: 'Report Card',
+                    subtitle: 'Subject grades',
+                    onTap: onOpenGrades ?? () {},
                   ),
                 ),
               ],
             ),
-          ),
-          const SizedBox(height: 16),
-
-          // ── 3/5/10 Absence Early Warning Tier Alert (If Applicable) ──
-          if (absentCount >= 3) _buildAbsenceAlert(theme, isDark, absentCount),
-
-          // ── Attendance Snapshot (Present, Late, Absent, Rate) ──
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                'Attendance Snapshot',
-                style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-              ),
-              if (onOpenAttendance != null)
-                TextButton.icon(
-                  onPressed: onOpenAttendance,
-                  icon: const Icon(Icons.arrow_forward_rounded, size: 16),
-                  label: const Text('View Logs'),
-                  style: TextButton.styleFrom(
-                    visualDensity: VisualDensity.compact,
-                    textStyle: const TextStyle(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w700,
-                    ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: _buildActionCard(
+                    theme: theme,
+                    isDark: isDark,
+                    icon: Icons.contact_phone_rounded,
+                    color: AppTheme.catOrange,
+                    title: 'Adviser Contact',
+                    subtitle: 'Reach out to teacher',
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              ParentTeacherContactView(teacher: teacher),
+                        ),
+                      );
+                    },
                   ),
                 ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              _buildStatCard(
-                theme,
-                isDark,
-                'Present',
-                '$presentCount',
-                AppTheme.catGreen,
-              ),
-              const SizedBox(width: 8),
-              _buildStatCard(
-                theme,
-                isDark,
-                'Late',
-                '$lateCount',
-                AppTheme.catOrange,
-              ),
-              const SizedBox(width: 8),
-              _buildStatCard(
-                theme,
-                isDark,
-                'Absent',
-                '$absentCount',
-                AppTheme.catRed,
-              ),
-              const SizedBox(width: 8),
-              _buildStatCard(theme, isDark, 'Rate', '$rate%', AppTheme.catBlue),
-            ],
-          ),
-          const SizedBox(height: 20),
-
-          // ── Quick Access Features Grid ──
-          const Text(
-            'Quick Actions & Monitoring',
-            style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: _buildActionCard(
-                  theme: theme,
-                  isDark: isDark,
-                  icon: Icons.calendar_month_rounded,
-                  color: AppTheme.catBlue,
-                  title: "Class Schedule",
-                  subtitle: "Weekly timetable",
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) =>
-                            ParentScheduleView(linkedStudent: linkedStudent),
-                      ),
-                    );
-                  },
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _buildActionCard(
+                    theme: theme,
+                    isDark: isDark,
+                    icon: Icons.fact_check_rounded,
+                    color: AppTheme.catGreen,
+                    title: 'Attendance Logs',
+                    subtitle: 'Detailed timestamps',
+                    onTap: onOpenAttendance ?? () {},
+                  ),
                 ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _buildActionCard(
-                  theme: theme,
-                  isDark: isDark,
-                  icon: Icons.assignment_turned_in_rounded,
-                  color: AppTheme.catTeal,
-                  title: "Report Card",
-                  subtitle: "Subject grades",
-                  onTap: onOpenGrades ?? () {},
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: _buildActionCard(
-                  theme: theme,
-                  isDark: isDark,
-                  icon: Icons.contact_phone_rounded,
-                  color: AppTheme.catOrange,
-                  title: "Adviser Contact",
-                  subtitle: "Reach out to teacher",
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) =>
-                            ParentTeacherContactView(teacher: teacher),
-                      ),
-                    );
-                  },
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _buildActionCard(
-                  theme: theme,
-                  isDark: isDark,
-                  icon: Icons.fact_check_rounded,
-                  color: AppTheme.catGreen,
-                  title: "Attendance Logs",
-                  subtitle: "Detailed timestamps",
-                  onTap: onOpenAttendance ?? () {},
-                ),
-              ),
-            ],
-          ),
-        ],
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -469,54 +522,66 @@ class ParentStudentOverviewTab extends StatelessWidget {
     required String subtitle,
     required VoidCallback onTap,
   }) {
-    return InkWell(
-      onTap: onTap,
+    return Material(
+      color: theme.colorScheme.surface,
       borderRadius: BorderRadius.circular(14),
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: theme.colorScheme.surface,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: theme.colorScheme.onSurface.withValues(
-              alpha: isDark ? 0.16 : 0.12,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: theme.colorScheme.onSurface.withValues(
+                alpha: isDark ? 0.16 : 0.1,
+              ),
             ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: isDark ? 0.18 : 0.03),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
           ),
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: isDark ? 0.18 : 0.1),
-                borderRadius: BorderRadius.circular(10),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: isDark ? 0.18 : 0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(icon, color: color, size: 22),
               ),
-              child: Icon(icon, color: color, size: 22),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 13,
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 13,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    subtitle,
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.6,
+                        ),
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

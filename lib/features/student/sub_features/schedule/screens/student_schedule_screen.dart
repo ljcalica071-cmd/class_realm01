@@ -3,6 +3,7 @@ import 'package:class_realm/data/repositories/supabase_schedule_repository.dart'
 import 'package:class_realm/models/academic_models.dart';
 import 'package:class_realm/models/student_dashboard_models.dart';
 import 'package:class_realm/features/teacher/widgets/timetable_grid_widget.dart';
+import 'package:class_realm/shared/widgets/shared_widgets.dart';
 import 'package:loading_animation_widget/loading_animation_widget.dart';
 
 enum ScheduleViewMode { list, grid }
@@ -18,14 +19,42 @@ class StudentScheduleScreen extends StatefulWidget {
 
 class _StudentScheduleScreenState extends State<StudentScheduleScreen> {
   ScheduleViewMode _viewMode = ScheduleViewMode.list;
-  late Future<List<ScheduleModel>> _schedulesFuture;
+  List<ScheduleModel> _schedules = [];
+  bool _isLoading = true;
+  Object? _loadError;
 
   @override
   void initState() {
     super.initState();
-    _schedulesFuture = SupabaseScheduleRepository.instance.getSchedules(
-      section: widget.dashboardData.student.departmentOrSection,
-    );
+    _loadSchedules();
+  }
+
+  Future<void> _loadSchedules({bool silent = false}) async {
+    setState(() {
+      if (!silent) {
+        _isLoading = true;
+      }
+      _loadError = null;
+    });
+
+    try {
+      final rows = await SupabaseScheduleRepository.instance.getSchedules(
+        section: widget.dashboardData.student.departmentOrSection,
+      );
+      if (!mounted) return;
+      setState(() {
+        _schedules = rows;
+        _isLoading = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        if (!silent || _schedules.isEmpty) {
+          _loadError = error;
+        }
+        _isLoading = false;
+      });
+    }
   }
 
   final List<String> _days = const [
@@ -142,10 +171,7 @@ class _StudentScheduleScreenState extends State<StudentScheduleScreen> {
             ),
             Text(
               value,
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-              ),
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
             ),
           ],
         ),
@@ -156,7 +182,11 @@ class _StudentScheduleScreenState extends State<StudentScheduleScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final section = widget.dashboardData.student.departmentOrSection;
+    final isDark = theme.brightness == Brightness.dark;
+    final rawSection = widget.dashboardData.student.departmentOrSection;
+    final section = rawSection?.trim().isNotEmpty == true
+        ? rawSection!.trim()
+        : 'Class';
 
     return Scaffold(
       appBar: AppBar(
@@ -217,8 +247,9 @@ class _StudentScheduleScreenState extends State<StudentScheduleScreen> {
                               : 'Weekly Timetable Grid',
                           style: TextStyle(
                             fontSize: 12,
-                            color: theme.colorScheme.onSurface
-                                .withValues(alpha: 0.6),
+                            color: theme.colorScheme.onSurface.withValues(
+                              alpha: 0.6,
+                            ),
                           ),
                         ),
                       ],
@@ -243,7 +274,7 @@ class _StudentScheduleScreenState extends State<StudentScheduleScreen> {
                         _viewMode = newSelection.first;
                       });
                     },
-                    style: ButtonStyle(
+                    style: const ButtonStyle(
                       visualDensity: VisualDensity.compact,
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
@@ -252,42 +283,88 @@ class _StudentScheduleScreenState extends State<StudentScheduleScreen> {
               ),
             ),
 
-            // Main Content Area
+            // Main Content Area with Branded Mobile Swipe-Down Refresh
             Expanded(
-              child: FutureBuilder<List<ScheduleModel>>(
-                future: _schedulesFuture,
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return Center(
+              child: _isLoading
+                  ? Center(
                       child: LoadingAnimationWidget.staggeredDotsWave(
                         color: theme.colorScheme.primary,
                         size: 40,
                       ),
-                    );
-                  }
-                  if (snapshot.hasError) {
-                    return Center(
-                      child: Text(
-                        'Error loading schedule: ${snapshot.error}',
-                        style: TextStyle(color: theme.colorScheme.error),
-                      ),
-                    );
-                  }
-
-                  final schedules = snapshot.data ?? [];
-                  if (schedules.isEmpty) {
-                    return const Center(child: Text('No schedule records found.'));
-                  }
-
-                  return AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 300),
-                    child:
-                        _viewMode == ScheduleViewMode.list
-                            ? _buildListView(context, theme, schedules)
-                            : _buildGridView(context, theme, schedules),
-                  );
-                },
-              ),
+                    )
+                  : AppPullToRefresh(
+                      onRefresh: () => _loadSchedules(silent: true),
+                      child: _loadError != null
+                          ? AppPullToRefresh.scrollableState(
+                              child: Text(
+                                'Error loading schedule: $_loadError',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  color: theme.colorScheme.error,
+                                ),
+                              ),
+                            )
+                          : _schedules.isEmpty
+                          ? AppPullToRefresh.scrollableState(
+                              child: Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.all(28),
+                                decoration: BoxDecoration(
+                                  color: theme.colorScheme.surface,
+                                  borderRadius: BorderRadius.circular(18),
+                                  border: Border.all(
+                                    color: theme.colorScheme.onSurface
+                                        .withValues(alpha: isDark ? 0.14 : 0.1),
+                                  ),
+                                ),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Container(
+                                      width: 64,
+                                      height: 64,
+                                      decoration: BoxDecoration(
+                                        color: theme.colorScheme.primary
+                                            .withValues(
+                                              alpha: isDark ? 0.18 : 0.1,
+                                            ),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: Icon(
+                                        Icons.calendar_today_outlined,
+                                        size: 30,
+                                        color: theme.colorScheme.primary,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 14),
+                                    const Text(
+                                      'No schedule records found.',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 16,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      'Pull down to refresh once your class schedule is plotted.',
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(
+                                        fontSize: 12.5,
+                                        color: theme.colorScheme.onSurface
+                                            .withValues(alpha: 0.6),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            )
+                          : AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 300),
+                              child: _viewMode == ScheduleViewMode.list
+                                  ? _buildListView(context, theme, _schedules)
+                                  : _buildGridView(context, theme, _schedules),
+                            ),
+                    ),
             ),
           ],
         ),
@@ -300,13 +377,16 @@ class _StudentScheduleScreenState extends State<StudentScheduleScreen> {
     ThemeData theme,
     List<ScheduleModel> schedules,
   ) {
+    final isDark = theme.brightness == Brightness.dark;
     return ListView.builder(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.all(16),
       itemCount: _days.length,
       itemBuilder: (ctx, i) {
         final day = _days[i];
-        final daySchedules =
-            schedules.where((s) => s.dayOfWeek == day).toList();
+        final daySchedules = schedules
+            .where((s) => s.dayOfWeek == day)
+            .toList();
 
         if (daySchedules.isEmpty) return const SizedBox.shrink();
 
@@ -320,7 +400,7 @@ class _StudentScheduleScreenState extends State<StudentScheduleScreen> {
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.bold,
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                  color: theme.colorScheme.primary,
                   letterSpacing: 1.1,
                 ),
               ),
@@ -328,16 +408,27 @@ class _StudentScheduleScreenState extends State<StudentScheduleScreen> {
             ...daySchedules.map(
               (s) => InkWell(
                 onTap: () => _showScheduleDetailsDialog(context, s),
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(14),
                 child: Container(
                   margin: const EdgeInsets.only(bottom: 10),
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
                     color: theme.colorScheme.surface,
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(14),
                     border: Border.all(
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.12),
+                      color: theme.colorScheme.onSurface.withValues(
+                        alpha: isDark ? 0.14 : 0.11,
+                      ),
                     ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(
+                          alpha: isDark ? 0.18 : 0.03,
+                        ),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
                   ),
                   child: Row(
                     children: [
@@ -367,8 +458,9 @@ class _StudentScheduleScreenState extends State<StudentScheduleScreen> {
                                 Icon(
                                   Icons.place_outlined,
                                   size: 14,
-                                  color: theme.colorScheme.onSurface
-                                      .withValues(alpha: 0.6),
+                                  color: theme.colorScheme.onSurface.withValues(
+                                    alpha: 0.6,
+                                  ),
                                 ),
                                 const SizedBox(width: 4),
                                 Text(
@@ -397,8 +489,9 @@ class _StudentScheduleScreenState extends State<StudentScheduleScreen> {
                           Text(
                             s.endTime,
                             style: TextStyle(
-                              color: theme.colorScheme.onSurface
-                                  .withValues(alpha: 0.6),
+                              color: theme.colorScheme.onSurface.withValues(
+                                alpha: 0.6,
+                              ),
                               fontSize: 12,
                             ),
                           ),

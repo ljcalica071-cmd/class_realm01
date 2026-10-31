@@ -345,6 +345,56 @@ void main() {
       expect(errRes.isSuccess, isFalse);
       expect(errRes.errorMessage!.contains('AIzaSySuperSecretKey1234567890'), isFalse);
     });
+
+    test('falls back across Gemini 3.x models on a single API key when a model is retired or under 503 high demand', () async {
+      final triedModels = <String>[];
+      final singleKeyService = GeminiService.forTesting(
+        apiKeysProvider: () => ['single-live-key'],
+        rawGenerator: ({required apiKey, required model, required prompt}) async {
+          triedModels.add(model);
+          if (triedModels.length == 1) {
+            throw Exception(
+              'This model models/$model is no longer available to new users.',
+            );
+          }
+          if (triedModels.length == 2) {
+            throw Exception(
+              '503 UNAVAILABLE: This model is currently experiencing high demand.',
+            );
+          }
+          return jsonEncode({
+            'intended_outcomes': '1. Solve rational equations accurately in real-world contexts.',
+            'learning_content': '- Topic: Rational Equations\n- Materials: SHS Module.',
+            'assessment': '- 10-item formative assessment with scoring rubric.',
+            'work_experiences': '1. Review (10m)\n2. Discussion (25m)\n3. Practice (25m)',
+          });
+        },
+      );
+
+      final result = await singleKeyService.generateStructuredIlawPlan(
+        subject: 'General Mathematics',
+        topic: 'Rational Equations',
+        gradeLevel: 'Grade 11',
+        quarter: 'Quarter 1',
+        durationMinutes: 60,
+      );
+
+      expect(triedModels.first, 'gemini-3.5-flash-lite');
+      expect(triedModels.length, 3);
+      expect(result.isSuccess, isTrue);
+      expect(result.usedKeySlot, 1);
+    });
+
+    test('redactSecrets strips Google AI Studio AQ. auth keys and query string keys', () {
+      const sampleLeak =
+          'Failed calling https://generativelanguage.googleapis.com/v1beta?key=AQ.Ab8RN6JtR-ewaX0U8RHMB8GNSg_FakeTestKey99999 '
+          'with header AQ.Ab8RN6JtR-ewaX0U8RHMB8GNSg_FakeTestKey99999';
+      final scrubbed = GeminiService.redactSecrets(sampleLeak, const []);
+
+      expect(scrubbed.contains('AQ.Ab8RN6JtR'), isFalse);
+      expect(scrubbed.contains('FakeTestKey99999'), isFalse);
+      expect(scrubbed, contains('[REDACTED_API_KEY]'));
+    });
   });
 
   group('Task 4: Real .docx and .pdf Exporters', () {
@@ -616,6 +666,92 @@ void main() {
 
       // Lands in Step 2 Review & Edit with populated sample draft!
       expect(find.text('Teacher Review & Edit'), findsOneWidget);
+    });
+
+    testWidgets('displays clean Gemini AI Ready badge without Failover jargon and keeps Grade & Quarter dropdown menus anchored in a fixed position below the field', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1280, 900));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      final store = TeacherLessonPlanStore(currentUserProvider: () => activeTeacher);
+      final readyGemini = GeminiService.forTesting(
+        apiKeysProvider: () => ['key-1'],
+        rawGenerator: ({required apiKey, required model, required prompt}) async => '',
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: TeacherLessonPlanningTab(
+              lessonPlans: const <LessonPlanModel>[],
+              onPlanGenerated: () {},
+              store: store,
+              geminiService: readyGemini,
+              currentUserProvider: () => activeTeacher,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Badge uses simple, clean wording without "Failover"
+      expect(find.text('Gemini AI Ready'), findsOneWidget);
+      expect(find.textContaining('Failover'), findsNothing);
+
+      // Open wizard
+      await tester.tap(find.text('Generate New Lesson Plan'));
+      await tester.pumpAndSettle();
+
+      final quarterField = find.byKey(const Key('ilaw_quarter_dropdown'));
+      expect(quarterField, findsOneWidget);
+      final quarterFieldBottom = tester.getBottomLeft(quarterField).dy;
+
+      // Open Quarter dropdown while Quarter 1 is selected
+      await tester.tap(quarterField);
+      await tester.pumpAndSettle();
+
+      expect(find.widgetWithText(MenuItemButton, 'Quarter 2'), findsOneWidget);
+      final q1ItemTopWhenQ1 = tester
+          .getTopLeft(find.widgetWithText(MenuItemButton, 'Quarter 1'))
+          .dy;
+      expect(q1ItemTopWhenQ1, greaterThanOrEqualTo(quarterFieldBottom));
+
+      // Select Quarter 4 (bottom item)
+      await tester.tap(find.widgetWithText(MenuItemButton, 'Quarter 4'));
+      await tester.pumpAndSettle();
+
+      // Re-open Quarter dropdown while Quarter 4 is selected -> stays in the exact same fixed spot below the field!
+      await tester.tap(quarterField);
+      await tester.pumpAndSettle();
+
+      final q1ItemTopWhenQ4 = tester
+          .getTopLeft(find.widgetWithText(MenuItemButton, 'Quarter 1'))
+          .dy;
+      expect(q1ItemTopWhenQ4, equals(q1ItemTopWhenQ1));
+      expect(q1ItemTopWhenQ4, greaterThanOrEqualTo(quarterFieldBottom));
+
+      await tester.tap(find.widgetWithText(MenuItemButton, 'Quarter 4'));
+      await tester.pumpAndSettle();
+
+      final gradeField = find.byKey(const Key('ilaw_grade_dropdown'));
+      expect(gradeField, findsOneWidget);
+      final gradeFieldBottom = tester.getBottomLeft(gradeField).dy;
+
+      await tester.tap(gradeField);
+      await tester.pumpAndSettle();
+      final g11TopWhenG11 = tester
+          .getTopLeft(find.widgetWithText(MenuItemButton, 'Grade 11'))
+          .dy;
+      expect(g11TopWhenG11, greaterThanOrEqualTo(gradeFieldBottom));
+
+      await tester.tap(find.widgetWithText(MenuItemButton, 'Grade 12'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(gradeField);
+      await tester.pumpAndSettle();
+      final g11TopWhenG12 = tester
+          .getTopLeft(find.widgetWithText(MenuItemButton, 'Grade 11'))
+          .dy;
+      expect(g11TopWhenG12, equals(g11TopWhenG11));
     });
   });
 }

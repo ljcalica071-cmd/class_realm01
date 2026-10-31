@@ -41,9 +41,11 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
     _loadInitialData();
   }
 
-  Future<void> _loadInitialData() async {
+  Future<void> _loadInitialData({bool silent = false}) async {
     setState(() {
-      _isLoading = true;
+      if (!silent) {
+        _isLoading = true;
+      }
       _errorMessage = null;
       _loadMoreError = null;
     });
@@ -70,7 +72,9 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _errorMessage = AppModals.sanitizeErrorMessage(e);
+        if (!silent || _records.isEmpty) {
+          _errorMessage = AppModals.sanitizeErrorMessage(e);
+        }
         _isLoading = false;
       });
     }
@@ -137,12 +141,18 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
     }
 
     if (_errorMessage != null) {
-      return AppEmptyState(
-        icon: Icons.error_outline_rounded,
-        title: 'Unable to Load Attendance',
-        message: _errorMessage!,
-        actionLabel: 'Retry',
-        onAction: _loadInitialData,
+      return AppPullToRefresh(
+        onRefresh: () => _loadInitialData(silent: true),
+        child: AppPullToRefresh.scrollableState(
+          padding: EdgeInsets.zero,
+          child: AppEmptyState(
+            icon: Icons.error_outline_rounded,
+            title: 'Unable to Load Attendance',
+            message: _errorMessage!,
+            actionLabel: 'Retry',
+            onAction: _loadInitialData,
+          ),
+        ),
       );
     }
 
@@ -210,110 +220,128 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
         ),
         const Divider(height: 1),
 
-        // Read-Only Attendance Logs List with Pagination
+        // Read-Only Attendance Logs List with Pagination & Mobile Swipe-Down Refresh
         Expanded(
-          child: _records.isEmpty
-              ? const AppEmptyState(
-                  icon: Icons.fact_check_outlined,
-                  title: 'No Attendance Records Yet',
-                  message: 'Your class attendance logs will appear here once recorded.',
-                )
-              : ListView.separated(
-                  padding: const EdgeInsets.all(16),
-                  itemCount:
-                      _records.length +
-                      ((_hasMore || _loadMoreError != null) ? 1 : 0),
-                  separatorBuilder: (_, _) => const SizedBox(height: 10),
-                  itemBuilder: (ctx, i) {
-                    if (i == _records.length) {
-                      return _buildPaginationFooter(theme);
-                    }
+          child: AppPullToRefresh(
+            onRefresh: () => _loadInitialData(silent: true),
+            child: _records.isEmpty
+                ? AppPullToRefresh.scrollableState(
+                    padding: EdgeInsets.zero,
+                    child: const AppEmptyState(
+                      icon: Icons.fact_check_outlined,
+                      title: 'No Attendance Records Yet',
+                      message:
+                          'Your class attendance logs will appear here once recorded.',
+                    ),
+                  )
+                : ListView.separated(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.all(16),
+                    itemCount:
+                        _records.length +
+                        ((_hasMore || _loadMoreError != null) ? 1 : 0),
+                    separatorBuilder: (_, _) => const SizedBox(height: 10),
+                    itemBuilder: (ctx, i) {
+                      if (i == _records.length) {
+                        return _buildPaginationFooter(theme);
+                      }
 
-                    final record = _records[i];
-                    final source = _resolveProvenance(record);
-                    final classLabel = _resolveClassLabel(record);
-                    final timeInDisplay = record.timeIn.trim().isEmpty
-                        ? '—'
-                        : record.timeIn.trim();
+                      final record = _records[i];
+                      final source = _resolveProvenance(record);
+                      final classLabel = _resolveClassLabel(record);
+                      final timeInDisplay = record.timeIn.trim().isEmpty
+                          ? '—'
+                          : record.timeIn.trim();
 
-                    return Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.surface,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: theme.colorScheme.onSurface.withValues(
-                            alpha: isDark ? 0.16 : 0.12,
+                      return Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.surface,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: theme.colorScheme.onSurface.withValues(
+                              alpha: isDark ? 0.16 : 0.11,
+                            ),
                           ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(
+                                alpha: isDark ? 0.2 : 0.03,
+                              ),
+                              blurRadius: 8,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
                         ),
-                      ),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  classLabel,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: 15,
-                                    color: theme.colorScheme.onSurface,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Wrap(
-                                  spacing: 10,
-                                  runSpacing: 4,
-                                  crossAxisAlignment: WrapCrossAlignment.center,
-                                  children: [
-                                    Text(
-                                      _formatDate(record.date),
-                                      style: TextStyle(
-                                        fontSize: 12.5,
-                                        fontWeight: FontWeight.w600,
-                                        color: theme.colorScheme.onSurface
-                                            .withValues(alpha: 0.72),
-                                      ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    classLabel,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 15,
+                                      color: theme.colorScheme.onSurface,
                                     ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Wrap(
+                                    spacing: 10,
+                                    runSpacing: 4,
+                                    crossAxisAlignment:
+                                        WrapCrossAlignment.center,
+                                    children: [
+                                      Text(
+                                        _formatDate(record.date),
+                                        style: TextStyle(
+                                          fontSize: 12.5,
+                                          fontWeight: FontWeight.w600,
+                                          color: theme.colorScheme.onSurface
+                                              .withValues(alpha: 0.72),
+                                        ),
+                                      ),
+                                      Text(
+                                        'Time In: $timeInDisplay',
+                                        style: TextStyle(
+                                          fontSize: 12.5,
+                                          color: theme.colorScheme.onSurface
+                                              .withValues(alpha: 0.68),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8),
+                                  _buildProvenancePill(theme, source),
+                                  if (record.remarks != null &&
+                                      record.remarks!.trim().isNotEmpty) ...[
+                                    const SizedBox(height: 6),
                                     Text(
-                                      'Time In: $timeInDisplay',
+                                      record.remarks!.trim(),
                                       style: TextStyle(
-                                        fontSize: 12.5,
                                         color: theme.colorScheme.onSurface
-                                            .withValues(alpha: 0.68),
+                                            .withValues(alpha: 0.65),
+                                        fontSize: 11.5,
+                                        fontStyle: FontStyle.italic,
                                       ),
                                     ),
                                   ],
-                                ),
-                                const SizedBox(height: 8),
-                                _buildProvenancePill(theme, source),
-                                if (record.remarks != null &&
-                                    record.remarks!.trim().isNotEmpty) ...[
-                                  const SizedBox(height: 6),
-                                  Text(
-                                    record.remarks!.trim(),
-                                    style: TextStyle(
-                                      color: theme.colorScheme.onSurface
-                                          .withValues(alpha: 0.65),
-                                      fontSize: 11.5,
-                                      fontStyle: FontStyle.italic,
-                                    ),
-                                  ),
                                 ],
-                              ],
+                              ),
                             ),
-                          ),
-                          const SizedBox(width: 10),
-                          StatusBadge.fromAttendance(record.status),
-                        ],
-                      ),
-                    );
-                  },
-                ),
+                            const SizedBox(width: 10),
+                            StatusBadge.fromAttendance(record.status),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+          ),
         ),
       ],
     );
@@ -358,7 +386,10 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
           if (_hasMore)
             Center(
               child: _isLoadingMore
-                  ? const CircularProgressIndicator()
+                  ? LoadingAnimationWidget.staggeredDotsWave(
+                      color: theme.colorScheme.primary,
+                      size: 28,
+                    )
                   : AppSecondaryButton(
                       label: 'Load More Records',
                       icon: Icons.arrow_downward_rounded,
@@ -557,21 +588,24 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
       textColor = isDark ? const Color(0xFFFCA5A5) : const Color(0xFF991B1B);
       icon = Icons.error_rounded;
       title = 'Critical Notice: $absentCount Recorded Absences (SARDO Risk)';
-      subtitle = 'You have reached 10 absences, placing you at critical risk of drop-out status under DepEd policy. Please schedule an urgent conference with your adviser.';
+      subtitle =
+          'You have reached 10 absences, placing you at critical risk of drop-out status under DepEd policy. Please schedule an urgent conference with your adviser.';
     } else if (absentCount >= 5) {
       bannerColor = isDark ? const Color(0xFF431407) : const Color(0xFFFFF7ED);
       borderColor = const Color(0xFFEA580C);
       textColor = isDark ? const Color(0xFFFDBA74) : const Color(0xFF9A3412);
       icon = Icons.warning_amber_rounded;
       title = 'Attendance Alert: $absentCount Recorded Absences';
-      subtitle = 'Attendance intervention required. Please coordinate with your subject teacher or class adviser to submit excuse letters or make-up work.';
+      subtitle =
+          'Attendance intervention required. Please coordinate with your subject teacher or class adviser to submit excuse letters or make-up work.';
     } else {
       bannerColor = isDark ? const Color(0xFF422006) : const Color(0xFFFEFCE8);
       borderColor = const Color(0xFFCA8A04);
       textColor = isDark ? const Color(0xFFFDE047) : const Color(0xFF854D0E);
       icon = Icons.info_outline_rounded;
       title = 'Early Warning: $absentCount Recorded Absences';
-      subtitle = 'You have accumulated 3 absences. Please coordinate with your subject teacher regarding missed sessions.';
+      subtitle =
+          'You have accumulated 3 absences. Please coordinate with your subject teacher regarding missed sessions.';
     }
 
     return Container(
