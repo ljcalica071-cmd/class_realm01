@@ -45,6 +45,24 @@ class AttendanceHistoryAnalyticsViewState
     setState(() => _selectedPreset = preset);
     if (preset != AttendanceDatePreset.custom) {
       _loadAll();
+    } else {
+      if (!_hasInvalidCustomRange) {
+        _loadAll();
+      }
+    }
+  }
+
+  DateTime get customStartDate => _customStartDate;
+  DateTime get customEndDate => _customEndDate;
+
+  void setCustomRange(DateTime start, DateTime end) {
+    setState(() {
+      _customStartDate = _dateOnly(start);
+      _customEndDate = _dateOnly(end);
+      _selectedPreset = AttendanceDatePreset.custom;
+    });
+    if (!_hasInvalidCustomRange) {
+      _loadAll();
     }
   }
 
@@ -93,12 +111,11 @@ class AttendanceHistoryAnalyticsViewState
     super.initState();
     _repository = widget.repository ?? SupabaseAttendanceRepository.instance;
     final now = DateTime.now();
-    _customStartDate = DateTime(
-      now.year,
-      now.month,
-      now.day,
-    ).subtract(const Duration(days: 7));
-    _customEndDate = DateTime(now.year, now.month, now.day);
+    final today = DateTime(now.year, now.month, now.day);
+    final min2026 = DateTime(2026, 1, 1);
+    final sevenDaysAgo = today.subtract(const Duration(days: 7));
+    _customStartDate = sevenDaysAgo.isBefore(min2026) ? min2026 : sevenDaysAgo;
+    _customEndDate = today;
     _loadAll();
   }
 
@@ -118,25 +135,31 @@ class AttendanceHistoryAnalyticsViewState
 
   AttendanceDateRange _computeCurrentDateRange() {
     final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final min2026 = DateTime(2026, 1, 1);
     switch (_selectedPreset) {
       case AttendanceDatePreset.thisWeek:
         final monday = now.subtract(Duration(days: now.weekday - 1));
+        final weekStart = DateTime(monday.year, monday.month, monday.day);
         return AttendanceDateRange(
-          startDate: DateTime(monday.year, monday.month, monday.day),
-          endDate: DateTime(now.year, now.month, now.day),
+          startDate: weekStart.isBefore(min2026) ? min2026 : weekStart,
+          endDate: today,
         );
       case AttendanceDatePreset.thisMonth:
+        final monthStart = DateTime(now.year, now.month, 1);
         return AttendanceDateRange(
-          startDate: DateTime(now.year, now.month, 1),
-          endDate: DateTime(now.year, now.month, now.day),
+          startDate: monthStart.isBefore(min2026) ? min2026 : monthStart,
+          endDate: today,
         );
       case AttendanceDatePreset.custom:
-        final start = _customStartDate.isAfter(_customEndDate)
+        DateTime start = _customStartDate.isAfter(_customEndDate)
             ? _customEndDate
             : _customStartDate;
-        final end = _customStartDate.isAfter(_customEndDate)
+        DateTime end = _customStartDate.isAfter(_customEndDate)
             ? _customStartDate
             : _customEndDate;
+        if (start.isBefore(min2026)) start = min2026;
+        if (end.isAfter(today)) end = today;
         return AttendanceDateRange(
           startDate: DateTime(start.year, start.month, start.day),
           endDate: DateTime(end.year, end.month, end.day),
@@ -499,11 +522,17 @@ class AttendanceHistoryAnalyticsViewState
       key: key,
       borderRadius: BorderRadius.circular(10),
       onTap: () async {
+        final now = DateTime.now();
+        final today = DateTime(now.year, now.month, now.day);
+        final min2026 = DateTime(2026, 1, 1);
+        final initial = date.isAfter(today)
+            ? today
+            : (date.isBefore(min2026) ? min2026 : date);
         final picked = await showAppDatePickerDialog(
           context,
-          initialDate: date,
-          firstDate: DateTime(2020),
-          lastDate: DateTime.now().add(const Duration(days: 365)),
+          initialDate: initial,
+          firstDate: min2026,
+          lastDate: today,
           title: 'Select $label',
         );
         if (picked != null) onPicked(picked);

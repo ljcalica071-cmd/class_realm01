@@ -104,6 +104,8 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
   final GlobalKey<AttendanceHistoryAnalyticsViewState> _analyticsViewKey =
       GlobalKey<AttendanceHistoryAnalyticsViewState>();
   AttendanceDatePreset _selectedAnalyticsPreset = AttendanceDatePreset.thisWeek;
+  late DateTime _analyticsCustomStartDate;
+  late DateTime _analyticsCustomEndDate;
 
   int _rosterLoadRequest = 0;
 
@@ -111,6 +113,12 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
   void initState() {
     super.initState();
     _repository = widget.repository ?? SupabaseAttendanceRepository.instance;
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final min2026 = DateTime(2026, 1, 1);
+    final sevenDaysAgo = today.subtract(const Duration(days: 7));
+    _analyticsCustomStartDate = sevenDaysAgo.isBefore(min2026) ? min2026 : sevenDaysAgo;
+    _analyticsCustomEndDate = today;
     HardwareKeyboard.instance.addHandler(_handleGlobalHardwareKey);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -1104,8 +1112,9 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
   Future<void> _onDateChanged(DateTime newDate) async {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
+    final min2026 = DateTime(2026, 1, 1);
     final targetDate = DateTime(newDate.year, newDate.month, newDate.day);
-    if (targetDate.isAfter(today)) return;
+    if (targetDate.isAfter(today) || targetDate.isBefore(min2026)) return;
     if (_isSameDay(newDate, _attendanceSelectedDate)) return;
     if (!await _promptDiscardIfDirty()) return;
 
@@ -1628,7 +1637,16 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
             isSmall: true,
             onPressed: () {
               setState(() => _selectedAnalyticsPreset = preset);
-              _analyticsViewKey.currentState?.setPreset(preset);
+              if (preset == AttendanceDatePreset.custom) {
+                if (!_analyticsCustomStartDate.isAfter(_analyticsCustomEndDate)) {
+                  _analyticsViewKey.currentState?.setCustomRange(
+                    _analyticsCustomStartDate,
+                    _analyticsCustomEndDate,
+                  );
+                }
+              } else {
+                _analyticsViewKey.currentState?.setPreset(preset);
+              }
             },
           );
   }
@@ -1636,8 +1654,10 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
   Widget _buildClassAndDateControls(ThemeData theme, bool isDark) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
+    final min2026 = DateTime(2026, 1, 1);
     final isToday = _isSameDay(_attendanceSelectedDate, now);
     final isSelectedTodayOrFuture = !_attendanceSelectedDate.isBefore(today);
+    final isEarliestAllowed = !_attendanceSelectedDate.isAfter(min2026);
     final borderColor = theme.colorScheme.onSurface.withValues(
       alpha: isDark ? 0.14 : 0.12,
     );
@@ -1740,26 +1760,39 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           IconButton(
-                            tooltip: 'Previous Day',
+                            tooltip: isEarliestAllowed
+                                ? '2026 is the earliest allowed date'
+                                : 'Previous Day',
                             icon: Icon(
                               LucideIcons.chevronLeft,
                               size: 15,
-                              color: theme.colorScheme.onSurface,
+                              color: isEarliestAllowed
+                                  ? theme.colorScheme.onSurface.withValues(
+                                      alpha: 0.25,
+                                    )
+                                  : theme.colorScheme.onSurface,
                             ),
-                            onPressed: () => _onDateChanged(
-                              _attendanceSelectedDate.subtract(
-                                const Duration(days: 1),
-                              ),
-                            ),
+                            onPressed: isEarliestAllowed
+                                ? null
+                                : () => _onDateChanged(
+                                      _attendanceSelectedDate.subtract(
+                                        const Duration(days: 1),
+                                      ),
+                                    ),
                             padding: const EdgeInsets.symmetric(horizontal: 8),
                             constraints: const BoxConstraints(),
                           ),
                           InkWell(
                             onTap: () async {
+                              final initial = _attendanceSelectedDate.isBefore(min2026)
+                                  ? min2026
+                                  : (_attendanceSelectedDate.isAfter(today)
+                                      ? today
+                                      : _attendanceSelectedDate);
                               final picked = await showAppDatePickerDialog(
                                 context,
-                                initialDate: _attendanceSelectedDate,
-                                firstDate: DateTime(2020),
+                                initialDate: initial,
+                                firstDate: min2026,
                                 lastDate: today,
                                 title: 'Select Attendance Date',
                               );
@@ -1863,9 +1896,180 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
                 ),
               ],
             ),
+            if (_selectedAnalyticsPreset == AttendanceDatePreset.custom) ...[
+              const SizedBox(height: 12),
+              _buildAnalyticsCustomDateRangeRow(theme, isDark, today, min2026),
+            ],
           ],
         ],
       ),
+    );
+  }
+
+  Widget _buildAnalyticsCustomDateRangeRow(
+    ThemeData theme,
+    bool isDark,
+    DateTime today,
+    DateTime min2026,
+  ) {
+    final hasRangeError =
+        _analyticsCustomStartDate.isAfter(_analyticsCustomEndDate);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            InkWell(
+              onTap: () async {
+                final initial = _analyticsCustomStartDate.isAfter(today)
+                    ? today
+                    : (_analyticsCustomStartDate.isBefore(min2026)
+                        ? min2026
+                        : _analyticsCustomStartDate);
+                final picked = await showAppDatePickerDialog(
+                  context,
+                  initialDate: initial,
+                  firstDate: min2026,
+                  lastDate: today,
+                  title: 'Select Start Date',
+                );
+                if (picked != null) {
+                  setState(() => _analyticsCustomStartDate = picked);
+                  if (!_analyticsCustomStartDate
+                      .isAfter(_analyticsCustomEndDate)) {
+                    _analyticsViewKey.currentState?.setCustomRange(
+                      _analyticsCustomStartDate,
+                      _analyticsCustomEndDate,
+                    );
+                  }
+                }
+              },
+              borderRadius: BorderRadius.circular(8),
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surface,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: hasRangeError
+                        ? const Color(0xFFDC2626)
+                        : theme.colorScheme.onSurface.withValues(
+                            alpha: isDark ? 0.2 : 0.16,
+                          ),
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      LucideIcons.calendar,
+                      size: 14,
+                      color: theme.colorScheme.primary,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Start: ',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: theme.colorScheme.onSurface,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            Icon(
+              LucideIcons.arrowRight,
+              size: 14,
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+            InkWell(
+              onTap: () async {
+                final initial = _analyticsCustomEndDate.isAfter(today)
+                    ? today
+                    : (_analyticsCustomEndDate.isBefore(min2026)
+                        ? min2026
+                        : _analyticsCustomEndDate);
+                final picked = await showAppDatePickerDialog(
+                  context,
+                  initialDate: initial,
+                  firstDate: min2026,
+                  lastDate: today,
+                  title: 'Select End Date',
+                );
+                if (picked != null) {
+                  setState(() => _analyticsCustomEndDate = picked);
+                  if (!_analyticsCustomStartDate
+                      .isAfter(_analyticsCustomEndDate)) {
+                    _analyticsViewKey.currentState?.setCustomRange(
+                      _analyticsCustomStartDate,
+                      _analyticsCustomEndDate,
+                    );
+                  }
+                }
+              },
+              borderRadius: BorderRadius.circular(8),
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surface,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: hasRangeError
+                        ? const Color(0xFFDC2626)
+                        : theme.colorScheme.onSurface.withValues(
+                            alpha: isDark ? 0.2 : 0.16,
+                          ),
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      LucideIcons.calendar,
+                      size: 14,
+                      color: theme.colorScheme.primary,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'End: ',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: theme.colorScheme.onSurface,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+        if (hasRangeError) ...[
+          const SizedBox(height: 6),
+          const Row(
+            children: [
+              Icon(Icons.error_outline, size: 13, color: Color(0xFFDC2626)),
+              SizedBox(width: 4),
+              Text(
+                'Start date cannot be after end date.',
+                style: TextStyle(
+                  color: Color(0xFFDC2626),
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ],
     );
   }
 
