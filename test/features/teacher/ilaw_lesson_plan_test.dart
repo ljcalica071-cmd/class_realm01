@@ -509,6 +509,91 @@ void main() {
       expect(scrubbed.contains('FakeTestKey99999'), isFalse);
       expect(scrubbed, contains('[REDACTED_API_KEY]'));
     });
+
+    test('generates DepEd 2026 multi-session matrix JSON and extracts 4 sessions and rubrics', () async {
+      final multiService = GeminiService.forTesting(
+        apiKeysProvider: () => ['test-api-key'],
+        rawGenerator: ({required apiKey, required model, required prompt}) async {
+          expect(prompt, contains('DepEd Order No. 003, s. 2026'));
+          expect(prompt, contains('Developing (75-79%)'));
+          expect(prompt, contains('Number of Sessions: 4'));
+          return '''
+{
+  "intended_outcomes": "At the end of the lesson block, learners solve rational inequalities.",
+  "learning_content": "Topic: Rational Inequalities\\nReferences: DepEd SHS Curriculum Guide",
+  "assessment": "Formative drills and exit tickets.",
+  "work_experiences": "4-session procedure breakdown.",
+  "sessions": [
+    {
+      "session_number": 1,
+      "session_title": "Session 1: Finding Critical Values",
+      "objectives": "Find zeros and undefined points.",
+      "learning_experiences": "Warm-up (10m), Modeling (20m), Guided practice (20m), Summary (10m)",
+      "formative_assessment": "3 critical value items.",
+      "parent_guide": "Ask child how to find when fraction equals zero.",
+      "community_experience": "Explain rate limits on municipal bridges.",
+      "teacher_reflections": "Review factoring quadratic numerators."
+    },
+    {
+      "session_number": 2,
+      "session_title": "Session 2: Sign Analysis Table",
+      "objectives": "Construct interval tables.",
+      "learning_experiences": "Warm-up (10m), Interval test (25m), Pairs (25m)",
+      "formative_assessment": "Fill in sign chart.",
+      "parent_guide": "Verify that sign table shows positive/negative test values.",
+      "community_experience": "Relate intervals to water consumption tiers.",
+      "teacher_reflections": "Sign errors on negative factors."
+    },
+    {
+      "session_number": 3,
+      "session_title": "Session 3: Writing Solution Sets",
+      "objectives": "Express sets in interval notation.",
+      "learning_experiences": "Board review (15m), Exercises (30m), Exit ticket (15m)",
+      "formative_assessment": "Write 2 solution intervals.",
+      "parent_guide": "Inspect bracket vs parenthesis usage.",
+      "community_experience": "Budget ranges in sari-sari store stocking.",
+      "teacher_reflections": "Parentheses at infinity mastered."
+    },
+    {
+      "session_number": 4,
+      "session_title": "Session 4: Synthesis & Application",
+      "objectives": "Solve real-world contextual problems.",
+      "learning_experiences": "Word problem modeling (20m), Group challenge (25m), Evaluation (15m)",
+      "formative_assessment": "Contextualized problem on speed-distance inequality.",
+      "parent_guide": "Discuss how travel time varies with speed.",
+      "community_experience": "Public transit fare matrix optimization.",
+      "teacher_reflections": "High engagement in group challenge."
+    }
+  ],
+  "rubric_items": [
+    {
+      "criterion": "Objectives aligned with DepEd SHS standards.",
+      "is_met": true,
+      "notes": "Fully met."
+    }
+  ]
+}
+''';
+        },
+      );
+
+      final result = await multiService.generateStructuredIlawPlan(
+        subject: 'General Mathematics',
+        topic: 'Rational Inequalities',
+        gradeLevel: 'Grade 11',
+        quarter: 'Quarter 1',
+        durationMinutes: 60,
+        numberOfSessions: 4,
+        proficiencyLevel: DepEdProficiencyLevel.developing,
+      );
+
+      expect(result.isSuccess, isTrue);
+      expect(result.sections!.sessions.length, 4);
+      expect(result.sections!.sessions.first.sessionTitle, contains('Finding Critical Values'));
+      expect(result.sections!.sessions[3].sessionTitle, contains('Synthesis & Application'));
+      expect(result.sections!.sessions.first.parentGuide, contains('Ask child'));
+      expect(result.sections!.rubricItems.isNotEmpty, isTrue);
+    });
   });
 
   group('Task 4: Real .docx and .pdf Exporters', () {
