@@ -834,6 +834,10 @@ void main() {
       // Generate with Gemini AI -> moves to Step 2 (Teacher Review & Edit)
       await tester.tap(find.text('Generate with Gemini AI'));
       await tester.pumpAndSettle();
+      if (find.text('I Understand & Generate').evaluate().isNotEmpty) {
+        await tester.tap(find.text('I Understand & Generate'));
+        await tester.pumpAndSettle();
+      }
 
       expect(find.text('Teacher Review & Edit'), findsOneWidget);
 
@@ -1026,6 +1030,126 @@ void main() {
           .getTopLeft(find.widgetWithText(MenuItemButton, 'Grade 11'))
           .dy;
       expect(g11TopWhenG12, equals(g11TopWhenG11));
+    });
+
+    testWidgets('supports DepEd 2026 multi-session matrix authoring with competency checklist and rubrics', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1280, 960));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      final store = TeacherLessonPlanStore(currentUserProvider: () => activeTeacher);
+      final fakeGemini = GeminiService.forTesting(
+        apiKeysProvider: () => ['test-key'],
+        rawGenerator: ({required apiKey, required model, required prompt}) async {
+          return jsonEncode({
+            'intended_outcomes': '1. Master rational functions in SHS.',
+            'learning_content': '- Topic: Rational Functions\n- References: DepEd SHS Curriculum Guide',
+            'assessment': '- Formative checks & exit tickets.',
+            'work_experiences': '4-session procedures.',
+            'sessions': [
+              {
+                'session_number': 1,
+                'session_title': 'Session 1: Introduction to Functions',
+                'objectives': 'Define rational functions.',
+                'learning_experiences': 'Warm-up (10m), Discussion (25m), Guided practice (25m)',
+                'formative_assessment': 'Quick 3-item check.',
+                'parent_guide': 'Discuss functions at home.',
+                'community_experience': 'Relate to jeepney fare rates.',
+                'teacher_reflections': 'Learners understood domain concept.',
+              },
+              {
+                'session_number': 2,
+                'session_title': 'Session 2: Rational Equations',
+                'objectives': 'Solve equations with fractions.',
+                'learning_experiences': 'LCD review (10m), Solving (25m), Pair drills (25m)',
+                'formative_assessment': 'Board challenge.',
+                'parent_guide': 'Review homework with parent.',
+                'community_experience': 'Store inventory budgets.',
+                'teacher_reflections': 'Check extraneous roots.',
+              },
+            ],
+            'rubric_items': [
+              {
+                'criterion': 'Intentions & Objectives are clearly aligned.',
+                'is_met': true,
+                'notes': 'Verified.',
+              },
+            ],
+          });
+        },
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: TeacherLessonPlanningTab(
+              lessonPlans: const <LessonPlanModel>[],
+              onPlanGenerated: () {},
+              store: store,
+              geminiService: fakeGemini,
+              currentUserProvider: () => activeTeacher,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Generate New Lesson Plan'));
+      await tester.pumpAndSettle();
+
+      // Verify SHS Grade and Quarter pickers
+      expect(find.byKey(const Key('ilaw_grade_dropdown')), findsOneWidget);
+      expect(find.byKey(const Key('ilaw_quarter_dropdown')), findsOneWidget);
+      expect(find.byKey(const Key('ilaw_sessions_dropdown')), findsOneWidget);
+      expect(find.byKey(const Key('ilaw_proficiency_dropdown')), findsOneWidget);
+
+      // Enter subject and select competency chip
+      await tester.enterText(
+        find.byKey(const Key('ilaw_subject_field')),
+        'General Mathematics',
+      );
+      await tester.enterText(
+        find.byKey(const Key('ilaw_topic_field')),
+        'Rational Functions & Equations',
+      );
+      await tester.pumpAndSettle();
+
+      // Verify curriculum competency checklist shows DepEd SHS competencies
+      expect(find.textContaining('M11GM-Ia-1'), findsOneWidget);
+      await tester.tap(find.textContaining('M11GM-Ia-1'));
+      await tester.pumpAndSettle();
+
+      // Trigger generate -> displays DepEd DO 3 s.2026 AI Ethics Notice dialog
+      await tester.tap(find.text('Generate with Gemini AI'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('DepEd Order No. 003, s. 2026'), findsOneWidget);
+      expect(find.text('I Understand & Generate'), findsOneWidget);
+
+      // Confirm dialog -> proceeds with generation and opens Step 2
+      await tester.tap(find.text('I Understand & Generate'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Teacher Review & Edit'), findsOneWidget);
+
+      // Verify multi-session matrix tabs appear in Step 2
+      expect(find.text('Session 1'), findsOneWidget);
+      expect(find.text('Session 2'), findsOneWidget);
+
+      // Tap Session 2 tab
+      await tester.ensureVisible(find.text('Session 2'));
+      await tester.tap(find.text('Session 2'));
+      await tester.pumpAndSettle();
+
+      await tester.ensureVisible(
+        find.textContaining('Session 2: Rational Equations').first,
+      );
+      expect(find.textContaining('Session 2: Rational Equations'), findsWidgets);
+
+      // Approve & save
+      await tester.tap(find.text('Approve & Format iLAW'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('iLAW LESSON PLAN'), findsOneWidget);
     });
   });
 }

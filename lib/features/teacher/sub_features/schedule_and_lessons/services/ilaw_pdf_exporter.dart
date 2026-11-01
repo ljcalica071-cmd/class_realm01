@@ -38,9 +38,6 @@ class IlawPdfExporter {
     final teacher = plan.teacherName.trim().isNotEmpty
         ? plan.teacherName.trim()
         : 'Subject Teacher';
-    final strategy = plan.teachingStrategy.trim().isNotEmpty
-        ? plan.teachingStrategy.trim()
-        : 'Collaborative / Inquiry-Based';
     final dateStr = _formatDate(plan.updatedAt);
 
     // Top Steel-Blue Minimalist Accent Rule (#487898 -> 0.282, 0.471, 0.596)

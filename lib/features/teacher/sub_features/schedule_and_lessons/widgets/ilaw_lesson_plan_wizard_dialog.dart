@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:class_realm/core/services/gemini_service.dart';
-import 'package:class_realm/core/services/local_storage_service.dart';
 import 'package:class_realm/core/theme/app_theme.dart';
 import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/shared/widgets/shared_widgets.dart';
@@ -48,6 +47,10 @@ class _IlawLessonPlanWizardDialogState
 
   String _selectedGrade = 'Grade 11';
   String _selectedQuarter = 'Quarter 1';
+  int _selectedSessions = 4;
+  DepEdProficiencyLevel _selectedProficiency = DepEdProficiencyLevel.developing;
+  IlawTemplateType _selectedTemplate = IlawTemplateType.ilawModified;
+  IlawContentSource _selectedSource = IlawContentSource.curriculumBased;
 
   late final TextEditingController _subjectCtrl;
   late final TextEditingController _topicCtrl;
@@ -59,11 +62,27 @@ class _IlawLessonPlanWizardDialogState
   late final TextEditingController _contentCtrl;
   late final TextEditingController _assessmentCtrl;
   late final TextEditingController _workCtrl;
+
   final ScrollController _scrollCtrl = ScrollController();
 
-  // Inline validation error states (never bottom SnackBars)
+  List<IlawSessionData> _sessions = [];
+  List<IlawRubricItem> _rubricItems = [];
+  int _activeSessionIndex = 0;
+
+  // Session edit controllers
+  final List<TextEditingController> _sessionTitleCtrls = [];
+  final List<TextEditingController> _sessionObjectivesCtrls = [];
+  final List<TextEditingController> _sessionExperiencesCtrls = [];
+  final List<TextEditingController> _sessionAssessmentCtrls = [];
+  final List<TextEditingController> _sessionParentGuideCtrls = [];
+  final List<TextEditingController> _sessionCommunityCtrls = [];
+  final List<TextEditingController> _sessionReflectionCtrls = [];
+
+  // Inline validation error states
   String? _gradeError;
   String? _quarterError;
+  String? _sessionsError;
+  String? _proficiencyError;
   String? _subjectError;
   String? _topicError;
   String? _durationError;
@@ -85,8 +104,6 @@ class _IlawLessonPlanWizardDialogState
   bool _inlineAlertIsError = false;
   String? _exportFeedbackMessage;
 
-  List<String> _cachedTeacherSubjects = const [];
-
   @override
   void initState() {
     super.initState();
@@ -97,8 +114,16 @@ class _IlawLessonPlanWizardDialogState
         'ilaw_${DateTime.now().microsecondsSinceEpoch.toString()}';
     _createdAt = existing?.createdAt ?? DateTime.now();
     _status = existing?.status ?? IlawPlanStatus.draft;
+
     _selectedGrade = existing?.gradeLevel ?? 'Grade 11';
     _selectedQuarter = existing?.quarter ?? 'Quarter 1';
+    _selectedSessions = existing?.numberOfSessions ?? 4;
+    _selectedProficiency =
+        existing?.targetProficiency ?? DepEdProficiencyLevel.developing;
+    _selectedTemplate =
+        existing?.templateType ?? IlawTemplateType.ilawModified;
+    _selectedSource =
+        existing?.contentSource ?? IlawContentSource.curriculumBased;
 
     _subjectCtrl = TextEditingController(text: existing?.subject ?? '');
     _topicCtrl = TextEditingController(text: existing?.topic ?? '');
@@ -119,21 +144,65 @@ class _IlawLessonPlanWizardDialogState
     _assessmentCtrl = TextEditingController(text: existing?.assessment ?? '');
     _workCtrl = TextEditingController(text: existing?.workExperiences ?? '');
 
-    _loadTeacherSubjectSuggestions();
+    _sessions = existing != null ? List.from(existing.effectiveSessions) : [];
+    _rubricItems =
+        existing != null
+            ? List.from(existing.effectiveRubrics)
+            : IlawRubricItem.defaultRubrics();
+
+    _syncSessionControllers();
   }
 
-  void _loadTeacherSubjectSuggestions() {
-    final uid = widget.currentTeacher?.id ?? '';
-    if (uid.isEmpty) return;
-    final raw = LocalStorageService.getTeacherSubjects(uid);
-    final names = <String>{};
-    for (final row in raw) {
-      final n = (row['subject_name'] ?? row['name'] ?? '').toString().trim();
-      if (n.isNotEmpty) {
-        names.add(n);
-      }
+  void _syncSessionControllers() {
+    _disposeSessionControllers();
+    for (final s in _sessions) {
+      _sessionTitleCtrls.add(TextEditingController(text: s.sessionTitle));
+      _sessionObjectivesCtrls.add(TextEditingController(text: s.objectives));
+      _sessionExperiencesCtrls.add(
+        TextEditingController(text: s.learningExperiences),
+      );
+      _sessionAssessmentCtrls.add(
+        TextEditingController(text: s.formativeAssessment),
+      );
+      _sessionParentGuideCtrls.add(TextEditingController(text: s.parentGuide));
+      _sessionCommunityCtrls.add(
+        TextEditingController(text: s.communityExperience),
+      );
+      _sessionReflectionCtrls.add(
+        TextEditingController(text: s.teacherReflections),
+      );
     }
-    _cachedTeacherSubjects = names.take(6).toList();
+  }
+
+  void _disposeSessionControllers() {
+    for (final c in _sessionTitleCtrls) {
+      c.dispose();
+    }
+    for (final c in _sessionObjectivesCtrls) {
+      c.dispose();
+    }
+    for (final c in _sessionExperiencesCtrls) {
+      c.dispose();
+    }
+    for (final c in _sessionAssessmentCtrls) {
+      c.dispose();
+    }
+    for (final c in _sessionParentGuideCtrls) {
+      c.dispose();
+    }
+    for (final c in _sessionCommunityCtrls) {
+      c.dispose();
+    }
+    for (final c in _sessionReflectionCtrls) {
+      c.dispose();
+    }
+    _sessionTitleCtrls.clear();
+    _sessionObjectivesCtrls.clear();
+    _sessionExperiencesCtrls.clear();
+    _sessionAssessmentCtrls.clear();
+    _sessionParentGuideCtrls.clear();
+    _sessionCommunityCtrls.clear();
+    _sessionReflectionCtrls.clear();
   }
 
   @override
@@ -148,6 +217,7 @@ class _IlawLessonPlanWizardDialogState
     _assessmentCtrl.dispose();
     _workCtrl.dispose();
     _scrollCtrl.dispose();
+    _disposeSessionControllers();
     super.dispose();
   }
 
@@ -160,6 +230,9 @@ class _IlawLessonPlanWizardDialogState
   bool _validateStep1() {
     final gErr = IlawLessonPlanValidator.validateGradeLevel(_selectedGrade);
     final qErr = IlawLessonPlanValidator.validateQuarter(_selectedQuarter);
+    final sesErr = IlawLessonPlanValidator.validateNumberOfSessions(
+      _selectedSessions,
+    );
     final sErr = IlawLessonPlanValidator.validateSubject(_subjectCtrl.text);
     final tErr = IlawLessonPlanValidator.validateTopic(_topicCtrl.text);
     final dErr = IlawLessonPlanValidator.validateDuration(_durationCtrl.text);
@@ -173,84 +246,106 @@ class _IlawLessonPlanWizardDialogState
     setState(() {
       _gradeError = gErr;
       _quarterError = qErr;
+      _sessionsError = sesErr;
       _subjectError = sErr;
       _topicError = tErr;
       _durationError = dErr;
       _strategyError = stErr;
       _competencyError = cErr;
-      _inlineAlertMessage = null;
     });
 
-    final isValid = gErr == null &&
+    return gErr == null &&
         qErr == null &&
+        sesErr == null &&
         sErr == null &&
         tErr == null &&
         dErr == null &&
         stErr == null &&
         cErr == null;
-    if (!isValid) {
-      _scrollToTop();
-    }
-    return isValid;
   }
 
-  bool _validateStep2({required bool requireCompleteSections}) {
+  bool _validateStep2() {
     final tErr = IlawLessonPlanValidator.validateTopic(_topicCtrl.text);
     final dErr = IlawLessonPlanValidator.validateDuration(_durationCtrl.text);
-
-    String? iErr;
-    String? lErr;
-    String? aErr;
-    String? wErr;
-
-    if (requireCompleteSections) {
-      iErr = IlawLessonPlanValidator.validateSectionContent(
-        _outcomesCtrl.text,
-        sectionName: 'Intended Learning Outcomes',
-      );
-      lErr = IlawLessonPlanValidator.validateSectionContent(
-        _contentCtrl.text,
-        sectionName: 'Learning Content & Resources',
-      );
-      aErr = IlawLessonPlanValidator.validateSectionContent(
-        _assessmentCtrl.text,
-        sectionName: 'Assessment & Learning Activities',
-      );
-      wErr = IlawLessonPlanValidator.validateSectionContent(
-        _workCtrl.text,
-        sectionName: 'Work / Learning Experiences',
-        maxLength: IlawLessonPlanValidator.maxProcedureSectionLength,
-      );
-    }
+    final oErr = IlawLessonPlanValidator.validateSectionContent(
+      _outcomesCtrl.text,
+      sectionName: 'Intended Learning Outcomes',
+    );
+    final cErr = IlawLessonPlanValidator.validateSectionContent(
+      _contentCtrl.text,
+      sectionName: 'Learning Content & Resources',
+    );
+    final aErr = IlawLessonPlanValidator.validateSectionContent(
+      _assessmentCtrl.text,
+      sectionName: 'Assessment & Activities',
+    );
+    final wErr = IlawLessonPlanValidator.validateSectionContent(
+      _workCtrl.text,
+      sectionName: 'Work / Learning Experiences',
+      maxLength: IlawLessonPlanValidator.maxProcedureSectionLength,
+    );
 
     setState(() {
       _topicError = tErr;
       _durationError = dErr;
-      _outcomesError = iErr;
-      _contentError = lErr;
+      _outcomesError = oErr;
+      _contentError = cErr;
       _assessmentError = aErr;
       _workError = wErr;
-      _inlineAlertMessage = null;
     });
 
     return tErr == null &&
         dErr == null &&
-        iErr == null &&
-        lErr == null &&
+        oErr == null &&
+        cErr == null &&
         aErr == null &&
         wErr == null;
+  }
+
+  void _saveSessionFormValuesToState() {
+    for (int i = 0; i < _sessions.length; i++) {
+      if (i < _sessionTitleCtrls.length) {
+        _sessions[i] = _sessions[i].copyWith(
+          sessionTitle: _sessionTitleCtrls[i].text,
+          objectives: _sessionObjectivesCtrls[i].text,
+          learningExperiences: _sessionExperiencesCtrls[i].text,
+          formativeAssessment: _sessionAssessmentCtrls[i].text,
+          parentGuide: _sessionParentGuideCtrls[i].text,
+          communityExperience: _sessionCommunityCtrls[i].text,
+          teacherReflections: _sessionReflectionCtrls[i].text,
+        );
+      }
+    }
   }
 
   Future<void> _handleGenerateWithAi() async {
     if (!_validateStep1()) return;
 
+    if (!widget.geminiService.hasConfiguredKeys) {
+      setState(() {
+        _isGenerating = false;
+        _showMissingKeysPrompt = true;
+        _inlineAlertIsError = true;
+        _inlineAlertMessage =
+            'No Gemini API key is configured in .env yet. You can inspect sample drafts or add your key to enable live generation.';
+      });
+      return;
+    }
+
+    // Show DepEd Order No. 003, s. 2026 Confirmation Modal
+    final confirmed = await _showDepEdEthicsNoticeDialog();
+    if (confirmed != true || !mounted) return;
+
     setState(() {
       _isGenerating = true;
-      _showMissingKeysPrompt = false;
       _inlineAlertMessage = null;
+      _inlineAlertIsError = false;
+      _showMissingKeysPrompt = false;
+      _exportFeedbackMessage = null;
     });
 
-    final durationMins = int.parse(_durationCtrl.text.trim());
+    final durationMins = int.tryParse(_durationCtrl.text.trim()) ?? 60;
+
     final result = await widget.geminiService.generateStructuredIlawPlan(
       subject: _subjectCtrl.text.trim(),
       topic: _topicCtrl.text.trim(),
@@ -259,88 +354,181 @@ class _IlawLessonPlanWizardDialogState
       durationMinutes: durationMins,
       teachingStrategy: _strategyCtrl.text.trim(),
       learningCompetency: _competencyCtrl.text.trim(),
+      numberOfSessions: _selectedSessions,
+      proficiencyLevel: _selectedProficiency,
+      templateType: _selectedTemplate,
     );
 
     if (!mounted) return;
-
-    if (result.isSuccess && result.sections != null) {
-      final sections = result.sections!;
-      setState(() {
-        _isGenerating = false;
-        _outcomesCtrl.text = sections.intendedOutcomes;
-        _contentCtrl.text = sections.learningContent;
-        _assessmentCtrl.text = sections.assessment;
-        _workCtrl.text = sections.workExperiences;
-        _outcomesError = null;
-        _contentError = null;
-        _assessmentError = null;
-        _workError = null;
-        _status = IlawPlanStatus.draft;
-        _step = IlawWizardStep.reviewEdit;
-        _inlineAlertIsError = false;
-        _inlineAlertMessage =
-            'AI draft generated. Review and edit any section below before approving.';
-      });
-      return;
-    }
 
     if (result.missingApiKeys) {
       setState(() {
         _isGenerating = false;
         _showMissingKeysPrompt = true;
-        _inlineAlertIsError = false;
+        _inlineAlertIsError = true;
         _inlineAlertMessage =
-            'Gemini API keys (GEMINI_API_KEY_1..3) are not placed in .env yet. You can load a sample SHS iLAW draft below to test editing, formatting, and DOCX/PDF export now.';
+            'No Gemini API key is configured in .env yet. You can inspect sample drafts or add your key to enable live generation.';
       });
       return;
     }
 
+    if (!result.isSuccess || result.sections == null) {
+      setState(() {
+        _isGenerating = false;
+        _inlineAlertIsError = true;
+        _inlineAlertMessage =
+            result.errorMessage ?? 'Lesson plan generation failed. Try again.';
+      });
+      return;
+    }
+
+    final sections = result.sections!;
     setState(() {
       _isGenerating = false;
-      _inlineAlertIsError = true;
-      _inlineAlertMessage =
-          result.errorMessage ?? 'Unable to generate lesson plan right now.';
+      _outcomesCtrl.text = sections.intendedOutcomes;
+      _contentCtrl.text = sections.learningContent;
+      _assessmentCtrl.text = sections.assessment;
+      _workCtrl.text = sections.workExperiences;
+      _sessions = List.from(sections.sessions);
+      _rubricItems = List.from(sections.rubricItems);
+      _activeSessionIndex = 0;
+      _syncSessionControllers();
+      _step = IlawWizardStep.reviewEdit;
+      _inlineAlertMessage = null;
     });
+
+    _scrollToTop();
+  }
+
+  Future<bool?> _showDepEdEthicsNoticeDialog() {
+    final theme = Theme.of(context);
+    return showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          backgroundColor: theme.colorScheme.surface,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+          title: Row(
+            children: [
+              Icon(Icons.shield_outlined, color: theme.colorScheme.primary),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Text(
+                  'DepEd Order No. 003, s. 2026 AI Ethics Notice',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                ),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'This lesson plan is generated using AI in accordance with DepEd guidelines (DO 3 s.2026). As a professional Senior High School teacher, you are responsible for reviewing, validating, and adapting all generated contents before classroom execution.',
+                style: TextStyle(
+                  fontSize: 13.5,
+                  height: 1.45,
+                  color: theme.colorScheme.onSurface,
+                ),
+              ),
+              const SizedBox(height: 14),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primary.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.check_circle_outline,
+                      size: 16,
+                      color: theme.colorScheme.primary,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Targeting: $_selectedGrade • $_selectedQuarter • $_selectedSessions Sessions • ${_selectedProficiency.label}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: theme.colorScheme.primary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Cancel'),
+            ),
+            AppButton.primary(
+              label: 'I Understand & Generate',
+              isSmall: true,
+              onPressed: () => Navigator.of(ctx).pop(true),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   void _handleLoadTemplateDraft() {
-    if (!_validateStep1()) return;
-    final durationMins = int.parse(_durationCtrl.text.trim());
-    final template = IlawLessonPlan.buildTemplateSections(
-      subject: _subjectCtrl.text.trim(),
-      topic: _topicCtrl.text.trim(),
+    final durationMins = int.tryParse(_durationCtrl.text.trim()) ?? 60;
+    final sub =
+        _subjectCtrl.text.trim().isNotEmpty
+            ? _subjectCtrl.text.trim()
+            : 'General Mathematics';
+    final top =
+        _topicCtrl.text.trim().isNotEmpty
+            ? _topicCtrl.text.trim()
+            : 'Rational Functions & Models';
+
+    final draft = IlawLessonPlan.buildTemplateSections(
+      subject: sub,
+      topic: top,
       gradeLevel: _selectedGrade,
       quarter: _selectedQuarter,
       durationMinutes: durationMins,
       teachingStrategy: _strategyCtrl.text.trim(),
       learningCompetency: _competencyCtrl.text.trim(),
+      numberOfSessions: _selectedSessions,
+      proficiencyLevel: _selectedProficiency,
     );
 
     setState(() {
+      _outcomesCtrl.text = draft.intendedOutcomes;
+      _contentCtrl.text = draft.learningContent;
+      _assessmentCtrl.text = draft.assessment;
+      _workCtrl.text = draft.workExperiences;
+      _sessions = List.from(draft.sessions);
+      _rubricItems = List.from(draft.rubricItems);
+      _activeSessionIndex = 0;
+      _syncSessionControllers();
       _showMissingKeysPrompt = false;
-      _outcomesCtrl.text = template.intendedOutcomes;
-      _contentCtrl.text = template.learningContent;
-      _assessmentCtrl.text = template.assessment;
-      _workCtrl.text = template.workExperiences;
-      _outcomesError = null;
-      _contentError = null;
-      _assessmentError = null;
-      _workError = null;
-      _status = IlawPlanStatus.draft;
+      _inlineAlertMessage = null;
       _step = IlawWizardStep.reviewEdit;
-      _inlineAlertIsError = false;
-      _inlineAlertMessage =
-          'Structured SHS iLAW draft loaded. Customize any section below before approving.';
     });
+
+    _scrollToTop();
   }
 
-  IlawLessonPlan _buildCurrentPlanModel(IlawPlanStatus targetStatus) {
-    final teacher = widget.currentTeacher;
+  IlawLessonPlan _buildCurrentPlanModel([IlawPlanStatus? status]) {
+    _saveSessionFormValuesToState();
     final durationMins = int.tryParse(_durationCtrl.text.trim()) ?? 60;
+    final teacher = widget.currentTeacher;
+
     return IlawLessonPlan(
       id: _planId,
-      teacherId: teacher?.id ?? '',
-      teacherName: teacher?.fullName ?? 'Subject Teacher',
+      teacherId: teacher?.id ?? 'teacher_local',
+      teacherName: teacher?.fullName ?? 'Senior High School Teacher',
       gradeLevel: _selectedGrade,
       quarter: _selectedQuarter,
       subject: _subjectCtrl.text.trim(),
@@ -352,15 +540,20 @@ class _IlawLessonPlanWizardDialogState
       learningContent: _contentCtrl.text.trim(),
       assessment: _assessmentCtrl.text.trim(),
       workExperiences: _workCtrl.text.trim(),
-      status: targetStatus,
+      templateType: _selectedTemplate,
+      contentSource: _selectedSource,
+      targetProficiency: _selectedProficiency,
+      numberOfSessions: _selectedSessions,
+      sessions: _sessions,
+      rubricItems: _rubricItems,
+      status: status ?? _status,
       createdAt: _createdAt,
       updatedAt: DateTime.now(),
     );
   }
 
   Future<void> _handleSaveDraft() async {
-    if (!_validateStep2(requireCompleteSections: false)) return;
-
+    _saveSessionFormValuesToState();
     setState(() {
       _isSaving = true;
       _inlineAlertMessage = null;
@@ -375,8 +568,7 @@ class _IlawLessonPlanWizardDialogState
         _isSaving = false;
         _status = IlawPlanStatus.draft;
         _inlineAlertIsError = false;
-        _inlineAlertMessage =
-            'Saved privately to your teacher lesson plan drafts.';
+        _inlineAlertMessage = 'Draft saved to your lesson plan library.';
       });
     } catch (e) {
       if (!mounted) return;
@@ -388,13 +580,13 @@ class _IlawLessonPlanWizardDialogState
     }
   }
 
-  Future<void> _handleApproveAndFormat() async {
-    if (!_validateStep2(requireCompleteSections: true)) return;
+  Future<void> _handleApproveAndFinalize() async {
+    if (!_validateStep2()) return;
+    _saveSessionFormValuesToState();
 
     setState(() {
       _isSaving = true;
       _inlineAlertMessage = null;
-      _exportFeedbackMessage = null;
     });
 
     try {
@@ -407,6 +599,7 @@ class _IlawLessonPlanWizardDialogState
         _status = IlawPlanStatus.approved;
         _step = IlawWizardStep.previewExport;
       });
+      _scrollToTop();
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -457,8 +650,8 @@ class _IlawLessonPlanWizardDialogState
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final screenSize = MediaQuery.of(context).size;
-    final dialogWidth = (screenSize.width - 32).clamp(320.0, 880.0);
-    final dialogMaxHeight = (screenSize.height - 48).clamp(420.0, 820.0);
+    final dialogWidth = (screenSize.width - 32).clamp(320.0, 920.0);
+    final dialogMaxHeight = (screenSize.height - 48).clamp(440.0, 840.0);
 
     return Dialog(
       insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
@@ -501,15 +694,15 @@ class _IlawLessonPlanWizardDialogState
       case IlawWizardStep.details:
         title = 'Generate SHS iLAW Lesson Plan';
         subtitle =
-            'Strengthened Senior High School Curriculum  •  Private to your account';
+            'DepEd Strengthened Senior High School Curriculum • Private to your account';
       case IlawWizardStep.reviewEdit:
         title = 'Teacher Review & Edit';
         subtitle =
-            'Refine the AI-generated sections before formatting into official iLAW.';
+            'Refine multi-session matrices and self-check rubrics before finalizing.';
       case IlawWizardStep.previewExport:
         title = 'Approved iLAW Format & Download';
         subtitle =
-            'Minimalist print-ready layout  •  Choose Word (.docx) or PDF (.pdf)';
+            'Official DepEd print-ready layout  •  Choose Word (.docx) or PDF (.pdf)';
     }
 
     return Container(
@@ -555,23 +748,16 @@ class _IlawLessonPlanWizardDialogState
                 Text(
                   subtitle,
                   style: TextStyle(
-                    fontSize: 12.5,
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.62),
+                    fontSize: 12,
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.58),
                   ),
                 ),
               ],
             ),
           ),
           IconButton(
-            tooltip: 'Close',
-            onPressed: (_isGenerating || _isSaving)
-                ? null
-                : () => Navigator.of(context).pop(),
-            icon: Icon(
-              Icons.close,
-              size: 20,
-              color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-            ),
+            icon: const Icon(Icons.close, size: 20),
+            onPressed: () => Navigator.of(context).pop(),
           ),
         ],
       ),
@@ -579,123 +765,104 @@ class _IlawLessonPlanWizardDialogState
   }
 
   Widget _buildStepperBar(ThemeData theme) {
-    final currentIdx = _step.index;
-    final labels = const [
-      '1. Lesson Details',
-      '2. Review & Edit',
-      '3. iLAW Format & Export',
+    final steps = [
+      (IlawWizardStep.details, '1. Lesson Details'),
+      (IlawWizardStep.reviewEdit, '2. Review & Edit'),
+      (IlawWizardStep.previewExport, '3. iLAW Format & Export'),
     ];
 
     return Container(
-      width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
       decoration: BoxDecoration(
-        color: theme.colorScheme.onSurface.withValues(alpha: 0.025),
+        color: theme.colorScheme.onSurface.withValues(alpha: 0.02),
         border: Border(
           bottom: BorderSide(
-            color: theme.colorScheme.onSurface.withValues(alpha: 0.08),
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.06),
           ),
         ),
       ),
-      child: Wrap(
-        spacing: 12,
-        runSpacing: 8,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        children: List.generate(labels.length, (idx) {
-          final isCurrent = idx == currentIdx;
-          final isDone = idx < currentIdx;
-          final badgeColor = isCurrent
-              ? theme.colorScheme.primary
-              : (isDone
-                    ? AppTheme.catGreen
-                    : theme.colorScheme.onSurface.withValues(alpha: 0.35));
-
-          return Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 5,
-                ),
-                decoration: BoxDecoration(
-                  color: isCurrent
-                      ? theme.colorScheme.primary.withValues(alpha: 0.12)
-                      : (isDone
-                            ? AppTheme.catGreen.withValues(alpha: 0.1)
-                            : Colors.transparent),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: isCurrent || isDone
-                        ? badgeColor.withValues(alpha: 0.4)
-                        : theme.colorScheme.onSurface.withValues(alpha: 0.14),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            for (var i = 0; i < steps.length; i++) ...[
+              if (i > 0)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: Icon(
+                    Icons.chevron_right,
+                    size: 16,
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.35),
                   ),
                 ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (isDone) ...[
-                      const Icon(
-                        Icons.check,
-                        size: 13,
-                        color: AppTheme.catGreen,
-                      ),
-                      const SizedBox(width: 5),
-                    ],
-                    Text(
-                      labels[idx],
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: isCurrent
-                            ? FontWeight.w700
-                            : FontWeight.w500,
-                        color: isCurrent
-                            ? theme.colorScheme.primary
-                            : (isDone
-                                  ? AppTheme.catGreen
-                                  : theme.colorScheme.onSurface.withValues(
-                                      alpha: 0.55,
-                                    )),
-                      ),
-                    ),
-                  ],
-                ),
+              _buildStepIndicator(
+                theme,
+                label: steps[i].$2,
+                isActive: _step == steps[i].$1,
+                isCompleted: _step.index > steps[i].$1.index,
               ),
-              if (idx < labels.length - 1) ...[
-                const SizedBox(width: 8),
-                Icon(
-                  Icons.chevron_right,
-                  size: 16,
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.3),
-                ),
-              ],
             ],
-          );
-        }),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStepIndicator(
+    ThemeData theme, {
+    required String label,
+    required bool isActive,
+    required bool isCompleted,
+  }) {
+    Color bg;
+    Color fg;
+    Border? border;
+
+    if (isActive) {
+      bg = theme.colorScheme.primary.withValues(alpha: 0.12);
+      fg = theme.colorScheme.primary;
+      border = Border.all(color: theme.colorScheme.primary.withValues(alpha: 0.4));
+    } else if (isCompleted) {
+      bg = AppTheme.catGreen.withValues(alpha: 0.12);
+      fg = AppTheme.catGreen;
+    } else {
+      bg = Colors.transparent;
+      fg = theme.colorScheme.onSurface.withValues(alpha: 0.42);
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(20),
+        border: border,
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: isActive || isCompleted ? FontWeight.w600 : FontWeight.w500,
+          color: fg,
+        ),
       ),
     );
   }
 
   Widget _buildPinnedAlertRegion(ThemeData theme) {
     final hasInline = _inlineAlertMessage != null;
-    final hasExport =
-        _step == IlawWizardStep.previewExport && _exportFeedbackMessage != null;
-    if (!hasInline && !hasExport) {
-      return const SizedBox.shrink();
-    }
+    final hasExport = _exportFeedbackMessage != null;
+    if (!hasInline && !hasExport) return const SizedBox.shrink();
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 14, 24, 0),
+      padding: const EdgeInsets.fromLTRB(24, 12, 24, 0),
       child: Column(
-        mainAxisSize: MainAxisSize.min,
         children: [
           if (hasInline)
             _buildInlineStatusBox(
               theme,
               message: _inlineAlertMessage!,
               isError: _inlineAlertIsError,
-              trailing: (_step == IlawWizardStep.details &&
-                      _showMissingKeysPrompt)
+              action: _showMissingKeysPrompt
                   ? AppButton.outline(
                       label: 'Continue with Sample SHS Draft',
                       icon: Icons.edit_note_outlined,
@@ -734,6 +901,7 @@ class _IlawLessonPlanWizardDialogState
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Row 1: Grade Level & Quarter
             if (isWide)
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -749,41 +917,72 @@ class _IlawLessonPlanWizardDialogState
               _buildQuarterDropdown(theme),
             ],
             const SizedBox(height: 16),
+
+            // Row 2: Sessions & Proficiency
+            if (isWide)
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(child: _buildSessionsDropdown(theme)),
+                  const SizedBox(width: 16),
+                  Expanded(child: _buildProficiencyDropdown(theme)),
+                ],
+              )
+            else ...[
+              _buildSessionsDropdown(theme),
+              const SizedBox(height: 16),
+              _buildProficiencyDropdown(theme),
+            ],
+            const SizedBox(height: 16),
+
+            // Subject input
             _buildValidatedTextField(
               theme: theme,
               fieldKey: const Key('ilaw_subject_field'),
-              label: 'Subject *',
+              label: 'Senior High School Subject *',
               hint: 'e.g., General Mathematics or Oral Communication',
               controller: _subjectCtrl,
               errorText: _subjectError,
               maxLength: IlawLessonPlanValidator.maxSubjectLength,
               showCounter: true,
               onChanged: (_) {
-                if (_subjectError != null) {
-                  setState(() => _subjectError = null);
-                }
+                setState(() {
+                  _subjectError = null;
+                });
               },
             ),
-            if (_cachedTeacherSubjects.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 6,
-                children: _cachedTeacherSubjects.map((sub) {
-                  return ActionChip(
-                    label: Text(sub, style: const TextStyle(fontSize: 11.5)),
-                    visualDensity: VisualDensity.compact,
-                    onPressed: () {
-                      setState(() {
-                        _subjectCtrl.text = sub;
-                        _subjectError = null;
-                      });
-                    },
-                  );
-                }).toList(),
-              ),
-            ],
+
+            // Suggested SHS Subjects
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: DepEdCurriculumCatalog.getStandardSubjects(_selectedGrade)
+                  .take(6)
+                  .map((sub) {
+                return ActionChip(
+                  label: Text(sub, style: const TextStyle(fontSize: 11)),
+                  visualDensity: VisualDensity.compact,
+                  onPressed: () {
+                    setState(() {
+                      _subjectCtrl.text = sub;
+                      _subjectError = null;
+                    });
+                  },
+                );
+              }).toList(),
+            ),
             const SizedBox(height: 16),
+
+            // Template & Source Toggles
+            _buildFormatAndSourceOptions(theme),
+            const SizedBox(height: 16),
+
+            // Curriculum Competencies Checklist
+            _buildCompetencyChecklist(theme),
+            const SizedBox(height: 16),
+
+            // Topic field
             _buildValidatedTextField(
               theme: theme,
               fieldKey: const Key('ilaw_topic_field'),
@@ -800,6 +999,8 @@ class _IlawLessonPlanWizardDialogState
               },
             ),
             const SizedBox(height: 16),
+
+            // Duration and Strategy
             if (isWide)
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -815,12 +1016,14 @@ class _IlawLessonPlanWizardDialogState
               _buildStrategySection(theme),
             ],
             const SizedBox(height: 16),
+
+            // Competency / Teacher Notes
             _buildValidatedTextField(
               theme: theme,
               fieldKey: const Key('ilaw_competency_field'),
-              label: 'Learning Competency / Specific Instructions (Optional)',
+              label: 'Selected Competencies / Teacher Instructions (Optional)',
               hint:
-                  'e.g., Distinguishes rational function, rational equation, and rational inequality.',
+                  'Checked competencies will appear here, or type custom notes.',
               controller: _competencyCtrl,
               errorText: _competencyError,
               maxLines: 3,
@@ -838,6 +1041,132 @@ class _IlawLessonPlanWizardDialogState
     );
   }
 
+  Widget _buildFormatAndSourceOptions(ThemeData theme) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Format Template & Content Source',
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: theme.colorScheme.onSurface,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            ChoiceChip(
+              label: const Text('iLAW Modified (DepEd 2026)', style: TextStyle(fontSize: 11.5)),
+              selected: _selectedTemplate == IlawTemplateType.ilawModified,
+              visualDensity: VisualDensity.compact,
+              onSelected: (_) => setState(() => _selectedTemplate = IlawTemplateType.ilawModified),
+            ),
+            ChoiceChip(
+              label: const Text('Curriculum Based', style: TextStyle(fontSize: 11.5)),
+              selected: _selectedSource == IlawContentSource.curriculumBased,
+              visualDensity: VisualDensity.compact,
+              onSelected: (_) => setState(() => _selectedSource = IlawContentSource.curriculumBased),
+            ),
+            ChoiceChip(
+              label: const Text('Manual Input', style: TextStyle(fontSize: 11.5)),
+              selected: _selectedSource == IlawContentSource.manual,
+              visualDensity: VisualDensity.compact,
+              onSelected: (_) => setState(() => _selectedSource = IlawContentSource.manual),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCompetencyChecklist(ThemeData theme) {
+    final comps = DepEdCurriculumCatalog.getCompetenciesFor(
+      gradeLevel: _selectedGrade,
+      subject: _subjectCtrl.text,
+      quarter: _selectedQuarter,
+    );
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.onSurface.withValues(alpha: 0.025),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: theme.colorScheme.onSurface.withValues(alpha: 0.1),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.checklist_rtl_outlined, size: 16, color: theme.colorScheme.primary),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'DepEd Curriculum Competencies ($_selectedGrade • $_selectedQuarter)',
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w700,
+                    color: theme.colorScheme.onSurface,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          for (final comp in comps.take(4)) ...[
+            InkWell(
+              borderRadius: BorderRadius.circular(6),
+              onTap: () {
+                setState(() {
+                  if (_competencyCtrl.text.contains(comp)) {
+                    _competencyCtrl.text = _competencyCtrl.text.replaceAll(comp, '').trim();
+                  } else {
+                    final curr = _competencyCtrl.text.trim();
+                    _competencyCtrl.text = curr.isEmpty ? comp : '$curr\n$comp';
+                  }
+                  _competencyError = null;
+                });
+              },
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      _competencyCtrl.text.contains(comp)
+                          ? Icons.check_box
+                          : Icons.check_box_outline_blank,
+                      size: 16,
+                      color: _competencyCtrl.text.contains(comp)
+                          ? theme.colorScheme.primary
+                          : theme.colorScheme.onSurface.withValues(alpha: 0.4),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        comp,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: theme.colorScheme.onSurface.withValues(alpha: 0.85),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   Widget _buildDurationSection(ThemeData theme) {
     const presets = ['45', '60', '90', '120'];
     return Column(
@@ -846,7 +1175,7 @@ class _IlawLessonPlanWizardDialogState
         _buildValidatedTextField(
           theme: theme,
           fieldKey: const Key('ilaw_duration_field'),
-          label: 'Duration (Minutes) *',
+          label: 'Duration per Session (Minutes) *',
           hint: 'e.g., 60',
           controller: _durationCtrl,
           errorText: _durationError,
@@ -935,10 +1264,55 @@ class _IlawLessonPlanWizardDialogState
     );
   }
 
+  Widget _buildSessionsDropdown(ThemeData theme) {
+    final items = ['1 Session', '2 Sessions', '3 Sessions', '4 Sessions', '5 Sessions'];
+    final currentLabel = '$_selectedSessions ${_selectedSessions == 1 ? "Session" : "Sessions"}';
+
+    return _buildDropdownField(
+      theme: theme,
+      fieldKey: const Key('ilaw_sessions_dropdown'),
+      label: 'Number of Sessions (1 to 5) *',
+      value: currentLabel,
+      items: items,
+      errorText: _sessionsError,
+      onChanged: (val) {
+        if (val != null) {
+          final count = int.tryParse(val.split(' ').first) ?? 4;
+          setState(() {
+            _selectedSessions = count;
+            _sessionsError = null;
+          });
+        }
+      },
+    );
+  }
+
+  Widget _buildProficiencyDropdown(ThemeData theme) {
+    final items = DepEdProficiencyLevel.values.map((p) => p.label).toList();
+
+    return _buildDropdownField(
+      theme: theme,
+      fieldKey: const Key('ilaw_proficiency_dropdown'),
+      label: 'Proficiency Target (CRLA/RMA Aligned) *',
+      value: _selectedProficiency.label,
+      items: items,
+      errorText: _proficiencyError,
+      onChanged: (val) {
+        if (val != null) {
+          setState(() {
+            _selectedProficiency = DepEdProficiencyLevel.fromString(val);
+            _proficiencyError = null;
+          });
+        }
+      },
+    );
+  }
+
   Widget _buildStep2ReviewEdit(ThemeData theme) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // Topic & Duration Header
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
@@ -948,10 +1322,10 @@ class _IlawLessonPlanWizardDialogState
               color: theme.colorScheme.onSurface.withValues(alpha: 0.08),
             ),
           ),
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final isWide = constraints.maxWidth >= 520;
-              final topicInput = _buildValidatedTextField(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildValidatedTextField(
                 theme: theme,
                 fieldKey: const Key('ilaw_review_topic_field'),
                 label: 'Lesson Topic *',
@@ -964,144 +1338,132 @@ class _IlawLessonPlanWizardDialogState
                     setState(() => _topicError = null);
                   }
                 },
-              );
-              final durationInput = _buildValidatedTextField(
-                theme: theme,
-                fieldKey: const Key('ilaw_review_duration_field'),
-                label: 'Duration (Mins) *',
-                hint: '60',
-                controller: _durationCtrl,
-                errorText: _durationError,
-                keyboardType: TextInputType.number,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                onChanged: (_) {
-                  if (_durationError != null) {
-                    setState(() => _durationError = null);
-                  }
-                },
-              );
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 12,
+                runSpacing: 6,
                 children: [
                   Text(
-                    '${_subjectCtrl.text.trim()}  •  $_selectedGrade  •  $_selectedQuarter',
+                    '$_selectedGrade  •  $_selectedQuarter  •  $_selectedSessions Sessions  •  ${_selectedProficiency.label}',
                     style: TextStyle(
-                      fontSize: 12.5,
+                      fontSize: 12,
                       fontWeight: FontWeight.w600,
                       color: theme.colorScheme.primary,
                     ),
                   ),
-                  const SizedBox(height: 12),
-                  if (isWide)
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(flex: 3, child: topicInput),
-                        const SizedBox(width: 16),
-                        Expanded(flex: 1, child: durationInput),
-                      ],
-                    )
-                  else ...[
-                    topicInput,
-                    const SizedBox(height: 12),
-                    durationInput,
-                  ],
                 ],
-              );
-            },
+              ),
+            ],
           ),
         ),
         const SizedBox(height: 20),
-        _buildIlawEditableSectionCard(
+
+        // Section I: Outcomes
+        _buildSectionHeader(theme, 'I', 'INTENDED LEARNING OUTCOMES'),
+        const SizedBox(height: 8),
+        _buildValidatedTextField(
           theme: theme,
-          badgeLetter: 'I',
-          title: 'Intended Learning Outcomes (Objectives) *',
-          subtitle: 'Clear, measurable SHS learning outcomes for this session.',
           fieldKey: const Key('ilaw_edit_outcomes_field'),
+          label: '',
+          hint: 'Learning objectives...',
           controller: _outcomesCtrl,
           errorText: _outcomesError,
           maxLines: 4,
           maxLength: IlawLessonPlanValidator.maxStandardSectionLength,
-          onChanged: () {
-            if (_outcomesError != null) setState(() => _outcomesError = null);
+          showCounter: true,
+          onChanged: (_) {
+            if (_outcomesError != null) {
+              setState(() => _outcomesError = null);
+            }
           },
         ),
-        const SizedBox(height: 16),
-        _buildIlawEditableSectionCard(
+        const SizedBox(height: 20),
+
+        // Section L: Content
+        _buildSectionHeader(theme, 'L', 'LEARNING CONTENT & RESOURCES'),
+        const SizedBox(height: 8),
+        _buildValidatedTextField(
           theme: theme,
-          badgeLetter: 'L',
-          title: 'Learning Content & Resources *',
-          subtitle:
-              'Key concepts, SHS curriculum references, and instructional materials.',
           fieldKey: const Key('ilaw_edit_content_field'),
+          label: '',
+          hint: 'Content and materials...',
           controller: _contentCtrl,
           errorText: _contentError,
           maxLines: 4,
           maxLength: IlawLessonPlanValidator.maxStandardSectionLength,
-          onChanged: () {
-            if (_contentError != null) setState(() => _contentError = null);
+          showCounter: true,
+          onChanged: (_) {
+            if (_contentError != null) {
+              setState(() => _contentError = null);
+            }
           },
         ),
-        const SizedBox(height: 16),
-        _buildIlawEditableSectionCard(
+        const SizedBox(height: 20),
+
+        // Section A: Assessment
+        _buildSectionHeader(theme, 'A', 'ASSESSMENT & ACTIVITIES'),
+        const SizedBox(height: 8),
+        _buildValidatedTextField(
           theme: theme,
-          badgeLetter: 'A',
-          title: 'Assessment & Learning Activities *',
-          subtitle:
-              'Formative or performance evaluation tasks and grading focus.',
           fieldKey: const Key('ilaw_edit_assessment_field'),
+          label: '',
+          hint: 'Assessment plan...',
           controller: _assessmentCtrl,
           errorText: _assessmentError,
           maxLines: 4,
           maxLength: IlawLessonPlanValidator.maxStandardSectionLength,
-          onChanged: () {
+          showCounter: true,
+          onChanged: (_) {
             if (_assessmentError != null) {
               setState(() => _assessmentError = null);
             }
           },
         ),
-        const SizedBox(height: 16),
-        _buildIlawEditableSectionCard(
+        const SizedBox(height: 20),
+
+        // Section W: Procedure
+        _buildSectionHeader(theme, 'W', 'WORK / LEARNING EXPERIENCES'),
+        const SizedBox(height: 8),
+        _buildValidatedTextField(
           theme: theme,
-          badgeLetter: 'W',
-          title: 'Work / Learning Experiences (Procedure) *',
-          subtitle:
-              'Step-by-step classroom flow, learner engagement, and assignment.',
           fieldKey: const Key('ilaw_edit_work_field'),
+          label: '',
+          hint: 'Procedure...',
           controller: _workCtrl,
           errorText: _workError,
           maxLines: 6,
           maxLength: IlawLessonPlanValidator.maxProcedureSectionLength,
-          onChanged: () {
-            if (_workError != null) setState(() => _workError = null);
+          showCounter: true,
+          onChanged: (_) {
+            if (_workError != null) {
+              setState(() => _workError = null);
+            }
           },
         ),
+        const SizedBox(height: 24),
+
+        // Multi-Session Detailed Matrix Cards
+        if (_sessions.isNotEmpty) ...[
+          _buildMultiSessionMatrixEditor(theme),
+          const SizedBox(height: 24),
+        ],
+
+        // Rubric Checklist
+        _buildRubricsChecklistEditor(theme),
       ],
     );
   }
 
-  Widget _buildIlawEditableSectionCard({
-    required ThemeData theme,
-    required String badgeLetter,
-    required String title,
-    required String subtitle,
-    required Key fieldKey,
-    required TextEditingController controller,
-    required String? errorText,
-    required int maxLines,
-    required int maxLength,
-    required VoidCallback onChanged,
-  }) {
+  Widget _buildMultiSessionMatrixEditor(ThemeData theme) {
     return Container(
+      width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
+        color: theme.colorScheme.onSurface.withValues(alpha: 0.02),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: errorText != null
-              ? _errorRed
-              : theme.colorScheme.onSurface.withValues(alpha: 0.1),
-          width: errorText != null ? 1.4 : 1.0,
+          color: theme.colorScheme.primary.withValues(alpha: 0.2),
         ),
       ),
       child: Column(
@@ -1109,334 +1471,197 @@ class _IlawLessonPlanWizardDialogState
         children: [
           Row(
             children: [
-              Container(
-                width: 28,
-                height: 28,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.primary.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(8),
-                ),
+              Icon(Icons.view_column_outlined, color: theme.colorScheme.primary),
+              const SizedBox(width: 8),
+              Expanded(
                 child: Text(
-                  badgeLetter,
+                  'MULTI-SESSION INSTRUCTIONAL MATRIX (${_sessions.length} Sessions)',
                   style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w800,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
                     color: theme.colorScheme.primary,
                   ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: TextStyle(
-                        fontSize: 13.5,
-                        fontWeight: FontWeight.w700,
-                        color: theme.colorScheme.onSurface,
-                      ),
-                    ),
-                    Text(
-                      subtitle,
-                      style: TextStyle(
-                        fontSize: 11.5,
-                        color: theme.colorScheme.onSurface.withValues(
-                          alpha: 0.58,
-                        ),
-                      ),
-                    ),
-                  ],
                 ),
               ),
             ],
           ),
           const SizedBox(height: 12),
-          _buildValidatedTextField(
-            theme: theme,
-            fieldKey: fieldKey,
-            label: '',
-            hint: 'Enter $title...',
-            controller: controller,
-            errorText: errorText,
-            maxLines: maxLines,
-            maxLength: maxLength,
-            showCounter: true,
-            onChanged: (_) => onChanged(),
+
+          // Session Tab selector
+          Wrap(
+            spacing: 8,
+            children: [
+              for (int i = 0; i < _sessions.length; i++)
+                ChoiceChip(
+                  label: Text('Session ${i + 1}'),
+                  selected: _activeSessionIndex == i,
+                  visualDensity: VisualDensity.compact,
+                  onSelected: (_) => setState(() => _activeSessionIndex = i),
+                ),
+            ],
           ),
+          const SizedBox(height: 16),
+
+          // Active Session Editor
+          if (_activeSessionIndex < _sessionTitleCtrls.length) ...[
+            Text(
+              'Session ${_activeSessionIndex + 1}: ${_sessionTitleCtrls[_activeSessionIndex].text}',
+              key: ValueKey('session_title_header_$_activeSessionIndex'),
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: theme.colorScheme.primary,
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextFormField(
+              key: ValueKey('session_title_field_$_activeSessionIndex'),
+              controller: _sessionTitleCtrls[_activeSessionIndex],
+              decoration: const InputDecoration(
+                labelText: 'Session Title',
+                border: OutlineInputBorder(),
+              ),
+              onChanged: (_) => setState(() {}),
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _sessionObjectivesCtrls[_activeSessionIndex],
+              maxLines: 2,
+              decoration: const InputDecoration(
+                labelText: 'Session Objectives',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _sessionExperiencesCtrls[_activeSessionIndex],
+              maxLines: 3,
+              decoration: const InputDecoration(
+                labelText: 'Learning Experiences (Warm-up, Modeling, Practice)',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _sessionAssessmentCtrls[_activeSessionIndex],
+              maxLines: 2,
+              decoration: const InputDecoration(
+                labelText: 'Formative Assessment',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _sessionParentGuideCtrls[_activeSessionIndex],
+              decoration: const InputDecoration(
+                labelText: 'Ways Forward: Parent Guide (Home Follow-up)',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _sessionCommunityCtrls[_activeSessionIndex],
+              decoration: const InputDecoration(
+                labelText: 'Ways Forward: Community Experience',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _sessionReflectionCtrls[_activeSessionIndex],
+              decoration: const InputDecoration(
+                labelText: 'Teacher Reflections',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
         ],
       ),
     );
   }
 
-  Widget _buildStep3MinimalistPreview(ThemeData theme) {
-    final plan = _buildCurrentPlanModel(_status);
-    final teacherName = plan.teacherName.isNotEmpty
-        ? plan.teacherName
-        : 'Subject Teacher';
-    final dateStr = plan.updatedAt.toLocal().toString().split(' ').first;
-    final strategy = plan.teachingStrategy.isNotEmpty
-        ? plan.teachingStrategy
-        : 'Collaborative / Inquiry-Based';
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        // Minimalist A4-styled Paper Sheet
-        Container(
-          width: double.infinity,
-          constraints: const BoxConstraints(maxWidth: 740),
-          padding: const EdgeInsets.all(28),
-          decoration: BoxDecoration(
-            color: theme.brightness == Brightness.dark
-                ? const Color(0xFF1E293B)
-                : Colors.white,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: theme.colorScheme.onSurface.withValues(alpha: 0.12),
+  Widget _buildRubricsChecklistEditor(ThemeData theme) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.onSurface.withValues(alpha: 0.02),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: theme.colorScheme.onSurface.withValues(alpha: 0.1),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Rubric for Lesson Planning Self-Check & Peer Coaching',
+            style: TextStyle(
+              fontSize: 13.5,
+              fontWeight: FontWeight.w700,
+              color: theme.colorScheme.onSurface,
             ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.04),
-                blurRadius: 16,
-                offset: const Offset(0, 6),
-              ),
-            ],
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                height: 3.5,
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.primary,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              const SizedBox(height: 18),
-              Text(
-                'DEPARTMENT OF EDUCATION  •  SENIOR HIGH SCHOOL NEW CURRICULUM',
-                style: TextStyle(
-                  fontSize: 10.5,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 1.0,
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.58),
-                ),
-              ),
-              const SizedBox(height: 6),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          const SizedBox(height: 10),
+          for (int i = 0; i < _rubricItems.length; i++) ...[
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Row(
                 children: [
+                  Checkbox(
+                    value: _rubricItems[i].isMet,
+                    onChanged: (val) {
+                      setState(() {
+                        _rubricItems[i] = _rubricItems[i].copyWith(
+                          isMet: val ?? false,
+                        );
+                      });
+                    },
+                  ),
                   Expanded(
                     child: Text(
-                      'iLAW LESSON PLAN',
+                      _rubricItems[i].criterion,
                       style: TextStyle(
-                        fontSize: 21,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 0.3,
+                        fontSize: 12.5,
                         color: theme.colorScheme.onSurface,
                       ),
                     ),
                   ),
-                  StatusBadge(
-                    text: 'Approved',
-                    backgroundColor: AppTheme.catGreen.withValues(alpha: 0.12),
-                    textColor: AppTheme.catGreen,
-                    icon: Icons.check_circle_outline,
-                  ),
                 ],
               ),
-              const SizedBox(height: 18),
-              // Minimalist Metadata Box
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.03),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.1),
-                  ),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildPreviewMetaPairRow(
-                      theme,
-                      leftLabel: 'Subject',
-                      leftValue: plan.subject,
-                      rightLabel: 'Grade & Quarter',
-                      rightValue: '${plan.gradeLevel}  •  ${plan.quarter}',
-                    ),
-                    const SizedBox(height: 10),
-                    _buildPreviewMetaPairRow(
-                      theme,
-                      leftLabel: 'Lesson Topic',
-                      leftValue: plan.topic,
-                      rightLabel: 'Time Allotment',
-                      rightValue: '${plan.durationMinutes} Minutes',
-                    ),
-                    const SizedBox(height: 10),
-                    _buildPreviewMetaPairRow(
-                      theme,
-                      leftLabel: 'Prepared By',
-                      leftValue: teacherName,
-                      rightLabel: 'Date Prepared',
-                      rightValue: dateStr,
-                    ),
-                    const SizedBox(height: 10),
-                    _buildPreviewMetaPairRow(
-                      theme,
-                      leftLabel: 'Approach',
-                      leftValue: strategy,
-                      rightLabel: 'Format Standard',
-                      rightValue: 'SHS Strengthened iLAW',
-                    ),
-                    if (plan.learningCompetency.isNotEmpty) ...[
-                      const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 10),
-                        child: Divider(height: 1),
-                      ),
-                      Text(
-                        'Learning Competency',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          color: theme.colorScheme.onSurface.withValues(
-                            alpha: 0.55,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        plan.learningCompetency,
-                        style: TextStyle(
-                          fontSize: 13,
-                          height: 1.45,
-                          color: theme.colorScheme.onSurface,
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              const SizedBox(height: 22),
-              _buildPreviewIlawBlock(
-                theme,
-                code: 'I',
-                heading: 'INTENDED LEARNING OUTCOMES (OBJECTIVES)',
-                content: plan.intendedOutcomes,
-              ),
-              const SizedBox(height: 18),
-              _buildPreviewIlawBlock(
-                theme,
-                code: 'L',
-                heading: 'LEARNING CONTENT & RESOURCES',
-                content: plan.learningContent,
-              ),
-              const SizedBox(height: 18),
-              _buildPreviewIlawBlock(
-                theme,
-                code: 'A',
-                heading: 'ASSESSMENT & LEARNING ACTIVITIES',
-                content: plan.assessment,
-              ),
-              const SizedBox(height: 18),
-              _buildPreviewIlawBlock(
-                theme,
-                code: 'W',
-                heading: 'WORK / LEARNING EXPERIENCES (PROCEDURE)',
-                content: plan.workExperiences,
-              ),
-              const SizedBox(height: 28),
-              const Divider(height: 1),
-              const SizedBox(height: 20),
-              Text(
-                'Prepared and Approved by:',
-                style: TextStyle(
-                  fontSize: 11.5,
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
-                ),
-              ),
-              const SizedBox(height: 18),
-              Text(
-                teacherName.toUpperCase(),
-                style: TextStyle(
-                  fontSize: 13.5,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 0.4,
-                  color: theme.colorScheme.onSurface,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                'Senior High School Subject Teacher',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildPreviewMetaPairRow(
-    ThemeData theme, {
-    required String leftLabel,
-    required String leftValue,
-    required String rightLabel,
-    required String rightValue,
-  }) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        if (constraints.maxWidth < 460) {
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildSingleMetaItem(theme, leftLabel, leftValue),
-              const SizedBox(height: 8),
-              _buildSingleMetaItem(theme, rightLabel, rightValue),
-            ],
-          );
-        }
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(child: _buildSingleMetaItem(theme, leftLabel, leftValue)),
-            const SizedBox(width: 16),
-            Expanded(
-              child: _buildSingleMetaItem(theme, rightLabel, rightValue),
             ),
           ],
-        );
-      },
+        ],
+      ),
     );
   }
 
-  Widget _buildSingleMetaItem(ThemeData theme, String label, String value) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _buildSectionHeader(ThemeData theme, String code, String label) {
+    return Row(
       children: [
+        Container(
+          width: 24,
+          height: 24,
+          decoration: BoxDecoration(
+            color: theme.colorScheme.primary,
+            borderRadius: BorderRadius.circular(6),
+          ),
+          alignment: Alignment.center,
+          child: Text(
+            code,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+        const SizedBox(width: 10),
         Text(
           label,
           style: TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w600,
-            color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
-          ),
-        ),
-        const SizedBox(height: 2),
-        Text(
-          value,
-          style: TextStyle(
             fontSize: 13,
-            fontWeight: FontWeight.w600,
+            fontWeight: FontWeight.w700,
             color: theme.colorScheme.onSurface,
           ),
         ),
@@ -1444,40 +1669,170 @@ class _IlawLessonPlanWizardDialogState
     );
   }
 
-  Widget _buildPreviewIlawBlock(
-    ThemeData theme, {
-    required String code,
-    required String heading,
-    required String content,
-  }) {
+  Widget _buildStep3MinimalistPreview(ThemeData theme) {
+    final plan = _buildCurrentPlanModel(IlawPlanStatus.approved);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Export Action Bar
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.primary.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Text(
+                  'Lesson Plan Approved. Ready for official DepEd document download.',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: theme.colorScheme.primary,
+                  ),
+                ),
+              ),
+              Wrap(
+                spacing: 8,
+                children: [
+                  AppButton.outline(
+                    label: _isExportingDocx ? 'Exporting...' : 'Download Word (.docx)',
+                    icon: Icons.description_outlined,
+                    isSmall: true,
+                    isLoading: _isExportingDocx,
+                    onPressed: () => _handleExport(IlawExportFormat.docx),
+                  ),
+                  AppButton.primary(
+                    label: _isExportingPdf ? 'Exporting...' : 'Download PDF (.pdf)',
+                    icon: Icons.picture_as_pdf_outlined,
+                    isSmall: true,
+                    isLoading: _isExportingPdf,
+                    onPressed: () => _handleExport(IlawExportFormat.pdf),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 20),
+
+        // Document Canvas
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surface,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.1),
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'DEPARTMENT OF EDUCATION  •  SENIOR HIGH SCHOOL CURRICULUM',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'iLAW LESSON PLAN',
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800,
+                  color: theme.colorScheme.onSurface,
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Metadata Grid
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.03),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(
+                  children: [
+                    _buildMetaPair('Subject', plan.subject, 'Grade & Quarter', '${plan.gradeLevel} - ${plan.quarter}'),
+                    const SizedBox(height: 8),
+                    _buildMetaPair('Topic', plan.topic, 'Duration & Sessions', '${plan.durationMinutes}m • ${plan.numberOfSessions} Sessions'),
+                    const SizedBox(height: 8),
+                    _buildMetaPair('Proficiency Target', plan.targetProficiency.label, 'Governance', plan.depedOrderCitation),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              _buildPreviewBlock(theme, 'I', 'Intended Learning Outcomes', plan.intendedOutcomes),
+              const SizedBox(height: 14),
+              _buildPreviewBlock(theme, 'L', 'Learning Content & Resources', plan.learningContent),
+              const SizedBox(height: 14),
+              _buildPreviewBlock(theme, 'A', 'Assessment & Activities', plan.assessment),
+              const SizedBox(height: 14),
+              _buildPreviewBlock(theme, 'W', 'Work & Learning Experiences', plan.workExperiences),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMetaPair(String l1, String v1, String l2, String v2) {
+    return Row(
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(l1, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.grey)),
+              Text(v1, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600)),
+            ],
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(l2, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.grey)),
+              Text(v2, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600)),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPreviewBlock(ThemeData theme, String code, String title, String body) {
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
-        border: Border(
-          left: BorderSide(color: theme.colorScheme.primary, width: 3),
-        ),
+        border: Border(left: BorderSide(color: theme.colorScheme.primary, width: 3)),
       ),
-      padding: const EdgeInsets.only(left: 14, top: 2, bottom: 2),
+      padding: const EdgeInsets.only(left: 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            '$code.  $heading',
+            '$code. $title',
             style: TextStyle(
               fontSize: 12.5,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 0.4,
+              fontWeight: FontWeight.w700,
               color: theme.colorScheme.primary,
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 4),
           SelectableText(
-            content,
-            style: TextStyle(
-              fontSize: 13.5,
-              height: 1.58,
-              color: theme.colorScheme.onSurface,
-            ),
+            body,
+            style: TextStyle(fontSize: 13, height: 1.45, color: theme.colorScheme.onSurface),
           ),
         ],
       ),
@@ -1489,11 +1844,7 @@ class _IlawLessonPlanWizardDialogState
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
       decoration: BoxDecoration(
-        border: Border(
-          top: BorderSide(
-            color: theme.colorScheme.onSurface.withValues(alpha: 0.08),
-          ),
-        ),
+        border: Border(top: BorderSide(color: theme.colorScheme.onSurface.withValues(alpha: 0.08))),
       ),
       child: _buildFooterActions(theme),
     );
@@ -1519,14 +1870,10 @@ class _IlawLessonPlanWizardDialogState
               children: [
                 AppButton.outline(
                   label: 'Cancel',
-                  onPressed: _isGenerating
-                      ? null
-                      : () => Navigator.of(context).pop(),
+                  onPressed: _isGenerating ? null : () => Navigator.of(context).pop(),
                 ),
                 AppButton.primary(
-                  label: _isGenerating
-                      ? 'Generating...'
-                      : 'Generate with Gemini AI',
+                  label: _isGenerating ? 'Generating...' : 'Generate with Gemini AI',
                   icon: Icons.auto_awesome_outlined,
                   isLoading: _isGenerating,
                   onPressed: _isGenerating ? null : _handleGenerateWithAi,
@@ -1543,49 +1890,26 @@ class _IlawLessonPlanWizardDialogState
           spacing: 12,
           runSpacing: 10,
           children: [
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                AppButton.outline(
-                  label: 'Lesson Details',
-                  icon: Icons.arrow_back,
-                  onPressed: (_isGenerating || _isSaving)
-                      ? null
-                      : () => setState(() {
-                          _inlineAlertMessage = null;
-                          _step = IlawWizardStep.details;
-                        }),
-                ),
-                AppButton.outline(
-                  label: _isGenerating ? 'Regenerating...' : 'Regenerate AI',
-                  icon: Icons.refresh,
-                  isLoading: _isGenerating,
-                  onPressed: (_isGenerating || _isSaving)
-                      ? null
-                      : _handleGenerateWithAi,
-                ),
-              ],
+            AppButton.outline(
+              label: 'Back to Details',
+              icon: Icons.arrow_back,
+              onPressed: () => setState(() => _step = IlawWizardStep.details),
             ),
             Wrap(
               spacing: 10,
               runSpacing: 8,
               children: [
                 AppButton.outline(
-                  label: 'Save as Draft',
+                  label: 'Save Draft',
                   icon: Icons.save_outlined,
                   isLoading: _isSaving,
-                  onPressed: (_isGenerating || _isSaving)
-                      ? null
-                      : _handleSaveDraft,
+                  onPressed: _handleSaveDraft,
                 ),
-                AppButton.success(
+                AppButton.primary(
                   label: 'Approve & Format iLAW',
-                  icon: Icons.check_circle_outline,
+                  icon: Icons.verified_outlined,
                   isLoading: _isSaving,
-                  onPressed: (_isGenerating || _isSaving)
-                      ? null
-                      : _handleApproveAndFormat,
+                  onPressed: _handleApproveAndFinalize,
                 ),
               ],
             ),
@@ -1593,101 +1917,22 @@ class _IlawLessonPlanWizardDialogState
         );
 
       case IlawWizardStep.previewExport:
-        return Wrap(
-          alignment: WrapAlignment.spaceBetween,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          spacing: 12,
-          runSpacing: 10,
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             AppButton.outline(
-              label: 'Back to Edit',
-              icon: Icons.arrow_back,
-              onPressed: (_isExportingDocx || _isExportingPdf)
-                  ? null
-                  : () => setState(() {
-                      _exportFeedbackMessage = null;
-                      _step = IlawWizardStep.reviewEdit;
-                    }),
+              label: 'Edit Content',
+              icon: Icons.edit_outlined,
+              onPressed: () => setState(() => _step = IlawWizardStep.reviewEdit),
             ),
-            Wrap(
-              spacing: 10,
-              runSpacing: 8,
-              children: [
-                AppButton.primary(
-                  label: 'Download Word (.docx)',
-                  icon: Icons.description_outlined,
-                  isLoading: _isExportingDocx,
-                  onPressed: (_isExportingDocx || _isExportingPdf)
-                      ? null
-                      : () => _handleExport(IlawExportFormat.docx),
-                ),
-                AppButton.primary(
-                  label: 'Download PDF (.pdf)',
-                  icon: Icons.picture_as_pdf_outlined,
-                  backgroundColor: AppTheme.catSlate,
-                  isLoading: _isExportingPdf,
-                  onPressed: (_isExportingDocx || _isExportingPdf)
-                      ? null
-                      : () => _handleExport(IlawExportFormat.pdf),
-                ),
-                AppButton.outline(
-                  label: 'Done',
-                  onPressed: () => Navigator.of(context).pop(),
-                ),
-              ],
+            AppButton.primary(
+              label: 'Done',
+              icon: Icons.check,
+              onPressed: () => Navigator.of(context).pop(),
             ),
           ],
         );
     }
-  }
-
-  Widget _buildInlineStatusBox(
-    ThemeData theme, {
-    required String message,
-    required bool isError,
-    Widget? trailing,
-  }) {
-    final accent = isError ? _errorRed : theme.colorScheme.primary;
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: accent.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: accent.withValues(alpha: 0.35)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(
-                isError ? Icons.error_outline : Icons.info_outline,
-                size: 18,
-                color: accent,
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  message,
-                  style: TextStyle(
-                    fontSize: 12.5,
-                    height: 1.4,
-                    fontWeight: FontWeight.w500,
-                    color: isError ? _errorRed : theme.colorScheme.onSurface,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          if (trailing != null) ...[
-            const SizedBox(height: 10),
-            Align(alignment: Alignment.centerRight, child: trailing),
-          ],
-        ],
-      ),
-    );
   }
 
   Widget _buildValidatedTextField({
@@ -1734,9 +1979,7 @@ class _IlawLessonPlanWizardDialogState
                         fontWeight: FontWeight.w500,
                         color: len >= maxLength
                             ? _errorRed
-                            : theme.colorScheme.onSurface.withValues(
-                                alpha: 0.48,
-                              ),
+                            : theme.colorScheme.onSurface.withValues(alpha: 0.48),
                       ),
                     );
                   },
@@ -1750,9 +1993,7 @@ class _IlawLessonPlanWizardDialogState
           controller: controller,
           maxLines: maxLines,
           maxLength: maxLength,
-          buildCounter:
-              (_, {required currentLength, required isFocused, maxLength}) =>
-                  null,
+          buildCounter: (_, {required currentLength, required isFocused, maxLength}) => null,
           keyboardType: keyboardType,
           inputFormatters: inputFormatters,
           onChanged: onChanged,
@@ -1767,10 +2008,7 @@ class _IlawLessonPlanWizardDialogState
               fontSize: 13,
               color: theme.colorScheme.onSurface.withValues(alpha: 0.38),
             ),
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 14,
-              vertical: 12,
-            ),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
               borderSide: BorderSide(
@@ -1789,28 +2027,6 @@ class _IlawLessonPlanWizardDialogState
             ),
           ),
         ),
-        if (label.isEmpty && showCounter && maxLength != null) ...[
-          const SizedBox(height: 4),
-          Align(
-            alignment: Alignment.centerRight,
-            child: ValueListenableBuilder<TextEditingValue>(
-              valueListenable: controller,
-              builder: (_, val, _) {
-                final len = val.text.length;
-                return Text(
-                  '$len/$maxLength',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w500,
-                    color: len >= maxLength
-                        ? _errorRed
-                        : theme.colorScheme.onSurface.withValues(alpha: 0.48),
-                  ),
-                );
-              },
-            ),
-          ),
-        ],
         if (hasError) ...[
           const SizedBox(height: 5),
           Row(
@@ -1863,30 +2079,18 @@ class _IlawLessonPlanWizardDialogState
             return MenuAnchor(
               alignmentOffset: const Offset(0, 4),
               style: MenuStyle(
-                backgroundColor: WidgetStatePropertyAll(
-                  theme.colorScheme.surface,
-                ),
-                surfaceTintColor: const WidgetStatePropertyAll(
-                  Colors.transparent,
-                ),
+                backgroundColor: WidgetStatePropertyAll(theme.colorScheme.surface),
+                surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
                 elevation: const WidgetStatePropertyAll(6),
-                shadowColor: WidgetStatePropertyAll(
-                  Colors.black.withValues(alpha: 0.16),
-                ),
-                padding: const WidgetStatePropertyAll(
-                  EdgeInsets.symmetric(vertical: 4),
-                ),
+                shadowColor: WidgetStatePropertyAll(Colors.black.withValues(alpha: 0.16)),
+                padding: const WidgetStatePropertyAll(EdgeInsets.symmetric(vertical: 4)),
                 minimumSize: WidgetStatePropertyAll(Size(menuWidth, 0)),
                 maximumSize: WidgetStatePropertyAll(Size(menuWidth, 240)),
                 side: WidgetStatePropertyAll(
-                  BorderSide(
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.12),
-                  ),
+                  BorderSide(color: theme.colorScheme.onSurface.withValues(alpha: 0.12)),
                 ),
                 shape: WidgetStatePropertyAll(
-                  RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
+                  RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                 ),
               ),
               menuChildren: items.map((item) {
@@ -1899,36 +2103,24 @@ class _IlawLessonPlanWizardDialogState
                       padding: const WidgetStatePropertyAll(
                         EdgeInsets.symmetric(horizontal: 14, vertical: 11),
                       ),
-                      backgroundColor: WidgetStateProperty.resolveWith((
-                        states,
-                      ) {
+                      backgroundColor: WidgetStateProperty.resolveWith((states) {
                         if (isSelected) {
-                          return theme.colorScheme.primary.withValues(
-                            alpha: 0.10,
-                          );
+                          return theme.colorScheme.primary.withValues(alpha: 0.10);
                         }
                         if (states.contains(WidgetState.hovered)) {
-                          return theme.colorScheme.onSurface.withValues(
-                            alpha: 0.05,
-                          );
+                          return theme.colorScheme.onSurface.withValues(alpha: 0.05);
                         }
                         return Colors.transparent;
                       }),
                     ),
                     trailingIcon: isSelected
-                        ? Icon(
-                            Icons.check,
-                            size: 16,
-                            color: theme.colorScheme.primary,
-                          )
+                        ? Icon(Icons.check, size: 16, color: theme.colorScheme.primary)
                         : null,
                     child: Text(
                       item,
                       style: TextStyle(
                         fontSize: 13.5,
-                        fontWeight: isSelected
-                            ? FontWeight.w600
-                            : FontWeight.w400,
+                        fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
                         color: isSelected
                             ? theme.colorScheme.primary
                             : theme.colorScheme.onSurface,
@@ -1938,7 +2130,6 @@ class _IlawLessonPlanWizardDialogState
                 );
               }).toList(),
               builder: (context, controller, child) {
-                final isOpen = controller.isOpen;
                 return InkWell(
                   key: fieldKey,
                   borderRadius: BorderRadius.circular(10),
@@ -1951,27 +2142,19 @@ class _IlawLessonPlanWizardDialogState
                   },
                   child: Container(
                     width: double.infinity,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 12,
-                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                     decoration: BoxDecoration(
-                      color:
-                          theme.inputDecorationTheme.fillColor ??
-                          theme.colorScheme.surface,
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.02),
                       borderRadius: BorderRadius.circular(10),
                       border: Border.all(
                         color: hasError
                             ? _errorRed
-                            : (isOpen
-                                  ? theme.colorScheme.primary
-                                  : theme.colorScheme.onSurface.withValues(
-                                      alpha: 0.16,
-                                    )),
-                        width: hasError || isOpen ? 1.5 : 1.0,
+                            : theme.colorScheme.onSurface.withValues(alpha: 0.16),
+                        width: hasError ? 1.5 : 1.0,
                       ),
                     ),
                     child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Expanded(
                           child: Text(
@@ -1980,16 +2163,12 @@ class _IlawLessonPlanWizardDialogState
                               fontSize: 13.5,
                               color: theme.colorScheme.onSurface,
                             ),
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
                         Icon(
-                          isOpen
-                              ? Icons.keyboard_arrow_up_rounded
-                              : Icons.keyboard_arrow_down_rounded,
-                          size: 20,
-                          color: theme.colorScheme.onSurface.withValues(
-                            alpha: 0.65,
-                          ),
+                          Icons.arrow_drop_down,
+                          color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                         ),
                       ],
                     ),
@@ -2002,6 +2181,7 @@ class _IlawLessonPlanWizardDialogState
         if (hasError) ...[
           const SizedBox(height: 5),
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Icon(Icons.error_outline, size: 14, color: _errorRed),
               const SizedBox(width: 4),
@@ -2019,6 +2199,55 @@ class _IlawLessonPlanWizardDialogState
           ),
         ],
       ],
+    );
+  }
+
+  Widget _buildInlineStatusBox(
+    ThemeData theme, {
+    required String message,
+    required bool isError,
+    Widget? action,
+  }) {
+    final color = isError ? _errorRed : AppTheme.catGreen;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            isError ? Icons.error_outline : Icons.check_circle_outline,
+            size: 18,
+            color: color,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  message,
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    height: 1.4,
+                    color: isError ? _errorRed : theme.colorScheme.onSurface,
+                    fontWeight: isError ? FontWeight.w500 : FontWeight.w400,
+                  ),
+                ),
+                if (action != null) ...[
+                  const SizedBox(height: 8),
+                  action,
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
