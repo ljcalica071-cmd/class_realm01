@@ -211,6 +211,34 @@ void main() {
       expect(restored.effectiveRubrics.first.isMet, isTrue);
       expect(restored.effectiveRubrics.last.isMet, isFalse);
     });
+
+    test('validates multi-session count (1 to 5) and looks up SHS competencies in DepEdCurriculumCatalog', () {
+      expect(IlawLessonPlanValidator.validateNumberOfSessions(0), isNotNull);
+      expect(IlawLessonPlanValidator.validateNumberOfSessions(6), isNotNull);
+      expect(IlawLessonPlanValidator.validateNumberOfSessions(1), isNull);
+      expect(IlawLessonPlanValidator.validateNumberOfSessions(4), isNull);
+      expect(IlawLessonPlanValidator.validateNumberOfSessions(5), isNull);
+
+      final mathComps = DepEdCurriculumCatalog.getCompetenciesFor(
+        gradeLevel: 'Grade 11',
+        subject: 'General Mathematics',
+        quarter: 'Quarter 1',
+      );
+      expect(mathComps.isNotEmpty, isTrue);
+      expect(mathComps.any((c) => c.toLowerCase().contains('rational') || c.toLowerCase().contains('function')), isTrue);
+
+      final statsComps = DepEdCurriculumCatalog.getCompetenciesFor(
+        gradeLevel: 'Grade 11',
+        subject: 'Statistics and Probability',
+        quarter: 'Quarter 3',
+      );
+      expect(statsComps.isNotEmpty, isTrue);
+      expect(statsComps.any((c) => c.toLowerCase().contains('distribution') || c.toLowerCase().contains('random')), isTrue);
+
+      final subjects11 = DepEdCurriculumCatalog.getStandardSubjects('Grade 11');
+      expect(subjects11, contains('General Mathematics'));
+      expect(subjects11, contains('Oral Communication in Context'));
+    });
   });
 
   group('Task 2: TeacherLessonPlanStore Strict Privacy Isolation', () {
