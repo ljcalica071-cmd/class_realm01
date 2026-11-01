@@ -669,6 +669,81 @@ void main() {
       // Parentheses in `(a, b)` must be escaped as `\(a, b\)` inside PDF text operators
       expect(pdfText, contains(r'\(a, b\)'));
     });
+
+    test('exports DepEd multi-session matrix and rubric checklist in .docx and .pdf', () {
+      final now = DateTime.utc(2026, 11, 2, 10, 0);
+      final multiPlan = IlawLessonPlan(
+        id: 'multi-exp-01',
+        teacherId: 'teacher-naruto',
+        teacherName: 'Naruto Uzumaki',
+        gradeLevel: 'Grade 11',
+        quarter: 'Quarter 1',
+        subject: 'General Mathematics',
+        topic: 'Rational Functions and Models',
+        durationMinutes: 60,
+        numberOfSessions: 4,
+        targetProficiency: DepEdProficiencyLevel.developing,
+        depedOrderCitation: 'DepEd Order No. 003, s. 2026',
+        intendedOutcomes: 'Master rational functions and models.',
+        learningContent: 'DepEd SHS General Math Module.',
+        assessment: 'Formative checks.',
+        workExperiences: '4-session procedures.',
+        sessions: [
+          const IlawSessionData(
+            sessionNumber: 1,
+            sessionTitle: 'Session 1: Defining Rational Functions',
+            objectives: 'Distinguish functions from relations.',
+            learningExperiences: 'Warm-up: Function recall (10m)\nModeling: Vertical line test (20m)\nPair Work: Domain analysis (20m)\nExit slip (10m)',
+            formativeAssessment: '5-item domain quiz.',
+            parentGuide: 'Review table of values with parent.',
+            communityExperience: 'Electricity consumption rate vs time.',
+            teacherReflections: 'Graphing went smoothly.',
+          ),
+          const IlawSessionData(
+            sessionNumber: 2,
+            sessionTitle: 'Session 2: Rational Equations in Real Life',
+            objectives: 'Clear denominators to solve x.',
+            learningExperiences: 'LCD review (10m)\nSolving equations (25m)\nGroup speed drills (25m)',
+            formativeAssessment: 'Board drill with 3 rational equations.',
+            parentGuide: 'Explain LCD technique at home.',
+            communityExperience: 'Sari-sari store pricing formulas.',
+            teacherReflections: 'Watch for extraneous roots.',
+          ),
+        ],
+        rubricItems: [
+          const IlawRubricItem(
+            criterion: 'Intentions & Objectives are clearly aligned.',
+            isMet: true,
+            notes: 'Verified against M11GM-Ia-1.',
+          ),
+          const IlawRubricItem(
+            criterion: 'Differentiated for Developing learners.',
+            isMet: false,
+            notes: 'Provide scaffolded hints.',
+          ),
+        ],
+        status: IlawPlanStatus.approved,
+        createdAt: now,
+        updatedAt: now,
+      );
+
+      final docxBytes = IlawDocxExporter.generateBytes(multiPlan);
+      final archive = ZipDecoder().decodeBytes(docxBytes);
+      final docFile = archive.files.firstWhere((f) => f.name == 'word/document.xml');
+      final docXml = utf8.decode(docFile.content as List<int>);
+
+      expect(docXml, contains('Session 1: Defining Rational Functions'));
+      expect(docXml, contains('Session 2: Rational Equations in Real Life'));
+      expect(docXml, contains('DepEd Order No. 003, s. 2026'));
+      expect(docXml, contains('Rubric for Lesson Planning Self-Check'));
+      expect(docXml, contains('Developing (75-79%)'));
+
+      final pdfBytes = IlawPdfExporter.generateBytes(multiPlan);
+      final pdfText = latin1.decode(pdfBytes);
+      expect(pdfText, contains('Session 1: Defining Rational Functions'));
+      expect(pdfText, contains('DepEd Order No. 003, s. 2026'));
+      expect(pdfText, contains(r'Developing \(75-79%\)'));
+    });
   });
 
   group('Task 5: Minimalist UI Wizard, Inline Validation, Edit & Export Flow', () {

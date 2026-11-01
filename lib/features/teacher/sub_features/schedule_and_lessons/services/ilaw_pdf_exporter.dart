@@ -3,12 +3,12 @@ import 'dart:typed_data';
 
 import 'package:class_realm/features/teacher/sub_features/schedule_and_lessons/models/ilaw_lesson_plan.dart';
 
-/// Pure-Dart multi-page PDF 1.4 generator for the minimalist Senior High School
-/// (SHS) New Curriculum iLAW Lesson Plan format.
+/// Pure-Dart multi-page PDF 1.4 generator for the DepEd Senior High School
+/// (SHS) Strengthened Curriculum iLAW Modified Lesson Plan format.
 ///
-/// Requires zero third-party native or pubspec dependencies while generating
-/// standards-compliant `%PDF-1.4` binary files with accurate `xref` offsets,
-/// automatic word-wrapping, multi-page pagination, and safe PDF escaping.
+/// Generates standards-compliant `%PDF-1.4` binary files with accurate `xref`
+/// offsets, automatic word-wrapping, multi-session matrices, self-check rubrics,
+/// and safe PDF string escaping.
 class IlawPdfExporter {
   static const double _pageWidth = 595.28; // A4 width in points
   static const double _pageHeight = 841.89; // A4 height in points
@@ -58,7 +58,8 @@ class IlawPdfExporter {
 
     _drawText(
       currentStream,
-      text: 'DEPARTMENT OF EDUCATION  |  SENIOR HIGH SCHOOL NEW CURRICULUM',
+      text:
+          'REPUBLIC OF THE PHILIPPINES  |  DEPARTMENT OF EDUCATION  |  SHS CURRICULUM',
       x: _margin,
       y: cursorY,
       fontSize: 8.5,
@@ -71,7 +72,7 @@ class IlawPdfExporter {
 
     _drawText(
       currentStream,
-      text: 'iLAW LESSON PLAN',
+      text: 'iLAW LESSON PLAN (MODIFIED DEPED 2026)',
       x: _margin,
       y: cursorY,
       fontSize: 16,
@@ -90,7 +91,7 @@ class IlawPdfExporter {
           )
         : const <String>[];
     final metaBoxHeight =
-        76.0 +
+        100.0 +
         (competencyLines.isNotEmpty
             ? (competencyLines.length * 13.0 + 8.0)
             : 0.0);
@@ -113,13 +114,13 @@ class IlawPdfExporter {
     );
 
     final colLeft = _margin + 12;
-    final colRight = _margin + (_contentWidth * 0.54);
+    final colRight = _margin + (_contentWidth * 0.52);
     double metaY = boxTop - 16;
 
     _drawKeyValue(
       currentStream,
       'Subject:',
-      _truncate(plan.subject, 34),
+      _truncate(plan.subject, 32),
       colLeft,
       metaY,
     );
@@ -130,38 +131,28 @@ class IlawPdfExporter {
       colRight,
       metaY,
     );
-    metaY -= 16;
+    metaY -= 15;
 
     _drawKeyValue(
       currentStream,
       'Topic:',
-      _truncate(plan.topic, 36),
+      _truncate(plan.topic, 34),
       colLeft,
       metaY,
     );
     _drawKeyValue(
       currentStream,
-      'Duration:',
-      '${plan.durationMinutes} Minutes',
+      'Duration & Sessions:',
+      '${plan.durationMinutes}m  •  ${plan.numberOfSessions} Sessions',
       colRight,
       metaY,
     );
-    metaY -= 16;
+    metaY -= 15;
 
     _drawKeyValue(
       currentStream,
-      'Teacher:',
-      _truncate(teacher, 34),
-      colLeft,
-      metaY,
-    );
-    _drawKeyValue(currentStream, 'Date:', dateStr, colRight, metaY);
-    metaY -= 16;
-
-    _drawKeyValue(
-      currentStream,
-      'Approach:',
-      _truncate(strategy, 34),
+      'Proficiency Target:',
+      plan.targetProficiency.label,
       colLeft,
       metaY,
     );
@@ -172,22 +163,41 @@ class IlawPdfExporter {
       colRight,
       metaY,
     );
+    metaY -= 15;
+
+    _drawKeyValue(
+      currentStream,
+      'Prepared By:',
+      _truncate(teacher, 32),
+      colLeft,
+      metaY,
+    );
+    _drawKeyValue(currentStream, 'Date:', dateStr, colRight, metaY);
+    metaY -= 15;
+
+    _drawKeyValue(
+      currentStream,
+      'AI Governance:',
+      _truncate(plan.depedOrderCitation, 70),
+      colLeft,
+      metaY,
+    );
 
     if (competencyLines.isNotEmpty) {
-      metaY -= 16;
+      metaY -= 15;
       for (final cLine in competencyLines) {
         _drawText(
           currentStream,
           text: cLine,
           x: colLeft,
           y: metaY,
-          fontSize: 9.2,
+          fontSize: 9.0,
           bold: false,
           r: 0.118,
           g: 0.161,
           b: 0.231,
         );
-        metaY -= 13;
+        metaY -= 12;
       }
     }
 
@@ -244,13 +254,13 @@ class IlawPdfExporter {
           text: line,
           x: _margin + 10,
           y: cursorY,
-          fontSize: 10.0,
+          fontSize: 9.8,
           bold: false,
           r: 0.118,
           g: 0.161,
           b: 0.231,
         );
-        cursorY -= 14.5;
+        cursorY -= 14.0;
       }
 
       // Subtle section divider
@@ -280,6 +290,139 @@ class IlawPdfExporter {
       'WORK / LEARNING EXPERIENCES (PROCEDURE)',
       plan.workExperiences,
     );
+
+    // Multi-Session Detailed Matrix
+    if (plan.effectiveSessions.isNotEmpty) {
+      ensureSpace(40);
+      _drawText(
+        currentStream,
+        text: 'MULTI-SESSION INSTRUCTIONAL DELIVERY MATRIX',
+        x: _margin,
+        y: cursorY,
+        fontSize: 11.5,
+        bold: true,
+        r: 0.059,
+        g: 0.090,
+        b: 0.165,
+      );
+      cursorY -= 16;
+
+      for (final s in plan.effectiveSessions) {
+        ensureSpace(60);
+        _drawFilledRect(
+          currentStream,
+          x: _margin,
+          y: cursorY - 18,
+          w: _contentWidth,
+          h: 18,
+          r: 0.937,
+          g: 0.965,
+          b: 1.0,
+        );
+        _drawText(
+          currentStream,
+          text: s.sessionTitle,
+          x: _margin + 8,
+          y: cursorY - 13,
+          fontSize: 9.5,
+          bold: true,
+          r: 0.118,
+          g: 0.227,
+          b: 0.541,
+        );
+        cursorY -= 26;
+
+        void writeSubField(String label, String content) {
+          ensureSpace(24);
+          _drawText(
+            currentStream,
+            text: '$label:',
+            x: _margin + 8,
+            y: cursorY,
+            fontSize: 9.0,
+            bold: true,
+            r: 0.278,
+            g: 0.333,
+            b: 0.412,
+          );
+          cursorY -= 12;
+          final lines = _wrapMultiline(content, maxChars: 82);
+          for (final l in lines) {
+            ensureSpace(14);
+            _drawText(
+              currentStream,
+              text: l,
+              x: _margin + 16,
+              y: cursorY,
+              fontSize: 8.8,
+              bold: false,
+              r: 0.118,
+              g: 0.161,
+              b: 0.231,
+            );
+            cursorY -= 12.0;
+          }
+          cursorY -= 4;
+        }
+
+        writeSubField('Objectives', s.objectives);
+        writeSubField('Learning Experiences', s.learningExperiences);
+        writeSubField('Formative Assessment', s.formativeAssessment);
+        writeSubField('Parent Guide', s.parentGuide);
+        writeSubField('Community Experience', s.communityExperience);
+        writeSubField('Teacher Reflections', s.teacherReflections);
+        cursorY -= 10;
+      }
+    }
+
+    // Rubric Table
+    if (plan.effectiveRubrics.isNotEmpty) {
+      ensureSpace(40);
+      _drawText(
+        currentStream,
+        text: 'Rubric for Lesson Planning Self-Check and/or Peer Coaching',
+        x: _margin,
+        y: cursorY,
+        fontSize: 11.5,
+        bold: true,
+        r: 0.059,
+        g: 0.090,
+        b: 0.165,
+      );
+      cursorY -= 16;
+
+      for (final r in plan.effectiveRubrics) {
+        ensureSpace(24);
+        final status = r.isMet ? '[X] Met' : '[ ] Not Yet';
+        _drawText(
+          currentStream,
+          text: '$status  ${r.criterion}',
+          x: _margin + 8,
+          y: cursorY,
+          fontSize: 8.8,
+          bold: r.isMet,
+          r: r.isMet ? 0.086 : 0.600,
+          g: r.isMet ? 0.396 : 0.106,
+          b: r.isMet ? 0.204 : 0.106,
+        );
+        cursorY -= 14;
+        if (r.notes.isNotEmpty) {
+          _drawText(
+            currentStream,
+            text: '     Notes: ${r.notes}',
+            x: _margin + 16,
+            y: cursorY,
+            fontSize: 8.2,
+            bold: false,
+            r: 0.392,
+            g: 0.455,
+            b: 0.545,
+          );
+          cursorY -= 12;
+        }
+      }
+      cursorY -= 10;
+    }
 
     // Signature Block
     ensureSpace(68);
@@ -323,57 +466,64 @@ class IlawPdfExporter {
       text: 'Senior High School Subject Teacher',
       x: _margin,
       y: cursorY,
-      fontSize: 9.0,
+      fontSize: 8.5,
       bold: false,
       r: 0.278,
       g: 0.333,
       b: 0.412,
     );
 
-    // Add page numbers at the bottom of every page
-    final totalPages = pages.length;
-    for (var i = 0; i < totalPages; i++) {
-      _drawText(
-        pages[i],
-        text: 'ClassRealm SHS iLAW Format  |  Page ${i + 1} of $totalPages',
-        x: _margin,
-        y: 28,
-        fontSize: 8.2,
-        bold: false,
-        r: 0.580,
-        g: 0.639,
-        b: 0.722,
-      );
-    }
+    return _assemblePdf(pages);
+  }
 
-    return _assemblePdfDocument(pages.map((p) => p.toString()).toList());
+  static void _drawText(
+    StringBuffer stream, {
+    required String text,
+    required double x,
+    required double y,
+    required double fontSize,
+    bool bold = false,
+    double r = 0.0,
+    double g = 0.0,
+    double b = 0.0,
+  }) {
+    final fontName = bold ? '/F2' : '/F1';
+    final escaped = _escapePdfString(text);
+    stream.writeln('BT');
+    stream.writeln('$fontName $fontSize Tf');
+    stream.writeln(
+      '${r.toStringAsFixed(3)} ${g.toStringAsFixed(3)} ${b.toStringAsFixed(3)} rg',
+    );
+    stream.writeln('${x.toStringAsFixed(2)} ${y.toStringAsFixed(2)} Td');
+    stream.writeln('($escaped) Tj');
+    stream.writeln('ET');
   }
 
   static void _drawKeyValue(
     StringBuffer stream,
-    String label,
+    String key,
     String value,
     double x,
     double y,
   ) {
     _drawText(
       stream,
-      text: label,
+      text: key,
       x: x,
       y: y,
-      fontSize: 9.2,
+      fontSize: 8.8,
       bold: true,
       r: 0.278,
       g: 0.333,
       b: 0.412,
     );
-    final labelOffset = (label.length * 4.8) + 6;
+    final keyOffset = (key.length * 5.2).clamp(42.0, 110.0);
     _drawText(
       stream,
       text: value,
-      x: x + labelOffset,
+      x: x + keyOffset,
       y: y,
-      fontSize: 9.5,
+      fontSize: 8.8,
       bold: false,
       r: 0.067,
       g: 0.094,
@@ -392,8 +542,10 @@ class IlawPdfExporter {
     required double b,
   }) {
     stream.writeln(
-      'q ${r.toStringAsFixed(3)} ${g.toStringAsFixed(3)} ${b.toStringAsFixed(3)} rg '
-      '${x.toStringAsFixed(2)} ${y.toStringAsFixed(2)} ${w.toStringAsFixed(2)} ${h.toStringAsFixed(2)} re f Q',
+      '${r.toStringAsFixed(3)} ${g.toStringAsFixed(3)} ${b.toStringAsFixed(3)} rg',
+    );
+    stream.writeln(
+      '${x.toStringAsFixed(2)} ${y.toStringAsFixed(2)} ${w.toStringAsFixed(2)} ${h.toStringAsFixed(2)} re f',
     );
   }
 
@@ -409,120 +561,83 @@ class IlawPdfExporter {
     required double strokeR,
     required double strokeG,
     required double strokeB,
+    double lineWidth = 0.8,
   }) {
     stream.writeln(
-      'q 0.75 w '
-      '${fillR.toStringAsFixed(3)} ${fillG.toStringAsFixed(3)} ${fillB.toStringAsFixed(3)} rg '
-      '${strokeR.toStringAsFixed(3)} ${strokeG.toStringAsFixed(3)} ${strokeB.toStringAsFixed(3)} RG '
-      '${x.toStringAsFixed(2)} ${y.toStringAsFixed(2)} ${w.toStringAsFixed(2)} ${h.toStringAsFixed(2)} re B Q',
+      '${fillR.toStringAsFixed(3)} ${fillG.toStringAsFixed(3)} ${fillB.toStringAsFixed(3)} rg',
+    );
+    stream.writeln(
+      '${x.toStringAsFixed(2)} ${y.toStringAsFixed(2)} ${w.toStringAsFixed(2)} ${h.toStringAsFixed(2)} re f',
+    );
+    stream.writeln(
+      '${strokeR.toStringAsFixed(3)} ${strokeG.toStringAsFixed(3)} ${strokeB.toStringAsFixed(3)} RG',
+    );
+    stream.writeln('$lineWidth w');
+    stream.writeln(
+      '${x.toStringAsFixed(2)} ${y.toStringAsFixed(2)} ${w.toStringAsFixed(2)} ${h.toStringAsFixed(2)} re S',
     );
   }
 
-  static void _drawText(
-    StringBuffer stream, {
-    required String text,
-    required double x,
-    required double y,
-    required double fontSize,
-    required bool bold,
-    required double r,
-    required double g,
-    required double b,
-  }) {
-    final fontRef = bold ? '/F2' : '/F1';
-    final escaped = escapePdfText(text);
-    stream.writeln(
-      'BT $fontRef ${fontSize.toStringAsFixed(1)} Tf '
-      '${r.toStringAsFixed(3)} ${g.toStringAsFixed(3)} ${b.toStringAsFixed(3)} rg '
-      '1 0 0 1 ${x.toStringAsFixed(2)} ${y.toStringAsFixed(2)} Tm ($escaped) Tj ET',
-    );
-  }
-
-  static String escapePdfText(String raw) {
-    final normalized = raw
-        .replaceAll('•', '-')
-        .replaceAll('–', '-')
-        .replaceAll('—', '-')
-        .replaceAll('“', '"')
-        .replaceAll('”', '"')
-        .replaceAll('‘', "'")
-        .replaceAll('’', "'")
-        .replaceAll('≠', '!=')
-        .replaceAll('≤', '<=')
-        .replaceAll('≥', '>=')
-        .replaceAll('×', 'x')
-        .replaceAll('÷', '/');
-
+  static String _escapePdfString(String input) {
     final sb = StringBuffer();
-    for (final rune in normalized.runes) {
-      if (rune < 32 || rune == 127) {
-        continue;
-      }
-      if (rune == 0x5C) {
-        sb.write(r'\\');
-      } else if (rune == 0x28) {
+    for (var i = 0; i < input.length; i++) {
+      final char = input[i];
+      final code = char.codeUnitAt(0);
+      if (code < 32 || code > 126) {
+        sb.write(' ');
+      } else if (char == '(') {
         sb.write(r'\(');
-      } else if (rune == 0x29) {
+      } else if (char == ')') {
         sb.write(r'\)');
-      } else if (rune <= 255) {
-        sb.writeCharCode(rune);
+      } else if (char == '\\') {
+        sb.write(r'\\');
       } else {
-        sb.write('?');
+        sb.write(char);
       }
     }
     return sb.toString();
   }
 
-  static List<String> _wrapMultiline(String content, {required int maxChars}) {
-    final rawLines = content.replaceAll('\r\n', '\n').split('\n');
-    final out = <String>[];
-    for (final line in rawLines) {
-      final trimmed = line.trim();
-      if (trimmed.isEmpty) {
-        out.add('');
-        continue;
-      }
-      out.addAll(_wrapText(trimmed, maxChars: maxChars));
-    }
-    return out;
-  }
-
-  static List<String> _wrapText(String line, {required int maxChars}) {
-    if (line.length <= maxChars) return [line];
-    final words = line.split(RegExp(r'\s+'));
+  static List<String> _wrapMultiline(String text, {int maxChars = 84}) {
     final lines = <String>[];
-    var current = '';
-    for (final word in words) {
-      if (word.length > maxChars) {
-        if (current.isNotEmpty) {
-          lines.add(current);
-          current = '';
-        }
-        var rest = word;
-        while (rest.length > maxChars) {
-          lines.add(rest.substring(0, maxChars));
-          rest = rest.substring(maxChars);
-        }
-        current = rest;
-      } else if (current.isEmpty) {
-        current = word;
-      } else if (current.length + 1 + word.length <= maxChars) {
-        current = '$current $word';
+    for (final rawLine in text.replaceAll('\r\n', '\n').split('\n')) {
+      final trimmed = rawLine.trimRight();
+      if (trimmed.isEmpty) {
+        lines.add('');
       } else {
-        lines.add(current);
-        current = '   $word';
+        lines.addAll(_wrapText(trimmed, maxChars: maxChars));
       }
-    }
-    if (current.isNotEmpty) {
-      lines.add(current);
     }
     return lines;
   }
 
-  static String _truncate(String input, int maxLen) {
-    final clean = input.trim();
-    if (clean.length <= maxLen) return clean;
-    return '${clean.substring(0, maxLen - 3)}...';
+  static List<String> _wrapText(String line, {int maxChars = 84}) {
+    if (line.length <= maxChars) return [line];
+    final words = line.split(' ');
+    final results = <String>[];
+    var current = StringBuffer();
+
+    for (final w in words) {
+      if (current.isEmpty) {
+        current.write(w);
+      } else if (current.length + 1 + w.length <= maxChars) {
+        current.write(' ');
+        current.write(w);
+      } else {
+        results.add(current.toString());
+        current = StringBuffer(w);
+      }
+    }
+    if (current.isNotEmpty) {
+      results.add(current.toString());
+    }
+    return results;
+  }
+
+  static String _truncate(String s, int maxLen) {
+    final trimmed = s.trim();
+    if (trimmed.length <= maxLen) return trimmed;
+    return '${trimmed.substring(0, maxLen - 1)}…';
   }
 
   static String _formatDate(DateTime dt) {
@@ -533,95 +648,74 @@ class IlawPdfExporter {
     return '$y-$m-$d';
   }
 
-  static Uint8List _assemblePdfDocument(List<String> pageStreams) {
-    // Object numbering:
-    // 1: Catalog
-    // 2: Pages
-    // 3: Font F1 (Helvetica)
-    // 4: Font F2 (Helvetica-Bold)
-    // For each page i (0..N-1):
-    //   pageObjId = 5 + (i * 2)
-    //   contentObjId = 6 + (i * 2)
-    final totalObjects = 4 + (pageStreams.length * 2);
-    final offsets = List<int>.filled(totalObjects + 1, 0);
+  static Uint8List _assemblePdf(List<StringBuffer> pageStreams) {
     final bytes = BytesBuilder();
+    final offsets = <int>[];
 
-    void writeStr(String s) {
-      bytes.add(latin1.encode(s));
+    void writeAscii(String s) {
+      bytes.add(ascii.encode(s));
     }
 
-    writeStr('%PDF-1.4\n');
+    writeAscii('%PDF-1.4\n');
 
-    void beginObj(int id) {
-      offsets[id] = bytes.length;
-      writeStr('$id 0 obj\n');
+    int objIndex = 1;
+
+    offsets.add(bytes.length);
+    writeAscii('$objIndex 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n');
+    objIndex++;
+
+    offsets.add(bytes.length);
+    final pageRefList = StringBuffer();
+    for (var i = 0; i < pageStreams.length; i++) {
+      final pNum = 5 + (i * 2);
+      pageRefList.write('$pNum 0 R ');
     }
-
-    void endObj() {
-      writeStr('endobj\n');
-    }
-
-    beginObj(1);
-    writeStr('<< /Type /Catalog /Pages 2 0 R >>\n');
-    endObj();
-
-    final kidsRefs = List.generate(
-      pageStreams.length,
-      (i) => '${5 + (i * 2)} 0 R',
-    ).join(' ');
-    beginObj(2);
-    writeStr(
-      '<< /Type /Pages /Kids [ $kidsRefs ] /Count ${pageStreams.length} >>\n',
+    writeAscii(
+      '$objIndex 0 obj\n<< /Type /Pages /Kids [ $pageRefList] /Count ${pageStreams.length} >>\nendobj\n',
     );
-    endObj();
+    objIndex++;
 
-    beginObj(3);
-    writeStr(
-      '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>\n',
+    offsets.add(bytes.length);
+    writeAscii(
+      '$objIndex 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n',
     );
-    endObj();
+    objIndex++;
 
-    beginObj(4);
-    writeStr(
-      '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>\n',
+    offsets.add(bytes.length);
+    writeAscii(
+      '$objIndex 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>\nendobj\n',
     );
-    endObj();
+    objIndex++;
 
     for (var i = 0; i < pageStreams.length; i++) {
-      final pageObjId = 5 + (i * 2);
-      final contentObjId = 6 + (i * 2);
-      final streamBytes = latin1.encode(pageStreams[i]);
-
-      beginObj(pageObjId);
-      writeStr(
-        '<< /Type /Page /Parent 2 0 R '
-        '/MediaBox [ 0 0 ${_pageWidth.toStringAsFixed(2)} ${_pageHeight.toStringAsFixed(2)} ] '
-        '/Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> '
-        '/Contents $contentObjId 0 R >>\n',
+      final contentObjNum = 6 + (i * 2);
+      offsets.add(bytes.length);
+      writeAscii(
+        '$objIndex 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 $_pageWidth $_pageHeight] /Contents $contentObjNum 0 R /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> >>\nendobj\n',
       );
-      endObj();
+      objIndex++;
 
-      beginObj(contentObjId);
-      writeStr('<< /Length ${streamBytes.length} >>\nstream\n');
+      final streamContent = pageStreams[i].toString();
+      final streamBytes = ascii.encode(streamContent);
+      offsets.add(bytes.length);
+      writeAscii('$objIndex 0 obj\n<< /Length ${streamBytes.length} >>\nstream\n');
       bytes.add(streamBytes);
-      writeStr('\nendstream\n');
-      endObj();
+      writeAscii('\nendstream\nendobj\n');
+      objIndex++;
     }
 
-    final xrefOffset = bytes.length;
-    writeStr('xref\n');
-    writeStr('0 ${totalObjects + 1}\n');
-    writeStr('0000000000 65535 f \n');
-    for (var id = 1; id <= totalObjects; id++) {
-      final padded = offsets[id].toString().padLeft(10, '0');
-      writeStr('$padded 00000 n \n');
+    final xrefStart = bytes.length;
+    final totalObjects = objIndex;
+    writeAscii('xref\n0 $totalObjects\n');
+    writeAscii('0000000000 65535 f \n');
+    for (final off in offsets) {
+      final offStr = off.toString().padLeft(10, '0');
+      writeAscii('$offStr 00000 n \n');
     }
 
-    writeStr('trailer\n');
-    writeStr('<< /Size ${totalObjects + 1} /Root 1 0 R >>\n');
-    writeStr('startxref\n');
-    writeStr('$xrefOffset\n');
-    writeStr('%%EOF\n');
+    writeAscii(
+      'trailer\n<< /Size $totalObjects /Root 1 0 R >>\nstartxref\n$xrefStart\n%%EOF',
+    );
 
     return bytes.toBytes();
   }
