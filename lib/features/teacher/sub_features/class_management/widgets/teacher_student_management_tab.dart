@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import 'package:class_realm/core/theme/app_theme.dart';
+import 'package:class_realm/core/utils/validators.dart';
 import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/shared/widgets/shared_widgets.dart';
 import 'package:class_realm/features/teacher/sub_features/class_management/widgets/unified_enroll_student_dialog.dart';
@@ -811,10 +812,10 @@ class _TeacherStudentManagementTabState
                                                           (s.fullName.contains(' ')
                                                               ? s.fullName.split(' ').first
                                                               : '');
-                                                      final middleInitial = (s.middleName != null &&
-                                                              s.middleName!.trim().isNotEmpty)
-                                                          ? '${s.middleName!.trim()[0].toUpperCase()}.'
-                                                          : '';
+                                                      final middleInitial =
+                                                          AppValidators.formatMiddleInitial(
+                                                        s.middleName,
+                                                      );
                                                       final restOfName = [firstName, middleInitial]
                                                           .where((e) => e.isNotEmpty)
                                                           .join(' ');

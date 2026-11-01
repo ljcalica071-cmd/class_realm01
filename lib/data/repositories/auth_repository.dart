@@ -2155,6 +2155,8 @@ class AuthRepository {
     required String gender,
     required DateTime birthday,
   }) async {
+    final cleanMiddleName =
+        AppValidators.normalizeMiddleInitial(middleName);
     try {
       final cleanEmail = email.trim().toLowerCase();
 
@@ -2203,9 +2205,7 @@ class AuthRepository {
           .from('teacher_profiles')
           .update({
             'first_name': firstName.trim(),
-            'middle_name': (middleName == null || middleName.trim().isEmpty)
-                ? null
-                : middleName.trim(),
+            'middle_name': cleanMiddleName,
             'last_name': lastName.trim(),
             'gender': gender,
             'birthday': bdayStr,
@@ -2227,6 +2227,8 @@ class AuthRepository {
     required DateTime birthday,
     bool isResend = false,
   }) async {
+    final cleanMiddleName =
+        AppValidators.normalizeMiddleInitial(middleName) ?? '';
     final cleanEmail = email.trim().toLowerCase();
 
     // 0. Verify domain deliverability (Ensure domain exists and can receive email)
@@ -2370,7 +2372,7 @@ class AuthRepository {
     // 5. Dispatch verification code via EmailService
     final fullName = [
       firstName.trim(),
-      middleName.trim(),
+      cleanMiddleName,
       lastName.trim(),
     ].where((s) => s.isNotEmpty).join(' ');
     try {
@@ -2403,7 +2405,7 @@ class AuthRepository {
         'email': cleanEmail,
         'code_hash': code,
         'first_name': firstName.trim(),
-        'middle_name': middleName.trim().isEmpty ? null : middleName.trim(),
+        'middle_name': cleanMiddleName.isEmpty ? null : cleanMiddleName,
         'last_name': lastName.trim(),
         'gender': gender,
         'birthday': bdayStr,
@@ -2456,6 +2458,8 @@ class AuthRepository {
     required String gender,
     required DateTime birthday,
   }) async {
+    final cleanMiddleName =
+        AppValidators.normalizeMiddleInitial(middleName) ?? '';
     final teacherId = 'tch_${DateTime.now().millisecondsSinceEpoch}';
     final bdayStr =
         '${birthday.year.toString().padLeft(4, '0')}-${birthday.month.toString().padLeft(2, '0')}-${birthday.day.toString().padLeft(2, '0')}';
@@ -2473,7 +2477,7 @@ class AuthRepository {
       await _supabaseClient.from('teacher_profiles').upsert({
         'teacher_id': teacherId,
         'first_name': firstName.trim(),
-        'middle_name': middleName.trim().isEmpty ? null : middleName.trim(),
+        'middle_name': cleanMiddleName.isEmpty ? null : cleanMiddleName,
         'last_name': lastName.trim(),
         'gender': gender,
         'birthday': bdayStr,
@@ -2588,7 +2592,9 @@ class AuthRepository {
 
     // 5. Code is VALID! Extract details and create teacher account
     final firstName = challenge['first_name']?.toString() ?? '';
-    final middleName = challenge['middle_name']?.toString();
+    final middleName = AppValidators.normalizeMiddleInitial(
+      challenge['middle_name']?.toString(),
+    );
     final lastName = challenge['last_name']?.toString() ?? '';
     final gender = challenge['gender']?.toString() ?? 'Male';
     final birthdayStr = challenge['birthday']?.toString() ?? '2000-01-01';
@@ -2635,9 +2641,7 @@ class AuthRepository {
     await _supabaseClient.from('teacher_profiles').upsert({
       'teacher_id': teacherId,
       'first_name': firstName,
-      'middle_name': (middleName == null || middleName.isEmpty)
-          ? null
-          : middleName,
+      'middle_name': middleName,
       'last_name': lastName,
       'gender': gender,
       'birthday': birthdayStr,

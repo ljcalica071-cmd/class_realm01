@@ -12,6 +12,14 @@ class DomainDeliverabilityResult {
 }
 
 class AppValidators {
+  static const String invalidMiddleInitialMessage =
+      'Invalid format. Use 1 letter and 1 period only (e.g: H.)';
+  static const String invalidBulkMiddleInitialMessage =
+      'Invalid middle initial format (eg: H.)';
+  static const String invalidExcelMiddleInitialMessage =
+      'Use 1 letter and 1 period only (e.g., H.)';
+  static final RegExp _middleInitialPattern = RegExp(r'^[a-zA-ZñÑ]\.$');
+
   /// Reusable input formatters for name fields (max 30 chars, no consecutive spaces/periods, capitalize first letter)
   static List<TextInputFormatter> get nameFormatters => [
     LengthLimitingTextInputFormatter(30),
@@ -40,6 +48,39 @@ class AppValidators {
       return 'Minimum 2 characters required.';
     }
     return null;
+  }
+
+  static String? validateMiddleInitial(String? value) {
+    if (value == null || value.isEmpty) return null;
+    final trimmed = value.trim();
+    if (trimmed.isEmpty || !_middleInitialPattern.hasMatch(trimmed)) {
+      return invalidMiddleInitialMessage;
+    }
+    return null;
+  }
+
+  static String? normalizeMiddleInitial(String? value) {
+    final validationError = validateMiddleInitial(value);
+    if (validationError != null) {
+      throw FormatException(validationError);
+    }
+    if (value == null || value.isEmpty) return null;
+    return value.trim().toUpperCase();
+  }
+
+  static bool isMiddleInitialConstraintViolation(Object error) {
+    final message = error.toString().toLowerCase();
+    return message.contains('middle_initial_format_check') ||
+        message.contains('middle initial format');
+  }
+
+  static String formatMiddleInitial(String? value) {
+    final trimmed = value?.trim();
+    if (trimmed == null || trimmed.isEmpty) return '';
+    if (_middleInitialPattern.hasMatch(trimmed)) {
+      return trimmed.toUpperCase();
+    }
+    return '${trimmed[0].toUpperCase()}.';
   }
 
   /// Email validator (Strict & Reusable across the system)
@@ -301,8 +342,9 @@ class AppValidators {
           // Check for RFC 7505 Null MX and reject parked / squatter domains
           final validMx = mxRecords.where((r) {
             final dataStr = (r['data']?.toString().toLowerCase().trim() ?? '');
-            if (dataStr.isEmpty || dataStr == '.' || dataStr == '0 .')
+            if (dataStr.isEmpty || dataStr == '.' || dataStr == '0 .') {
               return false;
+            }
             for (final kw in parkedKeywords) {
               if (dataStr.contains(kw)) return false;
             }
@@ -371,8 +413,9 @@ class AppValidators {
             final validMx = cfMx.where((r) {
               final dataStr =
                   (r['data']?.toString().toLowerCase().trim() ?? '');
-              if (dataStr.isEmpty || dataStr == '.' || dataStr == '0 .')
+              if (dataStr.isEmpty || dataStr == '.' || dataStr == '0 .') {
                 return false;
+              }
               for (final kw in parkedKeywords) {
                 if (dataStr.contains(kw)) return false;
               }
@@ -526,8 +569,9 @@ extension BirthdayValidator on AppValidators {
 
     // Role-specific age logic
     if (role == 'teacher' || role == 'parent') {
-      if (date.year <= 1950)
+      if (date.year <= 1950) {
         return 'Birthdates from 1950 and below are not supported.';
+      }
       if (age < 18) return 'Must be at least 18 years old.';
     } else if (role == 'student') {
       if (age > 50) return 'Student cannot be older than 50 years old.';

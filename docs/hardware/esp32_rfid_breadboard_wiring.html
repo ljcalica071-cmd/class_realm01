@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ClassRealm — ESP32 Breadboard Wiring Guide (User Kit Customized)</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: #0b1120;
+      color: #f1f5f9;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+    }
+
+    header {
+      width: 100%;
+      max-width: 1400px;
+      margin-bottom: 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid #1e293b;
+      padding-bottom: 16px;
+    }
+
+    h1 {
+      font-size: 24px;
+      font-weight: 700;
+      color: #38bdf8;
+    }
+
+    p.sub {
+      font-size: 14px;
+      color: #94a3b8;
+      margin-top: 4px;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 6px 12px;
+      border-radius: 9999px;
+      font-size: 12px;
+      font-weight: 600;
+      background: #0369a1;
+      color: #e0f2fe;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 20px;
+      width: 100%;
+      max-width: 1400px;
+    }
+
+    .tab-btn {
+      padding: 10px 20px;
+      border-radius: 8px;
+      border: 1px solid #334155;
+      background: #1e293b;
+      color: #cbd5e1;
+      font-weight: 600;
+      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .tab-btn.active {
+      background: #0284c7;
+      color: white;
+      border-color: #38bdf8;
+    }
+
+    .viewer-container {
+      width: 100%;
+      max-width: 1400px;
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+    }
+
+    .view-pane {
+      display: none;
+      width: 100%;
+      text-align: center;
+      padding: 16px;
+    }
+
+    .view-pane.active {
+      display: block;
+    }
+
+    .view-pane img,
+    .view-pane object {
+      max-width: 100%;
+      height: auto;
+      border-radius: 8px;
+    }
+
+    .pinout-card {
+      width: 100%;
+      max-width: 1400px;
+      margin-top: 24px;
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 16px;
+      padding: 24px;
+    }
+
+    .pinout-card h2 {
+      font-size: 18px;
+      color: #38bdf8;
+      margin-bottom: 16px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    th,
+    td {
+      padding: 10px 14px;
+      text-align: left;
+      border-bottom: 1px solid #334155;
+    }
+
+    th {
+      background: #0f172a;
+      color: #94a3b8;
+      font-weight: 600;
+      text-transform: uppercase;
+      font-size: 11px;
+      letter-spacing: 0.05em;
+    }
+
+    tr:hover td {
+      background: #253349;
+    }
+
+    .color-dot {
+      display: inline-block;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      margin-right: 8px;
+      vertical-align: middle;
+      border: 1px solid rgba(0, 0, 0, 0.3);
+    }
+
+    .wire-pill {
+      display: inline-block;
+      padding: 3px 8px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 700;
+      margin-right: 6px;
+    }
+
+    .pill-yellow {
+      background: #ca8a04;
+      color: #fef08a;
+    }
+
+    .pill-blue {
+      background: #1d4ed8;
+      color: #dbeafe;
+    }
+
+    .pill-black {
+      background: #000000;
+      color: #f3f4f6;
+      border: 1px solid #4b5563;
+    }
+
+    .pill-resistor {
+      background: #78350f;
+      color: #fef3c7;
+    }
+  </style>
+</head>
+
+<body>
+
+  <header>
+    <div>
+      <h1>ClassRealm — ESP32 Autonomous RFID Attendance System</h1>
+      <p class="sub">Custom Breadboard Assembly Guide (ESP32 Plugged in Rows 46–60 with Black M-M, Blue F-M, Yellow
+        U-jumpers)</p>
+    </div>
+    <span class="badge">Hardware Target: CR-HW-ESP32-GUIDE-2026-V1</span>
+  </header>
+
+  <div class="tabs">
+    <button class="tab-btn active" onclick="switchTab('svg-tab')">Flat Vector Graphic (SVG)</button>
+    <button class="tab-btn" onclick="switchTab('fritzing-tab')">Photorealistic Fritzing Render (JPG)</button>
+  </div>
+
+  <div class="viewer-container">
+    <div id="svg-tab" class="view-pane active">
+      <object data="esp32_rfid_breadboard_wiring.svg" type="image/svg+xml"
+        style="width: 100%; min-height: 780px;"></object>
+    </div>
+    <div id="fritzing-tab" class="view-pane">
+      <img src="esp32_rfid_breadboard_custom_kit.jpg" alt="ESP32 RFID Breadboard Fritzing Diagram"
+        style="width: 100%; max-height: 850px; object-fit: contain;">
+    </div>
+  </div>
+
+  <div class="pinout-card">
+    <h2>Verified Pinout & Wire Color Routing Reference</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Component</th>
+          <th>Component Pin</th>
+          <th>Breadboard / ESP32 Target</th>
+          <th>Wire Type & Color</th>
+          <th>Function & Notes</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>ESP32 Power</strong></td>
+          <td>3V3 (Row 60)</td>
+          <td>Hole A60 ➔ Red (+) Rail</td>
+          <td><span class="wire-pill pill-yellow">YELLOW</span>U-Jumper</td>
+          <td>Powers the 3.3V breadboard rail</td>
+        </tr>
+        <tr>
+          <td><strong>ESP32 Power</strong></td>
+          <td>GND (Row 59)</td>
+          <td>Hole A59 ➔ Blue (-) Rail</td>
+          <td><span class="wire-pill pill-yellow">YELLOW</span>U-Jumper</td>
+          <td>Connects system ground</td>
+        </tr>
+        <tr>
+          <td><strong>RC522 RFID</strong></td>
+          <td>3.3V</td>
+          <td>Red (+) Power Rail</td>
+          <td><span class="wire-pill pill-blue">BLUE</span>F-M</td>
+          <td>Strictly 3.3V ONLY!</td>
+        </tr>
+        <tr>
+          <td><strong>RC522 RFID</strong></td>
+          <td>GND</td>
+          <td>Blue (-) Ground Rail</td>
+          <td><span class="wire-pill pill-blue">BLUE</span>F-M</td>
+          <td>Ground Plane</td>
+        </tr>
+        <tr>
+          <td><strong>RC522 RFID</strong></td>
+          <td>RST</td>
+          <td>Hole A56 (ESP32 D4)</td>
+          <td><span class="wire-pill pill-blue">BLUE</span>F-M</td>
+          <td>RFID Reset Line</td>
+        </tr>
+        <tr>
+          <td><strong>RC522 RFID</strong></td>
+          <td>MISO</td>
+          <td>Hole A51 (ESP32 D19)</td>
+          <td><span class="wire-pill pill-blue">BLUE</span>F-M</td>
+          <td>SPI Master In Slave Out</td>
+        </tr>
+        <tr>
+          <td><strong>RC522 RFID</strong></td>
+          <td>MOSI</td>
+          <td>Hole A46 (ESP32 D23)</td>
+          <td><span class="wire-pill pill-blue">BLUE</span>F-M</td>
+          <td>SPI Master Out Slave In</td>
+        </tr>
+        <tr>
+          <td><strong>RC522 RFID</strong></td>
+          <td>SCK</td>
+          <td>Hole A52 (ESP32 D18)</td>
+          <td><span class="wire-pill pill-blue">BLUE</span>F-M</td>
+          <td>SPI Clock</td>
+        </tr>
+        <tr>
+          <td><strong>RC522 RFID</strong></td>
+          <td>SDA (SS)</td>
+          <td>Hole A53 (ESP32 D5)</td>
+          <td><span class="wire-pill pill-blue">BLUE</span>F-M</td>
+          <td>SPI Chip Select</td>
+        </tr>
+        <tr>
+          <td><strong>RC522 RFID</strong></td>
+          <td>IRQ</td>
+          <td><em>(Leave Empty)</em></td>
+          <td>—</td>
+          <td>Unconnected (20Hz FreeRTOS polling)</td>
+        </tr>
+        <tr>
+          <td><strong>0.96" OLED</strong></td>
+          <td>VCC</td>
+          <td>Red (+) Power Rail</td>
+          <td><span class="wire-pill pill-blue">BLUE</span>F-M</td>
+          <td>3.3V Display Power</td>
+        </tr>
+        <tr>
+          <td><strong>0.96" OLED</strong></td>
+          <td>GND</td>
+          <td>Blue (-) Ground Rail</td>
+          <td><span class="wire-pill pill-blue">BLUE</span>F-M</td>
+          <td>Display Ground</td>
+        </tr>
+        <tr>
+          <td><strong>0.96" OLED</strong></td>
+          <td>SCL</td>
+          <td>Hole A47 (ESP32 D22)</td>
+          <td><span class="wire-pill pill-blue">BLUE</span>F-M</td>
+          <td>I2C Clock</td>
+        </tr>
+        <tr>
+          <td><strong>0.96" OLED</strong></td>
+          <td>SDA</td>
+          <td>Hole A50 (ESP32 D21)</td>
+          <td><span class="wire-pill pill-blue">BLUE</span>F-M</td>
+          <td>I2C Data</td>
+        </tr>
+        <tr>
+          <td><strong>Active Buzzer</strong></td>
+          <td>(+) Leg (Hole G35)</td>
+          <td>Hole J51 (ESP32 D32)</td>
+          <td><span class="wire-pill pill-black">BLACK</span>M-M</td>
+          <td>Active HIGH Audio Tone</td>
+        </tr>
+        <tr>
+          <td><strong>Active Buzzer</strong></td>
+          <td>(-) Leg (Hole I35)</td>
+          <td>Blue (-) Ground Rail</td>
+          <td><span class="wire-pill pill-yellow">YELLOW</span>U-Jumper</td>
+          <td>Direct Ground Connection</td>
+        </tr>
+        <tr>
+          <td><strong>Green LED</strong></td>
+          <td>Anode (+) (Hole G25)</td>
+          <td>Hole J55 (ESP32 D27)</td>
+          <td><span class="wire-pill pill-black">BLACK</span>M-M</td>
+          <td>Valid Scan Indicator</td>
+        </tr>
+        <tr>
+          <td><strong>Green LED</strong></td>
+          <td>Cathode (-) (Hole I25)</td>
+          <td>Blue (-) Ground Rail</td>
+          <td><span class="wire-pill pill-resistor">220Ω</span>Resistor</td>
+          <td>Current Limiter (~8mA)</td>
+        </tr>
+        <tr>
+          <td><strong>Red LED</strong></td>
+          <td>Anode (+) (Hole G18)</td>
+          <td>Hole J56 (ESP32 D14)</td>
+          <td><span class="wire-pill pill-black">BLACK</span>M-M</td>
+          <td>Invalid / Duplicate Indicator</td>
+        </tr>
+        <tr>
+          <td><strong>Red LED</strong></td>
+          <td>Cathode (-) (Hole I18)</td>
+          <td>Blue (-) Ground Rail</td>
+          <td><span class="wire-pill pill-resistor">220Ω</span>Resistor</td>
+          <td>Current Limiter (~8mA)</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <script>
+    function switchTab(tabId) {
+      document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+      document.querySelectorAll('.view-pane').forEach(pane => pane.classList.remove('active'));
+
+      event.target.classList.add('active');
+      document.getElementById(tabId).classList.add('active');
+    }
+  </script>
+</body>
+
+</html>

@@ -24,7 +24,7 @@ All enrollments require an authoritative connection to a specific `subject_offer
 | `Email` | **Yes** | Valid RFC 5322 email syntax | Student's school or personal email |
 | `Last Name` | **Yes** | Min 2 characters, letters only | Student surname |
 | `First Name` | **Yes** | Min 2 characters, letters only | Student given name |
-| `Middle Name` | *No* | Optional letters | Student middle name |
+| `Middle Initial` | *No* | Blank or exactly one uppercase letter followed by a period (e.g. `H.`) | Student middle initial |
 | `Gender` | **Yes** | `Male` or `Female` (case-insensitive) | Student gender identity |
 | `Birthday` | **Yes** | `YYYY-MM-DD` (e.g. `2007-06-19`) | Date of birth; Age is auto-calculated |
 

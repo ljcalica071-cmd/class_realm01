@@ -3,16 +3,18 @@ import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:class_realm/core/services/supabase_service.dart';
 import 'package:class_realm/models/academic_models.dart';
+
 import 'teacher_classwork_repository.dart';
 
 class SupabaseTeacherClassworkRepository implements TeacherClassworkRepository {
-  static const int maxFileSizeBytes = 10 * 1024 * 1024; // 10 MiB = 10,485,760 bytes
+  static const int maxFileSizeBytes =
+      10 * 1024 * 1024; // 10 MiB = 10,485,760 bytes
   static const List<String> allowedExtensions = ['.pdf', '.doc', '.docx'];
 
   final SupabaseClient _client;
 
   SupabaseTeacherClassworkRepository({SupabaseClient? client})
-      : _client = client ?? SupabaseService().client;
+    : _client = client ?? SupabaseService().client;
 
   static final SupabaseTeacherClassworkRepository instance =
       SupabaseTeacherClassworkRepository();
@@ -56,7 +58,9 @@ class SupabaseTeacherClassworkRepository implements TeacherClassworkRepository {
           final rows = await query;
           final list = rows as List? ?? [];
           return list.map((item) {
-            return ActivityModel.fromJson(Map<String, dynamic>.from(item as Map));
+            return ActivityModel.fromJson(
+              Map<String, dynamic>.from(item as Map),
+            );
           }).toList();
         } catch (e) {
           debugPrint('Pure Dart classwork list notice: $e');
@@ -65,7 +69,9 @@ class SupabaseTeacherClassworkRepository implements TeacherClassworkRepository {
       },
       onUpdate: (_) {},
       fromJson: (json) => (json as List)
-          .map((e) => ActivityModel.fromJson(Map<String, dynamic>.from(e as Map)))
+          .map(
+            (e) => ActivityModel.fromJson(Map<String, dynamic>.from(e as Map)),
+          )
           .toList(),
       toJson: (list) => list.map((a) => a.toJson()).toList(),
       ttl: const Duration(minutes: 5),
@@ -88,23 +94,28 @@ class SupabaseTeacherClassworkRepository implements TeacherClassworkRepository {
       _validateFile(fileName, fileBytes);
 
       final safeName = fileName.replaceAll(RegExp(r'[^a-zA-Z0-9._-]'), '_');
-      storagePath = '$subjectOfferingId/${DateTime.now().millisecondsSinceEpoch}_$safeName';
+      storagePath =
+          '$subjectOfferingId/${DateTime.now().millisecondsSinceEpoch}_$safeName';
 
       try {
-        await _client.storage.from('classwork-materials').uploadBinary(
-          storagePath,
-          fileBytes,
-          fileOptions: FileOptions(
-            contentType: mimeType ?? 'application/octet-stream',
-            upsert: true,
-          ),
-        );
+        await _client.storage
+            .from('classwork-materials')
+            .uploadBinary(
+              storagePath,
+              fileBytes,
+              fileOptions: FileOptions(
+                contentType: mimeType ?? 'application/octet-stream',
+                upsert: true,
+              ),
+            );
       } catch (e) {
         debugPrint('Direct storage upload notice: $e');
       }
     }
 
-    final classworkType = activity.isRequirement ? 'performance_task' : 'activity';
+    final classworkType = activity.isRequirement
+        ? 'performance_task'
+        : 'activity';
 
     if (isNew) {
       final insertData = <String, dynamic>{
@@ -135,6 +146,7 @@ class SupabaseTeacherClassworkRepository implements TeacherClassworkRepository {
             .select()
             .single();
         AppDataCache.instance.invalidatePrefix('teacher_activities_');
+        AppDataCache.instance.invalidatePrefix('student_dashboard_');
         return ActivityModel.fromJson(Map<String, dynamic>.from(res));
       } catch (e) {
         debugPrint('Pure Dart insert classwork notice: $e');
@@ -165,6 +177,7 @@ class SupabaseTeacherClassworkRepository implements TeacherClassworkRepository {
             .select()
             .single();
         AppDataCache.instance.invalidatePrefix('teacher_activities_');
+        AppDataCache.instance.invalidatePrefix('student_dashboard_');
         return ActivityModel.fromJson(Map<String, dynamic>.from(res));
       } catch (e) {
         debugPrint('Pure Dart update classwork notice: $e');
@@ -184,6 +197,7 @@ class SupabaseTeacherClassworkRepository implements TeacherClassworkRepository {
           .update({'is_archived': true})
           .eq('id', activityId);
       AppDataCache.instance.invalidatePrefix('teacher_activities_');
+      AppDataCache.instance.invalidatePrefix('student_dashboard_');
     } catch (e) {
       debugPrint('Pure Dart delete classwork notice: $e');
     }
@@ -206,11 +220,11 @@ class SupabaseTeacherClassworkRepository implements TeacherClassworkRepository {
           .eq('term_number', termNumber)
           .eq('gradebook_column_index', gradebookColumnIndex)
           .eq('is_archived', false);
-          
+
       if (excludeClassworkId != null && excludeClassworkId.isNotEmpty) {
         query = query.neq('id', excludeClassworkId);
       }
-      
+
       final res = await query.limit(1).maybeSingle();
       return res != null;
     } catch (e) {

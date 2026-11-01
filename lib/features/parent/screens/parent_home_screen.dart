@@ -199,15 +199,7 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
             onPressed: () => _scaffoldKey.currentState?.openDrawer(),
           ),
           actions: [
-            if (linkedStudents.length > 1)
-              IconButton(
-                icon: const Icon(Icons.swap_horiz_rounded),
-                tooltip:
-                    'Switch Child Profile (${linkedStudent?.firstName ?? ""})',
-                onPressed: () {
-                  _switchChild(_selectedChildIndex + 1);
-                },
-              ),
+            _buildTopRightChildSwitcher(theme, linkedStudents, linkedStudent),
             IconButton(
               icon: Icon(
                 theme.brightness == Brightness.dark
@@ -240,51 +232,6 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
           builder: (context, constraints) {
             final content = Column(
               children: [
-                // Active Child Banner (if parent has multiple children)
-                if (linkedStudents.length > 1 && linkedStudent != null)
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 8,
-                    ),
-                    color: theme.colorScheme.primaryContainer.withValues(
-                      alpha: 0.35,
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.account_circle,
-                          size: 20,
-                          color: theme.colorScheme.primary,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            'Viewing: ${linkedStudent.fullName} (${linkedStudent.departmentOrSection ?? "Active"})',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 13,
-                              color: theme.colorScheme.primary,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        TextButton.icon(
-                          style: TextButton.styleFrom(
-                            visualDensity: VisualDensity.compact,
-                            padding: const EdgeInsets.symmetric(horizontal: 8),
-                          ),
-                          icon: const Icon(Icons.swap_horiz, size: 16),
-                          label: const Text(
-                            'Switch',
-                            style: TextStyle(fontSize: 12),
-                          ),
-                          onPressed: () =>
-                              _switchChild(_selectedChildIndex + 1),
-                        ),
-                      ],
-                    ),
-                  ),
                 Expanded(
                   child: _isLoadingStudents
                       ? Center(
@@ -346,6 +293,243 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildTopRightChildSwitcher(
+    ThemeData theme,
+    List<UserModel> students,
+    UserModel? activeChild,
+  ) {
+    if (students.isEmpty) return const SizedBox.shrink();
+
+    // If only 1 child is linked, show a clean, non-intrusive badge
+    if (students.length == 1) {
+      return Container(
+        margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.primary.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: theme.colorScheme.primary.withValues(alpha: 0.25),
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircleAvatar(
+              radius: 11,
+              backgroundColor: theme.colorScheme.primary,
+              child: Text(
+                (activeChild?.firstName?.isNotEmpty ?? false)
+                    ? activeChild!.firstName![0].toUpperCase()
+                    : 'C',
+                style: const TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+            const SizedBox(width: 6),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 130),
+              child: Text(
+                activeChild?.fullName ?? 'Child',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: theme.colorScheme.primary,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Multiple children linked (2, 3, or more): Elegant Dropdown Menu
+    return PopupMenuButton<int>(
+      tooltip: 'Switch Active Child',
+      offset: const Offset(0, 48),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+      ),
+      color: theme.colorScheme.surface,
+      elevation: 6,
+      onSelected: (int targetIndex) {
+        _switchChild(targetIndex);
+      },
+      child: Container(
+        margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.primary.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: theme.colorScheme.primary.withValues(alpha: 0.35),
+            width: 1.2,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircleAvatar(
+              radius: 12,
+              backgroundColor: theme.colorScheme.primary,
+              child: Text(
+                (activeChild?.firstName?.isNotEmpty ?? false)
+                    ? activeChild!.firstName![0].toUpperCase()
+                    : 'C',
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+            const SizedBox(width: 7),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 140),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    activeChild?.fullName ?? 'Select Child',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: theme.colorScheme.primary,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  if (activeChild?.departmentOrSection != null)
+                    Text(
+                      activeChild!.departmentOrSection!,
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: theme.colorScheme.onSurface
+                            .withValues(alpha: 0.6),
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 4),
+            Icon(
+              Icons.keyboard_arrow_down_rounded,
+              size: 18,
+              color: theme.colorScheme.primary,
+            ),
+          ],
+        ),
+      ),
+      itemBuilder: (BuildContext context) {
+        return List<PopupMenuEntry<int>>.generate(
+          students.length,
+          (index) {
+            final child = students[index];
+            final isSelected = index == (_selectedChildIndex % students.length);
+
+            return PopupMenuItem<int>(
+              value: index,
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 14,
+                      backgroundColor: isSelected
+                          ? theme.colorScheme.primary
+                          : theme.colorScheme.surfaceContainerHighest,
+                      child: Text(
+                        (child.firstName?.isNotEmpty ?? false)
+                            ? child.firstName![0].toUpperCase()
+                            : 'C',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: isSelected
+                              ? Colors.white
+                              : theme.colorScheme.onSurface,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            child.fullName,
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: isSelected
+                                  ? FontWeight.bold
+                                  : FontWeight.w500,
+                              color: isSelected
+                                  ? theme.colorScheme.primary
+                                  : theme.colorScheme.onSurface,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          Row(
+                            children: [
+                              if (child.lrn != null &&
+                                  child.lrn!.isNotEmpty) ...[
+                                Text(
+                                  'LRN: ${child.lrn}',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: theme.colorScheme.onSurface
+                                        .withValues(alpha: 0.55),
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                              ],
+                              if (child.departmentOrSection != null)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 1,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: theme.colorScheme.onSurface
+                                        .withValues(alpha: 0.08),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    child.departmentOrSection!,
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w600,
+                                      color: theme.colorScheme.onSurface
+                                          .withValues(alpha: 0.7),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (isSelected)
+                      Icon(
+                        Icons.check_circle_rounded,
+                        size: 18,
+                        color: theme.colorScheme.primary,
+                      ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
     );
   }
 

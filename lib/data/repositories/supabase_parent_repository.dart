@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/core/utils/parent_credential_helper.dart';
+import 'package:class_realm/core/utils/validators.dart';
 import 'package:class_realm/data/repositories/supabase_learning_material_repository.dart';
 import 'package:class_realm/core/services/firebase_auth_admin_service.dart';
 import 'package:class_realm/core/services/app_data_cache.dart';
@@ -256,13 +257,15 @@ class SupabaseParentRepository {
     required String firstName,
     String? middleName,
     required String lastName,
-    required String contactNumber,
+    String contactNumber = '',
     required DateTime birthday,
     required String relationship,
     required List<String> studentIds,
     String? email,
     String? tempPassword,
   }) async {
+    final cleanMiddleName =
+        AppValidators.normalizeMiddleInitial(middleName);
     // 1. Sibling Auto-Linking: Check if the exact same parent already exists in public.parent_profiles
     final bdayStr =
         '${birthday.year.toString().padLeft(4, '0')}-${birthday.month.toString().padLeft(2, '0')}-${birthday.day.toString().padLeft(2, '0')}';
@@ -299,7 +302,7 @@ class SupabaseParentRepository {
 
       final fullName = [
         firstName,
-        if (middleName != null && middleName.isNotEmpty) middleName,
+        ?cleanMiddleName,
         lastName,
       ].join(' ');
 
@@ -309,7 +312,7 @@ class SupabaseParentRepository {
         email: existingEmail,
         fullName: fullName,
         firstName: firstName,
-        middleName: middleName,
+        middleName: cleanMiddleName,
         lastName: lastName,
         birthday: birthday,
         parentGuardianRelationship: relationship,
@@ -345,9 +348,11 @@ class SupabaseParentRepository {
     String finalEmail = ParentCredentialHelper.generateEmail(baseLastName, collisionIndex: collisionIndex);
     final finalTempPassword = tempPassword ?? ParentCredentialHelper.generateTempPassword(baseLastName, birthday);
 
-    final parentFullName = [firstName, middleName, lastName]
-        .where((s) => s != null && s.isNotEmpty)
-        .join(' ');
+    final parentFullName = [
+      firstName,
+      ?cleanMiddleName,
+      lastName,
+    ].join(' ');
 
     String parentId = 'prnt_${DateTime.now().millisecondsSinceEpoch}';
 
@@ -395,7 +400,7 @@ class SupabaseParentRepository {
     await _client.from('parent_profiles').upsert({
       'parent_id': parentId,
       'first_name': firstName,
-      'middle_name': middleName,
+      'middle_name': cleanMiddleName,
       'last_name': lastName,
       'birthday': bdayIso,
       'status': 'pending_first_login',
@@ -412,7 +417,7 @@ class SupabaseParentRepository {
 
     final fullName = [
       firstName,
-      if (middleName != null && middleName.isNotEmpty) middleName,
+      ?cleanMiddleName,
       lastName,
     ].join(' ');
 
@@ -423,7 +428,7 @@ class SupabaseParentRepository {
       email: finalEmail,
       fullName: fullName,
       firstName: firstName,
-      middleName: middleName,
+      middleName: cleanMiddleName,
       lastName: lastName,
       birthday: birthday,
       parentGuardianRelationship: relationship,
@@ -437,6 +442,191 @@ class SupabaseParentRepository {
   /// Verifies the parent's identity for first login:
   /// checks contact number matches public.parent_profiles
   /// and at least one linked student's 12-digit LRN ends with childLrnLast4.
+  /// Searches for existing parent profiles in the school database by parent name or linked child LRN / name.
+  /// Used in AddParentDialog to easily link siblings to an already registered parent account.
+  Future<List<Map<String, dynamic>>> searchExistingParents({
+    required String query,
+  }) async {
+    final cleanQuery = query.trim().toLowerCase();
+    if (cleanQuery.isEmpty) return [];
+
+    try {
+      // 1. Search parent_profiles by first_name or last_name
+      final parentResp = await _client
+          .from('parent_profiles')
+          .select('''
+            parent_id,
+            first_name,
+            middle_name,
+            last_name,
+            birthday,
+            status,
+            users!inner ( email, is_archived )
+          ''')
+          .or('first_name.ilike.%$cleanQuery%,last_name.ilike.%$cleanQuery%')
+          .limit(15);
+
+      final parentMap = <String, Map<String, dynamic>>{};
+      for (final p in (parentResp as List)) {
+        final pid = p['parent_id']?.toString();
+        if (pid == null) continue;
+        final u = p['users'] as Map<String, dynamic>? ?? {};
+        if (u['is_archived'] == true) continue;
+
+        final fullName = [
+          p['first_name'],
+          p['middle_name'],
+          p['last_name'],
+        ].where((n) => n != null && n.toString().trim().isNotEmpty).join(' ');
+
+        parentMap[pid] = {
+          'parentId': pid,
+          'fullName': fullName,
+          'firstName': p['first_name']?.toString() ?? '',
+          'middleName': p['middle_name']?.toString(),
+          'lastName': p['last_name']?.toString() ?? '',
+          'birthday': p['birthday'] != null
+              ? DateTime.tryParse(p['birthday'].toString())
+              : null,
+          'email': u['email']?.toString() ?? '',
+          'status': p['status']?.toString() ?? 'active',
+          'linkedChildren': <Map<String, dynamic>>[],
+        };
+      }
+
+      // If search by student LRN or name, also check parent_student_links
+      if (cleanQuery.length >= 3) {
+        final linksByStudentResp = await _client
+            .from('parent_student_links')
+            .select('''
+              parent_id,
+              relationship,
+              student_profiles!inner (
+                student_id,
+                lrn,
+                first_name,
+                middle_name,
+                last_name
+              )
+            ''')
+            .or('student_profiles.first_name.ilike.%$cleanQuery%,student_profiles.last_name.ilike.%$cleanQuery%,student_profiles.lrn.ilike.%$cleanQuery%')
+            .limit(15);
+
+        final missingParentIds = <String>[];
+        for (final row in (linksByStudentResp as List)) {
+          final pid = row['parent_id']?.toString();
+          if (pid != null && !parentMap.containsKey(pid)) {
+            missingParentIds.add(pid);
+          }
+        }
+
+        if (missingParentIds.isNotEmpty) {
+          final extraParents = await _client
+              .from('parent_profiles')
+              .select('''
+                parent_id,
+                first_name,
+                middle_name,
+                last_name,
+                birthday,
+                status,
+                users!inner ( email, is_archived )
+              ''')
+              .filter('parent_id', 'in', missingParentIds);
+
+          for (final p in (extraParents as List)) {
+            final pid = p['parent_id']?.toString();
+            if (pid == null) continue;
+            final u = p['users'] as Map<String, dynamic>? ?? {};
+            if (u['is_archived'] == true) continue;
+
+            final fullName = [
+              p['first_name'],
+              p['middle_name'],
+              p['last_name'],
+            ].where((n) => n != null && n.toString().trim().isNotEmpty).join(' ');
+
+            parentMap[pid] = {
+              'parentId': pid,
+              'fullName': fullName,
+              'firstName': p['first_name']?.toString() ?? '',
+              'middleName': p['middle_name']?.toString(),
+              'lastName': p['last_name']?.toString() ?? '',
+              'birthday': p['birthday'] != null
+                  ? DateTime.tryParse(p['birthday'].toString())
+                  : null,
+              'email': u['email']?.toString() ?? '',
+              'status': p['status']?.toString() ?? 'active',
+              'linkedChildren': <Map<String, dynamic>>[],
+            };
+          }
+        }
+      }
+
+      if (parentMap.isEmpty) return [];
+
+      // Fetch linked children for all matched parents
+      final allParentIds = parentMap.keys.toList();
+      final childrenResp = await _client
+          .from('parent_student_links')
+          .select('''
+            parent_id,
+            relationship,
+            student_profiles!inner (
+              student_id,
+              lrn,
+              first_name,
+              middle_name,
+              last_name
+            )
+          ''')
+          .filter('parent_id', 'in', allParentIds);
+
+      for (final row in (childrenResp as List)) {
+        final pid = row['parent_id']?.toString();
+        if (pid == null || !parentMap.containsKey(pid)) continue;
+
+        final sp = row['student_profiles'] as Map<String, dynamic>? ?? {};
+        final studentName = [
+          sp['first_name'],
+          sp['middle_name'],
+          sp['last_name'],
+        ].where((n) => n != null && n.toString().trim().isNotEmpty).join(' ');
+
+        (parentMap[pid]!['linkedChildren'] as List).add({
+          'studentId': sp['student_id']?.toString() ?? '',
+          'fullName': studentName,
+          'lrn': sp['lrn']?.toString() ?? '',
+          'relationship': row['relationship']?.toString() ?? 'Child',
+        });
+      }
+
+      return parentMap.values.toList();
+    } catch (e) {
+      debugPrint('Error searching existing parents: $e');
+      return [];
+    }
+  }
+
+  /// Links selected students to an already existing parent account.
+  /// Prevents creating duplicate accounts for siblings.
+  Future<void> linkStudentsToExistingParent({
+    required String parentId,
+    required List<String> studentIds,
+    required String relationship,
+  }) async {
+    for (final sId in studentIds) {
+      await _client.from('parent_student_links').upsert({
+        'parent_id': parentId,
+        'student_id': sId,
+        'relationship': relationship,
+      }, onConflict: 'parent_id,student_id');
+    }
+
+    AppDataCache.instance.invalidatePrefix('teacher_parents_');
+    AppDataCache.instance.invalidatePrefix('parent_linked_students_\$parentId');
+  }
+
   Future<bool> verifyParentIdentityForFirstLogin({
     required String parentId,
     required DateTime birthday,
@@ -762,11 +952,13 @@ class SupabaseParentRepository {
     required String relationship,
     String? studentId,
   }) async {
+    final cleanMiddleName =
+        AppValidators.normalizeMiddleInitial(middleName);
     await _client
         .from('parent_profiles')
         .update({
           'first_name': firstName,
-          'middle_name': middleName,
+          'middle_name': cleanMiddleName,
           'last_name': lastName,
         })
         .eq('parent_id', parentId);
@@ -908,4 +1100,3 @@ class SupabaseParentRepository {
     }
   }
 }
-

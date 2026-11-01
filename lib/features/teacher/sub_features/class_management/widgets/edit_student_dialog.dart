@@ -203,12 +203,10 @@ class _EditStudentDialogState extends State<EditStudentDialog> {
                     Expanded(
                       flex: 2,
                       child: AppTextField(
-                        label: 'Middle Name',
+                        label: 'Middle Initial (Optional)',
                         controller: _middleNameCtrl,
-                        inputFormatters: [
-                          ...AppValidators.nameFormatters,
-                          LengthLimitingTextInputFormatter(30),
-                        ],
+                        textCapitalization: TextCapitalization.characters,
+                        validator: AppValidators.validateMiddleInitial,
                       ),
                     ),
                     const SizedBox(width: 12),

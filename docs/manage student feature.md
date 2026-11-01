@@ -78,7 +78,7 @@ All student data entry—whether manual single-student input, CSV/XLSX bulk impo
 | Field | Production rule | Validation details & formatters |
 |---|---|---|
 | **First name** | Required; 2–30 characters | Allowed characters: letters, spaces, hyphens, and periods (`[a-zA-Z\s\-\.]`). Auto-capitalizes first letter, rejects leading space/period, rejects consecutive spaces (`  `) and consecutive periods (`..`) via `_CleanInputFormatter`. |
-| **Middle name** | Optional; 0–30 characters | When provided, strictly enforces the same character rules and `_CleanInputFormatter` as First Name. |
+| **Middle initial** | Optional; blank or exactly one letter followed by a period (for example, `H.`) | Trim surrounding whitespace, store the initial in uppercase, and reject spaces-only values or any other format. Use the same rule in manual forms, bulk upload validation, the downloaded Excel template, and the database. |
 | **Last name** | Required; 2–30 characters | Allowed characters: letters, spaces, hyphens, and periods (`[a-zA-Z\s\-\.]`). Enforces `_CleanInputFormatter`. |
 | **LRN** | Required; exactly 12 digits | Must match `^\d{12}$` (numeric digits only). Non-digits stripped or rejected. Must be globally unique across ClassRealm. |
 | **Email** | Required; max 60 characters | Mandatory for student account creation, password delivery, and portal login. No spaces allowed. Validated against RFC 5322 regex. Subject to: (1) domain typo checks (.con, .cpm, Levenshtein distance <= 2 against Gmail, Yahoo, Outlook, etc.), and (2) live DNS-over-HTTPS (DoH) MX deliverability verification via Google Public DNS and Cloudflare DoH. |
@@ -258,7 +258,7 @@ The template must be download-ready on both Web (`kIsWeb`) and Desktop (Windows)
    - `Email` (Required): Student's active email address for receiving first-login temporary credentials (e.g., `juan.delacruz@example.com`).
    - `Last Name` (Required): 2–30 characters, clean capitalized format (e.g., `Dela Cruz`).
    - `First Name` (Required): 2–30 characters, clean capitalized format (e.g., `Juan`).
-   - `Middle Name` (Optional): 0–30 characters (e.g., `Protacio`).
+   - `Middle Initial` (Optional): blank or exactly one letter and a period (e.g., `H.`).
    - `Gender` (Required): `Male` or `Female` (case-insensitive, aliases `M`, `F`, `Lalaki`, `Babae` accepted during parsing).
    - `Birthday` (Required): ISO format `YYYY-MM-DD` (e.g., `2007-06-19`). Age must evaluate to 10–25 (or up to 60 for ALS learners), birth year >= 2000.
 

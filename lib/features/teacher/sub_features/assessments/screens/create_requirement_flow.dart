@@ -103,6 +103,7 @@ class _CreateRequirementFlowDialogState
   // selected subject offering + category + term. These are disabled in the
   // column dropdown so the teacher cannot pick an occupied slot by mistake.
   Set<int> _occupiedColumns = <int>{};
+  int _maxAvailableSlots = 3;
   bool _isLoadingOccupied = false;
   int _occupiedRequestId = 0;
 
@@ -297,11 +298,15 @@ class _CreateRequirementFlowDialogState
 
       final excludeId = widget.existingTask?.id;
       final occupied = <int>{};
+      int maxCol = 3;
       for (final item in items) {
         if (item.isArchived) continue;
+        final col = item.gradebookColumnIndex;
+        if (col != null && col > maxCol) {
+          maxCol = col;
+        }
         if (item.isRequirement != widget.isPerformanceTask) continue;
         if (item.termNumber != term) continue;
-        final col = item.gradebookColumnIndex;
         if (col == null) continue;
         if (excludeId != null && excludeId.isNotEmpty && item.id == excludeId) {
           continue;
@@ -309,8 +314,27 @@ class _CreateRequirementFlowDialogState
         occupied.add(col);
       }
 
+      // Check Gradebook Term Sheet for any extra columns added (up to 10)
+      try {
+        final termSheet = await SubjectRepository.instance.getGradebookTermSheet(offeringId, term);
+        if (termSheet != null) {
+          final catKey = widget.isPerformanceTask ? 'pt' : 'ww';
+          final hps = termSheet['hps'] as Map? ?? {};
+          final catHps = hps[catKey] as Map? ?? {};
+          for (final k in catHps.keys) {
+            final parsed = int.tryParse(k.toString());
+            if (parsed != null && parsed > maxCol) {
+              maxCol = parsed;
+            }
+          }
+        }
+      } catch (_) {}
+
+      maxCol = maxCol.clamp(3, 10);
+
       setState(() {
         _occupiedColumns = occupied;
+        _maxAvailableSlots = maxCol;
         _isLoadingOccupied = false;
         // Clear a previously chosen column if it turned out to be taken.
         if (_gradebookColumnIndex != null &&
@@ -1054,7 +1078,7 @@ class _CreateRequirementFlowDialogState
                                           ),
                                         ),
                                       ),
-                                      items: List.generate(10, (i) {
+                                      items: List.generate(_maxAvailableSlots, (i) {
                                         final col = i + 1;
                                         final prefix = widget.isPerformanceTask
                                             ? 'PT'

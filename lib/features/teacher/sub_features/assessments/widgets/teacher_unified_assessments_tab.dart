@@ -662,8 +662,8 @@ class _TeacherUnifiedAssessmentsTabState
       description: item.isRequirement ? '' : item.description,
       category: category,
       details: item.isRequirement
-          ? '${item.section} • Term ${item.termNumber} • ${item.maxScore.toInt()} pts${isOnline ? ' • Due ${_monthName(dueDate.month)} ${dueDate.day}, ${_formatTime(dueDate)}' : ''}'
-          : '${item.section} • Term ${item.termNumber} • ${item.maxScore.toInt()} pts${isOnline ? ' • Due ${_monthName(dueDate.month)} ${dueDate.day}' : ''}',
+          ? '${item.section} • Term ${item.termNumber} • ${item.maxScore.toInt()} pts${isOnline ? ' • Due ${_monthName(dueDate.month)} ${dueDate.day}, ${_formatTime(dueDate)}' : ' • In-Person'}'
+          : '${item.section} • Term ${item.termNumber} • ${item.maxScore.toInt()} pts${isOnline ? ' • Due ${_monthName(dueDate.month)} ${dueDate.day}' : ' • In-Person'}',
       icon: Icons.assignment_outlined,
       onPressed: isOnline 
           ? () {
@@ -673,9 +673,11 @@ class _TeacherUnifiedAssessmentsTabState
             } 
           : () {
               // In-Person -> Open Edit or Gradebook
-              _showEditActivityModal(item);
+              if (widget.onViewSubmissions != null) {
+                widget.onViewSubmissions!(item);
+              }
             },
-      actionLabel: isOnline ? 'View Submissions' : 'Edit Details',
+      actionLabel: 'View Submissions',
       onEdit: () => _showEditActivityModal(item),
       onDelete: () => _confirmDeleteActivity(item),
     );

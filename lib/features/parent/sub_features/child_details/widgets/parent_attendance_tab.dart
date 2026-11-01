@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:class_realm/core/theme/app_theme.dart';
 import 'package:class_realm/models/academic_models.dart';
 import 'package:class_realm/models/attendance_workspace_models.dart';
@@ -6,8 +6,13 @@ import 'package:class_realm/shared/widgets/shared_widgets.dart';
 
 class ParentAttendanceTab extends StatelessWidget {
   final List<AttendanceRecord> attendance;
+  final Future<void> Function()? onRefresh;
 
-  const ParentAttendanceTab({super.key, required this.attendance});
+  const ParentAttendanceTab({
+    super.key,
+    required this.attendance,
+    this.onRefresh,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -88,15 +93,21 @@ class ParentAttendanceTab extends StatelessWidget {
 
         // Strictly View-Only Attendance Logs List
         Expanded(
-          child: attendance.isEmpty
-              ? const AppEmptyState(
-                  icon: Icons.family_restroom_outlined,
-                  title: 'No Attendance Logs Yet',
-                  message:
-                      'Your child\'s daily subject attendance records will appear here.',
-                )
-              : ListView.separated(
-                  padding: const EdgeInsets.all(16),
+          child: AppPullToRefresh(
+            onRefresh: onRefresh,
+            child: attendance.isEmpty
+                ? AppPullToRefresh.scrollableState(
+                    padding: EdgeInsets.zero,
+                    child: const AppEmptyState(
+                      icon: Icons.family_restroom_outlined,
+                      title: 'No Attendance Logs Yet',
+                      message:
+                          'Your child\'s daily subject attendance records will appear here.',
+                    ),
+                  )
+                : ListView.separated(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.all(16),
                   itemCount: attendance.length,
                   separatorBuilder: (_, _) => const SizedBox(height: 10),
                   itemBuilder: (ctx, i) {
@@ -104,7 +115,7 @@ class ParentAttendanceTab extends StatelessWidget {
                     final source = _resolveProvenance(att);
                     final classLabel = _resolveClassLabel(att);
                     final timeInDisplay = att.timeIn.trim().isEmpty
-                        ? 'â€”'
+                        ? '—'
                         : att.timeIn.trim();
 
                     return Container(
@@ -185,6 +196,7 @@ class ParentAttendanceTab extends StatelessWidget {
                     );
                   },
                 ),
+          ),
         ),
       ],
     );
@@ -334,7 +346,7 @@ class ParentAttendanceTab extends StatelessWidget {
     if (!_isMethodKeyword(meth) &&
         sec.isNotEmpty &&
         meth.toLowerCase() != sec.toLowerCase()) {
-      return '$meth â€¢ $sec';
+      return '$meth • $sec';
     }
     if (!_isMethodKeyword(meth)) return meth;
     if (sec.isNotEmpty) return sec;

@@ -269,16 +269,8 @@ class _AddStudentDialogState extends State<AddStudentDialog> {
                       child: AppTextField(
                         label: 'Middle Initial (Optional)',
                         controller: _middleNameCtrl,
-                        inputFormatters: [
-                          FilteringTextInputFormatter.allow(RegExp(r"[a-zA-Z]")),
-                          LengthLimitingTextInputFormatter(1),
-                        ],
-                        validator: (v) {
-                          if (v != null && v.trim().length > 1) {
-                            return 'Max 1 character';
-                          }
-                          return null;
-                        },
+                        textCapitalization: TextCapitalization.characters,
+                        validator: AppValidators.validateMiddleInitial,
                       ),
                     ),
                     const SizedBox(width: 12),

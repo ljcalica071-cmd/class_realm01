@@ -35,7 +35,7 @@ The selected teacher subject offering is shared when possible between views. Cha
 
 - Select a subject offering/section from the signed-in teacher's actual active offerings; do not use sample data.
 - Select an attendance date with a date picker.
-- Display names in DepEd order as `Last name, First name, Middle initial` (for example, `Dela Cruz, Juan H.`); sort case-insensitively by last name, then first name, then middle name.
+- Display names in DepEd order as `Last name, First name, Middle initial` (for example, `Dela Cruz, Juan H.`); store an optional middle initial as one uppercase letter followed by a period, and sort case-insensitively by last name, then first name, then middle name.
 - Group the roster into Male and Female lists. Students whose gender is missing or does not match either supported value must remain visible in a clearly labeled **Unspecified** group rather than disappearing.
 - The limit of 50 male and 50 female students is a roster capacity, not a page size. Paginate the combined roster in pages of 30 students, keeping the Male group before the Female group and sorting each group by the name order above. A page boundary can fall within a gender group or between groups; the page count is across all students, not reset for each gender. Since a section is capped at 100 total students, load its roster once and reveal subsequent 30-student pages locally; do not re-read the database just to reveal the next page.
 - Keep the current text search behavior if it can be preserved without causing extra roster fetches.

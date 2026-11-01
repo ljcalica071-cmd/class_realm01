@@ -136,6 +136,11 @@ class StudentClassworkModel {
     required this.score,
     required this.feedback,
     this.attachment,
+    this.studentSubmission,
+    this.submittedAt,
+    this.completionMode = 'online',
+    this.termNumber = 1,
+    this.gradebookColumnIndex,
   });
 
   final String id;
@@ -153,6 +158,11 @@ class StudentClassworkModel {
   final double? score;
   final String? feedback;
   final StudentAttachmentModel? attachment;
+  final StudentAttachmentModel? studentSubmission;
+  final DateTime? submittedAt;
+  final String completionMode;
+  final int termNumber;
+  final int? gradebookColumnIndex;
 
   factory StudentClassworkModel.fromJson(Map<String, dynamic> json) {
     final subject = json['subject'] is Map
@@ -163,6 +173,9 @@ class StudentClassworkModel {
         : <String, dynamic>{};
     final assignedAt = json['assigned_at']?.toString();
     final deadline = json['deadline']?.toString();
+    final submittedAtStr =
+        json['submitted_at']?.toString() ??
+        submission['submitted_at']?.toString();
     final maxScore = json['max_score'];
     final score = json['score'] ?? submission['score'];
 
@@ -178,6 +191,18 @@ class StudentClassworkModel {
     } else if (json['attachment'] is Map) {
       parsedAttachment = StudentAttachmentModel.fromJson(
         Map<String, dynamic>.from(json['attachment'] as Map),
+      );
+    }
+
+    StudentAttachmentModel? parsedStudentSubmission;
+    if (json['student_submission'] is Map) {
+      parsedStudentSubmission = StudentAttachmentModel.fromJson(
+        Map<String, dynamic>.from(json['student_submission'] as Map),
+      );
+    } else if (submission['file_name'] != null ||
+        submission['storage_path'] != null) {
+      parsedStudentSubmission = StudentAttachmentModel.fromJson(
+        Map<String, dynamic>.from(submission),
       );
     }
 
@@ -200,6 +225,17 @@ class StudentClassworkModel {
       score: score is num ? score.toDouble() : null,
       feedback: (json['feedback'] ?? submission['feedback'])?.toString(),
       attachment: parsedAttachment,
+      studentSubmission: parsedStudentSubmission,
+      submittedAt: submittedAtStr == null
+          ? null
+          : DateTime.tryParse(submittedAtStr),
+      completionMode: json['completion_mode']?.toString() ?? 'online',
+      termNumber: json['term_number'] is num
+          ? (json['term_number'] as num).toInt()
+          : (int.tryParse(json['term_number']?.toString() ?? '') ?? 1),
+      gradebookColumnIndex: json['gradebook_column_index'] is num
+          ? (json['gradebook_column_index'] as num).toInt()
+          : int.tryParse(json['gradebook_column_index']?.toString() ?? ''),
     );
   }
 }

@@ -232,9 +232,9 @@ class _AdminEditTeacherDialogState extends State<AdminEditTeacherDialog> {
                       Expanded(
                         flex: 3,
                         child: AppTextField(
-                          label: 'Middle Name',
+                          label: 'Middle Initial (Optional)',
                           controller: _middleNameCtrl,
-                          inputFormatters: AppValidators.nameFormatters,
+                          validator: AppValidators.validateMiddleInitial,
                         ),
                       ),
                       const SizedBox(width: 10),

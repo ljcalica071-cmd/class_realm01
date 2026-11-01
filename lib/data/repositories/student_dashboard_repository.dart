@@ -22,12 +22,19 @@ class StudentDashboardRepository {
   Future<StudentDashboardData> loadDashboard({
     bool forceRefresh = false,
   }) async {
+    final authUser = firebase_auth.FirebaseAuth.instance.currentUser;
+    if (forceRefresh) {
+      _cachedDashboard = null;
+      if (authUser != null) {
+        AppDataCache.instance.invalidate('student_dashboard_${authUser.uid}');
+      }
+    }
+
     if (!forceRefresh && _cachedDashboard != null) {
       return _cachedDashboard!;
     }
 
     // 1. FAST LOCAL READ (0 milliseconds load, Web + Native parity)
-    final authUser = firebase_auth.FirebaseAuth.instance.currentUser;
     if (!forceRefresh && authUser != null) {
       final cachedWeb = AppDataCache.instance.getCached<StudentDashboardData>(
         'student_dashboard_${authUser.uid}',
@@ -74,30 +81,58 @@ class StudentDashboardRepository {
 
     try {
       // 1. Fetch student profile directly via Pure Dart
-      final profileRes = await client
-          .from('student_profiles')
-          .select(
-            'student_id, lrn, first_name, middle_name, last_name, birthday, gender',
-          )
-          .eq('student_id', uid)
-          .maybeSingle();
+      Map<String, dynamic>? profileRes;
+      try {
+        profileRes = await client
+            .from('student_profiles')
+            .select(
+              'student_id, lrn, first_name, middle_name, last_name, birthday, gender',
+            )
+            .eq('student_id', uid)
+            .maybeSingle();
+      } catch (e) {
+        debugPrint('Student profile fetch notice: $e');
+      }
 
       // 2. Fetch student enrollments directly via Pure Dart
-      final enrollmentRows = await client
-          .from('student_enrollments')
-          .select('''
-            subject_offering_id,
-            subject_offerings (
-              id,
-              subjects ( id, subject_name, subject_code, grade_level ),
-              sections ( id, section_name, grade_level ),
-              teacher_profiles ( teacher_id, first_name, last_name, gender )
-            )
-          ''')
-          .eq('student_id', uid)
-          .ilike('status', 'enrolled');
+      List<dynamic> enrollmentRows = [];
+      try {
+        final res = await client
+            .from('student_enrollments')
+            .select('''
+              subject_offering_id,
+              subject_offerings (
+                id,
+                subjects ( id, subject_name, subject_code, grade_level ),
+                sections ( id, section_name, grade_level ),
+                teacher_profiles ( teacher_id, first_name, last_name, gender )
+              )
+            ''')
+            .eq('student_id', uid)
+            .ilike('status', 'enrolled');
+        enrollmentRows = res as List? ?? [];
+      } catch (e) {
+        debugPrint('Enrollments full query notice: $e. Retrying without teacher_profiles join...');
+        try {
+          final res = await client
+              .from('student_enrollments')
+              .select('''
+                subject_offering_id,
+                subject_offerings (
+                  id,
+                  subjects ( id, subject_name, subject_code, grade_level ),
+                  sections ( id, section_name, grade_level )
+                )
+              ''')
+              .eq('student_id', uid)
+              .ilike('status', 'enrolled');
+          enrollmentRows = res as List? ?? [];
+        } catch (e2) {
+          debugPrint('Enrollments fallback query notice: $e2');
+        }
+      }
 
-      final enrollmentsList = (enrollmentRows as List? ?? []).map((row) {
+      final enrollmentsList = enrollmentRows.map((row) {
         final offering =
             row['subject_offerings'] as Map<String, dynamic>? ?? {};
         final sub = offering['subjects'] as Map<String, dynamic>? ?? {};
@@ -133,81 +168,87 @@ class StudentDashboardRepository {
           .where((id) => id.isNotEmpty)
           .toList();
 
-      // 3. Fetch classwork items and the current student's submissions.
+      // 3. Fetch classwork items and the current student's submissions gracefully.
       List<Map<String, dynamic>> classworkList = [];
       if (offeringIds.isNotEmpty) {
-        final submissionRows = await client
-            .from('student_classwork_submissions')
-            .select('classwork_id, status, score, feedback')
-            .eq('student_id', uid);
-        final submissionsByClassworkId = <String, Map<String, dynamic>>{};
-        for (final row in submissionRows as List) {
-          final submission = Map<String, dynamic>.from(row as Map);
-          final classworkId = submission['classwork_id']?.toString();
-          if (classworkId != null) {
-            submissionsByClassworkId[classworkId] = submission;
+        try {
+          final submissionRows = await client
+              .from('student_classwork_submissions')
+              .select('classwork_id, status, score, feedback, submitted_at')
+              .eq('student_id', uid);
+          final submissionsByClassworkId = <String, Map<String, dynamic>>{};
+          for (final row in submissionRows as List) {
+            final submission = Map<String, dynamic>.from(row as Map);
+            final classworkId = submission['classwork_id']?.toString();
+            if (classworkId != null) {
+              submissionsByClassworkId[classworkId] = submission;
+            }
           }
+
+          final items = await client
+              .from('classwork_items')
+              .select('''
+                id,
+                subject_offering_id,
+                classwork_type,
+                title,
+                description,
+                instructions,
+                assigned_at,
+                deadline,
+                max_score,
+                subject_offerings (
+                  subjects ( subject_name ),
+                  sections ( section_name, grade_level )
+                )
+              ''')
+              .filter('subject_offering_id', 'in', offeringIds)
+              .eq('is_published', true)
+              .eq('is_archived', false)
+              .order('deadline', ascending: true);
+
+          classworkList = (items as List? ?? []).map<Map<String, dynamic>>((i) {
+            final m = Map<String, dynamic>.from(i as Map);
+            final off = m['subject_offerings'] as Map<String, dynamic>? ?? {};
+            final s = off['subjects'] as Map<String, dynamic>? ?? {};
+            final sec = off['sections'] as Map<String, dynamic>? ?? {};
+            final submission = submissionsByClassworkId[m['id']?.toString()];
+            return {
+              'id': m['id']?.toString() ?? '',
+              'subject_offering_id': m['subject_offering_id']?.toString() ?? '',
+              'type': m['classwork_type']?.toString() ?? 'activity',
+              'title': m['title']?.toString() ?? '',
+              'description': m['description']?.toString(),
+              'instructions': m['instructions']?.toString(),
+              'assigned_at': m['assigned_at']?.toString(),
+              'deadline': m['deadline']?.toString(),
+              'max_score': m['max_score'] is num ? m['max_score'] : 100,
+              'subject_name': s['subject_name']?.toString() ?? '',
+              'section_name': sec['section_name']?.toString() ?? '',
+              'grade_level': sec['grade_level']?.toString() ?? '',
+              'status': submission?['status']?.toString() ?? 'pending',
+              'score': submission?['score'],
+              'feedback': submission?['feedback'],
+              'submitted_at': submission?['submitted_at'],
+            };
+          }).toList();
+        } catch (cwError) {
+          debugPrint('Classwork items load notice: $cwError');
         }
-
-        final items = await client
-            .from('classwork_items')
-            .select('''
-              id,
-              subject_offering_id,
-              classwork_type,
-              title,
-              description,
-              instructions,
-              assigned_at,
-              deadline,
-              max_score,
-              subject_offerings (
-                subjects ( subject_name ),
-                sections ( section_name, grade_level )
-              )
-            ''')
-            .filter('subject_offering_id', 'in', offeringIds)
-            .eq('is_published', true)
-            .eq('is_archived', false)
-            .order('deadline', ascending: true);
-
-        classworkList = (items as List? ?? []).map<Map<String, dynamic>>((i) {
-          final m = Map<String, dynamic>.from(i as Map);
-          final off = m['subject_offerings'] as Map<String, dynamic>? ?? {};
-          final s = off['subjects'] as Map<String, dynamic>? ?? {};
-          final sec = off['sections'] as Map<String, dynamic>? ?? {};
-          final submission = submissionsByClassworkId[m['id']?.toString()];
-          return {
-            'id': m['id']?.toString() ?? '',
-            'subject_offering_id': m['subject_offering_id']?.toString() ?? '',
-            'type': m['classwork_type']?.toString() ?? 'activity',
-            'title': m['title']?.toString() ?? '',
-            'description': m['description']?.toString(),
-            'instructions': m['instructions']?.toString(),
-            'assigned_at': m['assigned_at']?.toString(),
-            'deadline': m['deadline']?.toString(),
-            'max_score': m['max_score'] is num ? m['max_score'] : 100,
-            'subject_name': s['subject_name']?.toString() ?? '',
-            'section_name': sec['section_name']?.toString() ?? '',
-            'grade_level': sec['grade_level']?.toString() ?? '',
-            'status': submission?['status']?.toString() ?? 'pending',
-            'score': submission?['score'],
-            'feedback': submission?['feedback'],
-          };
-        }).toList();
       }
 
+      final currentUser = AuthRepository.instance.currentUser;
       final p = profileRes ?? <String, dynamic>{};
       final data = <String, dynamic>{
         'student': {
           'id': uid,
-          'email': authUser.email ?? '',
-          'lrn': p['lrn']?.toString() ?? '',
-          'first_name': p['first_name']?.toString() ?? '',
-          'middle_name': p['middle_name']?.toString(),
-          'last_name': p['last_name']?.toString() ?? '',
-          'gender': p['gender']?.toString(),
-          'birthday': p['birthday']?.toString(),
+          'email': authUser.email ?? currentUser?.email ?? '',
+          'lrn': p['lrn']?.toString() ?? currentUser?.lrn ?? '',
+          'first_name': p['first_name']?.toString() ?? currentUser?.firstName ?? '',
+          'middle_name': p['middle_name']?.toString() ?? currentUser?.middleName,
+          'last_name': p['last_name']?.toString() ?? currentUser?.lastName ?? '',
+          'gender': p['gender']?.toString() ?? currentUser?.gender,
+          'birthday': p['birthday']?.toString() ?? currentUser?.birthday?.toIso8601String(),
           'enrollments': enrollmentsList,
         },
         'classwork': classworkList,

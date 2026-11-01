@@ -76,7 +76,7 @@ class AttendanceHistoryAnalyticsViewState
           final ln = s.lastName.trim();
           final fn = s.firstName.trim();
           final mi = s.middleInitial != null && s.middleInitial!.isNotEmpty
-              ? ' ${s.middleInitial}.'
+              ? ' ${s.middleInitial}'
               : '';
           if (ln.isNotEmpty || fn.isNotEmpty) {
             return '$ln, $fn$mi';

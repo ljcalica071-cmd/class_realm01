@@ -60,9 +60,11 @@ class GeminiService {
   static final GeminiService instance = GeminiService._internal();
 
   static const List<String> _preferredModels = [
-    'gemini-2.5-flash',
-    'gemini-2.0-flash',
-    'gemini-1.5-flash',
+    'gemini-3.5-flash-lite',
+    'gemini-3-flash-preview',
+    'gemini-3.7-flash',
+    'gemini-3.8-flash',
+    'gemini-flash-lite-latest',
   ];
 
   final List<String> Function() _apiKeysProvider;
@@ -119,6 +121,7 @@ class GeminiService {
       generationConfig: GenerationConfig(
         temperature: 0.55,
         maxOutputTokens: 2500,
+        responseMimeType: 'application/json',
       ),
     );
     final response = await generativeModel.generateContent([
@@ -220,13 +223,13 @@ class GeminiService {
             final rawErr = err.toString();
             lastRedactedError = redactSecrets(rawErr, keys);
 
-            // If this specific model isn't available on this project, try fallback model on same key
-            if (_isModelNotFoundError(rawErr) &&
+            // If this specific model is retired, unavailable, or overloaded (or 429 on single-key setup), try fallback model on same key
+            if (_shouldTryNextModelOnSameKey(rawErr, totalKeys: keys.length) &&
                 mIdx + 1 < _preferredModels.length) {
               continue;
             }
 
-            // Otherwise (429 quota/rate limit, 403 auth, 503 overload, network), rotate to next API key!
+            // Otherwise (429 quota/rate limit with backup keys available, 403 auth, network), rotate to next API key!
             break;
           }
         }
@@ -267,11 +270,30 @@ class GeminiService {
         '**W. Work / Learning Experiences**\n${s.workExperiences}';
   }
 
-  static bool _isModelNotFoundError(String rawError) {
+  static bool _shouldTryNextModelOnSameKey(
+    String rawError, {
+    required int totalKeys,
+  }) {
     final lower = rawError.toLowerCase();
-    return lower.contains('404') ||
+    final isModelRetiredOrOverloaded =
+        lower.contains('404') ||
         (lower.contains('model') && lower.contains('not found')) ||
-        lower.contains('is not supported for generatecontent');
+        lower.contains('no longer available') ||
+        lower.contains('is not supported for generatecontent') ||
+        lower.contains('503') ||
+        lower.contains('high demand') ||
+        lower.contains('overloaded') ||
+        lower.contains('unavailable');
+    if (isModelRetiredOrOverloaded) {
+      return true;
+    }
+    if (totalKeys == 1 &&
+        (lower.contains('429') ||
+            lower.contains('quota') ||
+            lower.contains('too many requests'))) {
+      return true;
+    }
+    return false;
   }
 
   static String redactSecrets(String rawMessage, List<String> keys) {
@@ -282,11 +304,11 @@ class GeminiService {
       }
     }
     clean = clean.replaceAll(
-      RegExp(r'AIza[0-9A-Za-z_-]{16,}'),
+      RegExp(r'(?:AIza[0-9A-Za-z_-]{16,}|AQ\.[0-9A-Za-z_.-]{16,})'),
       '[REDACTED_API_KEY]',
     );
     clean = clean.replaceAll(
-      RegExp(r'key=[0-9A-Za-z_-]{12,}', caseSensitive: false),
+      RegExp(r'key=[0-9A-Za-z_.-]{12,}', caseSensitive: false),
       'key=[REDACTED_API_KEY]',
     );
     return clean;

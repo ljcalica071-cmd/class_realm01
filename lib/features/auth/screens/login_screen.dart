@@ -333,7 +333,7 @@ class _LoginScreenState extends State<LoginScreen> {
         SyncCoordinator.instance.syncParentData(user.id);
         Navigator.pushNamedAndRemoveUntil(
           context,
-          AppRoutes.parentHome,
+          AppRoutes.studentFirstLogin,
           (route) => false,
         );
       } else {

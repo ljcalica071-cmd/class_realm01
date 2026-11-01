@@ -61,6 +61,28 @@ void main() {
       expect(AppValidators.validateEmail('user.name+tag@sub.domain.org'), isNull);
     });
 
+    group('Middle initial validator', () {
+      test('allows blank and normalizes valid initials', () {
+        expect(AppValidators.validateMiddleInitial(null), isNull);
+        expect(AppValidators.validateMiddleInitial(''), isNull);
+        expect(AppValidators.validateMiddleInitial('H.'), isNull);
+        expect(AppValidators.normalizeMiddleInitial(' h. '), 'H.');
+        expect(AppValidators.normalizeMiddleInitial('ñ.'), 'Ñ.');
+      });
+
+      test('rejects whitespace-only and non-canonical initials', () {
+        const error =
+            'Invalid format. Use 1 letter and 1 period only (e.g: H.)';
+        for (final value in ['   ', 'H', 'HH.', 'H..', 'H. H', '1.', '.']) {
+          expect(AppValidators.validateMiddleInitial(value), error);
+        }
+        expect(
+          () => AppValidators.normalizeMiddleInitial('   '),
+          throwsFormatException,
+        );
+      });
+    });
+
     test('rejects empty or whitespace emails', () {
       expect(AppValidators.validateEmail(null), isNotNull);
       expect(AppValidators.validateEmail(''), isNotNull);

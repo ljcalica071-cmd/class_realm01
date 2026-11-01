@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:class_realm/core/theme/app_theme.dart';
@@ -51,6 +52,12 @@ class _AddParentDialogState extends State<AddParentDialog> {
   final List<UserModel> _selectedStudents = [];
   String _studentSearchQuery = '';
   bool _isSubmitting = false;
+  int _mode = 0; // 0 = New Parent, 1 = Link to Existing Parent
+  final _existingParentSearchCtrl = TextEditingController();
+  List<Map<String, dynamic>> _searchResults = [];
+  bool _isSearchingExisting = false;
+  Map<String, dynamic>? _selectedExistingParent;
+  Timer? _searchDebounce;
 
   @override
   void initState() {
@@ -70,7 +77,103 @@ class _AddParentDialogState extends State<AddParentDialog> {
     _lastNameCtrl.dispose();
     _customRelationshipCtrl.dispose();
     _studentSearchCtrl.dispose();
+    _existingParentSearchCtrl.dispose();
+    _searchDebounce?.cancel();
     super.dispose();
+  }
+
+  void _onSearchExistingChanged(String query) {
+    _searchDebounce?.cancel();
+    if (query.trim().isEmpty) {
+      setState(() {
+        _searchResults = [];
+        _isSearchingExisting = false;
+      });
+      return;
+    }
+    setState(() => _isSearchingExisting = true);
+    _searchDebounce = Timer(const Duration(milliseconds: 300), () async {
+      try {
+        final results = await SupabaseParentRepository()
+            .searchExistingParents(query: query);
+        if (mounted) {
+          setState(() {
+            _searchResults = results;
+            _isSearchingExisting = false;
+          });
+        }
+      } catch (e) {
+        if (mounted) {
+          setState(() => _isSearchingExisting = false);
+        }
+      }
+    });
+  }
+
+  void _submitLinkToExisting() async {
+    if (_selectedExistingParent == null) {
+      AppModals.showErrorDialog(
+        context: context,
+        title: 'Parent Required',
+        message: 'Please select an existing parent from the search results.',
+      );
+      return;
+    }
+    if (_selectedStudents.isEmpty) {
+      AppModals.showErrorDialog(
+        context: context,
+        title: 'Student Required',
+        message: 'Please select at least one student to link to this parent.',
+      );
+      return;
+    }
+    if (_relationship == null || _relationship!.isEmpty) {
+      AppModals.showErrorDialog(
+        context: context,
+        title: 'Relationship Required',
+        message:
+            'Please select the relationship (e.g. Father, Mother, Guardian).',
+      );
+      return;
+    }
+
+    setState(() => _isSubmitting = true);
+    final parentId = _selectedExistingParent!['parentId'].toString();
+    final parentName = _selectedExistingParent!['fullName'].toString();
+    final rel = _relationship == 'Other'
+        ? _customRelationshipCtrl.text.trim()
+        : _relationship!;
+
+    try {
+      await SupabaseParentRepository().linkStudentsToExistingParent(
+        parentId: parentId,
+        studentIds: _selectedStudents.map((s) => s.id).toList(),
+        relationship: rel,
+      );
+
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+        Navigator.of(context).pop();
+        widget.onParentCreated();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Successfully linked ${_selectedStudents.map((s) => s.fullName).join(", ")} to $parentName!',
+            ),
+            backgroundColor: AppTheme.catGreen,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+        AppModals.showErrorDialog(
+          context: context,
+          title: 'Linking Failed',
+          message: e.toString().replaceAll('Exception: ', ''),
+        );
+      }
+    }
   }
 
   void _submit() async {
@@ -103,9 +206,8 @@ class _AddParentDialogState extends State<AddParentDialog> {
     setState(() => _isSubmitting = true);
 
     final firstName = _firstNameCtrl.text.trim();
-    final middleName = _middleNameCtrl.text.trim().isNotEmpty
-        ? _middleNameCtrl.text.trim()
-        : null;
+    final middleName =
+        AppValidators.normalizeMiddleInitial(_middleNameCtrl.text);
     final lastName = _lastNameCtrl.text.trim();
     final fullName = [firstName, ?middleName, lastName].join(' ');
 
@@ -353,7 +455,13 @@ Instructions:
       ),
       content: SizedBox(
         width: 600,
-        child: Form(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildModeToggle(Theme.of(context)),
+            if (_mode == 0)
+              Form(
           key: _formKey,
           child: SingleChildScrollView(
             child: Column(
@@ -382,12 +490,10 @@ Instructions:
                     Expanded(
                       flex: 2,
                       child: AppTextField(
-                        label: 'Middle Name',
+                        label: 'Middle Initial (Optional)',
                         controller: _middleNameCtrl,
-                        inputFormatters: [
-                          ...AppValidators.nameFormatters,
-                          LengthLimitingTextInputFormatter(30),
-                        ],
+                        textCapitalization: TextCapitalization.characters,
+                        validator: AppValidators.validateMiddleInitial,
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -479,32 +585,379 @@ Instructions:
               ],
             ),
           ),
-        ),
+        )
+      else
+        _buildLinkToExistingView(Theme.of(context)),
+    ],
+  ),
+),
+actions: [
+  Row(
+    mainAxisAlignment: MainAxisAlignment.end,
+    children: [
+      AppSecondaryButton(
+        label: 'Cancel',
+        width: 140,
+        height: 44,
+        onPressed: () => Navigator.of(context).pop(),
       ),
-      actions: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.end,
-          children: [
-            AppSecondaryButton(
-              label: 'Cancel',
-              width: 140,
-              height: 44,
-              onPressed: () => Navigator.of(context).pop(),
+      const SizedBox(width: 12),
+      AppPrimaryButton(
+        label: _mode == 0 ? 'Create Account' : 'Link Student(s)',
+        icon: _mode == 0 ? Icons.person_add_alt_1 : Icons.link_rounded,
+        isLoading: _isSubmitting,
+        onPressed: _isSubmitting
+            ? null
+            : (_mode == 0 ? _submit : _submitLinkToExisting),
+        width: 200,
+        height: 44,
+      ),
+    ],
+  ),
+],
+);
+}
+
+Widget _buildModeToggle(ThemeData theme) {
+  return Container(
+    margin: const EdgeInsets.only(bottom: 16),
+    padding: const EdgeInsets.all(4),
+    decoration: BoxDecoration(
+      color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(
+        color: theme.colorScheme.outline.withValues(alpha: 0.15),
+      ),
+    ),
+    child: Row(
+      children: [
+        Expanded(
+          child: InkWell(
+            onTap: () => setState(() => _mode = 0),
+            borderRadius: BorderRadius.circular(9),
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 9),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: _mode == 0 ? theme.colorScheme.primary : Colors.transparent,
+                borderRadius: BorderRadius.circular(9),
+                boxShadow: _mode == 0
+                    ? [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.08),
+                          blurRadius: 4,
+                          offset: const Offset(0, 2),
+                        ),
+                      ]
+                    : null,
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.person_add_alt_1,
+                    size: 15,
+                    color: _mode == 0 ? Colors.white : theme.colorScheme.onSurface,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Bagong Parent (New)',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: _mode == 0 ? Colors.white : theme.colorScheme.onSurface,
+                    ),
+                  ),
+                ],
+              ),
             ),
-            const SizedBox(width: 12),
-            AppPrimaryButton(
-              label: 'Create Account',
-              icon: Icons.person_add_alt_1,
-              isLoading: _isSubmitting,
-              onPressed: _isSubmitting ? null : _submit,
-              width: 200,
-              height: 44,
+          ),
+        ),
+        const SizedBox(width: 4),
+        Expanded(
+          child: InkWell(
+            onTap: () => setState(() => _mode = 1),
+            borderRadius: BorderRadius.circular(9),
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 9),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: _mode == 1 ? theme.colorScheme.primary : Colors.transparent,
+                borderRadius: BorderRadius.circular(9),
+                boxShadow: _mode == 1
+                    ? [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.08),
+                          blurRadius: 4,
+                          offset: const Offset(0, 2),
+                        ),
+                      ]
+                    : null,
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.link_rounded,
+                    size: 16,
+                    color: _mode == 1 ? Colors.white : theme.colorScheme.onSurface,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    'I-link sa Rehistrado (Existing)',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: _mode == 1 ? Colors.white : theme.colorScheme.onSurface,
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ],
+          ),
         ),
       ],
-    );
-  }
+    ),
+  );
+}
+
+Widget _buildLinkToExistingView(ThemeData theme) {
+  return SingleChildScrollView(
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const SizedBox(height: 8),
+        const _SectionLabel('Search Registered Parent'),
+        TextField(
+          controller: _existingParentSearchCtrl,
+          onChanged: _onSearchExistingChanged,
+          decoration: InputDecoration(
+            hintText: 'Search parent by name or student LRN...',
+            hintStyle: TextStyle(
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+              fontSize: 13,
+            ),
+            prefixIcon: Icon(
+              Icons.search,
+              size: 20,
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+            ),
+            suffixIcon: _existingParentSearchCtrl.text.isNotEmpty
+                ? IconButton(
+                    icon: const Icon(Icons.clear, size: 18),
+                    onPressed: () {
+                      _existingParentSearchCtrl.clear();
+                      _onSearchExistingChanged('');
+                    },
+                  )
+                : null,
+            filled: true,
+            fillColor: theme.colorScheme.surface,
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 14,
+              vertical: 12,
+            ),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(
+                color: theme.colorScheme.outline.withValues(alpha: 0.4),
+              ),
+            ),
+          ),
+        ),
+        if (_isSearchingExisting) ...[
+          const SizedBox(height: 10),
+          LinearProgressIndicator(
+            minHeight: 2,
+            color: theme.colorScheme.primary,
+            backgroundColor: theme.colorScheme.primary.withValues(alpha: 0.1),
+          ),
+        ],
+        const SizedBox(height: 12),
+        if (_searchResults.isNotEmpty) ...[
+          Text(
+            'Select Existing Parent:',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+            ),
+          ),
+          const SizedBox(height: 6),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 180),
+            child: ListView.separated(
+              shrinkWrap: true,
+              itemCount: _searchResults.length,
+              separatorBuilder: (_, _) => const SizedBox(height: 6),
+              itemBuilder: (context, index) {
+                final p = _searchResults[index];
+                final isSelected =
+                    _selectedExistingParent?['parentId'] == p['parentId'];
+                final children = (p['linkedChildren'] as List? ?? []);
+                final childNames = children
+                    .map((c) => c['fullName']?.toString() ?? '')
+                    .where((n) => n.isNotEmpty)
+                    .join(', ');
+
+                return InkWell(
+                  onTap: () {
+                    setState(() {
+                      _selectedExistingParent = p;
+                    });
+                  },
+                  borderRadius: BorderRadius.circular(10),
+                  child: Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: isSelected
+                          ? theme.colorScheme.primary.withValues(alpha: 0.08)
+                          : theme.colorScheme.surface,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: isSelected
+                            ? theme.colorScheme.primary
+                            : theme.colorScheme.outline.withValues(alpha: 0.2),
+                        width: isSelected ? 1.5 : 1,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 16,
+                          backgroundColor: isSelected
+                              ? theme.colorScheme.primary
+                              : theme.colorScheme.primary.withValues(alpha: 0.1),
+                          child: Icon(
+                            Icons.person,
+                            size: 18,
+                            color: isSelected
+                                ? Colors.white
+                                : theme.colorScheme.primary,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Text(
+                                    p['fullName']?.toString() ?? 'Parent',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.bold,
+                                      color: isSelected
+                                          ? theme.colorScheme.primary
+                                          : theme.colorScheme.onSurface,
+                                    ),
+                                  ),
+                                  const Spacer(),
+                                  if (p['birthday'] != null)
+                                    Text(
+                                      'Bday: ${(p['birthday'] as DateTime).month}/${(p['birthday'] as DateTime).day}/${(p['birthday'] as DateTime).year}',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: theme.colorScheme.onSurface
+                                            .withValues(alpha: 0.55),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                              if (childNames.isNotEmpty) ...[
+                                const SizedBox(height: 2),
+                                Text(
+                                  'Linked Child: $childNames',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: theme.colorScheme.onSurface
+                                        .withValues(alpha: 0.7),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Icon(
+                          isSelected
+                              ? Icons.check_circle
+                              : Icons.radio_button_unchecked,
+                          color: isSelected
+                              ? theme.colorScheme.primary
+                              : theme.colorScheme.outline.withValues(alpha: 0.4),
+                          size: 18,
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 16),
+        ] else if (_existingParentSearchCtrl.text.isNotEmpty &&
+            !_isSearchingExisting) ...[
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Center(
+              child: Text(
+                'No registered parent found matching "${_existingParentSearchCtrl.text}". Try another name or switch to "Bagong Parent".',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+        ],
+        if (_selectedExistingParent != null) ...[
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppTheme.catGreen.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: AppTheme.catGreen.withValues(alpha: 0.3),
+              ),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.check_circle_outline,
+                    color: AppTheme.catGreen, size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Selected: ${_selectedExistingParent!["fullName"]} (${_selectedExistingParent!["email"]})',
+                    style: const TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.catGreen,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          const _SectionLabel('Relationship to Student'),
+          _buildRelationshipField(theme),
+          const SizedBox(height: 16),
+          const _SectionLabel('Link Student(s) Under Your Class'),
+          _buildLinkStudentSection(theme),
+        ],
+      ],
+    ),
+  );
+}
 
   Widget _buildCredentialPreviewCard(ThemeData theme) {
     final rawLastName = _lastNameCtrl.text.trim();

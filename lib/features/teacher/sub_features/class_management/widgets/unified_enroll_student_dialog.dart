@@ -986,7 +986,7 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
 
         final rawLrn = (lrnIndex < row.length ? row[lrnIndex] : '').toString().replaceAll('\uFEFF', '').trim();
         final rawFirst = (firstNameIndex < row.length ? row[firstNameIndex] : '').toString().replaceAll('\uFEFF', '').trim();
-        final rawMiddle = (middleNameIndex != -1 && middleNameIndex < row.length ? row[middleNameIndex] : '').toString().replaceAll('\uFEFF', '').trim();
+        final rawMiddle = (middleNameIndex != -1 && middleNameIndex < row.length ? row[middleNameIndex] : '').toString().replaceAll('\uFEFF', '');
         final rawLast = (lastNameIndex < row.length ? row[lastNameIndex] : '').toString().replaceAll('\uFEFF', '').trim();
         final rawGender = (genderIndex < row.length ? row[genderIndex] : '').toString().replaceAll('\uFEFF', '').trim();
         final rawBday = (birthdayIndex < row.length ? row[birthdayIndex] : '').toString().replaceAll('\uFEFF', '').trim();
@@ -1162,38 +1162,21 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
           continue;
         }
 
-        // Middle Initial (Optional, max 1 character, no numbers)
-        String cleanMiddle = '';
-        if (rawMiddle.isNotEmpty) {
-          if (RegExp(r'[0-9]').hasMatch(rawMiddle)) {
-            invalidRows.add(_InvalidStudentRow(
-              rowNumber: rowNum,
-              fieldTag: 'Middle Initial',
-              identifier: rawMiddle,
-              reason: 'Cannot contain numbers.',
-            ));
-            continue;
-          }
-          if (!RegExp(r"^[a-zA-Z\s\-\.\'ñÑ]+$").hasMatch(rawMiddle)) {
-            invalidRows.add(_InvalidStudentRow(
-              rowNumber: rowNum,
-              fieldTag: 'Middle Initial',
-              identifier: rawMiddle,
-              reason: 'Invalid special characters.',
-            ));
-            continue;
-          }
-          if (rawMiddle.length > 1) {
-            invalidRows.add(_InvalidStudentRow(
-              rowNumber: rowNum,
-              fieldTag: 'Middle Initial',
-              identifier: rawMiddle,
-              reason: 'Must be 1 letter only.',
-            ));
-            continue;
-          }
-          cleanMiddle = rawMiddle.toUpperCase();
+        // The middle initial is optional, but a provided value must match
+        // the canonical one-letter-and-period format.
+        final middleInitialError =
+            AppValidators.validateMiddleInitial(rawMiddle);
+        if (middleInitialError != null) {
+          invalidRows.add(_InvalidStudentRow(
+            rowNumber: rowNum,
+            fieldTag: 'Middle Initial',
+            identifier: rawMiddle.trim().isEmpty ? 'blank' : rawMiddle.trim(),
+            reason: AppValidators.invalidBulkMiddleInitialMessage,
+          ));
+          continue;
         }
+        final cleanMiddle =
+            AppValidators.normalizeMiddleInitial(rawMiddle) ?? '';
 
         // Gender Check
         final parsedGender = _parseGender(rawGender);
@@ -1641,14 +1624,24 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
                               text: 'Row ${item.rowNumber} ',
                               style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.red),
                             ),
-                            TextSpan(
-                              text: '(${item.fieldTag}: ${item.identifier}): ',
-                              style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.red),
-                            ),
-                            TextSpan(
-                              text: item.reason,
-                              style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.85)),
-                            ),
+                            if (item.fieldTag == 'Middle Initial')
+                              TextSpan(
+                                text: item.reason,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.red,
+                                ),
+                              )
+                            else ...[
+                              TextSpan(
+                                text: '(${item.fieldTag}: ${item.identifier}): ',
+                                style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.red),
+                              ),
+                              TextSpan(
+                                text: item.reason,
+                                style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.85)),
+                              ),
+                            ],
                           ],
                         ),
                       ),
@@ -2066,9 +2059,13 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
           isNetworkLoss = true;
           break; // Stop loop immediately to protect remaining un-enrolled students
         } else {
+          final errorMessage =
+              AppValidators.isMiddleInitialConstraintViolation(e)
+                  ? 'Row ${s.rowNumber} ${AppValidators.invalidBulkMiddleInitialMessage}'
+                  : e.toString().replaceAll('Exception: ', '').trim();
           failed.add({
             'student': s,
-            'error': e.toString().replaceAll('Exception: ', '').trim(),
+            'error': errorMessage,
           });
           pendingJson.removeWhere((item) => item['lrn'] == s.lrn);
           if (prefs != null && sessionKey != null) {
@@ -2291,7 +2288,9 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
                       return Padding(
                         padding: const EdgeInsets.symmetric(vertical: 2),
                         child: Text(
-                          '• ${s.firstName} ${s.lastName} (${s.lrn}): $err',
+                          err.startsWith('Row ')
+                              ? '• $err'
+                              : '• ${s.firstName} ${s.lastName} (${s.lrn}): $err',
                           style: const TextStyle(fontSize: 11, color: Colors.red),
                         ),
                       );
@@ -2883,18 +2882,10 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
                 Expanded(
                   flex: 3,
                   child: AppTextField(
-                    label: 'Middle Initial',
+                    label: 'Middle Initial (Optional)',
                     controller: _middleNameCtrl,
-                    inputFormatters: [
-                      FilteringTextInputFormatter.allow(RegExp(r"[a-zA-Z]")),
-                      LengthLimitingTextInputFormatter(1),
-                    ],
-                    validator: (v) {
-                      if (v != null && v.trim().length > 1) {
-                        return 'Max 1 character';
-                      }
-                      return null;
-                    },
+                    textCapitalization: TextCapitalization.characters,
+                    validator: AppValidators.validateMiddleInitial,
                   ),
                 ),
                 const SizedBox(width: 12),
