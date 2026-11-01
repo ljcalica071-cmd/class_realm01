@@ -125,6 +125,92 @@ void main() {
       expect(safeFile.contains(':'), isFalse);
       expect(safeFile, startsWith('iLAW_'));
     });
+
+    test('serializes and deserializes DepEd 2026 Multi-Session Matrix with rubrics and citation', () {
+      final now = DateTime.utc(2026, 11, 2, 9, 0);
+      final sessions = [
+        const IlawSessionData(
+          sessionNumber: 1,
+          sessionTitle: 'Session 1: Introduction to Rational Equations',
+          objectives: 'Identify rational equations from inequalities.',
+          learningExperiences: 'Warm-up: Fraction recall (10m)\nModeling: Board work (20m)\nGuided Practice: Pairs (20m)\nExit check (10m)',
+          formativeAssessment: '5-item classification drill.',
+          parentGuide: 'Encourage student to explain one rational equation at dinner.',
+          communityExperience: 'Relate rational rates to jeepney fare calculations.',
+          teacherReflections: 'Students grasped fraction reciprocals well.',
+        ),
+        const IlawSessionData(
+          sessionNumber: 2,
+          sessionTitle: 'Session 2: Solving Rational Equations Step-by-Step',
+          objectives: 'Solve rational equations by clearing denominators.',
+          learningExperiences: 'Review: LCD method (10m)\nModeling: Extraneous solutions (25m)\nPractice: Group problem solving (25m)',
+          formativeAssessment: 'Board challenge with 2 equations.',
+          parentGuide: 'Check if homework shows step-by-step checking of solutions.',
+          communityExperience: 'Discuss budget distribution across local barangay projects.',
+          teacherReflections: 'Watch out for extraneous roots.',
+        ),
+      ];
+
+      final rubrics = [
+        const IlawRubricItem(
+          criterion: 'Objectives clearly aligned with DepEd SHS curriculum.',
+          isMet: true,
+          notes: 'Aligned with M11GM-Ib-2.',
+        ),
+        const IlawRubricItem(
+          criterion: 'Learning activities are differentiated for Developing level.',
+          isMet: false,
+          notes: 'Add more scaffolded worksheets for remedial learners.',
+        ),
+      ];
+
+      final plan = IlawLessonPlan(
+        id: 'shs-multi-001',
+        teacherId: 'teacher-naruto',
+        teacherName: 'Naruto Uzumaki',
+        gradeLevel: 'Grade 11',
+        quarter: 'Quarter 1',
+        subject: 'General Mathematics',
+        topic: 'Rational Equations & Inequalities',
+        durationMinutes: 60,
+        teachingStrategy: 'Inquiry-Based & Problem-Based Learning',
+        learningCompetency: 'M11GM-Ib-2',
+        intendedOutcomes: 'Solve rational equations and inequalities.',
+        learningContent: 'LCD method, extraneous solutions.',
+        assessment: 'Formative drill and board work.',
+        workExperiences: 'Session 1 & 2 multi-day breakdown.',
+        templateType: IlawTemplateType.ilawModified,
+        contentSource: IlawContentSource.curriculumBased,
+        targetProficiency: DepEdProficiencyLevel.developing,
+        numberOfSessions: 2,
+        language: 'English',
+        depedOrderCitation: 'DepEd Order No. 003, s. 2026',
+        sessions: sessions,
+        rubricItems: rubrics,
+        status: IlawPlanStatus.approved,
+        createdAt: now,
+        updatedAt: now,
+      );
+
+      final json = plan.toJson();
+      expect(json['template_type'], 'ilawModified');
+      expect(json['content_source'], 'curriculumBased');
+      expect(json['target_proficiency'], 'developing');
+      expect(json['number_of_sessions'], 2);
+      expect(json['deped_order_citation'], contains('DepEd Order No. 003, s. 2026'));
+      expect(json['sessions'], isA<List>());
+      expect((json['sessions'] as List).length, 2);
+      expect(json['rubric_items'], isA<List>());
+      expect((json['rubric_items'] as List).length, 2);
+
+      final restored = IlawLessonPlan.fromJson(json);
+      expect(restored.numberOfSessions, 2);
+      expect(restored.effectiveSessions.length, 2);
+      expect(restored.effectiveSessions.first.sessionTitle, contains('Session 1'));
+      expect(restored.effectiveRubrics.length, 2);
+      expect(restored.effectiveRubrics.first.isMet, isTrue);
+      expect(restored.effectiveRubrics.last.isMet, isFalse);
+    });
   });
 
   group('Task 2: TeacherLessonPlanStore Strict Privacy Isolation', () {
