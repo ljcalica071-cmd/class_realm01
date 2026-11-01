@@ -216,13 +216,14 @@ class StudentDashboardRepository {
             return {
               'id': m['id']?.toString() ?? '',
               'subject_offering_id': m['subject_offering_id']?.toString() ?? '',
-              'type': m['classwork_type']?.toString() ?? 'activity',
+              'type': m['classwork_type']?.toString() ?? (m['grading_category'] == 'ex' ? 'exam' : 'activity'),
               'title': m['title']?.toString() ?? '',
               'description': m['description']?.toString(),
               'instructions': m['instructions']?.toString(),
               'assigned_at': m['assigned_at']?.toString(),
               'deadline': m['deadline']?.toString(),
               'max_score': m['max_score'] is num ? m['max_score'] : 100,
+              'completion_mode': m['completion_mode']?.toString() ?? 'online',
               'subject_name': s['subject_name']?.toString() ?? '',
               'section_name': sec['section_name']?.toString() ?? '',
               'grade_level': sec['grade_level']?.toString() ?? '',
@@ -232,6 +233,79 @@ class StudentDashboardRepository {
               'submitted_at': submission?['submitted_at'],
             };
           }).toList();
+
+          // Also fetch published digital assessments (quizzes and periodical exams)
+          try {
+            final attemptRows = await client
+                .from('assessment_attempts')
+                .select('assessment_id, status, submitted_at')
+                .eq('student_id', uid);
+            final attemptsByAssessmentId = <String, Map<String, dynamic>>{};
+            for (final a in (attemptRows as List? ?? [])) {
+              final row = Map<String, dynamic>.from(a as Map);
+              final aId = row['assessment_id']?.toString();
+              if (aId != null) {
+                attemptsByAssessmentId[aId] = row;
+              }
+            }
+
+            final assessments = await client
+                .from('digital_assessments')
+                .select("""
+                  id,
+                  subject_offering_id,
+                  assessment_type,
+                  grading_category,
+                  title,
+                  instructions,
+                  time_limit_minutes,
+                  available_from,
+                  deadline,
+                  subject_offerings (
+                    subjects ( subject_name ),
+                    sections ( section_name, grade_level )
+                  )
+                """)
+                .filter('subject_offering_id', 'in', offeringIds)
+                .eq('is_published', true)
+                .eq('is_archived', false)
+                .order('deadline', ascending: true);
+
+            for (final item in (assessments as List? ?? [])) {
+              final m = Map<String, dynamic>.from(item as Map);
+              final off = m['subject_offerings'] as Map<String, dynamic>? ?? {};
+              final s = off['subjects'] as Map<String, dynamic>? ?? {};
+              final sec = off['sections'] as Map<String, dynamic>? ?? {};
+              final aId = m['id']?.toString() ?? '';
+              final attempt = attemptsByAssessmentId[aId];
+              final isSubmitted = attempt != null &&
+                  (attempt['status'] == 'submitted' ||
+                      attempt['status'] == 'auto_submitted');
+
+              classworkList.add({
+                'id': aId,
+                'subject_offering_id':
+                    m['subject_offering_id']?.toString() ?? '',
+                'type': 'exam',
+                'title': m['title']?.toString() ?? 'Periodical Examination',
+                'description':
+                    'Periodical Examination (${m['time_limit_minutes'] ?? 60} mins)',
+                'instructions': m['instructions']?.toString() ?? '',
+                'assigned_at': m['available_from']?.toString(),
+                'deadline': m['deadline']?.toString(),
+                'max_score': 100,
+                'completion_mode': 'online',
+                'subject_name': s['subject_name']?.toString() ?? '',
+                'section_name': sec['section_name']?.toString() ?? '',
+                'grade_level': sec['grade_level']?.toString() ?? '',
+                'status': isSubmitted ? 'submitted' : 'pending',
+                'score': null,
+                'submitted_at': attempt?['submitted_at'],
+              });
+            }
+          } catch (assessErr) {
+            debugPrint('Digital assessments load notice: $assessErr');
+          }
         } catch (cwError) {
           debugPrint('Classwork items load notice: $cwError');
         }

@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:class_realm/core/theme/app_theme.dart';
 import 'package:class_realm/core/services/app_data_cache.dart';
 import 'package:class_realm/core/services/supabase_service.dart';
+import 'package:class_realm/data/repositories/supabase_schedule_repository.dart';
 import 'package:class_realm/models/user_model.dart';
+import 'package:class_realm/models/academic_models.dart';
+import 'package:class_realm/features/parent/sub_features/child_details/widgets/parent_subject_details_sheet.dart';
 import 'package:class_realm/shared/widgets/shared_widgets.dart';
 import 'package:loading_animation_widget/loading_animation_widget.dart';
 
@@ -17,6 +20,7 @@ class ParentGradesTab extends StatefulWidget {
 
 class _ParentGradesTabState extends State<ParentGradesTab> {
   List<Map<String, dynamic>> _offerings = const [];
+  List<ScheduleModel> _schedules = const [];
   Map<String, Map<int, Map<String, dynamic>>> _termGrades = const {};
   bool _isLoading = true;
 
@@ -64,7 +68,10 @@ class _ParentGradesTabState extends State<ParentGradesTab> {
 
     try {
       final client = SupabaseService().client;
+      final sec = widget.student?.departmentOrSection;
+
       final responses = await Future.wait<dynamic>([
+        // 1. Enrolled Offerings
         client
             .from('student_enrollments')
             .select('''
@@ -75,19 +82,26 @@ class _ParentGradesTabState extends State<ParentGradesTab> {
                 ex_weight,
                 terms_taught,
                 term_block,
-                subjects ( subject_name, subject_code, grade_level ),
-                sections ( section_name, grade_level ),
-                teacher_profiles ( first_name, last_name, gender )
+                subjects ( id, subject_name, subject_code, grade_level ),
+                sections ( id, section_name, grade_level ),
+                teacher_profiles ( teacher_id, first_name, last_name, gender )
               )
             ''')
             .eq('student_id', studentId)
             .ilike('status', 'enrolled'),
+
+        // 2. Term Grades (Strictly 3 Terms)
         client
             .from('term_grades')
             .select(
               'subject_offering_id, term_number, initial_grade, transmuted_grade, remarks, is_finalized',
             )
             .eq('student_id', studentId),
+
+        // 3. Schedules
+        sec != null && sec.isNotEmpty
+            ? SupabaseScheduleRepository.instance.getSchedules(section: sec)
+            : Future.value(<ScheduleModel>[]),
       ]);
 
       final offeringRows = (responses[0] as List)
@@ -104,7 +118,7 @@ class _ParentGradesTabState extends State<ParentGradesTab> {
         if (offeringId == null ||
             termNumber == null ||
             termNumber < 1 ||
-            termNumber > 4) {
+            termNumber > 3) {
           continue;
         }
         gradesByOffering.putIfAbsent(
@@ -113,10 +127,13 @@ class _ParentGradesTabState extends State<ParentGradesTab> {
         )[termNumber] = grade;
       }
 
+      final scheduleRows = responses[2] as List<ScheduleModel>;
+
       if (!mounted) return;
       setState(() {
         _offerings = offeringRows;
         _termGrades = gradesByOffering;
+        _schedules = scheduleRows;
         _isLoading = false;
       });
 
@@ -139,9 +156,10 @@ class _ParentGradesTabState extends State<ParentGradesTab> {
       return const Center(
         child: Padding(
           padding: EdgeInsets.all(24),
-          child: Text(
-            'No linked student found. Please contact the school administrator.',
-            textAlign: TextAlign.center,
+          child: AppEmptyState(
+            icon: Icons.person_off_outlined,
+            title: 'No Student Selected',
+            message: 'Please select a child to view their academic report card.',
           ),
         ),
       );
@@ -160,13 +178,12 @@ class _ParentGradesTabState extends State<ParentGradesTab> {
       return AppPullToRefresh(
         onRefresh: () => _loadGrades(silent: true),
         child: AppPullToRefresh.scrollableState(
-          padding: const EdgeInsets.all(16),
           child: Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(28),
+            margin: const EdgeInsets.all(24),
+            padding: const EdgeInsets.symmetric(vertical: 36, horizontal: 24),
             decoration: BoxDecoration(
               color: theme.colorScheme.surface,
-              borderRadius: BorderRadius.circular(18),
+              borderRadius: BorderRadius.circular(16),
               border: Border.all(
                 color: theme.colorScheme.onSurface.withValues(
                   alpha: isDark ? 0.16 : 0.12,
@@ -212,7 +229,7 @@ class _ParentGradesTabState extends State<ParentGradesTab> {
       );
     }
 
-    // Compute Overall General Average from finalized term grades
+    // Compute Overall General Weighted Average (GWA) from finalized term grades
     double totalGrades = 0;
     int gradedSubjectsCount = 0;
     for (final off in _offerings) {
@@ -241,7 +258,7 @@ class _ParentGradesTabState extends State<ParentGradesTab> {
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.all(16),
         children: [
-          // ── General Average & Summary Banner Card ──
+          // ── GWA & Summary Banner Card ──
           Container(
             padding: const EdgeInsets.all(18),
             decoration: BoxDecoration(
@@ -254,7 +271,7 @@ class _ParentGradesTabState extends State<ParentGradesTab> {
               ),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.03),
+                  color: Colors.black.withValues(alpha: isDark ? 0.16 : 0.03),
                   blurRadius: 8,
                   offset: const Offset(0, 2),
                 ),
@@ -263,43 +280,38 @@ class _ParentGradesTabState extends State<ParentGradesTab> {
             child: Row(
               children: [
                 Container(
-                  width: 60,
-                  height: 60,
+                  width: 58,
+                  height: 58,
                   decoration: BoxDecoration(
-                    color: (generalAverage != null && generalAverage >= 75)
-                        ? AppTheme.catGreen.withValues(
-                            alpha: isDark ? 0.2 : 0.12,
-                          )
-                        : theme.colorScheme.primary.withValues(
-                            alpha: isDark ? 0.2 : 0.1,
-                          ),
+                    color: generalAverage != null
+                        ? (generalAverage >= 75
+                            ? AppTheme.catGreen.withValues(alpha: 0.15)
+                            : AppTheme.catRed.withValues(alpha: 0.15))
+                        : theme.colorScheme.primary.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(14),
-                    border: Border.all(
-                      color: (generalAverage != null && generalAverage >= 75)
-                          ? AppTheme.catGreen.withValues(alpha: 0.4)
-                          : theme.colorScheme.primary.withValues(alpha: 0.3),
-                    ),
                   ),
                   child: Center(
                     child: Text(
                       generalAverage != null ? '$generalAverage' : '—',
                       style: TextStyle(
                         fontSize: 22,
-                        fontWeight: FontWeight.w900,
-                        color: (generalAverage != null && generalAverage >= 75)
-                            ? AppTheme.catGreen
+                        fontWeight: FontWeight.bold,
+                        color: generalAverage != null
+                            ? (generalAverage >= 75
+                                ? AppTheme.catGreen
+                                : AppTheme.catRed)
                             : theme.colorScheme.primary,
                       ),
                     ),
                   ),
                 ),
-                const SizedBox(width: 14),
+                const SizedBox(width: 16),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Official Report Card (${_offerings.length} Subjects)',
+                        'SSHS Report Card (${_offerings.length} Subjects)',
                         style: const TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 15,
@@ -308,8 +320,8 @@ class _ParentGradesTabState extends State<ParentGradesTab> {
                       const SizedBox(height: 3),
                       Text(
                         generalAverage != null
-                            ? 'General Average computed based on finalized grading periods.'
-                            : 'DepEd SHS Quarterly standing for ${student.firstName ?? student.fullName}.',
+                            ? 'General Weighted Average (GWA) computed across finalized 3-terms.'
+                            : 'Senior High School standing for ${student.firstName ?? student.fullName}.',
                         style: TextStyle(
                           fontSize: 12,
                           color: theme.colorScheme.onSurface.withValues(
@@ -332,20 +344,29 @@ class _ParentGradesTabState extends State<ParentGradesTab> {
             final subjectName =
                 subjectsMap['subject_name']?.toString() ?? 'Subject';
             final subjectCode = subjectsMap['subject_code']?.toString() ?? '';
+            final termsTaught = (offering['terms_taught'] as num?)?.toInt() ?? 3;
+            final termBlock = offering['term_block']?.toString();
+
             final teacherMap = _asMap(offering['teacher_profiles']);
-            final teacherName = [
-              teacherMap['first_name']?.toString() ?? '',
-              teacherMap['last_name']?.toString() ?? '',
-            ].where((s) => s.isNotEmpty).join(' ');
+            final teacherFirstName = teacherMap['first_name']?.toString() ?? '';
+            final teacherLastName = teacherMap['last_name']?.toString() ?? '';
+            final teacherGender = teacherMap['gender']?.toString() ?? '';
+            final teacherName = [teacherFirstName, teacherLastName]
+                .where((s) => s.isNotEmpty)
+                .join(' ');
+            final teacherTitle =
+                teacherGender.toLowerCase() == 'female' ? 'Ms.' : 'Mr.';
+            final teacherDisplayName = teacherName.isNotEmpty
+                ? '$teacherTitle $teacherName'
+                : 'Assigned Teacher';
 
             final terms = _termGrades[offId] ?? {};
-            final q1 = terms[1]?['transmuted_grade']?.toString() ?? '—';
-            final q2 = terms[2]?['transmuted_grade']?.toString() ?? '—';
-            final q3 = terms[3]?['transmuted_grade']?.toString() ?? '—';
+            final t1 = terms[1]?['transmuted_grade']?.toString() ?? '—';
+            final t2 = terms[2]?['transmuted_grade']?.toString() ?? '—';
+            final t3 = terms[3]?['transmuted_grade']?.toString() ?? '—';
 
             return Container(
               margin: const EdgeInsets.only(bottom: 12),
-              padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color: theme.colorScheme.surface,
                 borderRadius: BorderRadius.circular(14),
@@ -354,68 +375,108 @@ class _ParentGradesTabState extends State<ParentGradesTab> {
                     alpha: isDark ? 0.16 : 0.12,
                   ),
                 ),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(
-                        child: Text(
-                          subjectName,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 15,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      if (subjectCode.isNotEmpty)
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: theme.colorScheme.primaryContainer
-                                .withValues(alpha: 0.4),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(
-                            subjectCode,
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                              color: theme.colorScheme.primary,
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                  if (teacherName.isNotEmpty) ...[
-                    const SizedBox(height: 3),
-                    Text(
-                      'Teacher: $teacherName',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: theme.colorScheme.onSurface.withValues(
-                          alpha: 0.65,
-                        ),
-                      ),
-                    ),
-                  ],
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      _buildTermGradeBox(theme, isDark, 'Quarter 1', q1),
-                      const SizedBox(width: 8),
-                      _buildTermGradeBox(theme, isDark, 'Quarter 2', q2),
-                      const SizedBox(width: 8),
-                      _buildTermGradeBox(theme, isDark, 'Quarter 3', q3),
-                    ],
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: isDark ? 0.16 : 0.03),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
                   ),
                 ],
+              ),
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(14),
+                  onTap: () {
+                    ParentSubjectDetailsSheet.show(
+                      context,
+                      offering: offering,
+                      schedules: _schedules,
+                      termGrades: terms,
+                    );
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(
+                              child: Text(
+                                subjectName,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 15,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            if (subjectCode.isNotEmpty)
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: theme.colorScheme.primaryContainer
+                                      .withValues(alpha: 0.4),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  subjectCode,
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    color: theme.colorScheme.primary,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            Text(
+                              'Teacher: $teacherDisplayName',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: theme.colorScheme.onSurface.withValues(
+                                  alpha: 0.65,
+                                ),
+                              ),
+                            ),
+                            const Spacer(),
+                            Text(
+                              termsTaught == 1
+                                  ? '1 Term${termBlock != null ? " ($termBlock)" : ""}'
+                                  : '3 Terms',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: theme.colorScheme.onSurface.withValues(
+                                  alpha: 0.5,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            _buildTermGradeBox(theme, isDark, 'Term 1', t1),
+                            const SizedBox(width: 8),
+                            _buildTermGradeBox(theme, isDark, 'Term 2', t2),
+                            const SizedBox(width: 8),
+                            _buildTermGradeBox(theme, isDark, 'Term 3', t3),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               ),
             );
           }),
@@ -431,19 +492,28 @@ class _ParentGradesTabState extends State<ParentGradesTab> {
     String gradeValue,
   ) {
     final hasGrade = gradeValue != '—';
+    final numGrade = num.tryParse(gradeValue);
+    final isPassing = numGrade != null && numGrade >= 75;
+
+    final Color badgeColor = !hasGrade
+        ? theme.colorScheme.onSurface.withValues(alpha: 0.45)
+        : (isPassing
+            ? (isDark ? const Color(0xFF2DD4BF) : AppTheme.catTeal)
+            : AppTheme.catRed);
+
     return Expanded(
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
         decoration: BoxDecoration(
           color: hasGrade
-              ? AppTheme.catTeal.withValues(alpha: isDark ? 0.14 : 0.08)
+              ? badgeColor.withValues(alpha: isDark ? 0.14 : 0.08)
               : theme.colorScheme.surfaceContainerHighest.withValues(
                   alpha: 0.4,
                 ),
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
             color: hasGrade
-                ? AppTheme.catTeal.withValues(alpha: isDark ? 0.35 : 0.22)
+                ? badgeColor.withValues(alpha: isDark ? 0.35 : 0.22)
                 : theme.colorScheme.onSurface.withValues(alpha: 0.08),
           ),
         ),
@@ -454,9 +524,7 @@ class _ParentGradesTabState extends State<ParentGradesTab> {
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
-                color: hasGrade
-                    ? (isDark ? const Color(0xFF2DD4BF) : AppTheme.catTeal)
-                    : theme.colorScheme.onSurface.withValues(alpha: 0.45),
+                color: badgeColor,
               ),
             ),
             const SizedBox(height: 2),
@@ -468,6 +536,17 @@ class _ParentGradesTabState extends State<ParentGradesTab> {
                 color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
               ),
             ),
+            if (hasGrade) ...[
+              const SizedBox(height: 1),
+              Text(
+                isPassing ? 'Passed' : 'Needs Help',
+                style: TextStyle(
+                  fontSize: 9,
+                  fontWeight: FontWeight.w700,
+                  color: badgeColor,
+                ),
+              ),
+            ],
           ],
         ),
       ),

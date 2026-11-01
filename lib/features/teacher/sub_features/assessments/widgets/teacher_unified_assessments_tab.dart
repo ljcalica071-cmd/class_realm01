@@ -2,6 +2,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 
 import 'package:class_realm/core/theme/app_theme.dart';
+import 'package:class_realm/core/services/supabase_service.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/data/repositories/subject_repository.dart';
 import 'package:class_realm/data/repositories/teacher_classwork_repository.dart';
@@ -679,7 +680,7 @@ class _TeacherUnifiedAssessmentsTabState
             },
       actionLabel: 'View Submissions',
       onEdit: () => _showEditActivityModal(item),
-      onDelete: () => _confirmDeleteActivity(item),
+      onDelete: category == 'EX' ? null : () => _confirmDeleteActivity(item),
     );
   }
 
@@ -698,7 +699,7 @@ class _TeacherUnifiedAssessmentsTabState
         assessment: item,
         onAssessmentUpdated: () => setState(() {}),
       ),
-      onDelete: () => _confirmDeleteAssessment(item),
+      onDelete: (item.isExam || category == 'EX') ? null : () => _confirmDeleteAssessment(item),
       onReschedule: () => _showRescheduleAssessmentDialog(item),
       onProctor: () => LiveProctorMonitorModal.show(
         context: context,
@@ -847,50 +848,100 @@ class _TeacherUnifiedAssessmentsTabState
     );
   }
 
-  void _showItemAnalysisDialog(QuizOrExamModel item) {
-    final stats = <ItemDifficultyStat>[];
-    if (item.questions.isNotEmpty) {
-      for (int i = 0; i < item.questions.length; i++) {
-        final q = item.questions[i];
-        const totalAttempts = 35;
-        final correctCount = (20 + (i * 3) % 15).clamp(5, 34);
-        stats.add(
-          ItemDifficultyStat(
-            itemNumber: i + 1,
-            questionText: q.questionText,
-            totalAttempts: totalAttempts,
-            correctCount: correctCount,
-          ),
+  Future<void> _showItemAnalysisDialog(QuizOrExamModel item) async {
+    try {
+      final client = SupabaseService().client;
+      // Fetch real assessment questions from database
+      final questionsResponse = await client
+          .from('assessment_questions')
+          .select('id, question_text, position')
+          .eq('assessment_id', item.id)
+          .order('position', ascending: true);
+
+      final questionRows = List<Map<String, dynamic>>.from(questionsResponse as List? ?? []);
+
+      // Fetch real submitted attempts for this assessment
+      final attemptsResponse = await client
+          .from('assessment_attempts')
+          .select('id, status')
+          .eq('assessment_id', item.id)
+          .eq('status', 'submitted');
+      final attemptList = List<Map<String, dynamic>>.from(attemptsResponse as List? ?? []);
+      final totalAttempts = attemptList.length;
+
+      final stats = <ItemDifficultyStat>[];
+
+      if (questionRows.isNotEmpty) {
+        final qIds = questionRows.map((q) => q['id'].toString()).toList();
+        final responsesData = totalAttempts > 0
+            ? await client
+                .from('assessment_responses')
+                .select('question_id, is_correct')
+                .inFilter('question_id', qIds)
+            : [];
+        final responseList = List<Map<String, dynamic>>.from(responsesData as List? ?? []);
+
+        for (int i = 0; i < questionRows.length; i++) {
+          final q = questionRows[i];
+          final qId = q['id'].toString();
+          final qResponses = responseList.where((r) => r['question_id']?.toString() == qId);
+          final correctCount = qResponses.where((r) => r['is_correct'] == true).length;
+
+          stats.add(
+            ItemDifficultyStat(
+              itemNumber: (q['position'] as num?)?.toInt() ?? (i + 1),
+              questionText: q['question_text']?.toString() ?? 'Question ${i + 1}',
+              totalAttempts: totalAttempts,
+              correctCount: correctCount,
+            ),
+          );
+        }
+      } else if (item.questions.isNotEmpty) {
+        for (int i = 0; i < item.questions.length; i++) {
+          final q = item.questions[i];
+          stats.add(
+            ItemDifficultyStat(
+              itemNumber: i + 1,
+              questionText: q.questionText,
+              totalAttempts: totalAttempts,
+              correctCount: 0,
+            ),
+          );
+        }
+      }
+
+      if (!mounted) return;
+
+      ItemAnalysisModal.show(
+        context,
+        assessmentTitle: item.title,
+        stats: stats,
+        initialResultsReleased: item.resultsReleased,
+        onToggleRelease: (released) async {
+          try {
+            await client.from('digital_assessments').update({
+              'results_released': released,
+            }).eq('id', item.id);
+          } catch (_) {}
+        },
+      );
+    } catch (e) {
+      debugPrint('Item analysis query notice: $e');
+      if (mounted) {
+        ItemAnalysisModal.show(
+          context,
+          assessmentTitle: item.title,
+          stats: item.questions.asMap().entries.map((e) => ItemDifficultyStat(
+            itemNumber: e.key + 1,
+            questionText: e.value.questionText,
+            totalAttempts: 0,
+            correctCount: 0,
+          )).toList(),
+          initialResultsReleased: item.resultsReleased,
+          onToggleRelease: (released) async {},
         );
       }
-    } else {
-      stats.addAll([
-        const ItemDifficultyStat(
-          itemNumber: 1,
-          questionText: 'Identify the main powerhouse of the eukaryotic cell.',
-          totalAttempts: 35,
-          correctCount: 31,
-        ),
-        const ItemDifficultyStat(
-          itemNumber: 2,
-          questionText: 'Differentiate mitosis and meiosis in terms of daughter chromosome count.',
-          totalAttempts: 35,
-          correctCount: 22,
-        ),
-        const ItemDifficultyStat(
-          itemNumber: 3,
-          questionText: 'Calculate the expected phenotypic ratio in a dihybrid cross.',
-          totalAttempts: 35,
-          correctCount: 9,
-        ),
-      ]);
     }
-
-    ItemAnalysisModal.show(
-      context,
-      assessmentTitle: item.title,
-      stats: stats,
-    );
   }
 
   Widget _buildAssessmentCategoryBadge(
@@ -1042,14 +1093,28 @@ class _TeacherUnifiedAssessmentsTabState
               child: const Text('Cancel'),
             ),
             FilledButton(
-              onPressed: () {
+              onPressed: () async {
                 Navigator.pop(ctx);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Special schedule granted for ${item.title}. Window opens at ${_formatTime(newDate)}.'),
-                    backgroundColor: const Color(0xFF0F8A48),
-                  ),
+                try {
+                  final client = SupabaseService().client;
+                  await client.from('digital_assessments').update({
+                    'available_from': newDate.toIso8601String(),
+                    'deadline': newDate.add(Duration(minutes: item.durationMinutes)).toIso8601String(),
+                  }).eq('id', item.id);
+
+                  await client.from('classwork_items').update({
+                    'deadline': newDate.add(Duration(minutes: item.durationMinutes)).toIso8601String(),
+                  }).eq('id', item.id);
+                } catch (_) {}
+
+                if (!mounted) return;
+                AppModals.showSuccessDialog(
+                  context: context,
+                  title: 'Schedule Updated',
+                  message: 'Schedule successfully updated for ${item.title}. Window opens at ${_formatTime(newDate)}.',
                 );
+                widget.onRefresh?.call();
+                setState(() {});
               },
               child: const Text('Save Reschedule'),
             ),

@@ -273,7 +273,7 @@ class _TeacherParentManagementTabState
 
     // Calculate available sections based on selected subject
     List<String> availableSections = [];
-    if (_selectedSubjectFilter == 'â€” All Subjects â€”') {
+    if (_selectedSubjectFilter == '— All Subjects —') {
       availableSections = _teacherSections;
     } else {
       final filteredSectionsSet = <String>{};
@@ -310,7 +310,7 @@ class _TeacherParentManagementTabState
               );
 
           final matchesSubject =
-              _selectedSubjectFilter == 'â€” All Subjects â€”' ||
+              _selectedSubjectFilter == '— All Subjects —' ||
               (studentSubject == _selectedSubjectFilter);
 
           final matchesSection =
@@ -449,10 +449,15 @@ class _TeacherParentManagementTabState
                         ),
                         child: DropdownButtonHideUnderline(
                           child: DropdownButton<String>(
-                            value: _selectedSubjectFilter,
+                            value: _teacherSubjects.contains(_selectedSubjectFilter)
+                                ? _selectedSubjectFilter
+                                : (_teacherSubjects.isNotEmpty ? _teacherSubjects.first : null),
                             dropdownColor: theme.colorScheme.surface,
+                            iconEnabledColor: theme.colorScheme.onSurface,
                             style: TextStyle(
                               color: theme.colorScheme.onSurface,
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
                             ),
                             items: _teacherSubjects
                                 .map(
@@ -460,7 +465,11 @@ class _TeacherParentManagementTabState
                                     value: sub,
                                     child: Text(
                                       sub,
-                                      style: const TextStyle(fontSize: 13),
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.bold,
+                                        color: theme.colorScheme.onSurface,
+                                      ),
                                     ),
                                   ),
                                 )
@@ -494,10 +503,15 @@ class _TeacherParentManagementTabState
                         ),
                         child: DropdownButtonHideUnderline(
                           child: DropdownButton<String>(
-                            value: _selectedSectionFilter,
+                            value: (['— All Sections —', ...availableSections].contains(_selectedSectionFilter))
+                                ? _selectedSectionFilter
+                                : '— All Sections —',
                             dropdownColor: theme.colorScheme.surface,
+                            iconEnabledColor: theme.colorScheme.onSurface,
                             style: TextStyle(
                               color: theme.colorScheme.onSurface,
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
                             ),
                             items:
                                 ['— All Sections —', ...availableSections]
@@ -506,7 +520,11 @@ class _TeacherParentManagementTabState
                                         value: sec,
                                         child: Text(
                                           sec,
-                                          style: const TextStyle(fontSize: 13),
+                                          style: TextStyle(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.bold,
+                                            color: theme.colorScheme.onSurface,
+                                          ),
                                         ),
                                       ),
                                     )
@@ -1250,9 +1268,33 @@ class _TeacherParentManagementTabState
   }
 
   Future<void> _showAddParentDialog() async {
+    final effectiveSubject = _teacherSubjects.contains(_selectedSubjectFilter)
+        ? _selectedSubjectFilter
+        : (_teacherSubjects.isNotEmpty ? _teacherSubjects.first : null);
+
+    final isAllSubjects = effectiveSubject == null ||
+        effectiveSubject == '— All Subjects —';
+    final isAllSections = _selectedSectionFilter == '— All Sections —';
+
+    final filteredStudents = _enrolledStudents.where((s) {
+      final matchesSubject = isAllSubjects ||
+          (s.enrolledSubjectName != null &&
+              s.enrolledSubjectName!.trim().toLowerCase() ==
+                  effectiveSubject.trim().toLowerCase());
+
+      final matchesSection = isAllSections ||
+          (s.departmentOrSection != null &&
+              s.departmentOrSection!.trim().toLowerCase() ==
+                  _selectedSectionFilter.trim().toLowerCase());
+
+      return matchesSubject && matchesSection;
+    }).toList();
+
     await AddParentDialog.show(
       context,
-      students: _enrolledStudents,
+      students: filteredStudents,
+      filterSection: !isAllSections ? _selectedSectionFilter : null,
+      filterSubject: !isAllSubjects ? effectiveSubject : null,
       onParentCreated: _loadData,
     );
   }

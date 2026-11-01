@@ -95,3 +95,17 @@ void registerWebDrop({
 void unregisterWebDrop() {
   unregisterWebFileDropListener();
 }
+
+/// Registers browser window online/offline network event listeners.
+void registerWebConnectivityListeners({
+  required void Function(bool isOnline) onConnectivityChanged,
+}) {
+  registerWebConnectivityListenersPlatform(
+    onConnectivityChanged: onConnectivityChanged,
+  );
+}
+
+/// Returns navigator.onLine on web, or true on native.
+bool getWebNavigatorOnlineStatus() {
+  return getWebNavigatorOnlineStatusPlatform();
+}

@@ -280,22 +280,19 @@ Future<DateTime?> showAppDatePickerDialog(
             (index) => maxYear - index,
           );
 
-          // Build valid months for current selectedYear
+          // Build all 12 calendar months so users can clearly see the full year,
+          // while day-level bounds and validation prevent selecting invalid/past dates.
           final validMonthItems = <DropdownMenuItem<int>>[];
           for (int m = 1; m <= 12; m++) {
-            final isMonthFuture = selectedYear == maxDateOnly.year && m > maxDateOnly.month;
-            final isMonthPast = selectedYear == minDateOnly.year && m < minDateOnly.month;
-            if (!isMonthFuture && !isMonthPast) {
-              validMonthItems.add(
-                DropdownMenuItem<int>(
-                  value: m,
-                  child: Text(
-                    monthNames[m - 1],
-                    style: const TextStyle(fontSize: 13),
-                  ),
+            validMonthItems.add(
+              DropdownMenuItem<int>(
+                value: m,
+                child: Text(
+                  monthNames[m - 1],
+                  style: const TextStyle(fontSize: 13),
                 ),
-              );
-            }
+              ),
+            );
           }
 
           final isCandidateOutOfRange =

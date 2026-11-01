@@ -105,17 +105,41 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
             return lastA.toLowerCase().compareTo(lastB.toLowerCase());
           });
 
-      // 2. Load submissions from student_classwork_submissions
-      final submissionRows = await _client
-          .from('student_classwork_submissions')
-          .select()
-          .eq('classwork_id', _activity.id);
+      // 2. Load submissions from student_classwork_submissions with attachments
+      List<dynamic> submissionRows = [];
+      try {
+        final res = await _client
+            .from('student_classwork_submissions')
+            .select('''
+              *,
+              submission_attachments (
+                file_name,
+                storage_url,
+                mime_type,
+                file_size_bytes
+              )
+            ''')
+            .eq('classwork_id', _activity.id);
+        submissionRows = res as List? ?? [];
+      } catch (_) {
+        final res = await _client
+            .from('student_classwork_submissions')
+            .select()
+            .eq('classwork_id', _activity.id);
+        submissionRows = res as List? ?? [];
+      }
 
       final subMap = <String, Map<String, dynamic>>{};
-      for (final row in submissionRows as List? ?? []) {
+      for (final row in submissionRows) {
         final item = Map<String, dynamic>.from(row as Map);
         final studentId = item['student_id']?.toString();
         if (studentId != null) {
+          final attachments = item['submission_attachments'] as List? ?? [];
+          if (attachments.isNotEmpty) {
+            final att = Map<String, dynamic>.from(attachments.first as Map);
+            item['storage_path'] = att['storage_url'] ?? item['storage_path'];
+            item['file_name'] = att['file_name'] ?? item['file_name'];
+          }
           subMap[studentId] = item;
         }
       }
@@ -470,16 +494,16 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
                         ? null
                         : () async {
                             final pickedDate = await showDatePicker(
-                              context: context,
+                              context: ctx,
                               initialDate: selectedDate,
                               firstDate: DateTime.now().subtract(
                                 const Duration(days: 30),
                               ),
                               lastDate: DateTime(2100),
                             );
-                            if (pickedDate != null) {
+                            if (pickedDate != null && ctx.mounted) {
                               final pickedTime = await showTimePicker(
-                                context: context,
+                                context: ctx,
                                 initialTime: selectedTime,
                               );
                               if (pickedTime != null) {
@@ -549,6 +573,7 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
                 onPressed: isSavingDeadline
                     ? null
                     : () async {
+                        final messenger = ScaffoldMessenger.of(context);
                         setModalState(() => isSavingDeadline = true);
                         final newCombined = DateTime(
                           selectedDate.year,
@@ -584,8 +609,10 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
                             });
                           }
 
-                          Navigator.pop(ctx);
-                          ScaffoldMessenger.of(context).showSnackBar(
+                          if (ctx.mounted) {
+                            Navigator.pop(ctx);
+                          }
+                          messenger.showSnackBar(
                             SnackBar(
                               content: Text(
                                 'Deadline updated to ${_formatDateTime(newCombined)}. Submissions window synchronized.',
@@ -595,7 +622,7 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
                           );
                         } catch (e) {
                           setModalState(() => isSavingDeadline = false);
-                          ScaffoldMessenger.of(context).showSnackBar(
+                          messenger.showSnackBar(
                             SnackBar(
                               content: Text('Failed to update deadline: $e'),
                               backgroundColor: const Color(0xFFDC2626),

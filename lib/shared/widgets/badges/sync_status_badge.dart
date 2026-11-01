@@ -15,98 +15,118 @@ class SyncStatusBadge extends StatefulWidget {
 class _SyncStatusBadgeState extends State<SyncStatusBadge> {
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isCompact = MediaQuery.sizeOf(context).width < 380;
+        final isCompact = MediaQuery.sizeOf(context).width < 380;
 
     return ValueListenableBuilder<bool>(
-      valueListenable: AppLifecycleCoordinator.instance.isSyncingNotifier,
-      builder: (context, isSyncing, _) {
-        final status = isSyncing ? SyncStatus.syncing : SyncStatus.online;
+      valueListenable: AppLifecycleCoordinator.instance.isOnlineNotifier,
+      builder: (context, isOnline, _) {
+        return ValueListenableBuilder<bool>(
+          valueListenable: AppLifecycleCoordinator.instance.isSyncingNotifier,
+          builder: (context, isSyncing, _) {
+            final SyncStatus status;
+            if (!isOnline) {
+              status = SyncStatus.offline;
+            } else if (isSyncing) {
+              status = SyncStatus.syncing;
+            } else {
+              status = SyncStatus.online;
+            }
 
-        Color bg;
-        Color fg;
-        IconData icon;
-        String label;
+            Color bg;
+            Color fg;
+            IconData icon;
+            String label;
 
-        switch (status) {
-          case SyncStatus.online:
-            bg = AppTheme.catTeal.withValues(alpha: 0.12);
-            fg = AppTheme.catTeal;
-            icon = LucideIcons.wifi;
-            label = 'Online';
-            break;
-          case SyncStatus.offline:
-            bg = theme.colorScheme.onSurface.withValues(alpha: 0.08);
-            fg = theme.colorScheme.onSurface.withValues(alpha: 0.5);
-            icon = LucideIcons.wifiOff;
-            label = 'Offline Mode (Local)';
-            break;
-          case SyncStatus.pendingSync:
-            bg = AppTheme.catOrange.withValues(alpha: 0.12);
-            fg = AppTheme.catOrange;
-            icon = LucideIcons.cloudOff;
-            label = 'Pending Sync';
-            break;
-          case SyncStatus.syncing:
-            bg = AppTheme.catBlue.withValues(alpha: 0.12);
-            fg = AppTheme.catBlue;
-            icon = LucideIcons.refreshCw;
-            label = 'Syncing...';
-            break;
-          case SyncStatus.synced:
-            bg = AppTheme.catTeal.withValues(alpha: 0.12);
-            fg = AppTheme.catTeal;
-            icon = LucideIcons.cloudCheck;
-            label = 'Synced';
-            break;
-          case SyncStatus.syncError:
-            bg = AppTheme.catRed.withValues(alpha: 0.12);
-            fg = AppTheme.catRed;
-            icon = LucideIcons.alertCircle;
-            label = 'Sync Error';
-            break;
-        }
+            switch (status) {
+              case SyncStatus.online:
+                bg = AppTheme.catTeal.withValues(alpha: 0.12);
+                fg = AppTheme.catTeal;
+                icon = LucideIcons.wifi;
+                label = 'Online';
+                break;
+              case SyncStatus.offline:
+                bg = AppTheme.catRed.withValues(alpha: 0.12);
+                fg = AppTheme.catRed;
+                icon = LucideIcons.wifiOff;
+                label = 'Offline';
+                break;
+              case SyncStatus.pendingSync:
+                bg = AppTheme.catOrange.withValues(alpha: 0.12);
+                fg = AppTheme.catOrange;
+                icon = LucideIcons.cloudOff;
+                label = 'Pending Sync';
+                break;
+              case SyncStatus.syncing:
+                bg = AppTheme.catBlue.withValues(alpha: 0.12);
+                fg = AppTheme.catBlue;
+                icon = LucideIcons.refreshCw;
+                label = 'Syncing...';
+                break;
+              case SyncStatus.synced:
+                bg = AppTheme.catTeal.withValues(alpha: 0.12);
+                fg = AppTheme.catTeal;
+                icon = LucideIcons.cloudCheck;
+                label = 'Synced';
+                break;
+              case SyncStatus.syncError:
+                bg = AppTheme.catRed.withValues(alpha: 0.12);
+                fg = AppTheme.catRed;
+                icon = LucideIcons.alertCircle;
+                label = 'Sync Error';
+                break;
+            }
 
-        return Tooltip(
-          message: 'Cloud & local database sync status',
-          child: InkWell(
-            onTap: () async {
-              AppLifecycleCoordinator.instance.setSyncing(true);
-              try {
-                await SyncCoordinator.instance.processPendingQueue();
-              } finally {
-                AppLifecycleCoordinator.instance.setSyncing(false);
-              }
-            },
-            borderRadius: BorderRadius.circular(20),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: bg,
+            return Tooltip(
+              message: !isOnline
+                  ? 'No internet connection detected. Offline Mode is active.'
+                  : (isSyncing
+                      ? 'Syncing local and cloud data...'
+                      : 'Connected to cloud. Tap to verify connection.'),
+              child: InkWell(
+                onTap: () async {
+                  AppLifecycleCoordinator.instance.setSyncing(true);
+                  try {
+                    final isConnected = await AppLifecycleCoordinator.instance
+                        .checkConnectivity();
+                    if (isConnected) {
+                      await SyncCoordinator.instance.processPendingQueue();
+                    }
+                  } finally {
+                    AppLifecycleCoordinator.instance.setSyncing(false);
+                  }
+                },
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: fg.withValues(alpha: 0.3)),
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: bg,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: fg.withValues(alpha: 0.3)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(icon, size: 14, color: fg),
+                      if (!isCompact) ...[
+                        const SizedBox(width: 6),
+                        Text(
+                          label,
+                          maxLines: 1,
+                          softWrap: false,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: fg,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
               ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(icon, size: 14, color: fg),
-                  if (!isCompact) ...[
-                    const SizedBox(width: 6),
-                    Text(
-                      label,
-                      maxLines: 1,
-                      softWrap: false,
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: fg,
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
+            );
+          },
         );
       },
     );

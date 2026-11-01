@@ -146,13 +146,21 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
 
   Future<void> _loadActivities() async {
     try {
-      final list =
-          await SupabaseTeacherClassworkRepository.instance.getActivities();
+      final activitiesFuture =
+          SupabaseTeacherClassworkRepository.instance.getActivities();
+      final assessmentsFuture =
+          SupabaseTeacherClassworkRepository.instance.getAssessments();
+      final results = await Future.wait([activitiesFuture, assessmentsFuture]);
       if (mounted) {
-        setState(() => _persistedActivities = list);
+        setState(() {
+          _persistedActivities = results[0] as List<ActivityModel>;
+          _quizzesAndExams
+            ..clear()
+            ..addAll(results[1] as List<QuizOrExamModel>);
+        });
       }
     } catch (_) {
-      // Fallback gracefully to mock data if offline or error
+      // Fallback gracefully if offline or error
     }
   }
 
@@ -474,31 +482,28 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                 ),
               ),
               const SizedBox(width: 12),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    (widget.teacher ?? AuthRepository.instance.currentUser)
-                            ?.firstName ??
-                        (widget.teacher ?? AuthRepository.instance.currentUser)
-                            ?.fullName ??
-                        'Teacher',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 13,
-                    color: theme.colorScheme.onSurface,
-                  ),
-                ),
-                Text(
-                  'Faculty',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                  ),
-                ),
-              ],
-            ),
+              Builder(
+                builder: (context) {
+                  final teacherUser =
+                      widget.teacher ?? AuthRepository.instance.currentUser;
+                  final teacherFullName = [
+                    teacherUser?.firstName ?? '',
+                    teacherUser?.lastName ?? '',
+                  ].where((s) => s.trim().isNotEmpty).join(' ');
+                  final displayName = teacherFullName.isNotEmpty
+                      ? teacherFullName
+                      : (teacherUser?.fullName ?? 'Teacher');
+
+                  return Text(
+                    displayName,
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                      color: theme.colorScheme.onSurface,
+                    ),
+                  );
+                },
+              ),
           ],
         ),
       ),
@@ -793,7 +798,10 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         initialSection: _selectedClassSection,
         initialIsExam: true,
         skipTypeSelection: true,
-        onAssessmentCreated: () => setState(() {}),
+        onAssessmentCreated: () {
+          _loadActivities();
+          setState(() {});
+        },
       );
       return;
     }

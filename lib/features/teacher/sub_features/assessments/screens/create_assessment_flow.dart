@@ -1,18 +1,56 @@
-// Legacy question-planning helpers remain available for future wiring.
-// ignore_for_file: unused_element, unused_element_parameter
+// Create Examination (EX) & Assessment Flow Dialog
+// Fully redesigned to DepEd Order No. 015, s. 2026 standards.
+// Features Online (Take via App) & In-Person (Manual Record), sequential slot
+// locking (ST1 -> ST2 -> TE), split-box Date/Time/Duration, and category-isolated Question Builder.
 
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'package:class_realm/core/theme/app_theme.dart';
+import 'package:class_realm/core/services/supabase_service.dart';
+import 'package:class_realm/core/services/app_data_cache.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/data/repositories/subject_repository.dart';
 import 'package:class_realm/models/academic_models.dart';
 import 'package:class_realm/widgets/common/app_buttons.dart';
 import 'package:class_realm/widgets/common/app_modals.dart';
-import 'package:class_realm/widgets/common/app_text_field.dart';
 import 'package:class_realm/widgets/common/app_date_picker_field.dart';
+import 'package:class_realm/widgets/common/app_time_picker_field.dart';
 import 'package:class_realm/features/teacher/sub_features/assessments/quiz_exam_authoring/quiz_exam_authoring.dart';
+
+/// Active draft of an individual question during step 2 authoring.
+class QuestionDraft {
+  final int position;
+  final QuestionType type;
+  String statement;
+  List<String> choices; // 4 choices for multiple choice
+  String correctAnswer; // 'A'/'B'/'C'/'D', 'True'/'False', or identification text
+  double points;
+
+  QuestionDraft({
+    required this.position,
+    required this.type,
+    this.statement = '',
+    List<String>? choices,
+    this.correctAnswer = '',
+    this.points = 1.0,
+  }) : choices = choices ?? ['', '', '', ''];
+
+  bool get isComplete {
+    if (statement.trim().isEmpty) return false;
+    if (points <= 0) return false;
+    if (type == QuestionType.multipleChoice) {
+      if (choices.length < 4 || choices.any((c) => c.trim().isEmpty)) return false;
+      return correctAnswer.isNotEmpty;
+    } else if (type == QuestionType.trueFalse) {
+      return correctAnswer == 'True' || correctAnswer == 'False';
+    } else if (type == QuestionType.identification) {
+      return correctAnswer.trim().isNotEmpty;
+    }
+    return false;
+  }
+}
 
 class CreateAssessmentFlowDialog extends StatefulWidget {
   final VoidCallback onAssessmentCreated;
@@ -54,134 +92,256 @@ class CreateAssessmentFlowDialog extends StatefulWidget {
 
 class _CreateAssessmentFlowDialogState
     extends State<CreateAssessmentFlowDialog> {
-  // Steps:
-  // 1: Configure & Add Questions / Details
-  // 3: Question Builder
+  // Stepper: 1 = Basic Configuration, 2 = Question Builder (Online mode)
   int _currentStep = 1;
-  bool _isExam = false;
+
+  // Mode: 'online' (Take via App) or 'in_person' (Manual Record)
+  String _completionMode = 'online';
+
+  // Slot: 'ST1', 'ST2', 'TE'
   String _examCategory = 'ST1';
-  final Map<QuestionType, int> _questionCounts = {
-    QuestionType.multipleChoice: 0,
-    QuestionType.trueFalse: 0,
-    QuestionType.matching: 0,
-    QuestionType.identification: 0,
-  };
-  final _matchingLeftCtrl = TextEditingController();
-  final _matchingRightCtrl = TextEditingController();
-  final Map<QuestionType, TextEditingController> _questionCountCtrls = {
-    QuestionType.multipleChoice: TextEditingController(),
-    QuestionType.trueFalse: TextEditingController(),
-    QuestionType.matching: TextEditingController(),
-    QuestionType.identification: TextEditingController(),
-  };
-  final Map<String, String> _matchingPairs = {};
 
-  // Form Fields
-  final _titleCtrl = TextEditingController();
-  final _descCtrl = TextEditingController();
-  final _durationCtrl = TextEditingController(text: '30');
-  final _gradingQuarterCtrl = TextEditingController(text: '1st Quarter');
-  DateTime _scheduleDate = DateTime.now().add(const Duration(days: 2));
-  final Set<String> _selectedSections = {};
-  final Map<String, DateTime> _sectionDeadlines = {};
-  List<String> _availableSections = [];
+  // Sequential slot statuses for selected offering
+  bool _st1Created = false;
+  bool _st2Created = false;
+  bool _teCreated = false;
+  bool _isCheckingSlots = false;
+
+  // Selected Offering
+  Map<String, dynamic>? _selectedOffering;
   List<Map<String, dynamic>> _teacherSubjects = [];
-  String _subjectName = '';
-  bool _isLoadingSections = true;
+  bool _isLoadingOfferings = true;
 
-  bool get _isZeroExamSubject {
-    if (_teacherSubjects.isEmpty) return false;
-    final match = _teacherSubjects.firstWhere(
-      (s) => _selectedSections.contains(s['section_name']),
-      orElse: () => _teacherSubjects.first,
-    );
-    final exWeight = (match['ex_weight'] as num?)?.toDouble() ?? 30.0;
-    return exWeight == 0.0;
-  }
+  // Form Fields - Step 1
+  final _titleCtrl = TextEditingController();
+  final _instructionsCtrl = TextEditingController();
+  final _durationCtrl = TextEditingController(text: '60');
+  final _hpsPointsCtrl = TextEditingController(text: '100');
 
-  // Questions Builder
-  final List<QuestionModel> _questions = [];
-  final _qTextCtrl = TextEditingController();
-  final _qCorrectAnswerCtrl = TextEditingController();
+  DateTime _scheduledDate = DateTime(
+    DateTime.now().year < 2026 ? 2026 : DateTime.now().year,
+    DateTime.now().month,
+    DateTime.now().day,
+  );
+  TimeOfDay _startTime = const TimeOfDay(hour: 8, minute: 0);
+
+  // Inline error strings
+  String? _instructionsError;
+  String? _dateError;
+  String? _durationError;
+  String? _distributionError;
+
+  // Question distributions (3 types only, max 3 digits)
+  final _mcCountCtrl = TextEditingController(text: '5');
+  final _tfCountCtrl = TextEditingController(text: '3');
+  final _idCountCtrl = TextEditingController(text: '2');
+
+  // Step 2: Question Builder
+  List<QuestionDraft> _plannedQuestions = [];
+  int _activeQuestionIndex = 0;
+
+  // Active question editor fields
+  final _qStatementCtrl = TextEditingController();
   final _qPointsCtrl = TextEditingController(text: '1');
-  QuestionType _selectedQType = QuestionType.multipleChoice;
-
-  // Options for multiple choice
   final _choiceACtrl = TextEditingController();
   final _choiceBCtrl = TextEditingController();
   final _choiceCCtrl = TextEditingController();
   final _choiceDCtrl = TextEditingController();
-  String? _selectedChoiceAnswer;
+  String? _selectedMcAnswer; // 'A', 'B', 'C', 'D'
+  String? _selectedTfAnswer; // 'True', 'False'
+  final _qIdAnswerCtrl = TextEditingController();
+  String? _editorError;
+
+  bool _isPublishing = false;
+
+  bool get _isZeroExamSubject {
+    if (_selectedOffering == null) return false;
+    final exWeight = (_selectedOffering!['ex_weight'] as num?)?.toDouble() ?? 30.0;
+    return exWeight == 0.0;
+  }
+
+  int get _totalPlannedQuestions {
+    final mc = int.tryParse(_mcCountCtrl.text.trim()) ?? 0;
+    final tf = int.tryParse(_tfCountCtrl.text.trim()) ?? 0;
+    final id = int.tryParse(_idCountCtrl.text.trim()) ?? 0;
+    return mc + tf + id;
+  }
+
+  bool get _areAllSlotsFilled => _st1Created && _st2Created && _teCreated;
 
   @override
   void initState() {
     super.initState();
-    _loadTeacherSections();
-    if (widget.skipTypeSelection) {
-      _selectAssessmentType(widget.initialIsExam);
-    }
-  }
-
-  Future<void> _loadTeacherSections() async {
-    final teacherId = AuthRepository.instance.currentUser?.id;
-    if (teacherId == null) {
-      if (mounted) setState(() => _isLoadingSections = false);
-      return;
-    }
-    try {
-      final subjects = await SubjectRepository.instance.getTeacherSubjects(teacherId);
-      final sections = subjects
-          .map((s) => s['section_name']?.toString() ?? '')
-          .where((s) => s.isNotEmpty)
-          .toSet()
-          .toList()
-        ..sort();
-      final sub = subjects.isNotEmpty
-          ? (subjects.first['subject_name']?.toString() ?? '')
-          : '';
-      if (!mounted) return;
-      setState(() {
-        _teacherSubjects = subjects;
-        _availableSections = sections;
-        _subjectName = sub;
-        _isLoadingSections = false;
-        _selectedSections.clear();
-        if (sections.contains(widget.initialSection)) {
-          _selectedSections.add(widget.initialSection);
-          _sectionDeadlines[widget.initialSection] = _scheduleDate;
-        } else if (sections.isNotEmpty) {
-          _selectedSections.add(sections.first);
-          _sectionDeadlines[sections.first] = _scheduleDate;
-        }
-      });
-    } catch (_) {
-      if (mounted) setState(() => _isLoadingSections = false);
-    }
+    _instructionsCtrl.addListener(() {
+      if (_instructionsError != null) {
+        setState(() => _instructionsError = null);
+      }
+    });
+    _durationCtrl.addListener(() {
+      if (_durationError != null) {
+        setState(() => _durationError = null);
+      }
+    });
+    _loadTeacherOfferings();
   }
 
   @override
   void dispose() {
     _titleCtrl.dispose();
-    _descCtrl.dispose();
+    _instructionsCtrl.dispose();
     _durationCtrl.dispose();
-    _gradingQuarterCtrl.dispose();
-    _qTextCtrl.dispose();
-    _qCorrectAnswerCtrl.dispose();
+    _hpsPointsCtrl.dispose();
+    _mcCountCtrl.dispose();
+    _tfCountCtrl.dispose();
+    _idCountCtrl.dispose();
+    _qStatementCtrl.dispose();
     _qPointsCtrl.dispose();
     _choiceACtrl.dispose();
     _choiceBCtrl.dispose();
     _choiceCCtrl.dispose();
     _choiceDCtrl.dispose();
-    _matchingLeftCtrl.dispose();
-    _matchingRightCtrl.dispose();
-    for (final controller in _questionCountCtrls.values) {
-      controller.dispose();
-    }
+    _qIdAnswerCtrl.dispose();
     super.dispose();
   }
 
-  void _selectAssessmentType(bool isExam) {
-    if (isExam && _isZeroExamSubject) {
+  Future<void> _loadTeacherOfferings() async {
+    final user = AuthRepository.instance.currentUser;
+    if (user == null) {
+      if (mounted) setState(() => _isLoadingOfferings = false);
+      return;
+    }
+    try {
+      final subjects = await SubjectRepository.instance.getTeacherSubjects(user.id);
+      if (!mounted) return;
+
+      Map<String, dynamic>? initial;
+      if (widget.initialSection.isNotEmpty) {
+        initial = subjects.firstWhere(
+          (s) => s['section_name']?.toString() == widget.initialSection,
+          orElse: () => subjects.isNotEmpty ? subjects.first : <String, dynamic>{},
+        );
+      } else if (subjects.isNotEmpty) {
+        initial = subjects.first;
+      }
+
+      setState(() {
+        _teacherSubjects = subjects;
+        _selectedOffering = initial != null && initial.isNotEmpty ? initial : null;
+        _isLoadingOfferings = false;
+      });
+
+      if (_selectedOffering != null) {
+        final offeringId = _selectedOffering!['id']?.toString() ?? '';
+        if (offeringId.isNotEmpty) {
+          _checkSlotStatuses(offeringId);
+        }
+      }
+    } catch (_) {
+      if (mounted) setState(() => _isLoadingOfferings = false);
+    }
+  }
+
+  Future<void> _checkSlotStatuses(String offeringId) async {
+    setState(() => _isCheckingSlots = true);
+    try {
+      final client = SupabaseService().client;
+
+      // 1. Check existing classwork items for this offering under EX
+      final items = await client
+          .from('classwork_items')
+          .select('title, gradebook_column_index')
+          .eq('subject_offering_id', offeringId)
+          .eq('grading_category', 'ex')
+          .eq('is_archived', false);
+
+      // 2. Check gradebook sheet HPS
+      final termSheet = await SubjectRepository.instance.getGradebookTermSheet(offeringId, 1);
+      final hps = termSheet != null ? (termSheet['hps'] as Map? ?? {})['ex'] as Map? ?? {} : {};
+
+      bool hasSt1 = false;
+      bool hasSt2 = false;
+      bool hasTe = false;
+
+      for (final r in (items as List? ?? [])) {
+        final col = r['gradebook_column_index'] as int?;
+        final t = (r['title'] ?? '').toString().toUpperCase();
+        if (col == 1 || t.contains('ST1') || t.contains('SUMMATIVE TEST 1')) hasSt1 = true;
+        if (col == 2 || t.contains('ST2') || t.contains('SUMMATIVE TEST 2')) hasSt2 = true;
+        if (col == 3 || t.contains('TE') || t.contains('TERM EXAM') || t.contains('PERIODICAL')) hasTe = true;
+      }
+
+      if (hps['st1'] != null && (hps['st1'] as num) > 0) hasSt1 = true;
+      if (hps['st2'] != null && (hps['st2'] as num) > 0) hasSt2 = true;
+      if (hps['te'] != null && (hps['te'] as num) > 0) hasTe = true;
+
+      if (!mounted) return;
+      setState(() {
+        _st1Created = hasSt1;
+        _st2Created = hasSt2;
+        _teCreated = hasTe;
+        _isCheckingSlots = false;
+
+        // Auto-select the first available sequential slot
+        if (!hasSt1) {
+          _setExamSlot('ST1');
+        } else if (!hasSt2) {
+          _setExamSlot('ST2');
+        } else if (!hasTe) {
+          _setExamSlot('TE');
+        } else {
+          _setExamSlot('TE');
+        }
+      });
+    } catch (e) {
+      debugPrint('Slot check notice: $e');
+      if (mounted) setState(() => _isCheckingSlots = false);
+    }
+  }
+
+  void _setExamSlot(String slot) {
+    setState(() {
+      _examCategory = slot;
+      _titleCtrl.text = switch (slot) {
+        'ST2' => 'Summative Test 2 (ST2)',
+        'TE' => 'Term Examination (TE)',
+        _ => 'Summative Test 1 (ST1)',
+      };
+    });
+  }
+
+  Future<void> _pickDate() async {
+    final now = DateTime.now();
+    final today = DateTime(now.year < 2026 ? 2026 : now.year, now.month, now.day);
+    final minDate = _completionMode == 'online'
+        ? today
+        : DateTime(2026, 1, 1);
+
+    final picked = await showAppDatePickerDialog(
+      context,
+      initialDate: _scheduledDate.isBefore(minDate) ? minDate : _scheduledDate,
+      firstDate: minDate,
+      lastDate: DateTime(2100),
+      title: _completionMode == 'online' ? 'Select Scheduled Date' : 'Select Administered Date',
+      icon: Icons.calendar_today_outlined,
+    );
+
+    if (picked != null && mounted) {
+      setState(() {
+        _scheduledDate = picked;
+        _dateError = null;
+      });
+    }
+  }
+
+  void _handleContinueOrPublish() {
+    setState(() {
+      _instructionsError = null;
+      _dateError = null;
+      _durationError = null;
+      _distributionError = null;
+    });
+
+    if (_isZeroExamSubject) {
       AppModals.showErrorDialog(
         context: context,
         title: 'Zero-Exam Subject',
@@ -190,387 +350,513 @@ class _CreateAssessmentFlowDialogState
       );
       return;
     }
-    setState(() {
-      _isExam = isExam;
-      _currentStep = 1;
-      _durationCtrl.text = isExam ? '60' : '30';
-      _titleCtrl.text = '';
-      _descCtrl.text = '';
-      if (_isExam) {
-        _setExamTitle('ST1');
-      }
-    });
-  }
 
-  Future<void> _selectAssessmentDeadline(String section) async {
-    final current = _sectionDeadlines[section] ?? _scheduleDate;
-    final now = DateTime.now();
-    final initial = current.isBefore(now) ? now.add(const Duration(hours: 1)) : current;
-    final date = await showAppDatePickerDialog(
-      context,
-      initialDate: initial,
-      firstDate: DateTime(now.year, now.month, now.day),
-      lastDate: DateTime(2100),
-      title: 'Select Assessment Deadline',
-    );
-    if (!mounted || date == null) return;
-    final time = await showTimePicker(
-      context: context,
-      initialTime: TimeOfDay.fromDateTime(initial),
-    );
-    if (!mounted || time == null) return;
-    setState(() {
-      _sectionDeadlines[section] = DateTime(
-        date.year,
-        date.month,
-        date.day,
-        time.hour,
-        time.minute,
-      );
-      _scheduleDate = _sectionDeadlines[section]!;
-    });
-  }
-
-  String _formatAssessmentDeadline(DateTime date) {
-    final hour = date.hour == 0
-        ? 12
-        : (date.hour > 12 ? date.hour - 12 : date.hour);
-    final period = date.hour >= 12 ? 'PM' : 'AM';
-    return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year} '
-        '${hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')} $period';
-  }
-
-  void _addQuestionToList() {
-    final isMatching = _selectedQType == QuestionType.matching;
-    if (_qTextCtrl.text.trim().isEmpty && !isMatching) {
+    if (_areAllSlotsFilled) {
       AppModals.showErrorDialog(
         context: context,
-        title: 'Incomplete Question',
-        message:
-            'Please provide question text and the correct answer before adding.',
+        title: 'All Examination Slots Filled',
+        message: 'All examination slots (ST1, ST2, TE) are already configured for this offering.',
       );
       return;
     }
 
-    final points = int.tryParse(_qPointsCtrl.text.trim());
-    if (points == null || points < 1 || points > 10) {
-      AppModals.showErrorDialog(
-        context: context,
-        title: 'Invalid Points',
-        message: 'Points must be a whole number from 1 to 10.',
-      );
+    final instructions = _instructionsCtrl.text.trim();
+    if (instructions.length < 2) {
+      setState(() {
+        _instructionsError = 'Instructions & Guidelines are required (min 2 characters).';
+      });
       return;
     }
-    final planned = _questionCounts[_selectedQType] ?? 0;
-    final alreadyAdded = _questions
-        .where((q) => q.type == _selectedQType)
-        .length;
-    if (planned == 0 || alreadyAdded >= planned) {
-      AppModals.showErrorDialog(
-        context: context,
-        title: 'Question Limit Reached',
-        message: 'This question type is not included or has already reached its planned count.',
-      );
-      return;
-    }
-    List<String> choices = [];
 
-    if (_selectedQType == QuestionType.multipleChoice) {
-      choices = [
-        _choiceACtrl.text.trim().isEmpty
-            ? 'Option A'
-            : _choiceACtrl.text.trim(),
-        _choiceBCtrl.text.trim().isEmpty
-            ? 'Option B'
-            : _choiceBCtrl.text.trim(),
-        _choiceCCtrl.text.trim().isEmpty
-            ? 'Option C'
-            : _choiceCCtrl.text.trim(),
-        _choiceDCtrl.text.trim().isEmpty
-            ? 'Option D'
-            : _choiceDCtrl.text.trim(),
-      ];
-    } else if (_selectedQType == QuestionType.trueFalse) {
-      choices = ['True', 'False'];
-    } else if (_selectedQType == QuestionType.matching) {
-      if (_matchingPairs.isEmpty) {
+    if (_completionMode == 'in_person') {
+      final hps = int.tryParse(_hpsPointsCtrl.text.trim());
+      if (hps == null || hps < 1 || hps > 100) {
         AppModals.showErrorDialog(
           context: context,
-          title: 'Matching Pairs Required',
-          message:
-              'Add at least one matching pair before adding this question.',
+          title: 'Invalid Points',
+          message: 'Total Points (HPS) must be a positive integer between 1 and 100.',
         );
         return;
       }
-      // For matching type, choices are the options students can pick from (Column B)
-      choices = _matchingPairs.values.toList();
+      _publishInPersonExam(hps);
+      return;
     }
 
-    final correctAnswer =
-        _selectedQType == QuestionType.multipleChoice ||
-            _selectedQType == QuestionType.trueFalse
-        ? (_selectedChoiceAnswer ?? '')
-        : _selectedQType == QuestionType.matching
-        ? _matchingPairs.entries.map((e) => '${e.key}=${e.value}').join('|')
-        : _qCorrectAnswerCtrl.text.trim();
-    if (correctAnswer.isEmpty) {
-      AppModals.showErrorDialog(
-        context: context,
-        title: 'Correct Answer Required',
-        message:
-            'Select or enter the correct answer before adding the question.',
-      );
+    // Online Mode validations
+    final duration = int.tryParse(_durationCtrl.text.trim());
+    if (duration == null || duration < 1) {
+      setState(() => _durationError = 'Duration must be greater than 0.');
       return;
+    }
+
+    final mc = int.tryParse(_mcCountCtrl.text.trim()) ?? 0;
+    final tf = int.tryParse(_tfCountCtrl.text.trim()) ?? 0;
+    final id = int.tryParse(_idCountCtrl.text.trim()) ?? 0;
+    final total = mc + tf + id;
+
+    if (total == 0) {
+      setState(() => _distributionError = 'Please configure at least 1 question.');
+      return;
+    }
+    if (total > 100) {
+      setState(() => _distributionError = 'Total questions cannot exceed 100 items ($total / 100).');
+      return;
+    }
+
+    // Initialize Question Drafts for Step 2
+    final drafts = <QuestionDraft>[];
+    int pos = 1;
+    for (int i = 0; i < mc; i++) {
+      drafts.add(QuestionDraft(position: pos++, type: QuestionType.multipleChoice));
+    }
+    for (int i = 0; i < tf; i++) {
+      drafts.add(QuestionDraft(position: pos++, type: QuestionType.trueFalse));
+    }
+    for (int i = 0; i < id; i++) {
+      drafts.add(QuestionDraft(position: pos++, type: QuestionType.identification));
     }
 
     setState(() {
-      _questions.add(
-        QuestionModel(
-          id: 'q_${DateTime.now().millisecondsSinceEpoch}',
-          questionText: isMatching && _qTextCtrl.text.trim().isEmpty
-              ? 'Match the items in Column A with the correct items in Column B.'
-              : _qTextCtrl.text.trim(),
-          type: _selectedQType,
-          choices: choices,
-          correctAnswer: correctAnswer,
-          points: points.toDouble(),
-          matchingPairs: Map<String, String>.from(_matchingPairs),
-        ),
-      );
+      _plannedQuestions = drafts;
+      _activeQuestionIndex = 0;
+      _currentStep = 2;
+    });
 
-      // Clear question builder fields
-      _qTextCtrl.clear();
-      _qCorrectAnswerCtrl.clear();
-      _choiceACtrl.clear();
-      _choiceBCtrl.clear();
-      _choiceCCtrl.clear();
-      _choiceDCtrl.clear();
-      _selectedChoiceAnswer = null;
-      _matchingPairs.clear();
-      _advanceToNextQuestionType();
+    _loadQuestionIntoEditor(0);
+  }
+
+  void _loadQuestionIntoEditor(int index) {
+    if (index < 0 || index >= _plannedQuestions.length) return;
+    final q = _plannedQuestions[index];
+    setState(() {
+      _activeQuestionIndex = index;
+      _qStatementCtrl.text = q.statement;
+      _qPointsCtrl.text = q.points.toInt().toString();
+      _editorError = null;
+
+      if (q.type == QuestionType.multipleChoice) {
+        _choiceACtrl.text = q.choices.isNotEmpty ? q.choices[0] : '';
+        _choiceBCtrl.text = q.choices.length > 1 ? q.choices[1] : '';
+        _choiceCCtrl.text = q.choices.length > 2 ? q.choices[2] : '';
+        _choiceDCtrl.text = q.choices.length > 3 ? q.choices[3] : '';
+        _selectedMcAnswer = q.correctAnswer.isNotEmpty ? q.correctAnswer : null;
+      } else if (q.type == QuestionType.trueFalse) {
+        _selectedTfAnswer = q.correctAnswer.isNotEmpty ? q.correctAnswer : null;
+      } else if (q.type == QuestionType.identification) {
+        _qIdAnswerCtrl.text = q.correctAnswer;
+      }
     });
   }
 
-  List<QuestionType> get _configuredQuestionTypes => QuestionType.values
-      .where((type) => (_questionCounts[type] ?? 0) > 0)
-      .toList();
+  bool _saveCurrentEditorState() {
+    if (_activeQuestionIndex < 0 || _activeQuestionIndex >= _plannedQuestions.length) {
+      return false;
+    }
+    final q = _plannedQuestions[_activeQuestionIndex];
+    final statement = _qStatementCtrl.text.trim();
+    if (statement.isEmpty) {
+      setState(() => _editorError = 'Question statement cannot be empty.');
+      return false;
+    }
 
-  bool get _canAddCurrentQuestion {
-    final planned = _questionCounts[_selectedQType] ?? 0;
-    final added = _questions
-        .where((question) => question.type == _selectedQType)
-        .length;
-    return planned > 0 && added < planned;
-  }
+    final points = double.tryParse(_qPointsCtrl.text.trim()) ?? 1.0;
+    if (points <= 0) {
+      setState(() => _editorError = 'Points must be at least 1.');
+      return false;
+    }
 
-  void _advanceToNextQuestionType() {
-    final types = _configuredQuestionTypes;
-    if (types.isEmpty) return;
-    final currentIndex = types.indexOf(_selectedQType);
-    final currentCount = _questions
-        .where((q) => q.type == _selectedQType)
-        .length;
-    if (currentCount < (_questionCounts[_selectedQType] ?? 0)) return;
-    for (var index = currentIndex + 1; index < types.length; index++) {
-      final type = types[index];
-      if (_questions.where((q) => q.type == type).length <
-          (_questionCounts[type] ?? 0)) {
-        _selectedQType = type;
-        return;
+    if (q.type == QuestionType.multipleChoice) {
+      final a = _choiceACtrl.text.trim();
+      final b = _choiceBCtrl.text.trim();
+      final c = _choiceCCtrl.text.trim();
+      final d = _choiceDCtrl.text.trim();
+      if (a.isEmpty || b.isEmpty || c.isEmpty || d.isEmpty) {
+        setState(() => _editorError = 'All 4 choices (A, B, C, D) are required.');
+        return false;
       }
+      if (_selectedMcAnswer == null || _selectedMcAnswer!.isEmpty) {
+        setState(() => _editorError = 'Please select the correct answer radio.');
+        return false;
+      }
+      q.statement = statement;
+      q.points = points;
+      q.choices = [a, b, c, d];
+      q.correctAnswer = _selectedMcAnswer!;
+    } else if (q.type == QuestionType.trueFalse) {
+      if (_selectedTfAnswer == null || _selectedTfAnswer!.isEmpty) {
+        setState(() => _editorError = 'Please select True or False as the answer key.');
+        return false;
+      }
+      q.statement = statement;
+      q.points = points;
+      q.choices = ['True', 'False'];
+      q.correctAnswer = _selectedTfAnswer!;
+    } else if (q.type == QuestionType.identification) {
+      final key = _qIdAnswerCtrl.text.trim();
+      if (key.isEmpty) {
+        setState(() => _editorError = 'Please specify the official answer key for identification.');
+        return false;
+      }
+      q.statement = statement;
+      q.points = points;
+      q.correctAnswer = key;
     }
+
+    setState(() => _editorError = null);
+    _saveDraftLocally();
+    return true;
   }
 
-  void _setExamTitle(String category) {
-    _examCategory = category;
-    _titleCtrl.text = switch (category) {
-      'ST2' => 'Summative Test 2 (ST2)',
-      'TE' => 'Term Examination (TE)',
-      _ => 'Summative Test 1 (ST1)',
-    };
-  }
-
-  void _saveAssessment() {
-    if (_titleCtrl.text.trim().isEmpty) {
-      AppModals.showErrorDialog(
-        context: context,
-        title: 'Title Required',
-        message: 'Please provide a valid title for this assessment.',
-      );
-      return;
-    }
-
-    final duration = int.tryParse(_durationCtrl.text.trim());
-    if (duration == null || duration < 1) {
-      AppModals.showErrorDialog(
-        context: context,
-        title: 'Invalid Duration',
-        message: 'Duration must be a whole number greater than 0.',
-      );
-      return;
-    }
-    if (_selectedSections.isEmpty) {
-      AppModals.showErrorDialog(
-        context: context,
-        title: 'Assigned Section Required',
-        message: 'Select at least one assigned section.',
-      );
-      return;
-    }
-
-    final plannedTotal = _questionCounts.values.fold<int>(
-      0,
-      (sum, count) => sum + count,
-    );
-    if (_questions.length != plannedTotal) {
-      AppModals.showErrorDialog(
-        context: context,
-        title: 'Incomplete Question Set',
-        message:
-            'Add all $plannedTotal planned questions before publishing. Current total: ${_questions.length}.',
-      );
-      return;
-    }
-
-    final totalPoints = _questions.fold<double>(
-      0,
-      (sum, question) => sum + question.points,
-    );
-    if (totalPoints > 100) {
-      AppModals.showErrorDialog(
-        context: context,
-        title: 'Maximum Points Exceeded',
-        message:
-            'The total points for one quiz or examination cannot exceed 100.',
-      );
-      return;
-    }
-
-    // Strict EX (ST1, ST2, TE single slot) and WW (10 limit) validation
-    if (_isExam && _isZeroExamSubject) {
-      AppModals.showErrorDialog(
-        context: context,
-        title: 'Zero-Exam Subject',
-        message:
-            'This subject has no Examination component under DepEd Order No. 015, s. 2026. Initial Grades are computed 100% from Written Works and Performance Tasks.',
-      );
-      return;
-    }
-
-    // Synchronize Quiz or Exam HPS into Gradebook sheet for the assigned sections
+  void _saveDraftLocally() {
     try {
-      final categoryKey = _isExam ? 'ex' : 'ww';
-      final hpsSlotKey = _isExam ? _examCategory.toLowerCase() : '1';
-
-      final user = AuthRepository.instance.currentUser;
-      if (user != null) {
-        SubjectRepository.instance.getTeacherSubjects(user.id).then((offerings) {
-          for (final section in _selectedSections) {
-            final match = offerings.firstWhere(
-              (o) => o['section_name']?.toString() == section,
-              orElse: () => <String, dynamic>{},
-            );
-            final offeringId = match['id']?.toString();
-            if (offeringId != null) {
-              SubjectRepository.instance.getGradebookTermSheet(offeringId, 1).then((termSheet) {
-                final sheet = Map<String, dynamic>.from(termSheet ?? {});
-                final hps = Map<String, dynamic>.from(sheet['hps'] as Map? ?? {});
-                final catMap = Map<String, dynamic>.from(hps[categoryKey] as Map? ?? {});
-
-                catMap[hpsSlotKey] = totalPoints;
-                hps[categoryKey] = catMap;
-                sheet['hps'] = hps;
-
-                SubjectRepository.instance.saveGradebookTermSheet(offeringId, 1, sheet);
-              }).catchError((e) {
-                debugPrint('Assessment HPS sync notice: $e');
-              });
-            }
-          }
-        });
-      }
+      final offeringId = _selectedOffering?['id']?.toString() ?? 'temp';
+      final draftPayload = {
+        'offeringId': offeringId,
+        'slot': _examCategory,
+        'instructions': _instructionsCtrl.text,
+        'questions': _plannedQuestions.map((q) => {
+          'position': q.position,
+          'type': q.type.name,
+          'statement': q.statement,
+          'choices': q.choices,
+          'correctAnswer': q.correctAnswer,
+          'points': q.points,
+        }).toList(),
+      };
+      AppDataCache.instance.set(
+        'exam_draft_${offeringId}_$_examCategory',
+        jsonEncode(draftPayload),
+      );
     } catch (_) {}
+  }
 
-    widget.onAssessmentCreated();
-    Navigator.of(context).pop();
+  Future<void> _publishInPersonExam(int hpsPoints) async {
+    if (_selectedOffering == null) return;
+    setState(() => _isPublishing = true);
 
-    AppModals.showSuccessDialog(
-      context: context,
-      title: _isExam
-          ? 'Periodical Examination Published'
-          : 'Quiz Assessment Published',
-      message:
-          '${_titleCtrl.text.trim()} has been configured and published for ${_selectedSections.join(', ')}. Duration: $duration mins, Total Points: ${totalPoints.toInt()} pts.',
+    try {
+      final client = SupabaseService().client;
+      final offeringId = _selectedOffering!['id'].toString();
+      final title = _titleCtrl.text.trim();
+      final instructions = _instructionsCtrl.text.trim();
+
+      final slotIndex = switch (_examCategory) {
+        'ST2' => 2,
+        'TE' => 3,
+        _ => 1,
+      };
+
+      // 1. Insert into classwork_items
+      await client.from('classwork_items').insert({
+        'subject_offering_id': offeringId,
+        'grading_category': 'ex',
+        'title': title,
+        'instructions': instructions,
+        'max_score': hpsPoints,
+        'deadline': _scheduledDate.toIso8601String(),
+        'completion_mode': 'in_person',
+        'is_requirement': true,
+        'term_number': 1,
+        'gradebook_column_index': slotIndex,
+        'is_published': true,
+      });
+
+      // 2. Synchronize Gradebook Term Sheet HPS
+      final termSheet = await SubjectRepository.instance.getGradebookTermSheet(offeringId, 1) ?? {};
+      final hps = Map<String, dynamic>.from(termSheet['hps'] as Map? ?? {});
+      final exHps = Map<String, dynamic>.from(hps['ex'] as Map? ?? {});
+      exHps[_examCategory.toLowerCase()] = hpsPoints;
+      hps['ex'] = exHps;
+      termSheet['hps'] = hps;
+      await SubjectRepository.instance.saveGradebookTermSheet(offeringId, 1, termSheet);
+
+      AppDataCache.instance.invalidatePrefix('teacher_activities_');
+      AppDataCache.instance.invalidatePrefix('student_dashboard_');
+
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      widget.onAssessmentCreated();
+
+      AppModals.showSuccessDialog(
+        context: context,
+        title: 'Examination Recorded',
+        message: '$title has been saved in Gradebook as an In-Person examination with $hpsPoints total points.',
+      );
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isPublishing = false);
+        AppModals.showErrorDialog(
+          context: context,
+          title: 'Save Failed',
+          message: 'Failed to record examination: $e',
+        );
+      }
+    }
+  }
+
+  Future<void> _publishOnlineExam() async {
+    if (!_saveCurrentEditorState()) return;
+
+    final incomplete = _plannedQuestions.where((q) => !q.isComplete).toList();
+    if (incomplete.isNotEmpty) {
+      AppModals.showErrorDialog(
+        context: context,
+        title: 'Incomplete Questions',
+        message: 'Question #${incomplete.first.position} is missing its statement or answer key. Please review all items.',
+      );
+      _loadQuestionIntoEditor(incomplete.first.position - 1);
+      return;
+    }
+
+    if (_selectedOffering == null) return;
+    setState(() => _isPublishing = true);
+
+    try {
+      final client = SupabaseService().client;
+      final offeringId = _selectedOffering!['id'].toString();
+      final title = _titleCtrl.text.trim();
+      final instructions = _instructionsCtrl.text.trim();
+      final duration = int.parse(_durationCtrl.text.trim());
+
+      final startDateTime = DateTime(
+        _scheduledDate.year,
+        _scheduledDate.month,
+        _scheduledDate.day,
+        _startTime.hour,
+        _startTime.minute,
+      );
+      final deadline = startDateTime.add(Duration(minutes: duration));
+
+      final slotIndex = switch (_examCategory) {
+        'ST2' => 2,
+        'TE' => 3,
+        _ => 1,
+      };
+
+      final totalPoints = _plannedQuestions.fold<double>(0.0, (sum, q) => sum + q.points);
+
+      // 1. Create digital_assessments record
+      final assessmentRow = await client
+          .from('digital_assessments')
+          .insert({
+            'subject_offering_id': offeringId,
+            'assessment_type': switch (_examCategory) {
+              'ST2' => 'st2',
+              'TE' => 'term_exam',
+              _ => 'st1',
+            },
+            'grading_category': 'ex',
+            'title': title,
+            'instructions': instructions,
+            'time_limit_minutes': duration,
+            'available_from': startDateTime.toIso8601String(),
+            'deadline': deadline.toIso8601String(),
+            'attempts_allowed': 1,
+            'is_published': true,
+          })
+          .select()
+          .single();
+
+      final assessmentId = assessmentRow['id'].toString();
+
+      // 2. Insert assessment_questions & assessment_question_options
+      for (final q in _plannedQuestions) {
+        final qTypeStr = switch (q.type) {
+          QuestionType.multipleChoice => 'multiple_choice',
+          QuestionType.trueFalse => 'true_false',
+          QuestionType.identification => 'identification',
+          QuestionType.matching => 'matching_type',
+        };
+
+        final qRow = await client
+            .from('assessment_questions')
+            .insert({
+              'assessment_id': assessmentId,
+              'position': q.position,
+              'question_type': qTypeStr,
+              'question_text': q.statement,
+              'points': q.points,
+            })
+            .select()
+            .single();
+
+        final qId = qRow['id'].toString();
+
+        if (q.type == QuestionType.multipleChoice) {
+          const labels = ['A', 'B', 'C', 'D'];
+          for (int i = 0; i < 4; i++) {
+            await client.from('assessment_question_options').insert({
+              'question_id': qId,
+              'option_label': labels[i],
+              'option_text': q.choices[i],
+              'is_correct': q.correctAnswer == labels[i],
+            });
+          }
+        } else if (q.type == QuestionType.trueFalse) {
+          await client.from('assessment_question_options').insert([
+            {
+              'question_id': qId,
+              'option_label': 'True',
+              'option_text': 'True',
+              'is_correct': q.correctAnswer == 'True',
+            },
+            {
+              'question_id': qId,
+              'option_label': 'False',
+              'option_text': 'False',
+              'is_correct': q.correctAnswer == 'False',
+            },
+          ]);
+        } else if (q.type == QuestionType.identification) {
+          await client.from('assessment_question_options').insert({
+            'question_id': qId,
+            'option_label': 'Key',
+            'option_text': q.correctAnswer,
+            'is_correct': true,
+          });
+        }
+      }
+
+      // 3. Persist to classwork_items
+      await client.from('classwork_items').insert({
+        'subject_offering_id': offeringId,
+        'grading_category': 'ex',
+        'title': title,
+        'instructions': instructions,
+        'max_score': totalPoints.toInt(),
+        'deadline': deadline.toIso8601String(),
+        'completion_mode': 'online',
+        'is_requirement': true,
+        'term_number': 1,
+        'gradebook_column_index': slotIndex,
+        'is_published': true,
+      });
+
+      // 4. Update Gradebook Sheet HPS
+      final termSheet = await SubjectRepository.instance.getGradebookTermSheet(offeringId, 1) ?? {};
+      final hps = Map<String, dynamic>.from(termSheet['hps'] as Map? ?? {});
+      final exHps = Map<String, dynamic>.from(hps['ex'] as Map? ?? {});
+      exHps[_examCategory.toLowerCase()] = totalPoints.toInt();
+      hps['ex'] = exHps;
+      termSheet['hps'] = hps;
+      await SubjectRepository.instance.saveGradebookTermSheet(offeringId, 1, termSheet);
+
+      // Clean local draft
+      AppDataCache.instance.invalidate('exam_draft_${offeringId}_$_examCategory');
+      AppDataCache.instance.invalidatePrefix('teacher_activities_');
+      AppDataCache.instance.invalidatePrefix('student_dashboard_');
+
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      widget.onAssessmentCreated();
+
+      AppModals.showSuccessDialog(
+        context: context,
+        title: 'Examination Published',
+        message: '$title has been published for ${_selectedOffering!['section_name']}. Scheduled for ${_formatDate(_scheduledDate)} at ${AppTimePickerField.format(_startTime)} (${duration}m duration).',
+      );
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isPublishing = false);
+        AppModals.showErrorDialog(
+          context: context,
+          title: 'Publish Failed',
+          message: 'Error publishing digital assessment: $e',
+        );
+      }
+    }
+  }
+
+  void _openAiGeneration() {
+    final subName = _selectedOffering?['subject_name']?.toString() ?? 'General Subject';
+    AiGenerationModal.show(
+      context,
+      isExam: true,
+      subjectName: subName,
+      onQuestionsGenerated: (generated) {
+        final drafts = <QuestionDraft>[];
+        int pos = 1;
+        for (final q in generated) {
+          drafts.add(QuestionDraft(
+            position: pos++,
+            type: q.type,
+            statement: q.questionText,
+            choices: List.from(q.choices),
+            correctAnswer: q.correctAnswer,
+            points: q.points,
+          ));
+        }
+        setState(() {
+          _plannedQuestions = drafts;
+          _currentStep = 2;
+          _activeQuestionIndex = 0;
+        });
+        _loadQuestionIntoEditor(0);
+        AppModals.showSuccessDialog(
+          context: context,
+          title: 'Questions Generated with Gemini AI',
+          message: '${drafts.length} questions were generated. You can now navigate the items, verify answer keys, and adjust points before publishing.',
+        );
+      },
     );
+  }
+
+  String _formatDate(DateTime d) {
+    return '${d.month.toString().padLeft(2, '0')}/${d.day.toString().padLeft(2, '0')}/${d.year}';
   }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       backgroundColor: Colors.white,
-      insetPadding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
       child: Container(
-        width: 780,
-        constraints: const BoxConstraints(maxHeight: 720),
+        width: 820,
+        constraints: const BoxConstraints(maxHeight: 740),
         child: Column(
           children: [
-            // Header bar
+            // Header Bar
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
               decoration: BoxDecoration(
-                border: Border(bottom: BorderSide(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.12))),
+                border: Border(bottom: BorderSide(color: theme.colorScheme.onSurface.withValues(alpha: 0.12))),
               ),
               child: Row(
                 children: [
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: _isExam
-                          ? AppTheme.catRed.withValues(alpha: 0.1)
-                          : AppTheme.catBlue.withValues(alpha: 0.1),
+                      color: AppTheme.catRed.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: Icon(
-                      _isExam
-                          ? Icons.description_outlined
-                          : Icons.quiz_outlined,
-                      color: _isExam ? AppTheme.catRed : Theme.of(context).colorScheme.primary,
-                      size: 22,
-                    ),
+                    child: const Icon(Icons.description_outlined, color: AppTheme.catRed, size: 22),
                   ),
                   const SizedBox(width: 14),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          _isExam
-                              ? 'Configure Periodical Examination'
-                              : 'Configure Unit Quiz',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: Theme.of(context).colorScheme.onSurface,
-                          ),
+                        const Text(
+                          'Configure Periodical Examination',
+                          style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
                         ),
                         Text(
                           _currentStep == 1
-                              ? 'Set title, section, duration, and instructions'
-                              : 'Add questions and answer keys',
+                              ? 'Set method, slot, schedule, instructions, and distributions'
+                              : 'Question Builder — Author statements and mandatory answer keys',
                           style: TextStyle(
                             fontSize: 12,
-                            color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+                            color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                           ),
                         ),
                       ],
                     ),
                   ),
                   IconButton(
-                    icon: Icon(
-                      Icons.close,
-                      color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
-                    ),
+                    icon: Icon(Icons.close, color: theme.colorScheme.onSurface.withValues(alpha: 0.6)),
                     onPressed: () => Navigator.of(context).pop(),
                   ),
                 ],
@@ -580,17 +866,17 @@ class _CreateAssessmentFlowDialogState
             // Content Body
             Expanded(
               child: _currentStep == 1
-                  ? _buildBasicDetailsView()
-                  : _buildQuestionBuilderView(),
+                  ? _buildStep1BasicDetailsView()
+                  : _buildStep2QuestionBuilderView(),
             ),
 
-            // Footer / Bottom Actions
+            // Footer Bar
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
               decoration: BoxDecoration(
-                color: Color(0xFFF8FAFC),
-                border: Border(top: BorderSide(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.12))),
-                borderRadius: BorderRadius.only(
+                color: const Color(0xFFF8FAFC),
+                border: Border(top: BorderSide(color: theme.colorScheme.onSurface.withValues(alpha: 0.12))),
+                borderRadius: const BorderRadius.only(
                   bottomLeft: Radius.circular(20),
                   bottomRight: Radius.circular(20),
                 ),
@@ -598,7 +884,7 @@ class _CreateAssessmentFlowDialogState
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  if (_currentStep == 3)
+                  if (_currentStep == 2)
                     TextButton.icon(
                       icon: const Icon(Icons.arrow_back, size: 16),
                       label: const Text('Back to Details'),
@@ -613,7 +899,7 @@ class _CreateAssessmentFlowDialogState
                         child: Text(
                           'Cancel',
                           style: TextStyle(
-                            color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+                            color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                             fontWeight: FontWeight.w600,
                           ),
                         ),
@@ -621,20 +907,27 @@ class _CreateAssessmentFlowDialogState
                       const SizedBox(width: 12),
                       if (_currentStep == 1)
                         AppPrimaryButton(
-                          label: 'Continue to Question Builder',
-                          icon: Icons.arrow_forward,
+                          label: _completionMode == 'in_person'
+                              ? (_isPublishing ? 'Publishing...' : 'Publish Examination')
+                              : 'Continue',
+                          icon: _completionMode == 'in_person'
+                              ? Icons.publish
+                              : Icons.arrow_forward,
                           height: 42,
-                          onPressed: _continueToQuestionBuilder,
+                          backgroundColor: AppTheme.catRed,
+                          onPressed: (_areAllSlotsFilled || _isPublishing)
+                              ? null
+                              : _handleContinueOrPublish,
                         ),
-                      if (_currentStep == 3)
+                      if (_currentStep == 2)
                         AppPrimaryButton(
-                          label: _isExam ? 'Save Examination' : 'Save Quiz',
+                          label: _isPublishing
+                              ? 'Publishing Examination...'
+                              : 'Save & Publish Examination',
                           icon: Icons.check_circle_outline,
                           height: 42,
-                          backgroundColor: _isExam
-                              ? AppTheme.catRed
-                              : Theme.of(context).colorScheme.primary,
-                          onPressed: _saveAssessment,
+                          backgroundColor: AppTheme.catRed,
+                          onPressed: _isPublishing ? null : _publishOnlineExam,
                         ),
                     ],
                   ),
@@ -647,17 +940,21 @@ class _CreateAssessmentFlowDialogState
     );
   }
 
-  Widget _buildBasicDetailsView() {
+  // =========================================================================
+  // STEP 1: BASIC DETAILS & CONFIGURATION
+  // =========================================================================
+  Widget _buildStep1BasicDetailsView() {
     final theme = Theme.of(context);
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Upfront AI Generation Card (Prominently placed at the front/top of the modal)
+          // AI Generation Promo Card (Upfront at the top)
           Container(
-            margin: const EdgeInsets.only(bottom: 22),
-            padding: const EdgeInsets.all(16),
+            margin: const EdgeInsets.only(bottom: 20),
+            padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: [
@@ -671,12 +968,12 @@ class _CreateAssessmentFlowDialogState
             child: Row(
               children: [
                 Container(
-                  padding: const EdgeInsets.all(10),
+                  padding: const EdgeInsets.all(9),
                   decoration: BoxDecoration(
                     color: AppTheme.catPurple.withValues(alpha: 0.15),
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(Icons.auto_awesome, color: AppTheme.catPurple, size: 22),
+                  child: const Icon(Icons.auto_awesome, color: AppTheme.catPurple, size: 20),
                 ),
                 const SizedBox(width: 14),
                 Expanded(
@@ -685,9 +982,9 @@ class _CreateAssessmentFlowDialogState
                     children: [
                       Row(
                         children: [
-                          Text(
-                            _isExam ? 'Generate Examination with Gemini AI' : 'Generate Quiz with Gemini AI',
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                          const Text(
+                            'Generate Examination with Gemini AI',
+                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                           ),
                           const SizedBox(width: 8),
                           Container(
@@ -698,16 +995,16 @@ class _CreateAssessmentFlowDialogState
                             ),
                             child: const Text(
                               'AI POWERED',
-                              style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.catPurple),
+                              style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: AppTheme.catPurple),
                             ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 3),
+                      const SizedBox(height: 2),
                       Text(
-                        'Upload syllabus files (.pdf, .docx, .txt) or enter topics to auto-generate questions, choices, and answer keys.',
+                        'Upload syllabus files (.pdf, .docx) to auto-generate questions and answer keys.',
                         style: TextStyle(
-                          fontSize: 12,
+                          fontSize: 11,
                           color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
                         ),
                       ),
@@ -716,13 +1013,13 @@ class _CreateAssessmentFlowDialogState
                 ),
                 const SizedBox(width: 12),
                 ElevatedButton.icon(
-                  icon: const Icon(Icons.auto_awesome, size: 15),
+                  icon: const Icon(Icons.auto_awesome, size: 14),
                   label: const Text('Generate with AI'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppTheme.catPurple,
                     foregroundColor: Colors.white,
                     elevation: 0,
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
                   onPressed: _openAiGeneration,
@@ -731,889 +1028,1054 @@ class _CreateAssessmentFlowDialogState
             ),
           ),
 
-          if (_isExam)
-            DropdownButtonFormField<String>(
-              initialValue: _examCategory,
-              decoration: const InputDecoration(
-                labelText: 'Periodical Examination Title',
-                border: OutlineInputBorder(),
-              ),
-              items: const [
-                DropdownMenuItem(
-                  value: 'ST1',
-                  child: Text('Summative Test 1 (ST1)'),
-                ),
-                DropdownMenuItem(
-                  value: 'ST2',
-                  child: Text('Summative Test 2 (ST2)'),
-                ),
-                DropdownMenuItem(
-                  value: 'TE',
-                  child: Text('Term Examination (TE)'),
-                ),
-              ],
-              onChanged: (value) {
-                if (value != null) setState(() => _setExamTitle(value));
-              },
-            )
-          else
-            AppTextField(
-              label: 'Quiz Title',
-              hint: 'e.g., Short Quiz on Piecewise Functions',
-              controller: _titleCtrl,
+          // 1. Method Segmented Selector: Online vs In-Person
+          Container(
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
+              borderRadius: BorderRadius.circular(10),
             ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: AppTextField(
-                  label: 'Duration (Minutes)',
-                  controller: _durationCtrl,
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'Assigned Section & Start Date / Time',
-            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-          ),
-          const SizedBox(height: 8),
-          if (_isLoadingSections)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 12),
-              child: Center(
-                child: SizedBox(
-                  width: 24,
-                  height: 24,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-              ),
-            )
-          else if (_availableSections.isEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              child: Text(
-                'No sections available yet. Please set up your sections in Classroom Setup first.',
-                style: TextStyle(
-                  color: AppTheme.catRed,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            )
-          else
-            ..._availableSections.map(
-            (section) => Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: CheckboxListTile(
-                      dense: true,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-                      title: Text(section),
-                      value: _selectedSections.contains(section),
-                      onChanged: (selected) {
-                        setState(() {
-                          if (selected == true) {
-                            _selectedSections.add(section);
-                          } else {
-                            _selectedSections.remove(section);
-                          }
-                        });
-                      },
+            child: Row(
+              children: [
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () => setState(() => _completionMode = 'online'),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      decoration: BoxDecoration(
+                        color: _completionMode == 'online' ? Colors.white : Colors.transparent,
+                        borderRadius: BorderRadius.circular(8),
+                        boxShadow: _completionMode == 'online'
+                            ? [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.05),
+                                  blurRadius: 4,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ]
+                            : null,
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.laptop_chromebook,
+                            size: 16,
+                            color: _completionMode == 'online' ? const Color(0xFF0F8A48) : Colors.grey,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Online (Take via App)',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: _completionMode == 'online' ? FontWeight.w700 : FontWeight.w500,
+                              color: _completionMode == 'online' ? const Color(0xFF0F8A48) : Colors.grey.shade600,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                  Expanded(
-                    child: InkWell(
-                      onTap: () => _selectAssessmentDeadline(section),
-                      borderRadius: BorderRadius.circular(8),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 12,
-                        ),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.12)),
-                        ),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                _formatAssessmentDeadline(
-                                  _sectionDeadlines[section] ?? _scheduleDate,
+                ),
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () => setState(() => _completionMode = 'in_person'),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      decoration: BoxDecoration(
+                        color: _completionMode == 'in_person' ? Colors.white : Colors.transparent,
+                        borderRadius: BorderRadius.circular(8),
+                        boxShadow: _completionMode == 'in_person'
+                            ? [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.05),
+                                  blurRadius: 4,
+                                  offset: const Offset(0, 2),
                                 ),
-                                overflow: TextOverflow.ellipsis,
+                              ]
+                            : null,
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.people_alt_outlined,
+                            size: 16,
+                            color: _completionMode == 'in_person' ? const Color(0xFF0F8A48) : Colors.grey,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            'In-Person (Manual Record)',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: _completionMode == 'in_person' ? FontWeight.w700 : FontWeight.w500,
+                              color: _completionMode == 'in_person' ? const Color(0xFF0F8A48) : Colors.grey.shade600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // 2. Target Section Chip
+          if (_isLoadingOfferings)
+            const Center(child: Padding(padding: EdgeInsets.all(12), child: CircularProgressIndicator()))
+          else if (_selectedOffering != null)
+            _teacherSubjects.length > 1
+                ? Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFE8F5E9),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFF0F8A48).withValues(alpha: 0.2)),
+                    ),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<Map<String, dynamic>>(
+                        value: _selectedOffering,
+                        isExpanded: true,
+                        icon: const Icon(Icons.arrow_drop_down, color: Color(0xFF0F8A48)),
+                        items: _teacherSubjects.map((s) {
+                          return DropdownMenuItem<Map<String, dynamic>>(
+                            value: s,
+                            child: Text(
+                              'Grade ${s['grade_level'] ?? 11} • ${s['subject_name'] ?? 'Subject'} • ${s['section_name'] ?? 'Section'}',
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF0F8A48),
                               ),
                             ),
-                            Icon(
-                              Icons.calendar_month_outlined,
-                              size: 18,
-                              color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
-                            ),
-                          ],
-                        ),
+                          );
+                        }).toList(),
+                        onChanged: (newOff) {
+                          if (newOff != null) {
+                            setState(() => _selectedOffering = newOff);
+                            final offId = newOff['id']?.toString() ?? '';
+                            if (offId.isNotEmpty) {
+                              _checkSlotStatuses(offId);
+                            }
+                          }
+                        },
                       ),
+                    ),
+                  )
+                : Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFE8F5E9),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFF0F8A48).withValues(alpha: 0.2)),
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      'Grade ${_selectedOffering!['grade_level'] ?? 11} • ${_selectedOffering!['subject_name'] ?? 'Subject'} • ${_selectedOffering!['section_name'] ?? 'Section'}',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF0F8A48),
+                      ),
+                    ),
+                  ),
+          const SizedBox(height: 16),
+
+          // 3. Sequential Slot Selector: ST1 -> ST2 -> TE
+          Text(
+            'Periodical Examination Slot *',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: theme.colorScheme.onSurface,
+            ),
+          ),
+          const SizedBox(height: 8),
+          if (_isCheckingSlots)
+            const LinearProgressIndicator(minHeight: 2)
+          else
+            Row(
+              children: [
+                Expanded(
+                  child: _buildSlotButton(
+                    slot: 'ST1',
+                    label: 'Summative Test 1 (ST1)',
+                    isCreated: _st1Created,
+                    isEnabled: !_st1Created,
+                    tooltip: _st1Created ? 'ST1 is already created' : null,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _buildSlotButton(
+                    slot: 'ST2',
+                    label: 'Summative Test 2 (ST2)',
+                    isCreated: _st2Created,
+                    isEnabled: _st1Created && !_st2Created,
+                    tooltip: !_st1Created
+                        ? 'Create ST1 first before ST2'
+                        : (_st2Created ? 'ST2 is already created' : null),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _buildSlotButton(
+                    slot: 'TE',
+                    label: 'Term Examination (TE)',
+                    isCreated: _teCreated,
+                    isEnabled: _st1Created && _st2Created && !_teCreated,
+                    tooltip: (!_st1Created || !_st2Created)
+                        ? 'Complete ST1 & ST2 first before TE'
+                        : (_teCreated ? 'TE is already created' : null),
+                  ),
+                ),
+              ],
+            ),
+          if (_areAllSlotsFilled) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.amber.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.amber.shade300),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.info_outline, size: 16, color: Colors.amber.shade800),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'All examination slots (ST1, ST2, TE) are already configured for this offering.',
+                      style: TextStyle(fontSize: 12, color: Colors.amber.shade900),
                     ),
                   ),
                 ],
               ),
             ),
+          ],
+          const SizedBox(height: 18),
+
+          // 4. Split-Box Date, Time & Duration Controls
+          if (_completionMode == 'online') ...[
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Scheduled Date Box
+                Expanded(
+                  flex: 4,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Scheduled Date *',
+                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: theme.colorScheme.onSurface),
+                      ),
+                      const SizedBox(height: 6),
+                      InkWell(
+                        onTap: _pickDate,
+                        borderRadius: BorderRadius.circular(10),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                          decoration: BoxDecoration(
+                            border: Border.all(
+                              color: _dateError != null
+                                  ? const Color(0xFFDC2626)
+                                  : theme.colorScheme.outline.withValues(alpha: 0.3),
+                            ),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.calendar_today_outlined, size: 18, color: theme.colorScheme.primary),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  _formatDate(_scheduledDate),
+                                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      if (_dateError != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4, left: 4),
+                          child: Text(_dateError!, style: const TextStyle(fontSize: 12, color: Color(0xFFDC2626))),
+                        ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+
+                // Start Time Box
+                Expanded(
+                  flex: 4,
+                  child: AppTimePickerField(
+                    label: 'Start Time *',
+                    initialTime: _startTime,
+                    onTimeSelected: (t) => setState(() => _startTime = t),
+                  ),
+                ),
+                const SizedBox(width: 12),
+
+                // Duration Box
+                Expanded(
+                  flex: 3,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Duration (Mins) *',
+                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: theme.colorScheme.onSurface),
+                      ),
+                      const SizedBox(height: 6),
+                      TextField(
+                        controller: _durationCtrl,
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                          LengthLimitingTextInputFormatter(3),
+                        ],
+                        decoration: InputDecoration(
+                          hintText: '60',
+                          filled: true,
+                          fillColor: theme.colorScheme.surface,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                          errorText: _durationError,
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: BorderSide(color: theme.colorScheme.outline.withValues(alpha: 0.3)),
+                          ),
+                          errorBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: const BorderSide(color: Color(0xFFDC2626)),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ] else ...[
+            // In-Person Mode Controls: Administered Date & HPS
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  flex: 3,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Date Administered *',
+                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: theme.colorScheme.onSurface),
+                      ),
+                      const SizedBox(height: 6),
+                      InkWell(
+                        onTap: _pickDate,
+                        borderRadius: BorderRadius.circular(10),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: theme.colorScheme.outline.withValues(alpha: 0.3)),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.calendar_today_outlined, size: 18, color: theme.colorScheme.primary),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  _formatDate(_scheduledDate),
+                                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  flex: 2,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Total Points (HPS) *',
+                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: theme.colorScheme.onSurface),
+                      ),
+                      const SizedBox(height: 6),
+                      TextField(
+                        controller: _hpsPointsCtrl,
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                          LengthLimitingTextInputFormatter(3),
+                        ],
+                        decoration: InputDecoration(
+                          hintText: '100',
+                          filled: true,
+                          fillColor: theme.colorScheme.surface,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: BorderSide(color: theme.colorScheme.outline.withValues(alpha: 0.3)),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ],
+          const SizedBox(height: 18),
+
+          // 5. Instructions & Guidelines (Mandatory with live counter & inline error)
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Instructions & Guidelines *',
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: theme.colorScheme.onSurface),
+              ),
+              Text(
+                '${_instructionsCtrl.text.length} / 1000',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                  color: _instructionsCtrl.text.length > 1000
+                      ? const Color(0xFFDC2626)
+                      : theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 8),
-          AppTextField(
-            label: 'Instructions & Guidelines',
-            controller: _descCtrl,
+          const SizedBox(height: 6),
+          TextField(
+            controller: _instructionsCtrl,
             maxLines: 3,
+            maxLength: 1000,
+            buildCounter: (_, {required currentLength, required isFocused, maxLength}) => const SizedBox.shrink(),
+            onChanged: (_) => setState(() {}),
+            decoration: InputDecoration(
+              hintText: 'Provide test-taking guidelines, permitted calculators/materials, and proctoring rules...',
+              filled: true,
+              fillColor: theme.colorScheme.surface,
+              contentPadding: const EdgeInsets.all(12),
+              errorText: _instructionsError,
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide(
+                  color: _instructionsError != null
+                      ? const Color(0xFFDC2626)
+                      : theme.colorScheme.outline.withValues(alpha: 0.3),
+                  width: _instructionsError != null ? 1.5 : 1.0,
+                ),
+              ),
+              errorBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: Color(0xFFDC2626), width: 1.5),
+              ),
+              focusedErrorBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: Color(0xFFDC2626), width: 2.0),
+              ),
+              errorStyle: const TextStyle(fontSize: 12, color: Color(0xFFDC2626), fontWeight: FontWeight.w500),
+            ),
           ),
-          const SizedBox(height: 24),
-          _buildQuestionPlanFields(),
+          const SizedBox(height: 18),
+
+          // 6. Question Distributions (Only in Online Mode, 3 types max 3 digits)
+          if (_completionMode == 'online') ...[
+            Text(
+              'Question Distributions (3 Types)',
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Enter the planned number of questions per category (maximum 100 items total):',
+              style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurface.withValues(alpha: 0.6)),
+            ),
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                border: Border.all(
+                  color: _distributionError != null
+                      ? const Color(0xFFDC2626)
+                      : theme.colorScheme.outline.withValues(alpha: 0.2),
+                ),
+                borderRadius: BorderRadius.circular(10),
+                color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.2),
+              ),
+              child: Column(
+                children: [
+                  _buildDistributionRow('Multiple Choice', _mcCountCtrl),
+                  const Divider(height: 12),
+                  _buildDistributionRow('True or False', _tfCountCtrl),
+                  const Divider(height: 12),
+                  _buildDistributionRow('Identification', _idCountCtrl),
+                ],
+              ),
+            ),
+            if (_distributionError != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 6, left: 4),
+                child: Text(
+                  _distributionError!,
+                  style: const TextStyle(fontSize: 12, color: Color(0xFFDC2626), fontWeight: FontWeight.w500),
+                ),
+              ),
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Total Items: $_totalPlannedQuestions / 100',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                    color: _totalPlannedQuestions > 100
+                        ? const Color(0xFFDC2626)
+                        : theme.colorScheme.primary,
+                  ),
+                ),
+              ],
+            ),
+          ],
         ],
       ),
     );
   }
 
-  Widget _buildQuestionPlanFields() {
-    const labels = {
-      QuestionType.multipleChoice: 'Multiple Choices',
-      QuestionType.trueFalse: 'True / False',
-      QuestionType.matching: 'Matching Type',
-      QuestionType.identification: 'Identification',
-    };
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Question Distribution',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 6),
-        Text(
-          'Set how many questions to include for each question type.',
-          style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6), fontSize: 13),
-        ),
-        const SizedBox(height: 10),
-        Container(
+  Widget _buildSlotButton({
+    required String slot,
+    required String label,
+    required bool isCreated,
+    required bool isEnabled,
+    String? tooltip,
+  }) {
+    final theme = Theme.of(context);
+    final isSelected = _examCategory == slot;
+
+    return Tooltip(
+      message: tooltip ?? (isCreated ? 'Already configured' : 'Select $slot'),
+      child: InkWell(
+        onTap: (isEnabled && !isCreated) ? () => _setExamSlot(slot) : null,
+        borderRadius: BorderRadius.circular(10),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
           decoration: BoxDecoration(
-            border: Border.all(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.12)),
-            borderRadius: BorderRadius.circular(8),
+            color: isSelected
+                ? AppTheme.catRed.withValues(alpha: 0.1)
+                : (isCreated
+                    ? Colors.grey.shade100
+                    : theme.colorScheme.surface),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: isSelected
+                  ? AppTheme.catRed
+                  : (isCreated
+                      ? Colors.grey.shade300
+                      : theme.colorScheme.outline.withValues(alpha: 0.3)),
+              width: isSelected ? 1.8 : 1.0,
+            ),
           ),
           child: Column(
-            children: _questionCountCtrls.entries.map((entry) {
-              return Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 4,
+            children: [
+              Text(
+                slot,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  color: isSelected
+                      ? AppTheme.catRed
+                      : (isCreated ? Colors.grey : theme.colorScheme.onSurface),
                 ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        labels[entry.key]!,
-                        style: TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                    ),
-                    SizedBox(
-                      width: 130,
-                      child: AppTextField(
-                        label: '',
-                        hint: 'Items',
-                        controller: entry.value,
-                        keyboardType: TextInputType.number,
-                        inputFormatters: [
-                          FilteringTextInputFormatter.digitsOnly,
-                        ],
-                        onChanged: (_) => setState(() {}),
-                      ),
-                    ),
-                  ],
+              ),
+              const SizedBox(height: 2),
+              if (isCreated)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: const Text(
+                    'Already Created',
+                    style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.black54),
+                  ),
+                )
+              else
+                Text(
+                  slot == 'TE' ? 'Term Exam' : 'Summative',
+                  style: TextStyle(fontSize: 10, color: theme.colorScheme.onSurface.withValues(alpha: 0.6)),
                 ),
-              );
-            }).toList(),
+            ],
           ),
         ),
-        const SizedBox(height: 12),
-        Text(
-          'Total number of questions: ${_questionCountCtrls.values.fold<int>(0, (sum, controller) => sum + (int.tryParse(controller.text) ?? 0))} / 100',
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            color:
-                _questionCountCtrls.values.fold<int>(
-                      0,
-                      (sum, controller) =>
-                          sum + (int.tryParse(controller.text) ?? 0),
-                    ) >
-                    100
-                ? AppTheme.catRed
-                : Theme.of(context).colorScheme.primary,
+      ),
+    );
+  }
+
+  Widget _buildDistributionRow(String title, TextEditingController controller) {
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            title,
+            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+          ),
+        ),
+        SizedBox(
+          width: 90,
+          height: 38,
+          child: TextField(
+            controller: controller,
+            keyboardType: TextInputType.number,
+            textAlign: TextAlign.center,
+            inputFormatters: [
+              FilteringTextInputFormatter.digitsOnly,
+              LengthLimitingTextInputFormatter(3),
+            ],
+            onChanged: (_) => setState(() {}),
+            decoration: InputDecoration(
+              hintText: '0',
+              filled: true,
+              fillColor: Colors.white,
+              contentPadding: const EdgeInsets.symmetric(vertical: 8),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+            ),
           ),
         ),
       ],
     );
   }
 
-  void _continueToQuestionSetup() {
-    if (_titleCtrl.text.trim().isEmpty) {
-      AppModals.showErrorDialog(
-        context: context,
-        title: 'Title Required',
-        message: 'Please provide a title before continuing.',
-      );
-      return;
+  // =========================================================================
+  // STEP 2: QUESTION BUILDER (Active Editor + Matrix Navigator)
+  // =========================================================================
+  Widget _buildStep2QuestionBuilderView() {
+    final theme = Theme.of(context);
+    if (_plannedQuestions.isEmpty) {
+      return const Center(child: Text('No questions configured.'));
     }
-    final duration = int.tryParse(_durationCtrl.text.trim());
-    if (duration == null || duration < 1) {
-      AppModals.showErrorDialog(
-        context: context,
-        title: 'Invalid Duration',
-        message: 'Duration must be a whole number greater than 0.',
-      );
-      return;
-    }
-    setState(() => _currentStep = 2);
-  }
 
-  void _continueToQuestionBuilder() {
-    final counts = <QuestionType, int>{};
-    for (final entry in _questionCountCtrls.entries) {
-      final text = entry.value.text.trim();
-      final count = text.isEmpty ? 0 : int.tryParse(text);
-      if (count == null || count < 0 || count > 100) {
-        AppModals.showErrorDialog(
-          context: context,
-          title: 'Invalid Question Count',
-          message: 'Each question type must be empty/0 or a whole number from 1 to 100.',
-        );
-        return;
-      }
-      counts[entry.key] = count;
-    }
-    final total = counts.values.fold<int>(0, (sum, count) => sum + count);
-    if (total < 1 || total > 100) {
-      AppModals.showErrorDialog(
-        context: context,
-        title: 'Invalid Total Number of Questions',
-        message: 'The total number of questions must be between 1 and 100.',
-      );
-      return;
-    }
-    setState(() {
-      _questionCounts
-        ..clear()
-        ..addAll(counts);
-      _selectedQType = _configuredQuestionTypes.first;
-      _currentStep = 3;
-    });
-  }
-
-  void _openAiGeneration() {
-    AiGenerationModal.show(
-      context,
-      isExam: _isExam,
-      subjectName: _subjectName,
-      onQuestionsGenerated: (generated) {
-        setState(() {
-          _questions.addAll(generated);
-          _currentStep = 3;
-        });
-        AppModals.showSuccessDialog(
-          context: context,
-          title: 'Questions Generated with Gemini AI',
-          message:
-              '${generated.length} questions were successfully generated. Please review each question, verify answer keys, and adjust points before publishing.',
-        );
-      },
-    );
-  }
-
-  Widget _buildQuestionPlanView() {
-    final labels = {
-      QuestionType.multipleChoice: 'Multiple Choices',
-      QuestionType.trueFalse: 'True / False',
-      QuestionType.matching: 'Matching Type',
-      QuestionType.identification: 'Identification',
-    };
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(28),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // AI Generation Prompt Card
-          Container(
-            margin: const EdgeInsets.only(bottom: 20),
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  AppTheme.catPurple.withValues(alpha: 0.1),
-                  AppTheme.catBlue.withValues(alpha: 0.08),
-                ],
-              ),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppTheme.catPurple.withValues(alpha: 0.3)),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: AppTheme.catPurple.withValues(alpha: 0.15),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(Icons.auto_awesome, color: AppTheme.catPurple, size: 22),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Generate Assessment with Gemini AI',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        'Upload a reference document (.pdf, .docx, .txt) to automatically create questions grounded on your syllabus.',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 10),
-                ElevatedButton.icon(
-                  icon: const Icon(Icons.auto_awesome, size: 14),
-                  label: const Text('Auto-Generate'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.catPurple,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                  ),
-                  onPressed: _openAiGeneration,
-                ),
-              ],
-            ),
-          ),
-          Text(
-            _isExam
-                ? 'Set Examination Question Distribution'
-                : 'Set Quiz Question Distribution',
-            style: const TextStyle(fontSize: 19, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'Choose which question types to include and how many items each section should contain. The total will be calculated automatically.',
-            style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6), fontSize: 13),
-          ),
-          const SizedBox(height: 22),
-          ..._questionCounts.keys.map(
-            (type) => Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      labels[type]!,
-                      style: TextStyle(fontWeight: FontWeight.w600),
-                    ),
-                  ),
-                  SizedBox(
-                    width: 120,
-                    child: TextField(
-                      keyboardType: TextInputType.number,
-                      controller: _questionCountCtrls[type],
-                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                      decoration: const InputDecoration(
-                        labelText: 'Number of items',
-                        border: OutlineInputBorder(),
-                        isDense: true,
-                      ),
-                      onChanged: (value) {
-                        setState(
-                          () =>
-                              _questionCounts[type] = int.tryParse(value) ?? 0,
-                        );
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Total questions: ${_questionCounts.values.fold<int>(0, (sum, count) => sum + count)}',
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              color: Theme.of(context).colorScheme.primary,
-            ),
-          ),
-          const SizedBox(height: 24),
-          Align(
-            alignment: Alignment.centerRight,
-            child: const SizedBox.shrink(),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ==========================================
-  // STEP 3: BUILD QUESTIONS
-  // ==========================================
-  Widget _buildQuestionBuilderView() {
-    const labels = <QuestionType, String>{
-      QuestionType.multipleChoice: 'Multiple Choices',
-      QuestionType.trueFalse: 'True / False',
-      QuestionType.matching: 'Matching Type',
-      QuestionType.identification: 'Identification',
+    final currentDraft = _plannedQuestions[_activeQuestionIndex];
+    final qTypeLabel = switch (currentDraft.type) {
+      QuestionType.multipleChoice => 'Multiple Choice',
+      QuestionType.trueFalse => 'True / False',
+      QuestionType.identification => 'Identification',
+      QuestionType.matching => 'Matching',
     };
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Examination Answer Key & Question Builder Banner
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF8FAFC),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.12)),
-            ),
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Left Column: Active Question Editor Card
+        Expanded(
+          flex: 6,
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(20),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Top Editor Card Header
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      _isExam
-                          ? 'Answer Key & Question Items Setup'
-                          : 'Quiz Questions Builder',
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.bold,
-                        color: Theme.of(context).colorScheme.onSurface,
-                      ),
-                    ),
                     Row(
                       children: [
-                        ElevatedButton.icon(
-                          icon: const Icon(Icons.auto_awesome, size: 14),
-                          label: const Text('Generate with AI'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppTheme.catPurple,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        CircleAvatar(
+                          radius: 14,
+                          backgroundColor: AppTheme.catRed,
+                          child: Text(
+                            '${currentDraft.position}',
+                            style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
                           ),
-                          onPressed: _openAiGeneration,
                         ),
                         const SizedBox(width: 10),
                         Text(
-                          'Added: ${_questions.length} question(s)',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            color: Theme.of(context).colorScheme.primary,
+                          'Question ${currentDraft.position} of ${_plannedQuestions.length}',
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.primary.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            qTypeLabel.toUpperCase(),
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              color: theme.colorScheme.primary,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    // Points field
+                    Row(
+                      children: [
+                        const Text('Points:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                        const SizedBox(width: 8),
+                        SizedBox(
+                          width: 55,
+                          height: 36,
+                          child: TextField(
+                            controller: _qPointsCtrl,
+                            keyboardType: TextInputType.number,
+                            textAlign: TextAlign.center,
+                            inputFormatters: [
+                              FilteringTextInputFormatter.digitsOnly,
+                              LengthLimitingTextInputFormatter(2),
+                            ],
+                            decoration: InputDecoration(
+                              contentPadding: const EdgeInsets.symmetric(vertical: 6),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
                           ),
                         ),
                       ],
                     ),
                   ],
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 16),
 
-                // Question Type Selector
+                // Question Statement Input
                 Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    if (_configuredQuestionTypes.length > 1) ...[
-                      Text(
-                        'Question Type:',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      DropdownButton<QuestionType>(
-                        value: _configuredQuestionTypes.contains(_selectedQType)
-                            ? _selectedQType
-                            : _configuredQuestionTypes.first,
-                        items: _configuredQuestionTypes
-                            .map(
-                              (t) => DropdownMenuItem(
-                                value: t,
-                                child: Text(t.name.toUpperCase()),
-                              ),
-                            )
-                            .toList(),
-                        onChanged: (val) {
-                          if (val != null) {
-                            setState(() {
-                              _selectedQType = val;
-                              _selectedChoiceAnswer = null;
-                              _matchingPairs.clear();
-                            });
-                          }
-                        },
-                      ),
-                    ],
-                    if (_configuredQuestionTypes.length == 1)
-                      Text(
-                        labels[_configuredQuestionTypes.first]!,
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                          color: Theme.of(context).colorScheme.primary,
-                        ),
-                      ),
-                    const Spacer(),
-                    SizedBox(
-                      width: 120,
-                      child: TextField(
-                        controller: _qPointsCtrl,
-                        keyboardType: TextInputType.number,
-                        inputFormatters: [
-                          FilteringTextInputFormatter.digitsOnly,
-                        ],
-                        decoration: const InputDecoration(
-                          labelText: 'Points',
-                          isDense: true,
-                        ),
-                      ),
-                    ),
+                    const Text('Question Statement *', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                    Text('${_qStatementCtrl.text.length} / 500', style: const TextStyle(fontSize: 11, color: Colors.grey)),
                   ],
                 ),
-                const SizedBox(height: 12),
-
-                // Question Text
-                if (_selectedQType != QuestionType.matching)
-                  TextField(
-                    controller: _qTextCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Enter Question Statement',
-                      hintText:
-                          'e.g. Find the horizontal asymptote of f(x) = (3x + 1) / (2x - 5)',
-                      isDense: true,
-                    ),
+                const SizedBox(height: 6),
+                TextField(
+                  controller: _qStatementCtrl,
+                  maxLines: 3,
+                  maxLength: 500,
+                  buildCounter: (_, {required currentLength, required isFocused, maxLength}) => const SizedBox.shrink(),
+                  onChanged: (_) => setState(() {}),
+                  decoration: InputDecoration(
+                    hintText: 'Enter question text or problem statement...',
+                    filled: true,
+                    fillColor: Colors.white,
+                    contentPadding: const EdgeInsets.all(12),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                   ),
-                if (_selectedQType != QuestionType.matching)
-                  const SizedBox(height: 12),
+                ),
+                const SizedBox(height: 16),
 
-                // Multiple choice options if type is multiple choice
-                if (_selectedQType == QuestionType.multipleChoice) ...[
-                  Row(
-                    children: [
-                      Radio<String>(
-                        value: 'A',
-                        groupValue: _selectedChoiceAnswer,
-                        onChanged: (value) =>
-                            setState(() => _selectedChoiceAnswer = value),
-                      ),
-                      Expanded(
-                        child: TextField(
-                          controller: _choiceACtrl,
-                          decoration: const InputDecoration(
-                            labelText: 'Choice A',
-                            isDense: true,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Radio<String>(
-                        value: 'B',
-                        groupValue: _selectedChoiceAnswer,
-                        onChanged: (value) =>
-                            setState(() => _selectedChoiceAnswer = value),
-                      ),
-                      Expanded(
-                        child: TextField(
-                          controller: _choiceBCtrl,
-                          decoration: const InputDecoration(
-                            labelText: 'Choice B',
-                            isDense: true,
-                          ),
-                        ),
-                      ),
-                    ],
+                // Dynamic Choices & Answer Key Setup based on type
+                if (currentDraft.type == QuestionType.multipleChoice) ...[
+                  const Text(
+                    'Options & Answer Key (Fill all 4 and select the correct radio):',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 8),
+                  _buildMcChoiceRow('A', _choiceACtrl),
+                  const SizedBox(height: 8),
+                  _buildMcChoiceRow('B', _choiceBCtrl),
+                  const SizedBox(height: 8),
+                  _buildMcChoiceRow('C', _choiceCCtrl),
+                  const SizedBox(height: 8),
+                  _buildMcChoiceRow('D', _choiceDCtrl),
+                ] else if (currentDraft.type == QuestionType.trueFalse) ...[
+                  const Text(
+                    'Correct Answer Key (Mandatory):',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(height: 8),
                   Row(
                     children: [
-                      Radio<String>(
-                        value: 'C',
-                        groupValue: _selectedChoiceAnswer,
-                        onChanged: (value) =>
-                            setState(() => _selectedChoiceAnswer = value),
-                      ),
                       Expanded(
-                        child: TextField(
-                          controller: _choiceCCtrl,
-                          decoration: const InputDecoration(
-                            labelText: 'Choice C',
-                            isDense: true,
+                        child: RadioListTile<String>(
+                          title: const Text('True', style: TextStyle(fontWeight: FontWeight.bold)),
+                          value: 'True',
+                          groupValue: _selectedTfAnswer,
+                          onChanged: (val) => setState(() => _selectedTfAnswer = val),
+                          tileColor: _selectedTfAnswer == 'True'
+                              ? AppTheme.catGreen.withValues(alpha: 0.1)
+                              : Colors.grey.shade50,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            side: BorderSide(
+                              color: _selectedTfAnswer == 'True' ? AppTheme.catGreen : Colors.grey.shade300,
+                            ),
                           ),
                         ),
                       ),
                       const SizedBox(width: 12),
-                      Radio<String>(
-                        value: 'D',
-                        groupValue: _selectedChoiceAnswer,
-                        onChanged: (value) =>
-                            setState(() => _selectedChoiceAnswer = value),
-                      ),
                       Expanded(
-                        child: TextField(
-                          controller: _choiceDCtrl,
-                          decoration: const InputDecoration(
-                            labelText: 'Choice D',
-                            isDense: true,
+                        child: RadioListTile<String>(
+                          title: const Text('False', style: TextStyle(fontWeight: FontWeight.bold)),
+                          value: 'False',
+                          groupValue: _selectedTfAnswer,
+                          onChanged: (val) => setState(() => _selectedTfAnswer = val),
+                          tileColor: _selectedTfAnswer == 'False'
+                              ? AppTheme.catRed.withValues(alpha: 0.1)
+                              : Colors.grey.shade50,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            side: BorderSide(
+                              color: _selectedTfAnswer == 'False' ? AppTheme.catRed : Colors.grey.shade300,
+                            ),
                           ),
                         ),
                       ),
                     ],
                   ),
-                ],
-                if (_selectedQType == QuestionType.trueFalse) ...[
-                  Text(
-                    'Select the correct answer:',
-                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-                  ),
-                  ...['True', 'False'].map(
-                    (answer) => RadioListTile<String>(
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
-                      title: Text(answer),
-                      value: answer,
-                      groupValue: _selectedChoiceAnswer,
-                      onChanged: (value) =>
-                          setState(() => _selectedChoiceAnswer = value),
-                    ),
-                  ),
-                ],
-                if (_selectedQType == QuestionType.matching) ...[
-                  Text(
-                    'Matching pairs',
-                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                ] else if (currentDraft.type == QuestionType.identification) ...[
+                  const Text(
+                    'Official Correct Answer Key *',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(height: 6),
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 10,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade200,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          '${_matchingPairs.length + 1}',
-                          style: TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: TextField(
-                          controller: _matchingLeftCtrl,
-                          decoration: const InputDecoration(
-                            labelText: 'Item / Prompt',
-                            isDense: true,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: TextField(
-                          controller: _matchingRightCtrl,
-                          decoration: const InputDecoration(
-                            labelText: 'Correct Match',
-                            isDense: true,
-                          ),
-                        ),
-                      ),
-                      IconButton(
-                        icon: Icon(
-                          Icons.add_circle,
-                          color: Theme.of(context).colorScheme.primary,
-                        ),
-                        onPressed: () {
-                          final left = _matchingLeftCtrl.text.trim();
-                          final right = _matchingRightCtrl.text.trim();
-                          if (left.isEmpty || right.isEmpty) return;
-                          setState(() {
-                            _matchingPairs[left] = right;
-                            _matchingLeftCtrl.clear();
-                            _matchingRightCtrl.clear();
-                          });
-                        },
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  ..._matchingPairs.entries.toList().asMap().entries.map(
-                    (entry) => ListTile(
-                      dense: true,
-                      leading: CircleAvatar(
-                        radius: 12,
-                        backgroundColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
-                        child: Text(
-                          '${entry.key + 1}',
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                            color: Theme.of(context).colorScheme.primary,
-                          ),
-                        ),
-                      ),
-                      title: Text(entry.value.key),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            entry.value.value,
-                            style: TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                          IconButton(
-                            icon: Icon(Icons.close, size: 17),
-                            onPressed: () => setState(
-                                () => _matchingPairs.remove(entry.value.key)),
-                          ),
-                        ],
-                      ),
+                  TextField(
+                    controller: _qIdAnswerCtrl,
+                    decoration: InputDecoration(
+                      hintText: 'e.g. Mitochondria, Republic Act 10533, etc.',
+                      prefixIcon: const Icon(Icons.vpn_key_outlined, size: 18),
+                      filled: true,
+                      fillColor: Colors.white,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                     ),
                   ),
                 ],
 
-                // Answer Key / Correct Answer field
-                if (_selectedQType == QuestionType.identification)
+                if (_editorError != null) ...[
+                  const SizedBox(height: 12),
                   Row(
                     children: [
+                      const Icon(Icons.error_outline, size: 16, color: Color(0xFFDC2626)),
+                      const SizedBox(width: 6),
                       Expanded(
-                        child: TextField(
-                          controller: _qCorrectAnswerCtrl,
-                          decoration: const InputDecoration(
-                            labelText: 'Official Correct Answer',
-                            hintText:
-                                'Enter the answer used by the auto-checker',
-                            isDense: true,
-                            prefixIcon: Icon(Icons.vpn_key_outlined, size: 18),
-                          ),
+                        child: Text(
+                          _editorError!,
+                          style: const TextStyle(fontSize: 12, color: Color(0xFFDC2626), fontWeight: FontWeight.w500),
                         ),
                       ),
-                      const SizedBox(width: 16),
-                      AppPrimaryButton(
-                        label: 'Add to List',
-                        icon: Icons.add,
-                        height: 42,
-                        width: 130,
-                        onPressed: _canAddCurrentQuestion
-                            ? _addQuestionToList
-                            : null,
-                      ),
                     ],
-                  )
-                else
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: AppPrimaryButton(
-                      label: 'Add to List',
-                      icon: Icons.add,
-                      height: 42,
-                      width: 130,
-                      onPressed: _canAddCurrentQuestion
-                          ? _addQuestionToList
-                          : null,
-                    ),
                   ),
+                ],
+
+                const SizedBox(height: 20),
+
+                // Stepper Buttons: Previous / Next
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    if (_activeQuestionIndex > 0)
+                      OutlinedButton.icon(
+                        icon: const Icon(Icons.arrow_back, size: 16),
+                        label: const Text('Previous Question'),
+                        style: OutlinedButton.styleFrom(
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        ),
+                        onPressed: () {
+                          if (_saveCurrentEditorState()) {
+                            _loadQuestionIntoEditor(_activeQuestionIndex - 1);
+                          }
+                        },
+                      )
+                    else
+                      const SizedBox.shrink(),
+                    if (_activeQuestionIndex < _plannedQuestions.length - 1)
+                      ElevatedButton.icon(
+                        icon: const Icon(Icons.arrow_forward, size: 16),
+                        label: const Text('Next Question'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: theme.colorScheme.primary,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                        ),
+                        onPressed: () {
+                          if (_saveCurrentEditorState()) {
+                            _loadQuestionIntoEditor(_activeQuestionIndex + 1);
+                          }
+                        },
+                      )
+                    else
+                      ElevatedButton.icon(
+                        icon: const Icon(Icons.check, size: 16),
+                        label: const Text('Review Complete'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.catGreen,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                        ),
+                        onPressed: () {
+                          _saveCurrentEditorState();
+                        },
+                      ),
+                  ],
+                ),
               ],
             ),
           ),
-          const SizedBox(height: 20),
+        ),
 
-          // Render List of Questions Added
-          if (_questions.isNotEmpty) ...[
-            Text(
-              'Configured Questions & Answer Keys:',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-            ),
-            const SizedBox(height: 8),
-            ..._questions.asMap().entries.map((entry) {
-              final idx = entry.key + 1;
-              final q = entry.value;
-              return Container(
-                margin: const EdgeInsets.only(bottom: 8),
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.12)),
+        // Vertical divider
+        Container(
+          width: 1,
+          color: theme.colorScheme.onSurface.withValues(alpha: 0.1),
+        ),
+
+        // Right Column: Question Navigator Matrix (1..N)
+        Expanded(
+          flex: 4,
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Question Navigator (${_plannedQuestions.length} Items)',
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                 ),
-                child: Row(
-                  children: [
-                    CircleAvatar(
-                      radius: 12,
-                      backgroundColor: Theme.of(context).colorScheme.primary,
-                      child: Text(
-                        '$idx',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
+                const SizedBox(height: 6),
+                Text(
+                  'Click any question number to edit. Delete is prohibited to preserve test integrity.',
+                  style: TextStyle(fontSize: 11, color: theme.colorScheme.onSurface.withValues(alpha: 0.6)),
+                ),
+                const SizedBox(height: 12),
+
+                // Question Chips Grid
+                Expanded(
+                  child: GridView.builder(
+                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 5,
+                      mainAxisSpacing: 6,
+                      crossAxisSpacing: 6,
+                      childAspectRatio: 1.1,
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            q.questionText,
+                    itemCount: _plannedQuestions.length,
+                    itemBuilder: (ctx, i) {
+                      final q = _plannedQuestions[i];
+                      final isActive = i == _activeQuestionIndex;
+                      final isDone = q.isComplete;
+
+                      return InkWell(
+                        onTap: () {
+                          if (_saveCurrentEditorState()) {
+                            _loadQuestionIntoEditor(i);
+                          }
+                        },
+                        borderRadius: BorderRadius.circular(8),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 150),
+                          decoration: BoxDecoration(
+                            color: isActive
+                                ? theme.colorScheme.primary
+                                : (isDone
+                                    ? AppTheme.catGreen.withValues(alpha: 0.15)
+                                    : Colors.grey.shade100),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: isActive
+                                  ? theme.colorScheme.primary
+                                  : (isDone
+                                      ? AppTheme.catGreen
+                                      : Colors.grey.shade300),
+                              width: isActive ? 2 : 1,
+                            ),
+                          ),
+                          alignment: Alignment.center,
+                          child: Text(
+                            '${q.position}',
                             style: TextStyle(
+                              fontSize: 12,
                               fontWeight: FontWeight.bold,
-                              fontSize: 13,
+                              color: isActive
+                                  ? Colors.white
+                                  : (isDone ? AppTheme.catGreen : Colors.black87),
                             ),
                           ),
-                          const SizedBox(height: 2),
-                          Text(
-                            'Type: ${q.type.name.toUpperCase()} • Key: "${q.correctAnswer}" • Points: ${q.points}',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    IconButton(
-                      icon: Icon(
-                        Icons.delete_outline,
-                        size: 18,
-                        color: AppTheme.catRed,
-                      ),
-                      onPressed: () {
-                        setState(() => _questions.removeAt(entry.key));
-                      },
-                    ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+
+                const SizedBox(height: 10),
+                // Legend
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    _buildLegendItem('Done', AppTheme.catGreen),
+                    _buildLegendItem('Active', theme.colorScheme.primary),
+                    _buildLegendItem('Pending', Colors.grey),
                   ],
                 ),
-              );
-            }),
-          ],
-        ],
-      ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMcChoiceRow(String label, TextEditingController controller) {
+    final isCorrect = _selectedMcAnswer == label;
+
+    return Row(
+      children: [
+        Radio<String>(
+          value: label,
+          groupValue: _selectedMcAnswer,
+          onChanged: (val) => setState(() => _selectedMcAnswer = val),
+        ),
+        Expanded(
+          child: TextField(
+            controller: controller,
+            decoration: InputDecoration(
+              labelText: 'Choice $label',
+              isDense: true,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+              fillColor: isCorrect ? AppTheme.catGreen.withValues(alpha: 0.05) : Colors.white,
+              filled: true,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLegendItem(String label, Color color) {
+    return Row(
+      children: [
+        Container(
+          width: 10,
+          height: 10,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 4),
+        Text(label, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+      ],
     );
   }
 }

@@ -1076,16 +1076,20 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
   }) {
     final theme = Theme.of(context);
     final totalAll = items.length;
-    final totalWw = items.where((i) => i.type != 'performance_task').length;
+    final totalWw = items.where((i) => i.type != 'performance_task' && i.type != 'exam' && i.type != 'quiz').length;
     final totalPt = items.where((i) => i.type == 'performance_task').length;
+    final totalEx = items.where((i) => i.type == 'exam' || i.type == 'quiz').length;
 
     final filtered = showFilterChips
         ? items.where((item) {
             if (_classworkFilter == 'WW') {
-              return item.type != 'performance_task';
+              return item.type != 'performance_task' && item.type != 'exam' && item.type != 'quiz';
             }
             if (_classworkFilter == 'PT') {
               return item.type == 'performance_task';
+            }
+            if (_classworkFilter == 'EX') {
+              return item.type == 'exam' || item.type == 'quiz';
             }
             return true;
           }).toList()
@@ -1098,7 +1102,9 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
               ? 'No performance tasks yet'
               : (_classworkFilter == 'WW'
                   ? 'No written works or activities yet'
-                  : emptyTitle))
+                  : (_classworkFilter == 'EX'
+                      ? 'No periodical examinations yet'
+                      : emptyTitle)))
           : emptyTitle;
 
       final currentEmptyMessage = showFilterChips
@@ -1106,11 +1112,17 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
               ? 'Performance tasks assigned by your teacher will appear here.'
               : (_classworkFilter == 'WW'
                   ? 'Activities and written works assigned by your teacher will appear here.'
-                  : emptyMessage))
+                  : (_classworkFilter == 'EX'
+                      ? 'Scheduled examinations posted by your teacher will appear here.'
+                      : emptyMessage)))
           : emptyMessage;
 
-      final currentEmptyIcon = showFilterChips && _classworkFilter == 'PT'
-          ? Icons.workspace_premium_outlined
+      final currentEmptyIcon = showFilterChips
+          ? (_classworkFilter == 'PT'
+              ? Icons.workspace_premium_outlined
+              : (_classworkFilter == 'EX'
+                  ? Icons.quiz_outlined
+                  : emptyIcon))
           : emptyIcon;
 
       content = AppPullToRefresh.scrollableState(
@@ -1151,32 +1163,43 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
                       ),
                     ),
                   ),
-                  child: Row(
-                    children: [
-                      _buildClassworkFilterChip(
-                        label: 'All',
-                        count: totalAll,
-                        isSelected: _classworkFilter == 'All',
-                        onSelected: () =>
-                            setState(() => _classworkFilter = 'All'),
-                      ),
-                      const SizedBox(width: 8),
-                      _buildClassworkFilterChip(
-                        label: 'Activities (WW)',
-                        count: totalWw,
-                        isSelected: _classworkFilter == 'WW',
-                        onSelected: () =>
-                            setState(() => _classworkFilter = 'WW'),
-                      ),
-                      const SizedBox(width: 8),
-                      _buildClassworkFilterChip(
-                        label: 'Tasks (PT)',
-                        count: totalPt,
-                        isSelected: _classworkFilter == 'PT',
-                        onSelected: () =>
-                            setState(() => _classworkFilter = 'PT'),
-                      ),
-                    ],
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        _buildClassworkFilterChip(
+                          label: 'All',
+                          count: totalAll,
+                          isSelected: _classworkFilter == 'All',
+                          onSelected: () =>
+                              setState(() => _classworkFilter = 'All'),
+                        ),
+                        const SizedBox(width: 8),
+                        _buildClassworkFilterChip(
+                          label: 'Activities (WW)',
+                          count: totalWw,
+                          isSelected: _classworkFilter == 'WW',
+                          onSelected: () =>
+                              setState(() => _classworkFilter = 'WW'),
+                        ),
+                        const SizedBox(width: 8),
+                        _buildClassworkFilterChip(
+                          label: 'Tasks (PT)',
+                          count: totalPt,
+                          isSelected: _classworkFilter == 'PT',
+                          onSelected: () =>
+                              setState(() => _classworkFilter = 'PT'),
+                        ),
+                        const SizedBox(width: 8),
+                        _buildClassworkFilterChip(
+                          label: 'Exams (EX)',
+                          count: totalEx,
+                          isSelected: _classworkFilter == 'EX',
+                          onSelected: () =>
+                              setState(() => _classworkFilter = 'EX'),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
                 Expanded(child: content),

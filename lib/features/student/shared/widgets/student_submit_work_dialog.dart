@@ -163,14 +163,43 @@ class _StudentSubmitWorkDialogState extends State<StudentSubmitWorkDialog> {
             : null,
         'submitted_at': DateTime.now().toUtc().toIso8601String(),
         'updated_at': DateTime.now().toUtc().toIso8601String(),
-        if (storagePath != null) 'storage_path': storagePath,
-        if (_fileName != null) 'file_name': _fileName,
-        if (_fileSizeBytes != null) 'file_size_bytes': _fileSizeBytes,
       };
 
-      await client
+      final subResult = await client
           .from('student_classwork_submissions')
-          .upsert(submissionData, onConflict: 'classwork_id,student_id');
+          .upsert(submissionData, onConflict: 'classwork_id,student_id')
+          .select('id')
+          .single();
+
+      final submissionId = subResult['id']?.toString();
+
+      // 3. Insert or update submission_attachments
+      if (submissionId != null && storagePath != null && _fileName != null) {
+        String mimeType = 'application/pdf';
+        final ext = _fileName!.split('.').last.toLowerCase();
+        if (ext == 'doc') {
+          mimeType = 'application/msword';
+        } else if (ext == 'docx') {
+          mimeType =
+              'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+        }
+
+        try {
+          await client
+              .from('submission_attachments')
+              .delete()
+              .eq('submission_id', submissionId);
+          await client.from('submission_attachments').insert({
+            'submission_id': submissionId,
+            'file_name': _fileName!,
+            'storage_url': storagePath,
+            'mime_type': mimeType,
+            if (_fileSizeBytes != null) 'file_size_bytes': _fileSizeBytes,
+          });
+        } catch (attErr) {
+          debugPrint('Notice on submission attachment record: $attErr');
+        }
+      }
 
       // Invalidate cache
       AppDataCache.instance.invalidatePrefix('student_dashboard_${user.id}');

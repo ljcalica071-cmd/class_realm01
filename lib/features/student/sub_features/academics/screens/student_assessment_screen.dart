@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:class_realm/core/services/supabase_service.dart';
 import 'package:class_realm/core/theme/app_theme.dart';
 import 'package:class_realm/models/academic_models.dart';
 import 'package:class_realm/models/user_model.dart';
@@ -31,7 +33,9 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
       0; // 0: Rules Acknowledgment, 1: Answering Questions, 2: Result Summary
   bool _rulesAccepted = false;
   int _currentQuestionIndex = 0;
+  List<QuestionModel> _orderedQuestions = [];
   final Map<String, String> _studentAnswers = {};
+  final Map<String, TextEditingController> _textControllers = {};
   int _violations = 0;
   final List<Map<String, dynamic>> _violationLog = [];
   bool _isSubmitting = false;
@@ -41,11 +45,46 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
   DateTime? _startTime;
   AssessmentResultModel? _submittedResult;
 
+  TextEditingController _getTextController(String questionId) {
+    return _textControllers.putIfAbsent(
+      questionId,
+      () => TextEditingController(text: _studentAnswers[questionId] ?? ''),
+    );
+  }
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    for (var q in widget.assessment.questions) {
+
+    // Deterministically shuffle questions per student strictly within each category
+    final studentId = AuthRepository.instance.currentUser?.id ?? 'student';
+    final seed = studentId.hashCode ^ widget.assessment.id.hashCode;
+
+    final mcQuestions = widget.assessment.questions
+        .where((q) => q.type == QuestionType.multipleChoice)
+        .toList()
+      ..shuffle(Random(seed));
+
+    final tfQuestions = widget.assessment.questions
+        .where((q) => q.type == QuestionType.trueFalse)
+        .toList()
+      ..shuffle(Random(seed + 1));
+
+    final idQuestions = widget.assessment.questions
+        .where((q) => q.type == QuestionType.identification)
+        .toList()
+      ..shuffle(Random(seed + 2));
+
+    final otherQuestions = widget.assessment.questions
+        .where((q) => q.type != QuestionType.multipleChoice &&
+                      q.type != QuestionType.trueFalse &&
+                      q.type != QuestionType.identification)
+        .toList();
+
+    _orderedQuestions = [...mcQuestions, ...tfQuestions, ...idQuestions, ...otherQuestions];
+
+    for (var q in _orderedQuestions) {
       _studentAnswers[q.id] = '';
     }
     _secondsRemaining = widget.assessment.durationMinutes * 60;
@@ -55,6 +94,9 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
   void dispose() {
     _timer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
+    for (final controller in _textControllers.values) {
+      controller.dispose();
+    }
     super.dispose();
   }
 
@@ -90,39 +132,63 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
     setState(() {
       _violations++;
       _violationLog.add({'time': DateTime.now(), 'event': event});
-
-      if (_violations >= 3) {
-        AppModals.showErrorDialog(
-          context: context,
-          title: 'Assessment Locked',
-          message:
-              'Multiple violations detected. Your assessment has been automatically submitted.',
-        );
-        _submitAssessment(autoSubmit: true);
-      } else {
-        AppModals.showWarningDialog(
-          context: context,
-          title: 'Violation Detected',
-          message:
-              'Warning: $event.\nViolation $_violations of 3. Further violations will result in automatic submission.',
-        );
-      }
     });
+
+    // Background audit logging into anti_cheating_logs
+    try {
+      final user = AuthRepository.instance.currentUser;
+      SupabaseService().client.from('anti_cheating_logs').insert({
+        'event_type': 'window_focus_lost',
+        'details': '$event (Infraction #$_violations)',
+        'student_id': user?.id,
+        'assessment_id': widget.assessment.id,
+        'logged_at': DateTime.now().toIso8601String(),
+      }).catchError((_) {});
+    } catch (_) {}
+
+    // Strictly informational warning notice - NEVER auto-submit or lock student on violations
+    AppModals.showWarningDialog(
+      context: context,
+      title: 'Proctor Advisory Notice',
+      message:
+          'Warning: $event.\nLoss of window focus has been recorded (#$_violations) for instructor review. Please remain on the assessment screen.',
+    );
   }
 
   void _submitAssessment({bool autoSubmit = false}) {
     if (_isSubmitting) return;
 
     if (!autoSubmit) {
-      // Check if unanswered
-      final unansweredCount =
-          _studentAnswers.values.where((a) => a.trim().isEmpty).length;
-      if (unansweredCount > 0) {
-        AppModals.showErrorDialog(
+      // Find all unanswered questions
+      final List<int> unansweredNumbers = [];
+      int? firstUnansweredIndex;
+
+      for (int i = 0; i < _orderedQuestions.length; i++) {
+        final q = _orderedQuestions[i];
+        final ans = (_studentAnswers[q.id] ?? '').trim();
+        if (ans.isEmpty) {
+          unansweredNumbers.add(i + 1);
+          firstUnansweredIndex ??= i;
+        }
+      }
+
+      if (unansweredNumbers.isNotEmpty) {
+        // Automatically jump to the first unanswered question
+        if (firstUnansweredIndex != null) {
+          setState(() {
+            _currentQuestionIndex = firstUnansweredIndex!;
+          });
+        }
+
+        final itemSummary = unansweredNumbers.length <= 8
+            ? 'Item(s): #${unansweredNumbers.join(', #')}'
+            : 'Item(s): #${unansweredNumbers.take(8).join(', #')} and ${unansweredNumbers.length - 8} more';
+
+        AppModals.showWarningDialog(
           context: context,
-          title: 'Unanswered Questions',
+          title: 'Unanswered Questions Remaining',
           message:
-              'You still have $unansweredCount unanswered question(s). Please review before submitting.',
+              'You cannot submit the examination yet because you have ${unansweredNumbers.length} unanswered question(s).\n\n$itemSummary\n\nPlease answer all questions before submitting. For identification questions where you do not know the answer, you may enter "N/A".',
         );
         return;
       }
@@ -131,9 +197,9 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
     _timer?.cancel();
     setState(() => _isSubmitting = true);
 
-    // Auto-check against answer key
+    // Auto-check against answer key (unanswered or N/A answers yield 0 points)
     double scoreEarned = 0;
-    for (var q in widget.assessment.questions) {
+    for (var q in _orderedQuestions) {
       final studentAns = (_studentAnswers[q.id] ?? '').trim().toLowerCase();
       final correctAns = q.correctAnswer.trim().toLowerCase();
       final isMatching =
@@ -153,12 +219,6 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
             ? DateTime.now().difference(_startTime!).inMinutes
             : 0;
 
-    if (!mounted) return;
-    setState(() {
-      _isSubmitting = false;
-      _currentStep = 2;
-    });
-
     final student =
         AuthRepository.instance.currentUser ??
         UserModel(
@@ -168,6 +228,27 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
           email: '',
           role: UserRole.student,
         );
+
+    // Persist attempt record to Supabase (asynchronous)
+    try {
+      final user = AuthRepository.instance.currentUser;
+      final attemptStatus = autoSubmit ? 'auto_submitted' : 'submitted';
+      SupabaseService().client.from('assessment_attempts').upsert({
+        'assessment_id': widget.assessment.id,
+        'student_id': user?.id ?? student.id,
+        'attempt_number': 1,
+        'status': attemptStatus,
+        'started_at': _startTime?.toIso8601String() ?? DateTime.now().toIso8601String(),
+        'submitted_at': DateTime.now().toIso8601String(),
+      }).catchError((_) {});
+    } catch (_) {}
+
+    if (!mounted) return;
+    setState(() {
+      _isSubmitting = false;
+      _currentStep = 2;
+    });
+
     _submittedResult = AssessmentResultModel(
       id: 'res_${DateTime.now().millisecondsSinceEpoch}',
       assessmentId: widget.assessment.id,
@@ -200,30 +281,42 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
             widget.assessment.isExam ? AppTheme.catRed : Theme.of(context).colorScheme.primary,
         foregroundColor: Theme.of(context).colorScheme.onPrimary,
       ),
-      body: Stack(
-        children: [
-          Container(
-            color: Theme.of(context).scaffoldBackgroundColor,
-            child: Center(
-              child: Container(
-                constraints: const BoxConstraints(maxWidth: 800),
-                margin: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surface,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.12)),
-                ),
-                child: Column(
-                  children: [
-                    if (_currentStep == 0) _buildRulesView(),
-                    if (_currentStep == 1) _buildAnsweringView(),
-                    if (_currentStep == 2) _buildResultView(),
-                  ],
+      body: PopScope(
+        canPop: _currentStep != 1,
+        onPopInvokedWithResult: (didPop, _) {
+          if (didPop) return;
+          AppModals.showWarningDialog(
+            context: context,
+            title: 'Exam In Progress',
+            message:
+                'You cannot leave the assessment while the exam timer is actively running. Please complete or submit your examination.',
+          );
+        },
+        child: Stack(
+          children: [
+            Container(
+              color: Theme.of(context).scaffoldBackgroundColor,
+              child: Center(
+                child: Container(
+                  constraints: const BoxConstraints(maxWidth: 800),
+                  margin: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.surface,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.12)),
+                  ),
+                  child: Column(
+                    children: [
+                      if (_currentStep == 0) _buildRulesView(),
+                      if (_currentStep == 1) _buildAnsweringView(),
+                      if (_currentStep == 2) _buildResultView(),
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -279,13 +372,16 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
               'Time Limit: ${widget.assessment.durationMinutes} minutes timer.',
             ),
             _buildRuleBullet(
-              'Total Questions: ${widget.assessment.questions.length} items (${widget.assessment.totalPoints.toInt()} total points).',
+              'Total Questions: ${_orderedQuestions.length} items (${widget.assessment.totalPoints.toInt()} total points).',
+            ),
+            _buildRuleBullet(
+              'Mandatory Answers: Blank questions cannot be submitted manually. For identification questions where you do not know the answer, please enter "N/A".',
             ),
             _buildRuleBullet(
               'Internet Requirement: Active internet connection required throughout the assessment.',
             ),
             _buildRuleBullet(
-              'Anti-Cheating Policy: Switching tabs or minimizing the browser will be recorded as a violation.',
+              'Anti-Cheating Policy: Switching tabs or minimizing the browser will be recorded as a violation for teacher review.',
             ),
             const Spacer(),
             CheckboxListTile(
@@ -348,8 +444,11 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
   }
 
   Widget _buildAnsweringView() {
-    final q = widget.assessment.questions[_currentQuestionIndex];
-    final totalQ = widget.assessment.questions.length;
+    final q = _orderedQuestions[_currentQuestionIndex];
+    final totalQ = _orderedQuestions.length;
+    final answeredCount = _orderedQuestions
+        .where((item) => (_studentAnswers[item.id] ?? '').trim().isNotEmpty)
+        .length;
 
     return Expanded(
       child: Column(
@@ -364,9 +463,38 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  'Question ${_currentQuestionIndex + 1} of $totalQ',
-                  style: const TextStyle(fontWeight: FontWeight.bold),
+                Row(
+                  children: [
+                    Text(
+                      'Question ${_currentQuestionIndex + 1} of $totalQ',
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(width: 12),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color:
+                            answeredCount == totalQ
+                                ? AppTheme.catGreen.withValues(alpha: 0.12)
+                                : AppTheme.catOrange.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        '$answeredCount / $totalQ answered',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color:
+                              answeredCount == totalQ
+                                  ? AppTheme.catGreen
+                                  : AppTheme.catOrange,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
                 Row(
                   children: [
@@ -536,15 +664,93 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
                           }).toList(),
                     ),
                   ] else ...[
-                    TextField(
-                      controller: TextEditingController(
-                        text: _studentAnswers[q.id],
-                      ),
-                      onChanged: (val) => _studentAnswers[q.id] = val,
-                      decoration: const InputDecoration(
-                        labelText: 'Type your answer here',
-                        hintText: 'Enter final solution or answer',
-                      ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'Your Answer:',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: Theme.of(context).colorScheme.onSurface,
+                              ),
+                            ),
+                            InkWell(
+                              onTap: () {
+                                final ctrl = _getTextController(q.id);
+                                ctrl.text = 'N/A';
+                                ctrl.selection = TextSelection.fromPosition(
+                                  const TextPosition(offset: 3),
+                                );
+                                setState(() => _studentAnswers[q.id] = 'N/A');
+                              },
+                              borderRadius: BorderRadius.circular(6),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 5,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .primary
+                                      .withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .primary
+                                        .withValues(alpha: 0.3),
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.not_interested,
+                                      size: 13,
+                                      color:
+                                          Theme.of(context).colorScheme.primary,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      "Insert 'N/A' (I don't know)",
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                        color:
+                                            Theme.of(context)
+                                                .colorScheme
+                                                .primary,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        TextField(
+                          controller: _getTextController(q.id),
+                          onChanged: (val) {
+                            setState(() => _studentAnswers[q.id] = val);
+                          },
+                          decoration: InputDecoration(
+                            labelText: 'Type your answer here',
+                            hintText: "Enter answer (or type 'N/A' if unknown)",
+                            helperText:
+                                "Required: Blank answers are prohibited on submission. If you do not know the answer, enter 'N/A'.",
+                            helperMaxLines: 2,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ],
@@ -570,49 +776,65 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
                           : null,
                 ),
                 // Number bubbles
-                Row(
-                  children: List.generate(totalQ, (idx) {
-                    final isAnswered =
-                        (_studentAnswers[widget.assessment.questions[idx].id] ?? '')
-                            .trim()
-                            .isNotEmpty;
-                    final isCurrent = idx == _currentQuestionIndex;
-                    return InkWell(
-                      onTap: () => setState(() => _currentQuestionIndex = idx),
-                      child: Container(
-                        margin: const EdgeInsets.symmetric(horizontal: 4),
-                        width: 32,
-                        height: 32,
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          color:
-                              isCurrent
-                                  ? Theme.of(context).colorScheme.primary
-                                  : isAnswered
-                                  ? AppTheme.catGreen.withValues(alpha: 0.1)
-                                  : Theme.of(context).scaffoldBackgroundColor,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                            color: isCurrent ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.12),
+                Expanded(
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: List.generate(totalQ, (idx) {
+                        final isAnswered =
+                            (_studentAnswers[_orderedQuestions[idx].id] ?? '')
+                                .trim()
+                                .isNotEmpty;
+                        final isCurrent = idx == _currentQuestionIndex;
+                        return InkWell(
+                          onTap: () => setState(() => _currentQuestionIndex = idx),
+                          child: Container(
+                            margin: const EdgeInsets.symmetric(horizontal: 4),
+                            width: 32,
+                            height: 32,
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color:
+                                  isCurrent
+                                      ? Theme.of(context).colorScheme.primary
+                                      : isAnswered
+                                      ? AppTheme.catGreen.withValues(alpha: 0.12)
+                                      : Theme.of(context).scaffoldBackgroundColor,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color:
+                                    isCurrent
+                                        ? Theme.of(context).colorScheme.primary
+                                        : isAnswered
+                                        ? AppTheme.catGreen
+                                        : Theme.of(context)
+                                            .colorScheme
+                                            .onSurface
+                                            .withValues(alpha: 0.2),
+                                width: isCurrent || isAnswered ? 1.5 : 1,
+                              ),
+                            ),
+                            child: Text(
+                              '${idx + 1}',
+                              style: TextStyle(
+                                color:
+                                    isCurrent
+                                        ? Theme.of(context).colorScheme.onPrimary
+                                        : isAnswered
+                                        ? AppTheme.catGreen
+                                        : Theme.of(context).colorScheme.onSurface,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                              ),
+                            ),
                           ),
-                        ),
-                        child: Text(
-                          '${idx + 1}',
-                          style: TextStyle(
-                            color:
-                                isCurrent
-                                    ? Theme.of(context).colorScheme.onPrimary
-                                    : isAnswered
-                                    ? AppTheme.catGreen
-                                    : Theme.of(context).colorScheme.onSurface,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ),
-                    );
-                  }),
+                        );
+                      }),
+                    ),
+                  ),
                 ),
+                const SizedBox(width: 12),
                 if (_currentQuestionIndex < totalQ - 1)
                   AppPrimaryButton(
                     label: 'Next',
@@ -624,10 +846,20 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
                 else
                   AppPrimaryButton(
                     label: _isSubmitting ? 'Submitting...' : 'Submit Assessment',
-                    backgroundColor: AppTheme.catGreen,
+                    backgroundColor:
+                        answeredCount == totalQ
+                            ? AppTheme.catGreen
+                            : AppTheme.catOrange,
+                    icon:
+                        answeredCount == totalQ
+                            ? Icons.check_circle
+                            : Icons.warning_amber_rounded,
                     height: 40,
-                    width: 150,
-                    onPressed: _isSubmitting ? null : _submitAssessment,
+                    width: 180,
+                    onPressed:
+                        _isSubmitting
+                            ? null
+                            : () => _submitAssessment(autoSubmit: false),
                   ),
               ],
             ),

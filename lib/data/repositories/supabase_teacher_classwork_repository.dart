@@ -232,4 +232,201 @@ class SupabaseTeacherClassworkRepository implements TeacherClassworkRepository {
       return false; // Fallback to allow if query fails, or could throw.
     }
   }
+
+  Future<List<QuizOrExamModel>> getAssessments({String? subjectOfferingId}) async {
+    try {
+      var query = _client
+          .from('digital_assessments')
+          .select("""
+            id,
+            subject_offering_id,
+            assessment_type,
+            grading_category,
+            title,
+            instructions,
+            time_limit_minutes,
+            available_from,
+            deadline,
+            is_published,
+            results_released,
+            is_archived,
+            subject_offerings (
+              subjects ( subject_name ),
+              sections ( section_name, grade_level )
+            ),
+            assessment_questions (
+              id,
+              position,
+              question_type,
+              question_text,
+              points,
+              assessment_question_options (
+                id,
+                option_label,
+                option_text,
+                is_correct
+              )
+            )
+          """)
+          .eq('is_archived', false);
+
+      if (subjectOfferingId != null && subjectOfferingId.isNotEmpty) {
+        query = query.eq('subject_offering_id', subjectOfferingId);
+      }
+
+      final rows = await query.order('created_at', ascending: false);
+      final list = <QuizOrExamModel>[];
+
+      for (final raw in (rows as List? ?? [])) {
+        final r = Map<String, dynamic>.from(raw as Map);
+        final off = r['subject_offerings'] as Map<String, dynamic>? ?? {};
+        final sub = off['subjects'] as Map<String, dynamic>? ?? {};
+        final sec = off['sections'] as Map<String, dynamic>? ?? {};
+
+        final qRows = (r['assessment_questions'] as List? ?? [])
+            .map((q) => Map<String, dynamic>.from(q as Map))
+            .toList();
+        qRows.sort((a, b) =>
+            ((a['position'] as num?) ?? 0).compareTo((b['position'] as num?) ?? 0));
+
+        final questions = qRows.map((q) {
+          final qTypeStr = q['question_type']?.toString().toLowerCase() ?? '';
+          final qType = switch (qTypeStr) {
+            'multiple_choice' => QuestionType.multipleChoice,
+            'true_false' => QuestionType.trueFalse,
+            'identification' => QuestionType.identification,
+            'matching_type' => QuestionType.matching,
+            _ => QuestionType.multipleChoice,
+          };
+
+          final opts = (q['assessment_question_options'] as List? ?? [])
+              .map((o) => Map<String, dynamic>.from(o as Map))
+              .toList();
+          final choices = <String>[];
+          String correctAnswer = '';
+
+          if (qType == QuestionType.multipleChoice) {
+            for (final opt in opts) {
+              final text = opt['option_text']?.toString() ?? '';
+              choices.add(text);
+              if (opt['is_correct'] == true) {
+                correctAnswer = opt['option_label']?.toString() ?? text;
+              }
+            }
+          } else if (qType == QuestionType.trueFalse) {
+            choices.addAll(['True', 'False']);
+            for (final opt in opts) {
+              if (opt['is_correct'] == true) {
+                correctAnswer = opt['option_label']?.toString() ?? 'True';
+              }
+            }
+          } else if (qType == QuestionType.identification) {
+            for (final opt in opts) {
+              if (opt['is_correct'] == true) {
+                correctAnswer = opt['option_text']?.toString() ?? '';
+              }
+            }
+          }
+
+          return QuestionModel(
+            id: q['id']?.toString() ?? '',
+            questionText: q['question_text']?.toString() ?? '',
+            type: qType,
+            choices: choices,
+            correctAnswer: correctAnswer,
+            points: (q['points'] as num?)?.toDouble() ?? 1.0,
+          );
+        }).toList();
+
+        final schedDateStr = r['available_from'] ?? r['deadline'];
+        final schedDate = schedDateStr != null
+            ? DateTime.tryParse(schedDateStr.toString()) ?? DateTime.now()
+            : DateTime.now();
+
+        final aType = r['assessment_type']?.toString().toLowerCase();
+        final isExam = aType == 'st1' ||
+            aType == 'st2' ||
+            aType == 'term_exam' ||
+            r['grading_category'] == 'ex';
+
+        list.add(
+          QuizOrExamModel(
+            id: r['id'].toString(),
+            title: r['title']?.toString() ?? '',
+            description: r['instructions']?.toString() ?? '',
+            subject: sub['subject_name']?.toString() ?? '',
+            section: sec['section_name']?.toString() ?? '',
+            isExam: isExam,
+            durationMinutes: (r['time_limit_minutes'] as num?)?.toInt() ?? 60,
+            scheduleDate: schedDate,
+            isPublished: r['is_published'] != false,
+            resultsReleased: r['results_released'] == true,
+            questions: questions,
+          ),
+        );
+      }
+
+      // Also fetch in-person exams from classwork_items
+      try {
+        var inPersonQuery = _client
+            .from('classwork_items')
+            .select("""
+              id,
+              subject_offering_id,
+              grading_category,
+              title,
+              instructions,
+              max_score,
+              deadline,
+              completion_mode,
+              is_published,
+              subject_offerings (
+                subjects ( subject_name ),
+                sections ( section_name, grade_level )
+              )
+            """)
+            .eq('grading_category', 'ex')
+            .eq('completion_mode', 'in_person')
+            .eq('is_archived', false);
+
+        if (subjectOfferingId != null && subjectOfferingId.isNotEmpty) {
+          inPersonQuery =
+              inPersonQuery.eq('subject_offering_id', subjectOfferingId);
+        }
+
+        final inPersonRows = await inPersonQuery;
+        for (final raw in (inPersonRows as List? ?? [])) {
+          final r = Map<String, dynamic>.from(raw as Map);
+          final off = r['subject_offerings'] as Map<String, dynamic>? ?? {};
+          final sub = off['subjects'] as Map<String, dynamic>? ?? {};
+          final sec = off['sections'] as Map<String, dynamic>? ?? {};
+          final deadlineStr = r['deadline'];
+          final schedDate = deadlineStr != null
+              ? DateTime.tryParse(deadlineStr.toString()) ?? DateTime.now()
+              : DateTime.now();
+
+          list.add(
+            QuizOrExamModel(
+              id: r['id'].toString(),
+              title: r['title']?.toString() ?? '',
+              description: r['instructions']?.toString() ?? '',
+              subject: sub['subject_name']?.toString() ?? '',
+              section: sec['section_name']?.toString() ?? '',
+              isExam: true,
+              durationMinutes: 0,
+              scheduleDate: schedDate,
+              isPublished: r['is_published'] != false,
+              resultsReleased: false,
+              questions: [],
+            ),
+          );
+        }
+      } catch (_) {}
+
+      return list;
+    } catch (e) {
+      debugPrint('getAssessments notice: $e');
+      return [];
+    }
+  }
 }

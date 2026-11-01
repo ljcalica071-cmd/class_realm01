@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:class_realm/core/services/supabase_service.dart';
+import 'package:class_realm/models/academic_models.dart';
 import 'package:class_realm/models/student_dashboard_models.dart';
 import 'package:class_realm/features/student/shared/widgets/student_submit_work_dialog.dart';
+import 'package:class_realm/features/student/sub_features/academics/screens/student_assessment_screen.dart';
 
 class StudentClassworkCard extends StatelessWidget {
   const StudentClassworkCard({
@@ -277,7 +280,9 @@ class StudentClassworkCard extends StatelessWidget {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'In-Person ${classwork.type == 'performance_task' ? 'Performance Task' : 'Activity'}: Submit your physical work directly to your teacher in class. Your score and status will appear here once recorded.',
+                        classwork.type == 'exam'
+                            ? 'In-Person Periodical Examination: Administered in classroom by teacher. Your score will appear here once recorded in the Gradebook.'
+                            : 'In-Person ${classwork.type == 'performance_task' ? 'Performance Task' : 'Activity'}: Submit your physical work directly to your teacher in class. Your score and status will appear here once recorded.',
                         style: const TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
@@ -288,6 +293,84 @@ class StudentClassworkCard extends StatelessWidget {
                   ],
                 ),
               ),
+            ] else if (classwork.type == 'exam' || classwork.type == 'quiz') ...[
+              const SizedBox(height: 12),
+              if (isSubmitted) ...[
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0F8A48).withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: const Color(0xFF0F8A48).withValues(alpha: 0.25),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.check_circle,
+                          size: 18, color: Color(0xFF0F8A48)),
+                      const SizedBox(width: 8),
+                      Text(
+                        classwork.score != null
+                            ? 'Examination Completed • Score: ${_formatScore(classwork.score!)} / ${_formatScore(classwork.maxScore)} pts'
+                            : 'Examination Submitted • Recorded in system',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                          color: Color(0xFF0F8A48),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ] else if (isOverdue) ...[
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.error.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: theme.colorScheme.error.withValues(alpha: 0.2),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.lock_clock_outlined,
+                          size: 16, color: theme.colorScheme.error),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Examination Window Closed: The testing schedule has ended.',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: theme.colorScheme.error,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ] else ...[
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: FilledButton.icon(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFFDC2626),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 10),
+                    ),
+                    onPressed: () => _startAssessmentFlow(context),
+                    icon: const Icon(Icons.play_arrow_rounded, size: 18),
+                    label: const Text(
+                      'Take Examination (App)',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ),
+              ],
             ] else ...[
               if (isOverdue) ...[
                 const SizedBox(height: 12),
@@ -572,6 +655,159 @@ class StudentClassworkCard extends StatelessWidget {
   static String _formatScore(double score) => score == score.roundToDouble()
       ? score.toInt().toString()
       : score.toStringAsFixed(1);
+
+
+  Future<void> _startAssessmentFlow(BuildContext context) async {
+    if (classwork.assignedAt != null &&
+        classwork.assignedAt!.isAfter(DateTime.now())) {
+      final diff = classwork.assignedAt!.difference(DateTime.now());
+      final timeStr = diff.inHours > 0
+          ? '${diff.inHours}h ${diff.inMinutes % 60}m'
+          : '${diff.inMinutes} minutes';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'This examination is scheduled for ${_formatDate(classwork.assignedAt!)}. Testing window opens in $timeStr.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    try {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const Center(child: CircularProgressIndicator()),
+      );
+
+      final client = SupabaseService().client;
+      final rawAssess = await client
+          .from('digital_assessments')
+          .select("""
+            id,
+            subject_offering_id,
+            assessment_type,
+            title,
+            instructions,
+            time_limit_minutes,
+            available_from,
+            deadline,
+            results_released,
+            assessment_questions (
+              id,
+              position,
+              question_type,
+              question_text,
+              points,
+              assessment_question_options (
+                id,
+                option_label,
+                option_text,
+                is_correct
+              )
+            )
+          """)
+          .eq('id', classwork.id)
+          .maybeSingle();
+
+      if (context.mounted) Navigator.pop(context);
+
+      if (rawAssess == null) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+                content: Text('Could not load examination details.')),
+          );
+        }
+        return;
+      }
+
+      final qRows = (rawAssess['assessment_questions'] as List? ?? [])
+          .map((q) => Map<String, dynamic>.from(q as Map))
+          .toList();
+      qRows.sort((a, b) => ((a['position'] as num?) ?? 0)
+          .compareTo((b['position'] as num?) ?? 0));
+
+      final questions = qRows.map((q) {
+        final qTypeStr = q['question_type']?.toString().toLowerCase() ?? '';
+        final qType = switch (qTypeStr) {
+          'multiple_choice' => QuestionType.multipleChoice,
+          'true_false' => QuestionType.trueFalse,
+          'identification' => QuestionType.identification,
+          'matching_type' => QuestionType.matching,
+          _ => QuestionType.multipleChoice,
+        };
+
+        final opts = (q['assessment_question_options'] as List? ?? [])
+            .map((o) => Map<String, dynamic>.from(o as Map))
+            .toList();
+        final choices = <String>[];
+        String correctAnswer = '';
+
+        if (qType == QuestionType.multipleChoice) {
+          for (final opt in opts) {
+            final text = opt['option_text']?.toString() ?? '';
+            choices.add(text);
+            if (opt['is_correct'] == true) {
+              correctAnswer = opt['option_label']?.toString() ?? text;
+            }
+          }
+        } else if (qType == QuestionType.trueFalse) {
+          choices.addAll(['True', 'False']);
+          for (final opt in opts) {
+            if (opt['is_correct'] == true) {
+              correctAnswer = opt['option_label']?.toString() ?? 'True';
+            }
+          }
+        } else if (qType == QuestionType.identification) {
+          for (final opt in opts) {
+            if (opt['is_correct'] == true) {
+              correctAnswer = opt['option_text']?.toString() ?? '';
+            }
+          }
+        }
+
+        return QuestionModel(
+          id: q['id']?.toString() ?? '',
+          questionText: q['question_text']?.toString() ?? '',
+          type: qType,
+          choices: choices,
+          correctAnswer: correctAnswer,
+          points: (q['points'] as num?)?.toDouble() ?? 1.0,
+        );
+      }).toList();
+
+      final schedDate = classwork.assignedAt ?? DateTime.now();
+
+      final model = QuizOrExamModel(
+        id: rawAssess['id'].toString(),
+        title: rawAssess['title']?.toString() ?? classwork.title,
+        description:
+            rawAssess['instructions']?.toString() ?? classwork.instructions,
+        subject: classwork.subjectName,
+        section: classwork.sectionName,
+        isExam: true,
+        durationMinutes:
+            (rawAssess['time_limit_minutes'] as num?)?.toInt() ?? 60,
+        scheduleDate: schedDate,
+        isPublished: true,
+        resultsReleased: rawAssess['results_released'] == true,
+        questions: questions,
+      );
+
+      if (context.mounted) {
+        await StudentAssessmentScreen.start(context, model);
+        onRefresh?.call();
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to launch exam: $e')),
+        );
+      }
+    }
+  }
 }
 
 class _StatusPill extends StatelessWidget {
@@ -617,4 +853,5 @@ class _Detail extends StatelessWidget {
       ],
     );
   }
+
 }

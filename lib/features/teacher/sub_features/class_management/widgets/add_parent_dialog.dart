@@ -15,23 +15,33 @@ import 'package:class_realm/data/repositories/supabase_parent_repository.dart';
 class AddParentDialog extends StatefulWidget {
   final VoidCallback onParentCreated;
   final List<UserModel>? students;
+  final String? filterSection;
+  final String? filterSubject;
 
   const AddParentDialog({
     super.key,
     required this.onParentCreated,
     this.students,
+    this.filterSection,
+    this.filterSubject,
   });
 
   static Future<void> show(
     BuildContext context, {
     required VoidCallback onParentCreated,
     List<UserModel>? students,
+    String? filterSection,
+    String? filterSubject,
   }) {
     return showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (_) =>
-          AddParentDialog(onParentCreated: onParentCreated, students: students),
+      builder: (_) => AddParentDialog(
+        onParentCreated: onParentCreated,
+        students: students,
+        filterSection: filterSection,
+        filterSubject: filterSubject,
+      ),
     );
   }
 
@@ -579,7 +589,61 @@ Instructions:
                 const SizedBox(height: 12),
                 _buildCredentialPreviewCard(Theme.of(context)),
                 const SizedBox(height: 16),
-                const _SectionLabel('Link Students'),
+                _SectionLabel(
+                  'Link Students *',
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (widget.filterSection != null) ...[
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.25),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.groups_outlined,
+                                size: 12,
+                                color: Theme.of(context).colorScheme.primary,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                widget.filterSection!,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: Theme.of(context).colorScheme.primary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                      ],
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          '${_selectedStudents.length} linked',
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w600,
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
                 _buildLinkStudentSection(Theme.of(context)),
                 const SizedBox(height: 24),
               ],
@@ -1260,7 +1324,7 @@ Widget _buildLinkToExistingView(ThemeData theme) {
       initialValue: _selectedStudents,
       validator: (_) {
         if (_selectedStudents.isEmpty) {
-          return 'Link student is required.';
+          return 'Please select at least one student to link.';
         }
         return null;
       },
@@ -1269,35 +1333,14 @@ Widget _buildLinkToExistingView(ThemeData theme) {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'Link Students *',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: hasError
-                        ? theme.colorScheme.error
-                        : theme.colorScheme.onSurface,
-                  ),
-                ),
-                Text(
-                  '${_selectedStudents.length} linked',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 6),
+
             TextField(
               controller: _studentSearchCtrl,
               onChanged: (val) => setState(() => _studentSearchQuery = val),
               decoration: InputDecoration(
-                hintText: 'Search student by name or LRN...',
+                hintText: widget.filterSection != null
+                    ? 'Search student in ${widget.filterSection} by name or LRN...'
+                    : 'Search student by name or LRN...',
                 hintStyle: TextStyle(
                   color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
                   fontSize: 13,
@@ -1369,7 +1412,9 @@ Widget _buildLinkToExistingView(ThemeData theme) {
                         padding: const EdgeInsets.all(16),
                         child: Center(
                           child: Text(
-                            'No matching students found for "$_studentSearchQuery"',
+                            widget.filterSection != null
+                                ? 'No matching students found in ${widget.filterSection} for "$_studentSearchQuery"'
+                                : 'No matching students found for "$_studentSearchQuery"',
                             style: TextStyle(
                               fontSize: 13,
                               color: theme.colorScheme.onSurface.withValues(
@@ -1496,31 +1541,25 @@ Widget _buildLinkToExistingView(ThemeData theme) {
                   color: theme.colorScheme.surface,
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(
-                    color: hasError
-                        ? theme.colorScheme.error
-                        : theme.colorScheme.outline.withValues(alpha: 0.2),
+                    color: theme.colorScheme.outline.withValues(alpha: 0.22),
                   ),
                 ),
                 child: Row(
                   children: [
                     Icon(
-                      hasError ? Icons.error_outline : Icons.info_outline,
+                      Icons.info_outline,
                       size: 18,
-                      color: hasError
-                          ? theme.colorScheme.error
-                          : theme.colorScheme.onSurface.withValues(alpha: 0.4),
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.45),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
-                        'No students linked yet. Search and select up to 15 students to connect.',
+                        'No students linked yet. Search and select up to 15 students to link.',
                         style: TextStyle(
                           fontSize: 12,
-                          color: hasError
-                              ? theme.colorScheme.error
-                              : theme.colorScheme.onSurface.withValues(
-                                  alpha: 0.6,
-                                ),
+                          color: theme.colorScheme.onSurface.withValues(
+                            alpha: 0.65,
+                          ),
                         ),
                       ),
                     ),
@@ -1529,14 +1568,24 @@ Widget _buildLinkToExistingView(ThemeData theme) {
               ),
               if (hasError)
                 Padding(
-                  padding: const EdgeInsets.only(top: 6, left: 4),
-                  child: Text(
-                    field.errorText ?? 'Link student is required.',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: theme.colorScheme.error,
-                      fontWeight: FontWeight.w500,
-                    ),
+                  padding: const EdgeInsets.only(top: 8, left: 4),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.error_outline_rounded,
+                        size: 15,
+                        color: theme.colorScheme.error,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        field.errorText ?? 'Please select at least one student to link.',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: theme.colorScheme.error,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
             ] else
@@ -1623,7 +1672,8 @@ Widget _buildLinkToExistingView(ThemeData theme) {
 
 class _SectionLabel extends StatelessWidget {
   final String label;
-  const _SectionLabel(this.label);
+  final Widget? trailing;
+  const _SectionLabel(this.label, {this.trailing});
 
   @override
   Widget build(BuildContext context) {
@@ -1646,6 +1696,10 @@ class _SectionLabel extends StatelessWidget {
                   .withValues(alpha: 0.2),
             ),
           ),
+          if (trailing != null) ...[
+            const SizedBox(width: 8),
+            trailing!,
+          ],
         ],
       ),
     );

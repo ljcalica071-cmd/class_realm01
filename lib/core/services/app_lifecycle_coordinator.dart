@@ -1,5 +1,8 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:class_realm/core/services/local_storage_service.dart';
 import 'package:class_realm/core/services/sync_coordinator.dart';
 import 'package:class_realm/core/utils/browser_url_helper.dart';
@@ -32,6 +35,11 @@ class AppLifecycleCoordinator with WidgetsBindingObserver {
   /// Global notifier tracking background sync / session revalidation across warm refresh.
   final ValueNotifier<bool> isSyncingNotifier = ValueNotifier<bool>(false);
 
+  /// Global notifier tracking real network connectivity.
+  final ValueNotifier<bool> isOnlineNotifier = ValueNotifier<bool>(true);
+
+  Timer? _connectivityPollTimer;
+
   AppActivityLifecycleState get currentState => stateNotifier.value;
 
   void setSyncing(bool syncing) {
@@ -61,6 +69,23 @@ class AppLifecycleCoordinator with WidgetsBindingObserver {
       onShow: () => onRestart(),
       onUnload: () => onDestroy(),
     );
+
+    // Initial web online status check
+    isOnlineNotifier.value = getWebNavigatorOnlineStatus();
+
+    // Register web online/offline window event listeners
+    registerWebConnectivityListeners(
+      onConnectivityChanged: (online) {
+        if (isOnlineNotifier.value != online) {
+          isOnlineNotifier.value = online;
+          if (online) {
+            SyncCoordinator.instance.processPendingQueue();
+          }
+        }
+      },
+    );
+
+    _startConnectivityHeartbeat();
   }
 
   void addResumeListener(VoidCallback listener) {
@@ -218,8 +243,53 @@ class AppLifecycleCoordinator with WidgetsBindingObserver {
     }
   }
 
+  void _startConnectivityHeartbeat() {
+    _connectivityPollTimer?.cancel();
+    _connectivityPollTimer = Timer.periodic(const Duration(seconds: 15), (_) async {
+      await checkConnectivity();
+    });
+  }
+
+  Future<bool> checkConnectivity() async {
+    bool hasConnection = false;
+    try {
+      if (kIsWeb) {
+        final navOnline = getWebNavigatorOnlineStatus();
+        if (!navOnline) {
+          if (isOnlineNotifier.value != false) isOnlineNotifier.value = false;
+          return false;
+        }
+      }
+
+      final response = await http
+          .head(Uri.parse('https://www.google.com/generate_204'))
+          .timeout(const Duration(seconds: 4));
+      hasConnection = response.statusCode >= 200 && response.statusCode < 400;
+    } catch (_) {
+      try {
+        final supaUri = Uri.parse(Supabase.instance.client.rest.url);
+        final response = await http
+            .head(supaUri)
+            .timeout(const Duration(seconds: 3));
+        hasConnection = response.statusCode > 0;
+      } catch (_) {
+        hasConnection = false;
+      }
+    }
+
+    if (isOnlineNotifier.value != hasConnection) {
+      isOnlineNotifier.value = hasConnection;
+      if (hasConnection) {
+        SyncCoordinator.instance.processPendingQueue();
+      }
+    }
+    return hasConnection;
+  }
+
   void dispose() {
     if (_initialized) {
+      _connectivityPollTimer?.cancel();
+      _connectivityPollTimer = null;
       WidgetsBinding.instance.removeObserver(this);
       _initialized = false;
     }

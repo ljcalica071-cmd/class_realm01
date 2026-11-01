@@ -1306,7 +1306,6 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
             else if (_teacherSubjects.isEmpty)
               _buildNoClassesAvailable(theme)
             else ...[
-              if (_isOffline) _buildOfflineBanner(theme, isDark),
 
               // ── CASCADING FILTERS & DATE SELECTOR ──
               _buildClassAndDateControls(theme, isDark),
@@ -2523,33 +2522,7 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
     );
   }
 
-  Widget _buildOfflineBanner(ThemeData theme, bool isDark) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 14),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      decoration: BoxDecoration(
-        color: AppTheme.catOrange.withValues(alpha: isDark ? 0.16 : 0.08),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppTheme.catOrange.withValues(alpha: 0.3)),
-      ),
-      child: Row(
-        children: [
-          const Icon(LucideIcons.wifiOff, size: 16, color: AppTheme.catOrange),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              'Offline Spool Active: Attendance marks and RFID scans are stored locally and sync automatically once connectivity returns.',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: theme.colorScheme.onSurface,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+
 
   Widget _buildErrorContainer(
     ThemeData theme,
