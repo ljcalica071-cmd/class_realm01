@@ -776,24 +776,15 @@ class ScheduleModel {
   int get durationMinutes => endMinutes - startMinutes;
 
   int get dayOfWeekIndex {
-    switch (dayOfWeek) {
-      case 'Monday':
-        return 1;
-      case 'Tuesday':
-        return 2;
-      case 'Wednesday':
-        return 3;
-      case 'Thursday':
-        return 4;
-      case 'Friday':
-        return 5;
-      case 'Saturday':
-        return 6;
-      case 'Sunday':
-        return 7;
-      default:
-        return 1;
-    }
+    final clean = dayOfWeek.trim().toLowerCase();
+    if (clean.startsWith('mon')) return 1;
+    if (clean.startsWith('tue')) return 2;
+    if (clean.startsWith('wed')) return 3;
+    if (clean.startsWith('thu')) return 4;
+    if (clean.startsWith('fri')) return 5;
+    if (clean.startsWith('sat')) return 6;
+    if (clean.startsWith('sun')) return 7;
+    return 0;
   }
 
   static String dayFromIndex(int index) {

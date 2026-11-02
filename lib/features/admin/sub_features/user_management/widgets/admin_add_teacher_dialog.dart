@@ -979,17 +979,18 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog>
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    _buildFieldLabel('Middle Name', theme),
+                                    _buildFieldLabel('Middle Initial (Optional)', theme),
                                     TextFormField(
                                       controller: _middleNameController,
-                                      textCapitalization: TextCapitalization.words,
-                                      inputFormatters: AppValidators.nameFormatters,
+                                      textCapitalization: TextCapitalization.characters,
                                       textInputAction: TextInputAction.next,
                                       decoration: _inputDecoration(
                                         theme,
-                                        hintText: 'e.g. P.',
+                                        hintText: 'e.g. H.',
                                         isDark: isDark,
                                       ),
+                                      validator:
+                                          AppValidators.validateMiddleInitial,
                                     ),
                                   ],
                                 ),

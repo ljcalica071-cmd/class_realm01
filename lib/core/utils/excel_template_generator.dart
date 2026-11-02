@@ -155,7 +155,7 @@ class ExcelTemplateGenerator {
       <c r="B2" t="inlineStr" s="2"><is><t>juana.rexsa@gmail.com</t></is></c>
       <c r="C2" t="inlineStr" s="2"><is><t>Juana</t></is></c>
       <c r="D2" t="inlineStr" s="2"><is><t>Rexsa</t></is></c>
-      <c r="E2" t="inlineStr" s="2"><is><t>G</t></is></c>
+      <c r="E2" t="inlineStr" s="2"><is><t>G.</t></is></c>
       <c r="F2" t="inlineStr" s="2"><is><t>Female</t></is></c>
       <c r="G2" t="inlineStr" s="2"><is><t>2011-01-01</t></is></c>
     </row>''');
@@ -210,9 +210,9 @@ $rowsBuffer
     <dataValidation type="custom" errorStyle="stop" allowBlank="1" showInputMessage="1" showErrorMessage="1" errorTitle="Invalid Name" error="Names cannot contain numbers." promptTitle="First Name" prompt="Enter given name (2-30 letters)" sqref="D3:D100">
       <formula1>AND(ISERROR(FIND(&quot;0&quot;,D3)),ISERROR(FIND(&quot;1&quot;,D3)),ISERROR(FIND(&quot;2&quot;,D3)),ISERROR(FIND(&quot;3&quot;,D3)),ISERROR(FIND(&quot;4&quot;,D3)),ISERROR(FIND(&quot;5&quot;,D3)),ISERROR(FIND(&quot;6&quot;,D3)),ISERROR(FIND(&quot;7&quot;,D3)),ISERROR(FIND(&quot;8&quot;,D3)),ISERROR(FIND(&quot;9&quot;,D3)),LEN(D3)&gt;=2,LEN(D3)&lt;=30)</formula1>
     </dataValidation>
-    <!-- Validation 5: Middle Initial (Optional, max 1 char, no numbers) -->
-    <dataValidation type="custom" errorStyle="stop" allowBlank="1" showInputMessage="1" showErrorMessage="1" errorTitle="Invalid Name" error="Names cannot contain numbers." promptTitle="Middle Initial (Optional)" prompt="Leave blank or enter 1 letter only" sqref="E3:E100">
-      <formula1>OR(LEN(E3)=0,AND(LEN(E3)=1,ISERROR(FIND(&quot;0&quot;,E3)),ISERROR(FIND(&quot;1&quot;,E3)),ISERROR(FIND(&quot;2&quot;,E3)),ISERROR(FIND(&quot;3&quot;,E3)),ISERROR(FIND(&quot;4&quot;,E3)),ISERROR(FIND(&quot;5&quot;,E3)),ISERROR(FIND(&quot;6&quot;,E3)),ISERROR(FIND(&quot;7&quot;,E3)),ISERROR(FIND(&quot;8&quot;,E3)),ISERROR(FIND(&quot;9&quot;,E3))))</formula1>
+    <!-- Validation 5: Optional middle initial, exactly one letter and a period -->
+    <dataValidation type="custom" errorStyle="stop" allowBlank="1" showInputMessage="1" showErrorMessage="1" errorTitle="Invalid Format" error="Use 1 letter and 1 period only (e.g., H.)" promptTitle="Middle Initial (Optional)" prompt="Use 1 letter and 1 period only (e.g., H.), or leave blank." sqref="E3:E100">
+      <formula1>OR(LEN(E3)=0,AND(LEN(TRIM(E3))=2,OR(AND(UPPER(LEFT(TRIM(E3),1))&gt;=&quot;A&quot;,UPPER(LEFT(TRIM(E3),1))&lt;=&quot;Z&quot;),UPPER(LEFT(TRIM(E3),1))=&quot;Ñ&quot;),RIGHT(TRIM(E3),1)=&quot;.&quot;))</formula1>
     </dataValidation>
     <!-- Validation 6: Gender Dropdown (Male / Female) -->
     <dataValidation type="list" errorStyle="stop" allowBlank="1" showInputMessage="1" showErrorMessage="1" errorTitle="Invalid Gender" error="Please select 'Male' or 'Female' from the dropdown list." promptTitle="Gender" prompt="Select Male or Female" sqref="F3:F100">

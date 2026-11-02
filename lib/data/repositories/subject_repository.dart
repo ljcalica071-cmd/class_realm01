@@ -546,6 +546,56 @@ class SubjectRepository {
         'updated_at': DateTime.now().toUtc().toIso8601String(),
       }, onConflict: 'subject_offering_id,term_number');
 
+      // Sync scores to student_classwork_submissions for active classwork items
+      try {
+        final activeClasswork = await _client
+            .from('classwork_items')
+            .select('id, grading_category, gradebook_column_index')
+            .eq('subject_offering_id', offeringId)
+            .eq('term_number', termNumber)
+            .eq('is_archived', false);
+
+        final itemsList = activeClasswork as List? ?? [];
+        if (itemsList.isNotEmpty && scores.isNotEmpty) {
+          final submissionUpserts = <Map<String, dynamic>>[];
+          for (final item in itemsList) {
+            final classworkId = item['id']?.toString();
+            final catKey = item['grading_category']?.toString();
+            final colIdx = item['gradebook_column_index']?.toString();
+            if (classworkId == null || catKey == null || colIdx == null) {
+              continue;
+            }
+
+            for (final studentEntry in scores.entries) {
+              final studentId = studentEntry.key.toString();
+              final studentScores = studentEntry.value;
+              if (studentScores is! Map) continue;
+              final catScores = studentScores[catKey];
+              if (catScores is! Map) continue;
+              final scoreVal = catScores[colIdx];
+              if (scoreVal != null && scoreVal is num) {
+                submissionUpserts.add({
+                  'classwork_id': classworkId,
+                  'student_id': studentId,
+                  'score': scoreVal.toDouble(),
+                  'status': 'graded',
+                  'updated_at': DateTime.now().toUtc().toIso8601String(),
+                });
+              }
+            }
+          }
+
+          if (submissionUpserts.isNotEmpty) {
+            await _client.from('student_classwork_submissions').upsert(
+              submissionUpserts,
+              onConflict: 'classwork_id,student_id',
+            );
+          }
+        }
+      } catch (subErr) {
+        debugPrint('Sync to student_classwork_submissions notice: $subErr');
+      }
+
       final rows = payload['term_grades'];
       if (rows is List && rows.isNotEmpty) {
         final termGrades = rows.map<Map<String, dynamic>>((value) {

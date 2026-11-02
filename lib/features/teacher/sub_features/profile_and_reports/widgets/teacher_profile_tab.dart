@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:class_realm/core/theme/app_theme.dart';
+import 'package:class_realm/core/utils/validators.dart';
 import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/utils/formatters.dart';
@@ -264,7 +265,14 @@ class _TeacherProfileTabState extends State<TeacherProfileTab> {
                           const SizedBox(height: 24),
                           _buildInfoRow(theme, Icons.person, 'First Name', _teacher.firstName ?? ''),
                           if (_teacher.middleName != null && _teacher.middleName!.isNotEmpty)
-                            _buildInfoRow(theme, Icons.person_outline, 'Middle Name', _teacher.middleName!),
+                            _buildInfoRow(
+                              theme,
+                              Icons.person_outline,
+                              'Middle Initial',
+                              AppValidators.formatMiddleInitial(
+                                _teacher.middleName,
+                              ),
+                            ),
                           _buildInfoRow(theme, Icons.person, 'Last Name', _teacher.lastName ?? ''),
                           _buildInfoRow(theme, Icons.cake, 'Birthday', _teacher.birthday != null ? '${_teacher.birthday!.year}-${_teacher.birthday!.month.toString().padLeft(2, '0')}-${_teacher.birthday!.day.toString().padLeft(2, '0')}' : 'Not provided'),
                           _buildInfoRow(theme, Icons.timelapse, 'Age', _teacher.birthday != null ? '${_calculateAge(_teacher.birthday)} years old' : 'Unknown'),

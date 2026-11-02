@@ -29,6 +29,7 @@ class StudentHomeScreen extends StatefulWidget {
 class _StudentHomeScreenState extends State<StudentHomeScreen> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   int _currentIndex = 0;
+  String _classworkFilter = 'All';
   StudentDashboardData? _dashboard;
   Object? _loadError;
   bool _isLoading = true;
@@ -243,7 +244,7 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
             BottomNavigationBarItem(
               icon: Icon(Icons.assignment_outlined),
               activeIcon: Icon(Icons.assignment),
-              label: 'Written Works',
+              label: 'Classwork',
             ),
             BottomNavigationBarItem(
               icon: Icon(Icons.quiz_outlined),
@@ -758,7 +759,7 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
             ...todoItems.map(
               (item) => Padding(
                 padding: const EdgeInsets.only(bottom: 12),
-                child: StudentClassworkCard(classwork: item),
+                child: StudentClassworkCard(classwork: item, onRefresh: () => _loadDashboard(forceRefresh: true)),
               ),
             ),
         ],
@@ -1071,29 +1072,208 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
     required IconData emptyIcon,
     required String emptyTitle,
     required String emptyMessage,
+    bool showFilterChips = false,
   }) {
+    final theme = Theme.of(context);
+    final totalAll = items.length;
+    final totalWw = items.where((i) => i.type != 'performance_task' && i.type != 'exam' && i.type != 'quiz').length;
+    final totalPt = items.where((i) => i.type == 'performance_task').length;
+    final totalEx = items.where((i) => i.type == 'exam' || i.type == 'quiz').length;
+
+    final filtered = showFilterChips
+        ? items.where((item) {
+            if (_classworkFilter == 'WW') {
+              return item.type != 'performance_task' && item.type != 'exam' && item.type != 'quiz';
+            }
+            if (_classworkFilter == 'PT') {
+              return item.type == 'performance_task';
+            }
+            if (_classworkFilter == 'EX') {
+              return item.type == 'exam' || item.type == 'quiz';
+            }
+            return true;
+          }).toList()
+        : items;
+
+    Widget content;
+    if (filtered.isEmpty) {
+      final currentEmptyTitle = showFilterChips
+          ? (_classworkFilter == 'PT'
+              ? 'No performance tasks yet'
+              : (_classworkFilter == 'WW'
+                  ? 'No written works or activities yet'
+                  : (_classworkFilter == 'EX'
+                      ? 'No periodical examinations yet'
+                      : emptyTitle)))
+          : emptyTitle;
+
+      final currentEmptyMessage = showFilterChips
+          ? (_classworkFilter == 'PT'
+              ? 'Performance tasks assigned by your teacher will appear here.'
+              : (_classworkFilter == 'WW'
+                  ? 'Activities and written works assigned by your teacher will appear here.'
+                  : (_classworkFilter == 'EX'
+                      ? 'Scheduled examinations posted by your teacher will appear here.'
+                      : emptyMessage)))
+          : emptyMessage;
+
+      final currentEmptyIcon = showFilterChips
+          ? (_classworkFilter == 'PT'
+              ? Icons.workspace_premium_outlined
+              : (_classworkFilter == 'EX'
+                  ? Icons.quiz_outlined
+                  : emptyIcon))
+          : emptyIcon;
+
+      content = AppPullToRefresh.scrollableState(
+        child: _buildEmptyCard(
+          context,
+          icon: currentEmptyIcon,
+          title: currentEmptyTitle,
+          message: currentEmptyMessage,
+        ),
+      );
+    } else {
+      content = ListView.separated(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(16),
+        itemCount: filtered.length,
+        separatorBuilder: (_, _) => const SizedBox(height: 12),
+        itemBuilder: (context, index) => StudentClassworkCard(
+          classwork: filtered[index],
+          onRefresh: () => _loadDashboard(forceRefresh: true),
+        ),
+      );
+    }
+
     return AppPullToRefresh(
       onRefresh: () => _loadDashboard(forceRefresh: true, silent: true),
-      child: items.isEmpty
-          ? AppPullToRefresh.scrollableState(
-              child: _buildEmptyCard(
-                context,
-                icon: emptyIcon,
-                title: emptyTitle,
-                message: emptyMessage,
-              ),
+      child: showFilterChips
+          ? Column(
+              children: [
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.surface,
+                    border: Border(
+                      bottom: BorderSide(
+                        color: theme.colorScheme.outlineVariant
+                            .withValues(alpha: 0.4),
+                      ),
+                    ),
+                  ),
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        _buildClassworkFilterChip(
+                          label: 'All',
+                          count: totalAll,
+                          isSelected: _classworkFilter == 'All',
+                          onSelected: () =>
+                              setState(() => _classworkFilter = 'All'),
+                        ),
+                        const SizedBox(width: 8),
+                        _buildClassworkFilterChip(
+                          label: 'Activities (WW)',
+                          count: totalWw,
+                          isSelected: _classworkFilter == 'WW',
+                          onSelected: () =>
+                              setState(() => _classworkFilter = 'WW'),
+                        ),
+                        const SizedBox(width: 8),
+                        _buildClassworkFilterChip(
+                          label: 'Tasks (PT)',
+                          count: totalPt,
+                          isSelected: _classworkFilter == 'PT',
+                          onSelected: () =>
+                              setState(() => _classworkFilter = 'PT'),
+                        ),
+                        const SizedBox(width: 8),
+                        _buildClassworkFilterChip(
+                          label: 'Exams (EX)',
+                          count: totalEx,
+                          isSelected: _classworkFilter == 'EX',
+                          onSelected: () =>
+                              setState(() => _classworkFilter = 'EX'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                Expanded(child: content),
+              ],
             )
-          : ListView.separated(
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.all(16),
-              itemCount: items.length,
-              separatorBuilder: (_, _) => const SizedBox(height: 12),
-              itemBuilder: (context, index) =>
-                  StudentClassworkCard(classwork: items[index]),
-            ),
+          : content,
     );
   }
 
+  Widget _buildClassworkFilterChip({
+    required String label,
+    required int count,
+    required bool isSelected,
+    required VoidCallback onSelected,
+  }) {
+    final theme = Theme.of(context);
+    return InkWell(
+      onTap: onSelected,
+      borderRadius: BorderRadius.circular(20),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? theme.colorScheme.primary.withValues(alpha: 0.12)
+              : theme.colorScheme.surfaceContainerHighest.withValues(
+                  alpha: 0.4,
+                ),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isSelected
+                ? theme.colorScheme.primary
+                : theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
+            width: isSelected ? 1.5 : 1,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                color: isSelected
+                    ? theme.colorScheme.primary
+                    : theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(width: 5),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+              decoration: BoxDecoration(
+                color: isSelected
+                    ? theme.colorScheme.primary
+                    : theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                '$count',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  color: isSelected
+                      ? theme.colorScheme.onPrimary
+                      : theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
   Widget _buildEmptyCard(
     BuildContext context, {
     required IconData icon,

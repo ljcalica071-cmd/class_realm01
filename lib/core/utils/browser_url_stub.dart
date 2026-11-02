@@ -57,3 +57,9 @@ void registerWebFileDropListener(void Function(Uint8List bytes, String fileName,
 void unregisterWebFileDropListener() {
   // No-op on non-web platforms.
 }
+
+void registerWebConnectivityListenersPlatform({
+  required void Function(bool isOnline) onConnectivityChanged,
+}) {}
+
+bool getWebNavigatorOnlineStatusPlatform() => true;

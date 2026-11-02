@@ -16,6 +16,7 @@ class AppTextField extends StatelessWidget {
   final int? maxLength;
   final bool showCounter;
   final TextInputType? keyboardType;
+  final TextCapitalization textCapitalization;
   final List<TextInputFormatter>? inputFormatters;
   final void Function(String)? onChanged;
   final AutovalidateMode? autovalidateMode;
@@ -36,6 +37,7 @@ class AppTextField extends StatelessWidget {
     this.maxLength,
     this.showCounter = false,
     this.keyboardType,
+    this.textCapitalization = TextCapitalization.none,
     this.inputFormatters,
     this.onChanged,
     this.autovalidateMode,
@@ -93,6 +95,7 @@ class AppTextField extends StatelessWidget {
                   ? (context, {required currentLength, required isFocused, required maxLength}) => null
                   : null),
           keyboardType: keyboardType,
+          textCapitalization: textCapitalization,
           inputFormatters: inputFormatters,
           onChanged: onChanged,
           validator: validator,

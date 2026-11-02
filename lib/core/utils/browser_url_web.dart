@@ -218,3 +218,20 @@ void unregisterWebFileDropListener() {
     }
   } catch (_) {}
 }
+
+void registerWebConnectivityListenersPlatform({
+  required void Function(bool isOnline) onConnectivityChanged,
+}) {
+  try {
+    html.window.addEventListener('online', (_) => onConnectivityChanged(true));
+    html.window.addEventListener('offline', (_) => onConnectivityChanged(false));
+  } catch (_) {}
+}
+
+bool getWebNavigatorOnlineStatusPlatform() {
+  try {
+    return html.window.navigator.onLine ?? true;
+  } catch (_) {
+    return true;
+  }
+}

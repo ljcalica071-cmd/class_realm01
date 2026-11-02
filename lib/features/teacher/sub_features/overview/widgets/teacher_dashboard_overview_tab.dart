@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:class_realm/core/services/app_data_cache.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -11,6 +12,12 @@ import 'package:class_realm/data/repositories/subject_repository.dart';
 import 'package:class_realm/data/repositories/supabase_schedule_repository.dart';
 import 'package:class_realm/data/repositories/supabase_student_repository.dart';
 import 'package:class_realm/shared/widgets/shimmer_loading.dart';
+
+enum _ScheduleSessionStatus {
+  upcoming,
+  ongoing,
+  completed,
+}
 
 class TeacherDashboardOverviewTab extends StatefulWidget {
   final List<UserModel> activeStudents;
@@ -38,12 +45,22 @@ class _TeacherDashboardOverviewTabState
   int totalStudents = 0;
   bool isLoadingStats = true;
   List<ScheduleModel> _schedules = [];
+  Timer? _autoClockTimer;
 
   @override
   void initState() {
     super.initState();
     _hydrateOverviewStats();
     _loadDashboardStats();
+    _autoClockTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _autoClockTimer?.cancel();
+    super.dispose();
   }
 
   void _hydrateOverviewStats() {
@@ -134,31 +151,77 @@ class _TeacherDashboardOverviewTabState
     required String subject,
     required String sectionAndRoom,
     required String time,
-    required bool isDone,
+    required _ScheduleSessionStatus status,
   }) {
     final theme = Theme.of(context);
+
+    final Color iconBg;
+    final Color iconFg;
+    final IconData statusIcon;
+    final String statusLabel;
+    final Color badgeBg;
+    final Color badgeFg;
+    final Border border;
+
+    switch (status) {
+      case _ScheduleSessionStatus.upcoming:
+        iconBg = Colors.amber.withValues(alpha: 0.12);
+        iconFg = Colors.amber.shade800;
+        statusIcon = LucideIcons.clock;
+        statusLabel = 'Upcoming';
+        badgeBg = Colors.amber.withValues(alpha: 0.1);
+        badgeFg = Colors.amber.shade800;
+        border = Border.all(
+          color: theme.colorScheme.onSurface.withValues(alpha: 0.06),
+        );
+        break;
+      case _ScheduleSessionStatus.ongoing:
+        iconBg = Colors.teal.withValues(alpha: 0.16);
+        iconFg = Colors.teal.shade700;
+        statusIcon = LucideIcons.presentation;
+        statusLabel = 'In Session';
+        badgeBg = Colors.teal.withValues(alpha: 0.15);
+        badgeFg = Colors.teal.shade800;
+        border = Border.all(
+          color: Colors.teal.withValues(alpha: 0.45),
+          width: 1.5,
+        );
+        break;
+      case _ScheduleSessionStatus.completed:
+        iconBg = theme.colorScheme.onSurface.withValues(alpha: 0.06);
+        iconFg = theme.colorScheme.onSurface.withValues(alpha: 0.45);
+        statusIcon = LucideIcons.checkCheck;
+        statusLabel = 'Done';
+        badgeBg = theme.colorScheme.onSurface.withValues(alpha: 0.06);
+        badgeFg = theme.colorScheme.onSurface.withValues(alpha: 0.5);
+        border = Border.all(
+          color: theme.colorScheme.onSurface.withValues(alpha: 0.04),
+        );
+        break;
+    }
+
+    final isMuted = status == _ScheduleSessionStatus.completed;
+
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: theme.scaffoldBackgroundColor, // Inherits 60% for contrast inside 30% card
+        color: status == _ScheduleSessionStatus.ongoing
+            ? theme.colorScheme.primary.withValues(alpha: 0.03)
+            : theme.scaffoldBackgroundColor,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: theme.colorScheme.onSurface.withValues(alpha: 0.05),
-        ),
+        border: border,
       ),
       child: Row(
         children: [
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: isDone
-                  ? Colors.teal.withValues(alpha: 0.1)
-                  : Colors.amber.withValues(alpha: 0.1),
+              color: iconBg,
               borderRadius: BorderRadius.circular(10),
             ),
             child: Icon(
-              isDone ? LucideIcons.checkCircle : LucideIcons.clock,
-              color: isDone ? Colors.teal : Colors.amber.shade800,
+              statusIcon,
+              color: iconFg,
               size: 20,
             ),
           ),
@@ -167,31 +230,65 @@ class _TeacherDashboardOverviewTabState
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  subject,
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                    color: theme.colorScheme.onSurface,
-                  ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        subject,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                          color: isMuted
+                              ? theme.colorScheme.onSurface.withValues(alpha: 0.7)
+                              : theme.colorScheme.onSurface,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: badgeBg,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        statusLabel,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: badgeFg,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 2),
+                const SizedBox(height: 3),
                 Text(
                   sectionAndRoom,
                   style: TextStyle(
                     fontSize: 12,
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                    color: theme.colorScheme.onSurface.withValues(
+                      alpha: isMuted ? 0.45 : 0.6,
+                    ),
                   ),
                 ),
               ],
             ),
           ),
+          const SizedBox(width: 12),
           Text(
             time,
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
-              color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+              color: theme.colorScheme.onSurface.withValues(
+                alpha: isMuted ? 0.45 : 0.65,
+              ),
             ),
           ),
         ],
@@ -199,42 +296,67 @@ class _TeacherDashboardOverviewTabState
     );
   }
 
-  Widget _buildQuickActionTile(
+    Widget _buildQuickActionCard(
     BuildContext context, {
     required String title,
+    required String subtitle,
     required IconData icon,
+    required Color accentColor,
     required VoidCallback onTap,
   }) {
     final theme = Theme.of(context);
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
-        child: Row(
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: accentColor.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: accentColor.withValues(alpha: 0.2),
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Icon(icon, color: theme.colorScheme.primary, size: 20),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                title,
-                style: TextStyle(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 13,
-                  color: theme.colorScheme.onSurface,
-                ),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: accentColor.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(8),
               ),
+              child: Icon(icon, color: accentColor, size: 18),
             ),
-            Icon(
-              LucideIcons.chevronRight,
-              size: 18,
-              color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
+            const SizedBox(height: 8),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                    color: theme.colorScheme.onSurface,
+                  ),
+                ),
+                Text(
+                  subtitle,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                  ),
+                ),
+              ],
             ),
           ],
         ),
       ),
     );
   }
+
+
 
   @override
   Widget build(BuildContext context) {
@@ -253,15 +375,19 @@ class _TeacherDashboardOverviewTabState
     final mainValueSections = isLoadingStats ? '-' : '$totalSections';
     final mainValueStudents = isLoadingStats ? '-' : '$totalStudents';
     final now = DateTime.now();
-    final todayName = ScheduleModel.dayFromIndex(now.weekday);
+    final todayIndex = now.weekday;
+    final todayName = ScheduleModel.dayFromIndex(todayIndex);
     final nowInMinutes = now.hour * 60 + now.minute;
-    final sortedSchedules = List<ScheduleModel>.from(_schedules)
-      ..sort((a, b) {
-        final dayCompare = a.dayOfWeekIndex.compareTo(b.dayOfWeekIndex);
-        return dayCompare != 0
-            ? dayCompare
-            : a.startMinutes.compareTo(b.startMinutes);
-      });
+
+    // Filter strictly for classes scheduled today
+    final todaySchedules = _schedules.where((s) {
+      return s.dayOfWeekIndex == todayIndex ||
+          s.dayOfWeek.trim().toLowerCase() == todayName.toLowerCase();
+    }).toList()
+      ..sort((a, b) => a.startMinutes.compareTo(b.startMinutes));
+
+    final todayScheduleTitle =
+        'My Classes Today';
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
@@ -388,7 +514,7 @@ class _TeacherDashboardOverviewTabState
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Text(
-                              'My Class Schedule',
+                              todayScheduleTitle,
                               style: TextStyle(
                                 fontSize: 18,
                                 fontWeight: FontWeight.bold,
@@ -447,37 +573,37 @@ class _TeacherDashboardOverviewTabState
                               ),
                             ),
                           )
-                        else if (sortedSchedules.isEmpty)
+                        else if (todaySchedules.isEmpty)
                           Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 28),
+                            padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 16),
                             child: Center(
                               child: Column(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   Container(
-                                    padding: const EdgeInsets.all(12),
+                                    padding: const EdgeInsets.all(14),
                                     decoration: BoxDecoration(
                                       color: theme.colorScheme.primary.withValues(alpha: 0.08),
                                       shape: BoxShape.circle,
                                     ),
                                     child: Icon(
-                                      LucideIcons.calendarX2,
+                                      LucideIcons.calendarCheck2,
                                       size: 32,
                                       color: theme.colorScheme.primary,
                                     ),
                                   ),
                                   const SizedBox(height: 12),
                                   Text(
-                                    'No classes scheduled yet',
+                                    'No classes scheduled for today',
                                     style: TextStyle(
                                       fontWeight: FontWeight.bold,
-                                      fontSize: 14,
+                                      fontSize: 15,
                                       color: theme.colorScheme.onSurface,
                                     ),
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
-                                    'Configure your subjects in Classroom Setup and set up your weekly schedule.',
+                                    'You have no teaching sessions scheduled for $todayName. Check "View All Schedule" to see your weekly timetable.',
                                     textAlign: TextAlign.center,
                                     style: TextStyle(
                                       fontSize: 12,
@@ -489,26 +615,31 @@ class _TeacherDashboardOverviewTabState
                             ),
                           )
                         else
-                          ...sortedSchedules.map(
-                            (schedule) => Padding(
+                          ...todaySchedules.map((schedule) {
+                            final _ScheduleSessionStatus status;
+                            if (nowInMinutes < schedule.startMinutes) {
+                              status = _ScheduleSessionStatus.upcoming;
+                            } else if (nowInMinutes <= schedule.endMinutes) {
+                              status = _ScheduleSessionStatus.ongoing;
+                            } else {
+                              status = _ScheduleSessionStatus.completed;
+                            }
+
+                            return Padding(
                               padding: const EdgeInsets.only(top: 10),
                               child: _buildClassItem(
                                 context,
                                 subject: schedule.subject,
                                 sectionAndRoom: [
-                                  schedule.dayOfWeek,
-                                  'Section ${schedule.section}',
+                                  schedule.section.toLowerCase().startsWith('section') ? schedule.section : 'Section ${schedule.section}',
                                   if (schedule.room.trim().isNotEmpty)
                                     'Room ${schedule.room}',
                                 ].join(' • '),
-                                time:
-                                    '${schedule.startTime} - ${schedule.endTime}',
-                                isDone:
-                                    schedule.dayOfWeek == todayName &&
-                                    nowInMinutes >= schedule.endMinutes,
+                                time: '${schedule.startTime} - ${schedule.endTime}',
+                                status: status,
                               ),
-                            ),
-                          ),
+                            );
+                          }),
                       ],
                     ),
                   ),
@@ -525,44 +656,66 @@ class _TeacherDashboardOverviewTabState
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          'Quick Actions',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: theme.colorScheme.onSurface,
-                          ),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'Quick Actions',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: theme.colorScheme.onSurface,
+                              ),
+                            ),
+                            Icon(
+                              LucideIcons.sparkles,
+                              size: 16,
+                              color: theme.colorScheme.primary.withValues(alpha: 0.7),
+                            ),
+                          ],
                         ),
                         const SizedBox(height: 16),
-                        _buildQuickActionTile(
-                          context,
-                          title: 'Record Attendance',
-                          icon: LucideIcons.checkSquare,
-                          onTap: () => widget.onNavigateTo(5),
-                        ),
-                        Divider(
-                          height: 1,
-                          color: theme.colorScheme.onSurface.withValues(
-                            alpha: 0.05,
-                          ),
-                        ),
-                        _buildQuickActionTile(
-                          context,
-                          title: 'Create Classwork',
-                          icon: LucideIcons.fileText,
-                          onTap: widget.onCreateChooser,
-                        ),
-                        Divider(
-                          height: 1,
-                          color: theme.colorScheme.onSurface.withValues(
-                            alpha: 0.05,
-                          ),
-                        ),
-                        _buildQuickActionTile(
-                          context,
-                          title: 'View Schedule',
-                          icon: LucideIcons.calendarDays,
-                          onTap: () => widget.onNavigateTo(14),
+                        GridView.count(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          crossAxisCount: 2,
+                          crossAxisSpacing: 10,
+                          mainAxisSpacing: 10,
+                          childAspectRatio: 1.25,
+                          children: [
+                            _buildQuickActionCard(
+                              context,
+                              title: 'Attendance',
+                              subtitle: 'RFID & Roster',
+                              icon: LucideIcons.checkSquare,
+                              accentColor: Colors.teal,
+                              onTap: () => widget.onNavigateTo(5),
+                            ),
+                            _buildQuickActionCard(
+                              context,
+                              title: 'Create',
+                              subtitle: 'WW, PT, Exam',
+                              icon: LucideIcons.filePlus2,
+                              accentColor: theme.colorScheme.primary,
+                              onTap: widget.onCreateChooser,
+                            ),
+                            _buildQuickActionCard(
+                              context,
+                              title: 'Gradebook',
+                              subtitle: 'DepEd Grades',
+                              icon: LucideIcons.bookOpenCheck,
+                              accentColor: Colors.deepPurple,
+                              onTap: () => widget.onNavigateTo(18),
+                            ),
+                            _buildQuickActionCard(
+                              context,
+                              title: 'Schedule',
+                              subtitle: 'Timetable',
+                              icon: LucideIcons.calendarDays,
+                              accentColor: Colors.amber.shade800,
+                              onTap: () => widget.onNavigateTo(14),
+                            ),
+                          ],
                         ),
                       ],
                     ),

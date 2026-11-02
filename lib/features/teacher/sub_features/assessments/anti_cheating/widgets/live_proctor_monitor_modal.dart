@@ -1,3 +1,4 @@
+import 'package:class_realm/core/services/supabase_service.dart';
 import 'package:flutter/material.dart';
 import 'package:class_realm/core/theme/app_theme.dart';
 import '../models/student_live_proctor_state.dart';
@@ -52,20 +53,66 @@ class _LiveProctorMonitorModalState extends State<LiveProctorMonitorModal> {
     _initializeRoster();
   }
 
-  void _initializeRoster() {
-    // Populate roster from registered learners (mocked via static list for now)
-    final sampleLearners = <Map<String, String>>[
-      {'id': 'std_1', 'name': 'Juan Dela Cruz', 'lrn': '109823478912', 'section': widget.section},
-      {'id': 'std_2', 'name': 'Maria Santos', 'lrn': '109823478913', 'section': widget.section},
-      {'id': 'std_3', 'name': 'Angelo Reyes', 'lrn': '109823478914', 'section': widget.section},
-    ];
+  Future<void> _initializeRoster() async {
+    try {
+      final client = SupabaseService().client;
+      final assessmentRow = await client
+          .from('digital_assessments')
+          .select('subject_offering_id')
+          .eq('id', widget.assessmentId)
+          .maybeSingle();
 
-    _channelService.initializeRoster(sampleLearners);
-    // Mark first student in progress and with a sample violation for live demonstration
-    if (sampleLearners.isNotEmpty) {
-      _channelService.registerStudentStarted(sampleLearners.first['id']!);
+      final offeringId = assessmentRow?['subject_offering_id']?.toString();
+
+      var enrollQuery = client
+          .from('student_enrollments')
+          .select("""
+            student_id,
+            student_profiles!inner (
+              student_id,
+              lrn,
+              first_name,
+              last_name,
+              department_or_section
+            )
+          """)
+          .ilike('status', 'enrolled');
+
+      if (offeringId != null && offeringId.isNotEmpty) {
+        enrollQuery = enrollQuery.eq('subject_offering_id', offeringId);
+      }
+
+      final enrollData = await enrollQuery;
+      final learners = <Map<String, String>>[];
+
+      for (final row in enrollData as List? ?? []) {
+        final profile = row['student_profiles'] as Map<String, dynamic>? ?? {};
+        final sId = row['student_id']?.toString() ?? profile['student_id']?.toString() ?? '';
+        final firstName = profile['first_name']?.toString() ?? '';
+        final lastName = profile['last_name']?.toString() ?? '';
+        final name = [firstName, lastName].where((s) => s.isNotEmpty).join(' ');
+        final lrn = profile['lrn']?.toString() ?? 'N/A';
+        final sec = profile['department_or_section']?.toString() ?? widget.section;
+
+        if (sId.isNotEmpty) {
+          learners.add({
+            'id': sId,
+            'name': name.isNotEmpty ? name : 'Student ($lrn)',
+            'lrn': lrn,
+            'section': sec,
+          });
+        }
+      }
+
+      _channelService.initializeRoster(learners);
+      if (mounted) {
+        setState(() {
+          _students = _channelService.currentStates;
+        });
+      }
+    } catch (e) {
+      debugPrint('Real proctor roster fetch notice: $e');
     }
-    _students = _channelService.currentStates;
 
     _channelService.studentStatesStream.listen((updated) {
       if (mounted) {

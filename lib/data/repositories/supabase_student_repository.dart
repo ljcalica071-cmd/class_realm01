@@ -4,6 +4,7 @@ import 'package:class_realm/core/services/app_data_cache.dart';
 import 'package:class_realm/core/services/email_service.dart';
 import 'package:class_realm/core/services/firebase_auth_admin_service.dart';
 import 'package:class_realm/core/services/local_storage_service.dart';
+import 'package:class_realm/core/utils/validators.dart';
 import 'package:class_realm/data/datasources/local/app_database.dart';
 import 'package:class_realm/data/repositories/student_repository.dart';
 import 'package:class_realm/models/user_model.dart';
@@ -508,6 +509,8 @@ class SupabaseStudentRepository implements StudentRepository {
     required String subjectId,
     bool skipEmail = false,
   }) async {
+    final cleanMiddleName =
+        AppValidators.normalizeMiddleInitial(middleName) ?? '';
     final cleanEmail = email.trim().toLowerCase();
     final bdayStr =
         '${birthday.year.toString().padLeft(4, '0')}-${birthday.month.toString().padLeft(2, '0')}-${birthday.day.toString().padLeft(2, '0')}';
@@ -519,7 +522,7 @@ class SupabaseStudentRepository implements StudentRepository {
         '$cleanLastName${birthday.year}${birthday.month.toString().padLeft(2, '0')}${birthday.day.toString().padLeft(2, '0')}';
     final studentFullName = [
       firstName,
-      middleName,
+      cleanMiddleName,
       lastName,
     ].where((s) => s.isNotEmpty).join(' ');
 
@@ -648,7 +651,7 @@ class SupabaseStudentRepository implements StudentRepository {
         'student_id': studentId,
         'lrn': lrn,
         'first_name': firstName,
-        'middle_name': middleName.isEmpty ? null : middleName,
+        'middle_name': cleanMiddleName.isEmpty ? null : cleanMiddleName,
         'last_name': lastName,
         'gender': gender,
         'birthday': bdayStr,
@@ -700,7 +703,7 @@ class SupabaseStudentRepository implements StudentRepository {
             studentId: studentId,
             lrn: Value(lrn),
             firstName: firstName,
-            middleName: Value(middleName),
+            middleName: Value(cleanMiddleName),
             lastName: lastName,
             gender: Value(gender),
           ),
@@ -753,6 +756,8 @@ class SupabaseStudentRepository implements StudentRepository {
     required DateTime birthday,
     required String subjectId,
   }) async {
+    final cleanMiddleName =
+        AppValidators.normalizeMiddleInitial(middleName) ?? '';
     final bdayStr =
         '${birthday.year.toString().padLeft(4, '0')}-${birthday.month.toString().padLeft(2, '0')}-${birthday.day.toString().padLeft(2, '0')}';
     try {
@@ -761,7 +766,7 @@ class SupabaseStudentRepository implements StudentRepository {
           .update({
             'lrn': studentId,
             'first_name': firstName,
-            'middle_name': middleName.isEmpty ? null : middleName,
+            'middle_name': cleanMiddleName.isEmpty ? null : cleanMiddleName,
             'last_name': lastName,
             'gender': gender,
             'birthday': bdayStr,
@@ -781,7 +786,7 @@ class SupabaseStudentRepository implements StudentRepository {
           LocalStudentsCompanion(
             lrn: Value(studentId),
             firstName: Value(firstName),
-            middleName: Value(middleName.isEmpty ? null : middleName),
+            middleName: Value(cleanMiddleName.isEmpty ? null : cleanMiddleName),
             lastName: Value(lastName),
             gender: Value(gender),
           ),

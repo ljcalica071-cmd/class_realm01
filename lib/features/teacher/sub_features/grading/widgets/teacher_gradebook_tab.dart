@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import 'package:class_realm/core/theme/app_theme.dart';
 import 'package:class_realm/core/services/app_data_cache.dart';
+import 'package:class_realm/core/utils/validators.dart';
 import 'package:class_realm/core/utils/deped_grading_engine.dart';
 import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
@@ -40,7 +41,12 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
   bool _isLoadingSheets = false;
 
   int _selectedTerm = 1;
-  final ScrollController _scrollController = ScrollController();
+  final ScrollController _termHeaderHorizontalController = ScrollController();
+  final ScrollController _termBodyHorizontalController = ScrollController();
+  final ScrollController _finalHeaderHorizontalController = ScrollController();
+  final ScrollController _finalBodyHorizontalController = ScrollController();
+  bool _isSyncingTermScroll = false;
+  bool _isSyncingFinalScroll = false;
   final ValueNotifier<int> _hpsRevision = ValueNotifier(0);
   final Map<String, ValueNotifier<int>> _studentRevisions = {};
   Timer? _sheetSaveTimer;
@@ -59,8 +65,59 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
   @override
   void initState() {
     super.initState();
+    _setupScrollSync();
     _hydrateFromCache();
     _fetchSubjects();
+  }
+
+  void _setupScrollSync() {
+    _termBodyHorizontalController.addListener(() {
+      if (_isSyncingTermScroll) return;
+      if (_termHeaderHorizontalController.hasClients &&
+          _termHeaderHorizontalController.offset !=
+              _termBodyHorizontalController.offset) {
+        _isSyncingTermScroll = true;
+        _termHeaderHorizontalController
+            .jumpTo(_termBodyHorizontalController.offset);
+        _isSyncingTermScroll = false;
+      }
+    });
+
+    _termHeaderHorizontalController.addListener(() {
+      if (_isSyncingTermScroll) return;
+      if (_termBodyHorizontalController.hasClients &&
+          _termBodyHorizontalController.offset !=
+              _termHeaderHorizontalController.offset) {
+        _isSyncingTermScroll = true;
+        _termBodyHorizontalController
+            .jumpTo(_termHeaderHorizontalController.offset);
+        _isSyncingTermScroll = false;
+      }
+    });
+
+    _finalBodyHorizontalController.addListener(() {
+      if (_isSyncingFinalScroll) return;
+      if (_finalHeaderHorizontalController.hasClients &&
+          _finalHeaderHorizontalController.offset !=
+              _finalBodyHorizontalController.offset) {
+        _isSyncingFinalScroll = true;
+        _finalHeaderHorizontalController
+            .jumpTo(_finalBodyHorizontalController.offset);
+        _isSyncingFinalScroll = false;
+      }
+    });
+
+    _finalHeaderHorizontalController.addListener(() {
+      if (_isSyncingFinalScroll) return;
+      if (_finalBodyHorizontalController.hasClients &&
+          _finalBodyHorizontalController.offset !=
+              _finalHeaderHorizontalController.offset) {
+        _isSyncingFinalScroll = true;
+        _finalBodyHorizontalController
+            .jumpTo(_finalHeaderHorizontalController.offset);
+        _isSyncingFinalScroll = false;
+      }
+    });
   }
 
   void _hydrateFromCache() {
@@ -75,6 +132,18 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
       _selectedSubject = firstSubject['subject_name']?.toString();
       _selectedSection = firstSubject['section_name']?.toString();
       _isLoadingSubjects = false;
+      final termsTaught = firstSubject['terms_taught'] is int
+          ? firstSubject['terms_taught'] as int
+          : int.tryParse(firstSubject['terms_taught']?.toString() ?? '') ?? 3;
+      final termBlock =
+          firstSubject['term_block']?.toString() ?? '1ST, 2ND, 3RD';
+      final active = DepEdSubjectCatalog.getActiveTermsForBlock(
+        termsTaught,
+        termBlock,
+      );
+      if (active.isNotEmpty && !active.contains(_selectedTerm)) {
+        _selectedTerm = active.first;
+      }
       final subjectId = firstSubject['id']?.toString();
       if (subjectId != null) {
         final cached = AppDataCache.instance.getCached<List<UserModel>>(
@@ -221,12 +290,15 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
     for (final revision in _studentRevisions.values) {
       revision.dispose();
     }
-    _scrollController.dispose();
+    _termHeaderHorizontalController.dispose();
+    _termBodyHorizontalController.dispose();
+    _finalHeaderHorizontalController.dispose();
+    _finalBodyHorizontalController.dispose();
     super.dispose();
   }
 
   // Visible assessment slot configuration
-  static const int defaultCategoryColumns = 5;
+  static const int defaultCategoryColumns = 3;
   static const int maxCategoryColumns = 10;
   static const int exColumns = 3; // ST1, ST2, TE
 
@@ -253,7 +325,7 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
     final last = s.lastName ?? '';
     final first = s.firstName ?? '';
     final mid = (s.middleName != null && s.middleName!.isNotEmpty)
-        ? ' ${s.middleName![0]}.'
+        ? ' ${AppValidators.formatMiddleInitial(s.middleName)}'
         : '';
     if (last.isEmpty && first.isEmpty) return s.fullName;
     return '${last.toUpperCase()}, $first$mid';
@@ -765,7 +837,7 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
           _buildTopControls(theme, isDark),
           const SizedBox(height: 16),
 
-          if (_teacherSubjects.isEmpty || _students.isEmpty) ...[
+          if (!_isLoadingSubjects && !_isLoadingStudents && (_teacherSubjects.isEmpty || _students.isEmpty)) ...[
             _buildNoStudentsBanner(theme, isDark),
             const SizedBox(height: 12),
           ],
@@ -806,294 +878,20 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
                                   borderColor,
                                 )
                               else
-                                Column(
-                                  children: [
-                                    if (!_isSelectedTermActive)
-                                      _buildInactiveTermBanner(theme),
-                                    if (_studentLoadError != null)
-                                      MaterialBanner(
-                                        content: Text(_studentLoadError!),
-                                        leading: Icon(
-                                          Icons.people_outline,
-                                          color: theme.colorScheme.error,
-                                        ),
-                                        actions: [
-                                          TextButton(
-                                            onPressed: () {
-                                              final teacherId = AuthRepository
-                                                  .instance
-                                                  .currentUser
-                                                  ?.id;
-                                              final offeringId =
-                                                  _currentSubjectData?['id']
-                                                      ?.toString();
-                                              if (teacherId != null &&
-                                                  offeringId != null) {
-                                                unawaited(
-                                                  _fetchStudents(
-                                                    teacherId,
-                                                    offeringId,
-                                                  ),
-                                                );
-                                              }
-                                            },
-                                            child: const Text('Retry'),
-                                          ),
-                                        ],
-                                      ),
-                                    if (_sheetLoadError != null)
-                                      MaterialBanner(
-                                        content: Text(_sheetLoadError!),
-                                        leading: Icon(
-                                          Icons.error_outline,
-                                          color: theme.colorScheme.error,
-                                        ),
-                                        actions: [
-                                          TextButton(
-                                            onPressed: () {
-                                              final id =
-                                                  _currentSubjectData?['id']
-                                                      ?.toString();
-                                              if (id != null) {
-                                                unawaited(
-                                                  _loadOfferingSheets(id),
-                                                );
-                                              }
-                                            },
-                                            child: const Text('Retry'),
-                                          ),
-                                        ],
-                                      ),
-                                    Expanded(
-                                      child: SingleChildScrollView(
-                                        child: Row(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            // LEFT STICKY COLUMN
-                                            Container(
-                                              width: 230.0,
-                                              decoration: BoxDecoration(
-                                                color: cellBg,
-                                                boxShadow: [
-                                                  BoxShadow(
-                                                    color: Colors.black
-                                                        .withValues(
-                                                          alpha: isDark
-                                                              ? 0.3
-                                                              : 0.15,
-                                                        ),
-                                                    blurRadius: 10,
-                                                    offset: const Offset(4, 0),
-                                                  ),
-                                                ],
-                                              ),
-                                              child: Column(
-                                                children: [
-                                                  _buildCategoryHeaders(
-                                                    theme,
-                                                    subHeaderBg,
-                                                    headerText,
-                                                    wwWeight,
-                                                    ptWeight,
-                                                    exWeight,
-                                                    isLeft: true,
-                                                  ),
-                                                  _buildColumnSubHeaders(
-                                                    theme,
-                                                    headerBg,
-                                                    headerText,
-                                                    wwWeight,
-                                                    ptWeight,
-                                                    exWeight,
-                                                    isLeft: true,
-                                                  ),
-                                                  ValueListenableBuilder<int>(
-                                                    valueListenable:
-                                                        _hpsRevision,
-                                                    builder: (context, _, _) =>
-                                                        _buildHpsRow(
-                                                          theme,
-                                                          isDark,
-                                                          borderColor,
-                                                          cellText,
-                                                          wwWeight,
-                                                          ptWeight,
-                                                          exWeight,
-                                                          isLeft: true,
-                                                        ),
-                                                  ),
-                                                  Container(
-                                                    height: 2,
-                                                    color: borderColor,
-                                                  ),
-                                                  if (_selectedGender ==
-                                                          'All' ||
-                                                      _selectedGender ==
-                                                          'Male') ...[
-                                                    _buildGenderHeader(
-                                                      'MALE (${_maleStudents.length})',
-                                                      genderHeaderBg,
-                                                      isLeft: true,
-                                                    ),
-                                                    ..._buildStudentRows(
-                                                      _maleStudents,
-                                                      theme,
-                                                      isDark,
-                                                      cellText,
-                                                      borderColor,
-                                                      altRowBg,
-                                                      cellBg,
-                                                      wwWeight,
-                                                      ptWeight,
-                                                      exWeight,
-                                                      isLeft: true,
-                                                    ),
-                                                  ],
-                                                  if (_selectedGender ==
-                                                          'All' ||
-                                                      _selectedGender ==
-                                                          'Female') ...[
-                                                    _buildGenderHeader(
-                                                      'FEMALE (${_femaleStudents.length})',
-                                                      genderHeaderBg,
-                                                      isLeft: true,
-                                                    ),
-                                                    ..._buildStudentRows(
-                                                      _femaleStudents,
-                                                      theme,
-                                                      isDark,
-                                                      cellText,
-                                                      borderColor,
-                                                      altRowBg,
-                                                      cellBg,
-                                                      wwWeight,
-                                                      ptWeight,
-                                                      exWeight,
-                                                      isLeft: true,
-                                                    ),
-                                                  ],
-                                                ],
-                                              ),
-                                            ),
-                                            // RIGHT SCROLLABLE COLUMNS
-                                            Expanded(
-                                              child: Scrollbar(
-                                                thickness: 12,
-                                                controller: _scrollController,
-                                                radius: const Radius.circular(
-                                                  8,
-                                                ),
-                                                interactive: true,
-                                                child: SingleChildScrollView(
-                                         key: ValueKey('gradebook-scroll-grid-$_selectedGender-$_selectedTerm-$_wwColumns-$_ptColumns'),
-                                                  scrollDirection:
-                                                      Axis.horizontal,
-                                                  controller: _scrollController,
-                                                  child: SizedBox(
-                                                    width:
-                                                        _calculateTotalWidth() -
-                                                        230.0,
-                                                    child: Column(
-                                                      children: [
-                                                        _buildCategoryHeaders(
-                                                          theme,
-                                                          subHeaderBg,
-                                                          headerText,
-                                                          wwWeight,
-                                                          ptWeight,
-                                                          exWeight,
-                                                          isLeft: false,
-                                                        ),
-                                                        _buildColumnSubHeaders(
-                                                          theme,
-                                                          headerBg,
-                                                          headerText,
-                                                          wwWeight,
-                                                          ptWeight,
-                                                          exWeight,
-                                                          isLeft: false,
-                                                        ),
-                                                        ValueListenableBuilder<
-                                                          int
-                                                        >(
-                                                          valueListenable:
-                                                              _hpsRevision,
-                                                          builder:
-                                                              (context, _, _) =>
-                                                                  _buildHpsRow(
-                                                                    theme,
-                                                                    isDark,
-                                                                    borderColor,
-                                                                    cellText,
-                                                                    wwWeight,
-                                                                    ptWeight,
-                                                                    exWeight,
-                                                                    isLeft:
-                                                                        false,
-                                                                  ),
-                                                        ),
-                                                        Container(
-                                                          height: 2,
-                                                          color: borderColor,
-                                                        ),
-                                                        if (_selectedGender ==
-                                                                'All' ||
-                                                            _selectedGender ==
-                                                                'Male') ...[
-                                                          _buildGenderHeader(
-                                                            '',
-                                                            genderHeaderBg,
-                                                            isLeft: false,
-                                                          ),
-                                                          ..._buildStudentRows(
-                                                            _maleStudents,
-                                                            theme,
-                                                            isDark,
-                                                            cellText,
-                                                            borderColor,
-                                                            altRowBg,
-                                                            cellBg,
-                                                            wwWeight,
-                                                            ptWeight,
-                                                            exWeight,
-                                                            isLeft: false,
-                                                          ),
-                                                        ],
-                                                        if (_selectedGender ==
-                                                                'All' ||
-                                                            _selectedGender ==
-                                                                'Female') ...[
-                                                          _buildGenderHeader(
-                                                            '',
-                                                            genderHeaderBg,
-                                                            isLeft: false,
-                                                          ),
-                                                          ..._buildStudentRows(
-                                                            _femaleStudents,
-                                                            theme,
-                                                            isDark,
-                                                            cellText,
-                                                            borderColor,
-                                                            altRowBg,
-                                                            cellBg,
-                                                            wwWeight,
-                                                            ptWeight,
-                                                            exWeight,
-                                                            isLeft: false,
-                                                          ),
-                                                        ],
-                                                      ],
-                                                    ),
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                  ],
+                                _buildTermSpreadsheet(
+                                  theme,
+                                  isDark,
+                                  borderColor,
+                                  cellBg,
+                                  cellText,
+                                  headerBg,
+                                  subHeaderBg,
+                                  headerText,
+                                  genderHeaderBg,
+                                  altRowBg,
+                                  wwWeight,
+                                  ptWeight,
+                                  exWeight,
                                 ),
                               if (_isLoadingSubjects ||
                                   _isLoadingStudents ||
@@ -1226,7 +1024,7 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
               value: _selectedSubject,
               isDense: true,
               hint: Text(
-                'No subject yet',
+                _isLoadingSubjects ? 'Loading subjects...' : 'No subject yet',
                 style: TextStyle(
                   fontSize: 13,
                   color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
@@ -1448,7 +1246,7 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  sub ?? 'No subject yet',
+                  sub ?? (_isLoadingSubjects ? 'Loading...' : 'No subject yet'),
                   style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.bold,
@@ -1458,7 +1256,9 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  sec != null ? 'Section: $sec' : 'No section yet',
+                  sec != null
+                      ? 'Section: $sec'
+                      : (_isLoadingSubjects ? 'Loading...' : 'No section yet'),
                   style: TextStyle(
                     fontSize: 12,
                     color: text.withValues(alpha: 0.7),
@@ -1503,38 +1303,7 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
     );
   }
 
-  Widget _buildInactiveTermBanner(ThemeData theme) {
-    final activeTerm = _activeTerms.isEmpty ? 1 : _activeTerms.first;
-    return Material(
-      color: theme.colorScheme.errorContainer.withValues(alpha: 0.75),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        child: Row(
-          children: [
-            Icon(
-              Icons.warning_amber_rounded,
-              color: theme.colorScheme.onErrorContainer,
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                'INCORRECT SHEET. Do not use this sheet to input data. This subject is configured for $_termBlock only.',
-                style: TextStyle(
-                  color: theme.colorScheme.onErrorContainer,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 12,
-                ),
-              ),
-            ),
-            TextButton(
-              onPressed: () => unawaited(_changeTerm(activeTerm)),
-              child: const Text('Switch to Active Term'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+
 
   Widget _buildNoStudentsBanner(ThemeData theme, bool isDark) {
     final bg = isDark ? const Color(0xFF1E293B) : const Color(0xFFEFF6FF);
@@ -1573,14 +1342,363 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
     );
   }
 
+  Widget _buildTermSpreadsheet(
+    ThemeData theme,
+    bool isDark,
+    Color borderColor,
+    Color cellBg,
+    Color cellText,
+    Color headerBg,
+    Color subHeaderBg,
+    Color headerText,
+    Color genderHeaderBg,
+    Color altRowBg,
+    double wwWeight,
+    double ptWeight,
+    double exWeight,
+  ) {
+    return Column(
+      children: [
+        if (_studentLoadError != null)
+          MaterialBanner(
+            content: Text(_studentLoadError!),
+            leading: Icon(
+              Icons.people_outline,
+              color: theme.colorScheme.error,
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  final teacherId = AuthRepository.instance.currentUser?.id;
+                  final offeringId = _currentSubjectData?['id']?.toString();
+                  if (teacherId != null && offeringId != null) {
+                    unawaited(_fetchStudents(teacherId, offeringId));
+                  }
+                },
+                child: const Text('Retry'),
+              ),
+            ],
+          ),
+        if (_sheetLoadError != null)
+          MaterialBanner(
+            content: Text(_sheetLoadError!),
+            leading: Icon(
+              Icons.error_outline,
+              color: theme.colorScheme.error,
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  final id = _currentSubjectData?['id']?.toString();
+                  if (id != null) {
+                    unawaited(_loadOfferingSheets(id));
+                  }
+                },
+                child: const Text('Retry'),
+              ),
+            ],
+          ),
+        // PINNED / STICKY HEADER ROW (Never scrolls away vertically)
+        RepaintBoundary(
+          child: Container(
+            decoration: BoxDecoration(
+              color: cellBg,
+              border: Border(
+                bottom: BorderSide(
+                  color: borderColor,
+                  width: 2,
+                ),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(
+                    alpha: isDark ? 0.3 : 0.08,
+                  ),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                // Left fixed header (width 231.5 accommodates 1.5 border without child overflow)
+                Container(
+                  width: 231.5,
+                  decoration: BoxDecoration(
+                    color: cellBg,
+                    border: Border(
+                      right: BorderSide(
+                        color: borderColor.withValues(alpha: 0.5),
+                        width: 1.5,
+                      ),
+                    ),
+                  ),
+                  child: Column(
+                    children: [
+                      _buildCategoryHeaders(
+                        theme,
+                        subHeaderBg,
+                        headerText,
+                        wwWeight,
+                        ptWeight,
+                        exWeight,
+                        isLeft: true,
+                      ),
+                      _buildColumnSubHeaders(
+                        theme,
+                        headerBg,
+                        headerText,
+                        wwWeight,
+                        ptWeight,
+                        exWeight,
+                        isLeft: true,
+                      ),
+                      ValueListenableBuilder<int>(
+                        valueListenable: _hpsRevision,
+                        builder: (context, _, _) => _buildHpsRow(
+                          theme,
+                          isDark,
+                          borderColor,
+                          cellText,
+                          wwWeight,
+                          ptWeight,
+                          exWeight,
+                          isLeft: true,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                // Right horizontally scrollable header
+                Expanded(
+                  child: SingleChildScrollView(
+                    controller: _termHeaderHorizontalController,
+                    scrollDirection: Axis.horizontal,
+                    physics: const ClampingScrollPhysics(),
+                    child: SizedBox(
+                      width: _calculateTotalWidth() - 230.0,
+                      child: Column(
+                        children: [
+                          _buildCategoryHeaders(
+                            theme,
+                            subHeaderBg,
+                            headerText,
+                            wwWeight,
+                            ptWeight,
+                            exWeight,
+                            isLeft: false,
+                          ),
+                          _buildColumnSubHeaders(
+                            theme,
+                            headerBg,
+                            headerText,
+                            wwWeight,
+                            ptWeight,
+                            exWeight,
+                            isLeft: false,
+                          ),
+                          ValueListenableBuilder<int>(
+                            valueListenable: _hpsRevision,
+                            builder: (context, _, _) => _buildHpsRow(
+                              theme,
+                              isDark,
+                              borderColor,
+                              cellText,
+                              wwWeight,
+                              ptWeight,
+                              exWeight,
+                              isLeft: false,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+
+        // SCROLLABLE BODY (Vertical scroll for students, synced horizontal scroll)
+        Expanded(
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Left fixed student names (width 231.5 accommodates 1.5 border without child overflow)
+                RepaintBoundary(
+                  child: Container(
+                    width: 231.5,
+                    decoration: BoxDecoration(
+                      color: cellBg,
+                      border: Border(
+                        right: BorderSide(
+                          color: borderColor.withValues(alpha: 0.5),
+                          width: 1.5,
+                        ),
+                      ),
+                    ),
+                    child: Column(
+                      children: [
+                        Visibility(
+                          visible: _selectedGender == 'All' ||
+                              _selectedGender == 'Male',
+                          maintainState: true,
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              _buildGenderHeader(
+                                'MALE (${_maleStudents.length})',
+                                genderHeaderBg,
+                                isLeft: true,
+                              ),
+                              ..._buildStudentRows(
+                                _maleStudents,
+                                theme,
+                                isDark,
+                                cellText,
+                                borderColor,
+                                altRowBg,
+                                cellBg,
+                                wwWeight,
+                                ptWeight,
+                                exWeight,
+                                isLeft: true,
+                              ),
+                            ],
+                          ),
+                        ),
+                        Visibility(
+                          visible: _selectedGender == 'All' ||
+                              _selectedGender == 'Female',
+                          maintainState: true,
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              _buildGenderHeader(
+                                'FEMALE (${_femaleStudents.length})',
+                                genderHeaderBg,
+                                isLeft: true,
+                              ),
+                              ..._buildStudentRows(
+                                _femaleStudents,
+                                theme,
+                                isDark,
+                                cellText,
+                                borderColor,
+                                altRowBg,
+                                cellBg,
+                                wwWeight,
+                                ptWeight,
+                                exWeight,
+                                isLeft: true,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                // Right horizontally scrollable score cells
+                Expanded(
+                  child: Scrollbar(
+                    thickness: 12,
+                    controller: _termBodyHorizontalController,
+                    radius: const Radius.circular(8),
+                    interactive: true,
+                    child: SingleChildScrollView(
+                      key: ValueKey(
+                        'gradebook-scroll-grid-$_selectedTerm-$_wwColumns-$_ptColumns',
+                      ),
+                      scrollDirection: Axis.horizontal,
+                      controller: _termBodyHorizontalController,
+                      physics: const ClampingScrollPhysics(),
+                      child: SizedBox(
+                        width: _calculateTotalWidth() - 230.0,
+                        child: Column(
+                          children: [
+                            Visibility(
+                              visible: _selectedGender == 'All' ||
+                                  _selectedGender == 'Male',
+                              maintainState: true,
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  _buildGenderHeader(
+                                    '',
+                                    genderHeaderBg,
+                                    isLeft: false,
+                                  ),
+                                  ..._buildStudentRows(
+                                    _maleStudents,
+                                    theme,
+                                    isDark,
+                                    cellText,
+                                    borderColor,
+                                    altRowBg,
+                                    cellBg,
+                                    wwWeight,
+                                    ptWeight,
+                                    exWeight,
+                                    isLeft: false,
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Visibility(
+                              visible: _selectedGender == 'All' ||
+                                  _selectedGender == 'Female',
+                              maintainState: true,
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  _buildGenderHeader(
+                                    '',
+                                    genderHeaderBg,
+                                    isLeft: false,
+                                  ),
+                                  ..._buildStudentRows(
+                                    _femaleStudents,
+                                    theme,
+                                    isDark,
+                                    cellText,
+                                    borderColor,
+                                    altRowBg,
+                                    cellBg,
+                                    wwWeight,
+                                    ptWeight,
+                                    exWeight,
+                                    isLeft: false,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildFinalGradesView(
     ThemeData theme,
     bool isDark,
     Color borderColor,
   ) {
-    final headerColor = isDark
-        ? theme.colorScheme.surfaceContainerHighest
-        : const Color(0xFFE8EDF5);
+    final headerBg = isDark ? const Color(0xFF1E293B) : const Color(0xFF1B3A5C);
+    final subHeaderBg = isDark
+        ? const Color(0xFF334155)
+        : const Color(0xFF2D5A8E);
     final activeTermsList = _activeTerms.isEmpty ? const [1] : _activeTerms;
     final termCount = activeTermsList.length;
     final minTableWidth = 740.0 + (termCount * 100.0);
@@ -1614,15 +1732,24 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
           remarkW,
         ];
 
-        Widget headerCell(String label, double width, double height) =>
+        Widget headerCell(
+          String label,
+          double width,
+          double height, {
+          Color? bg,
+        }) =>
             Container(
               width: width,
               height: height,
               alignment: Alignment.center,
               padding: const EdgeInsets.symmetric(horizontal: 4),
               decoration: BoxDecoration(
+                color: bg ?? headerBg,
                 border: Border(
-                  right: BorderSide(color: borderColor, width: 0.5),
+                  right: BorderSide(
+                    color: Colors.white.withValues(alpha: 0.2),
+                    width: 0.5,
+                  ),
                 ),
               ),
               child: Text(
@@ -1630,10 +1757,10 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 textAlign: TextAlign.center,
-                style: TextStyle(
+                style: const TextStyle(
                   fontSize: 10,
                   fontWeight: FontWeight.bold,
-                  color: theme.colorScheme.onSurface,
+                  color: Colors.white,
                   letterSpacing: 0.4,
                 ),
               ),
@@ -1642,7 +1769,7 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
         Widget buildTwoTierHeader() => Container(
           height: 52,
           decoration: BoxDecoration(
-            color: headerColor,
+            color: headerBg,
             border: Border(bottom: BorderSide(color: borderColor, width: 0.5)),
           ),
           child: Row(
@@ -1654,28 +1781,35 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
                 width: totalTermsW,
                 child: Column(
                   children: [
-                    Expanded(
-                      child: Container(
-                        width: totalTermsW,
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          border: Border(
-                            right: BorderSide(color: borderColor, width: 0.5),
-                            bottom: BorderSide(color: borderColor, width: 0.5),
+                    Container(
+                      width: totalTermsW,
+                      height: 26,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: subHeaderBg,
+                        border: Border(
+                          right: BorderSide(
+                            color: Colors.white.withValues(alpha: 0.2),
+                            width: 0.5,
                           ),
-                        ),
-                        child: Text(
-                          'TERM GRADES',
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                            color: theme.colorScheme.onSurface,
-                            letterSpacing: 0.5,
+                          bottom: BorderSide(
+                            color: Colors.white.withValues(alpha: 0.2),
+                            width: 0.5,
                           ),
                         ),
                       ),
+                      child: const Text(
+                        'TERM GRADES',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
                     ),
-                    Expanded(
+                    SizedBox(
+                      height: 26,
                       child: Row(
                         children: [
                           for (final term in activeTermsList)
@@ -1685,6 +1819,7 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
                                   : (term == 2 ? 'SECOND TERM' : 'THIRD TERM'),
                               termW,
                               26,
+                              bg: subHeaderBg.withValues(alpha: 0.85),
                             ),
                         ],
                       ),
@@ -1716,51 +1851,105 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
           ),
         );
 
-        return SingleChildScrollView(
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: SizedBox(
-              width: tableWidth,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  buildTwoTierHeader(),
-                  if (_selectedGender == 'All' ||
-                      _selectedGender == 'Male') ...[
-                    genderHeader('MALE (${_maleStudents.length})'),
-                    if (_maleStudents.isEmpty)
-                      ..._buildFinalGradeEmptyRows(widths, borderColor, theme)
-                    else
-                      ..._maleStudents.asMap().entries.map(
-                        (entry) => _buildFinalGradeStudentRow(
-                          entry.value,
-                          entry.key + 1,
-                          widths,
-                          borderColor,
-                          theme,
-                        ),
-                      ),
+        return Column(
+          children: [
+            // STICKY HEADER (Pins at top when scrolling vertically)
+            RepaintBoundary(
+              child: Container(
+                decoration: BoxDecoration(
+                  color: headerBg,
+                  border: Border(bottom: BorderSide(color: borderColor, width: 1.5)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.08),
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
+                    ),
                   ],
-                  if (_selectedGender == 'All' ||
-                      _selectedGender == 'Female') ...[
-                    genderHeader('FEMALE (${_femaleStudents.length})'),
-                    if (_femaleStudents.isEmpty)
-                      ..._buildFinalGradeEmptyRows(widths, borderColor, theme)
-                    else
-                      ..._femaleStudents.asMap().entries.map(
-                        (entry) => _buildFinalGradeStudentRow(
-                          entry.value,
-                          entry.key + 1,
-                          widths,
-                          borderColor,
-                          theme,
-                        ),
-                      ),
-                  ],
-                ],
+                ),
+                child: SingleChildScrollView(
+                  controller: _finalHeaderHorizontalController,
+                  scrollDirection: Axis.horizontal,
+                  physics: const ClampingScrollPhysics(),
+                  child: SizedBox(
+                    width: tableWidth,
+                    child: buildTwoTierHeader(),
+                  ),
+                ),
               ),
             ),
-          ),
+            // SCROLLABLE BODY (Vertical scroll for student rows, synced horizontal scroll)
+            Expanded(
+              child: Scrollbar(
+                controller: _finalBodyHorizontalController,
+                interactive: true,
+                child: SingleChildScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  child: SingleChildScrollView(
+                    controller: _finalBodyHorizontalController,
+                    scrollDirection: Axis.horizontal,
+                    physics: const ClampingScrollPhysics(),
+                    child: SizedBox(
+                      width: tableWidth,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Visibility(
+                            visible: _selectedGender == 'All' ||
+                                _selectedGender == 'Male',
+                            maintainState: true,
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                genderHeader('MALE (${_maleStudents.length})'),
+                                if (_maleStudents.isEmpty)
+                                  ..._buildFinalGradeEmptyRows(widths, borderColor, theme)
+                                else
+                                  ..._maleStudents.asMap().entries.map(
+                                    (entry) => _buildFinalGradeStudentRow(
+                                      entry.value,
+                                      entry.key + 1,
+                                      widths,
+                                      borderColor,
+                                      theme,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                          Visibility(
+                            visible: _selectedGender == 'All' ||
+                                _selectedGender == 'Female',
+                            maintainState: true,
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                genderHeader('FEMALE (${_femaleStudents.length})'),
+                                if (_femaleStudents.isEmpty)
+                                  ..._buildFinalGradeEmptyRows(widths, borderColor, theme)
+                                else
+                                  ..._femaleStudents.asMap().entries.map(
+                                    (entry) => _buildFinalGradeStudentRow(
+                                      entry.value,
+                                      entry.key + 1,
+                                      widths,
+                                      borderColor,
+                                      theme,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
         );
       },
     );
@@ -1773,10 +1962,12 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
     Color borderColor,
     ThemeData theme,
   ) {
-    return AnimatedBuilder(
-      key: ValueKey('final-grade-row-${student.gender ?? "U"}-${student.id}-$rowNumber'),
-      animation: Listenable.merge([_revisionFor(student.id), _hpsRevision]),
-      builder: (context, _) {
+    return RepaintBoundary(
+      key: ValueKey('rb-final-grade-row-${student.gender ?? "U"}-${student.id}-$rowNumber'),
+      child: AnimatedBuilder(
+        key: ValueKey('final-grade-row-${student.gender ?? "U"}-${student.id}-$rowNumber'),
+        animation: Listenable.merge([_revisionFor(student.id), _hpsRevision]),
+        builder: (context, _) {
         final activeTermsList = _activeTerms.isEmpty ? const [1] : _activeTerms;
         final termCount = activeTermsList.length;
         final termGrades = {
@@ -1822,6 +2013,8 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
           ),
           child: Row(
             children: List.generate(values.length, (index) {
+              final isNum = index == 0;
+              final isLrn = index == 1;
               final isName = index == 2;
               final isFinalGrade = index == finalGradeIndex;
               final isRemark = index == remarkIndex;
@@ -1839,11 +2032,23 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
                 child: Text(
                   values[index],
                   style: TextStyle(
-                    fontSize: isName ? 12 : 11,
-                    fontWeight: (isFinalGrade || isRemark)
-                        ? FontWeight.bold
-                        : FontWeight.normal,
-                    color: textColor,
+                    fontSize: isName ? 11 : (isNum ? 10 : 11),
+                    fontWeight: isName
+                        ? FontWeight.w600
+                        : (isNum
+                            ? FontWeight.bold
+                            : ((isFinalGrade || isRemark)
+                                ? FontWeight.bold
+                                : (isLrn ? FontWeight.w500 : FontWeight.normal))),
+                    color: isNum
+                        ? textColor.withValues(alpha: 0.5)
+                        : (isRemark
+                            ? (finalGrade != null && finalGrade >= 75
+                                ? AppTheme.catGreen
+                                : (finalGrade != null
+                                    ? AppTheme.catRed
+                                    : textColor))
+                            : textColor),
                   ),
                   overflow: TextOverflow.ellipsis,
                   textAlign: isName ? TextAlign.left : TextAlign.center,
@@ -1853,8 +2058,9 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
           ),
         );
       },
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildFinalGradeEmptyRow(
     int rowNumber,
@@ -2585,191 +2791,227 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
 
     return List.generate(students.length, (idx) {
       final s = students[idx];
-      return AnimatedBuilder(
+      return RepaintBoundary(
         key: ValueKey(
-          'gradebook-row-${s.gender ?? "U"}-${s.id}-${isLeft ? "left" : "right"}-$idx-$_selectedTerm',
+          'rb-gradebook-row-${s.gender ?? "U"}-${s.id}-${isLeft ? "left" : "right"}-$idx-$_selectedTerm',
         ),
-        animation: Listenable.merge([_revisionFor(s.id), _hpsRevision]),
-        builder: (context, _) {
-          final rowBg = idx.isOdd ? altRowBg : cellBg;
-          final ig = _initialGrade(s.id, term: _selectedTerm);
-          final tg = ig == null ? null : DepEdGradingEngine.transmuteDO15(ig);
+        child: AnimatedBuilder(
+          key: ValueKey(
+            'gradebook-row-${s.gender ?? "U"}-${s.id}-${isLeft ? "left" : "right"}-$idx-$_selectedTerm',
+          ),
+          animation: Listenable.merge([_revisionFor(s.id), _hpsRevision]),
+          builder: (context, _) {
+            final rowBg = idx.isOdd ? altRowBg : cellBg;
 
-          List<Widget> buildScoreCells(
-            String category,
-            int count,
-            Color accent,
-          ) {
-            final cells = <Widget>[];
-            for (var i = 0; i < count; i++) {
-              cells.add(
-                _buildScoreCell(
-                  s.id,
-                  category,
-                  i,
-                  colW,
-                  rowBg,
-                  cellText,
-                  borderColor,
+            if (isLeft) {
+              return Container(
+                height: 32,
+                decoration: BoxDecoration(
+                  color: rowBg,
+                  border: Border(
+                    bottom: BorderSide(color: borderColor, width: 0.5),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: numW,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        border: Border(
+                          right: BorderSide(color: borderColor, width: 0.5),
+                        ),
+                      ),
+                      child: Text(
+                        '${idx + 1}',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: cellText.withValues(alpha: 0.5),
+                        ),
+                      ),
+                    ),
+                    Container(
+                      width: nameW,
+                      alignment: Alignment.centerLeft,
+                      padding: const EdgeInsets.only(left: 8),
+                      decoration: BoxDecoration(
+                        border: Border(
+                          right: BorderSide(color: borderColor, width: 0.5),
+                        ),
+                      ),
+                      child: Text(
+                        _displayName(s),
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: cellText,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
                 ),
               );
             }
-            if (category != 'ex' && count < maxCategoryColumns) {
-              cells.add(_emptyGridCell(colW, rowBg, borderColor, cellText));
-            }
-            if (category == 'ex') {
-              final exam = _examMetrics(s.id, term: _selectedTerm);
-              for (final score in [exam.wsSt1, exam.wsSt2, exam.wsTe]) {
+
+            // Right score cells: Compute metrics once per row (no redundant re-computations)
+            final wwMetrics = _componentMetrics(
+              s.id,
+              'ww',
+              _wwColumns,
+              wwWeight,
+              term: _selectedTerm,
+            );
+            final ptMetrics = _componentMetrics(
+              s.id,
+              'pt',
+              _ptColumns,
+              ptWeight,
+              term: _selectedTerm,
+            );
+            final examMetrics = _examMetrics(s.id, term: _selectedTerm);
+            final ig = DepEdGradingEngine.computeInitialGrade(
+              wwWs: wwMetrics.ws,
+              ptWs: ptMetrics.ws,
+              exWs: examMetrics.exWs,
+              exWeight: exWeight,
+            );
+            final tg = ig == null ? null : DepEdGradingEngine.transmuteDO15(ig);
+
+            List<Widget> buildScoreCells(
+              String category,
+              int count,
+              Color accent,
+            ) {
+              final cells = <Widget>[];
+              for (var i = 0; i < count; i++) {
                 cells.add(
-                  _computedCell(
-                    computedW,
-                    score?.toStringAsFixed(2) ?? '',
+                  _buildScoreCell(
+                    s.id,
+                    category,
+                    i,
+                    colW,
                     rowBg,
-                    accent,
+                    cellText,
                     borderColor,
                   ),
                 );
               }
-              cells.add(
-                _computedCell(
-                  computedW,
-                  exam.exPs?.toStringAsFixed(2) ?? '',
-                  rowBg,
-                  accent,
-                  borderColor,
-                  isBold: true,
-                ),
-              );
-              cells.add(
-                _computedCell(
-                  computedW,
-                  exam.exWs?.toStringAsFixed(2) ?? '',
-                  rowBg,
-                  accent,
-                  borderColor,
-                  isBold: true,
-                ),
-              );
+              if (category != 'ex' && count < maxCategoryColumns) {
+                cells.add(_emptyGridCell(colW, rowBg, borderColor, cellText));
+              }
+              if (category == 'ex') {
+                for (final score in [
+                  examMetrics.wsSt1,
+                  examMetrics.wsSt2,
+                  examMetrics.wsTe,
+                ]) {
+                  cells.add(
+                    _computedCell(
+                      computedW,
+                      score?.toStringAsFixed(2) ?? '',
+                      rowBg,
+                      accent,
+                      borderColor,
+                    ),
+                  );
+                }
+                cells.add(
+                  _computedCell(
+                    computedW,
+                    examMetrics.exPs?.toStringAsFixed(2) ?? '',
+                    rowBg,
+                    accent,
+                    borderColor,
+                    isBold: true,
+                  ),
+                );
+                cells.add(
+                  _computedCell(
+                    computedW,
+                    examMetrics.exWs?.toStringAsFixed(2) ?? '',
+                    rowBg,
+                    accent,
+                    borderColor,
+                    isBold: true,
+                  ),
+                );
+                return cells;
+              }
+
+              final metrics = category == 'ww' ? wwMetrics : ptMetrics;
+              cells
+                ..add(
+                  _computedCell(
+                    computedW,
+                    metrics.totalRaw?.toStringAsFixed(0) ?? '',
+                    rowBg,
+                    cellText,
+                    borderColor,
+                    isBold: true,
+                  ),
+                )
+                ..add(
+                  _computedCell(
+                    computedW,
+                    metrics.ps?.toStringAsFixed(2) ?? '',
+                    rowBg,
+                    accent,
+                    borderColor,
+                    isBold: true,
+                  ),
+                )
+                ..add(
+                  _computedCell(
+                    computedW,
+                    metrics.ws?.toStringAsFixed(2) ?? '',
+                    rowBg,
+                    accent,
+                    borderColor,
+                    isBold: true,
+                  ),
+                );
               return cells;
             }
 
-            final weight = category == 'ww' ? wwWeight : ptWeight;
-            final metrics = _componentMetrics(
-              s.id,
-              category,
-              count,
-              weight,
-              term: _selectedTerm,
-            );
-            cells
-              ..add(
-                _computedCell(
-                  computedW,
-                  metrics.totalRaw?.toStringAsFixed(0) ?? '',
-                  rowBg,
-                  cellText,
-                  borderColor,
-                  isBold: true,
+            return Container(
+              height: 32,
+              decoration: BoxDecoration(
+                color: rowBg,
+                border: Border(
+                  bottom: BorderSide(color: borderColor, width: 0.5),
                 ),
-              )
-              ..add(
-                _computedCell(
-                  computedW,
-                  metrics.ps?.toStringAsFixed(2) ?? '',
-                  rowBg,
-                  accent,
-                  borderColor,
-                  isBold: true,
-                ),
-              )
-              ..add(
-                _computedCell(
-                  computedW,
-                  metrics.ws?.toStringAsFixed(2) ?? '',
-                  rowBg,
-                  accent,
-                  borderColor,
-                  isBold: true,
-                ),
-              );
-            return cells;
-          }
-
-          return Container(
-            height: 32,
-            decoration: BoxDecoration(
-              color: rowBg,
-              border: Border(
-                bottom: BorderSide(color: borderColor, width: 0.5),
               ),
-            ),
-            child: Row(
-              children: isLeft
-                  ? [
-                      Container(
-                        width: numW,
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          border: Border(
-                            right: BorderSide(color: borderColor, width: 0.5),
-                          ),
-                        ),
-                        child: Text(
-                          '${idx + 1}',
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                            color: cellText.withValues(alpha: 0.5),
-                          ),
-                        ),
-                      ),
-                      Container(
-                        width: nameW,
-                        alignment: Alignment.centerLeft,
-                        padding: const EdgeInsets.only(left: 8),
-                        decoration: BoxDecoration(
-                          border: Border(
-                            right: BorderSide(color: borderColor, width: 0.5),
-                          ),
-                        ),
-                        child: Text(
-                          _displayName(s),
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: cellText,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ]
-                  : [
-                      ...buildScoreCells('ww', _wwColumns, AppTheme.catBlue),
-                      ...buildScoreCells('pt', _ptColumns, AppTheme.catGreen),
-                      ...buildScoreCells('ex', exColumns, AppTheme.catOrange),
-                      _computedCell(
-                        computedW,
-                        ig?.toStringAsFixed(2) ?? '',
-                        rowBg,
-                        cellText,
-                        borderColor,
-                        isBold: true,
-                      ),
-                      _computedCell(
-                        computedW,
-                        tg?.toString() ?? '',
-                        rowBg,
-                        tg != null
-                            ? (tg >= 75 ? AppTheme.catGreen : AppTheme.catRed)
-                            : cellText,
-                        borderColor,
-                        isBold: true,
-                        fontSize: 13,
-                      ),
-                    ],
-            ),
-          );
-        },
+              child: Row(
+                children: [
+                  ...buildScoreCells('ww', _wwColumns, AppTheme.catBlue),
+                  ...buildScoreCells('pt', _ptColumns, AppTheme.catGreen),
+                  ...buildScoreCells('ex', exColumns, AppTheme.catOrange),
+                  _computedCell(
+                    computedW,
+                    ig?.toStringAsFixed(2) ?? '',
+                    rowBg,
+                    cellText,
+                    borderColor,
+                    isBold: true,
+                  ),
+                  _computedCell(
+                    computedW,
+                    tg?.toString() ?? '',
+                    rowBg,
+                    tg != null
+                        ? (tg >= 75 ? AppTheme.catGreen : AppTheme.catRed)
+                        : cellText,
+                    borderColor,
+                    isBold: true,
+                    fontSize: 13,
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
       );
     });
   }
