@@ -589,7 +589,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
       case 18:
         return 'Grades Management';
       case 19:
-        return 'Parent Directory';
+        return 'Manage Parents';
       case 0:
         return 'Dashboard Overview';
       case 1:
@@ -607,7 +607,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
       case 9:
         return 'Student Achievement Records';
       case 12:
-        return 'Student Directory';
+        return 'Manage Students';
       case 13:
         return 'Institutional Analytics';
       case 14:

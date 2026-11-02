@@ -186,7 +186,7 @@ class SupabaseParentRepository {
             'id': parentId,
             'username': username,
             'email':
-                userInfo['email'] ?? 'parent_$parentId@classrealm.edu',
+                userInfo['email'] ?? 'parent_$parentId@classrealm.com',
             'fullName': fullName.isEmpty ? 'Parent / Guardian' : fullName,
             'firstName': profile['first_name']?.toString() ?? '',
             'middleName': profile['middle_name']?.toString(),
