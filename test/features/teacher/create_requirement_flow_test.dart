@@ -1,7 +1,43 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:class_realm/data/repositories/teacher_classwork_repository.dart';
+import 'package:class_realm/models/academic_models.dart';
 import 'package:class_realm/features/teacher/sub_features/assessments/screens/create_requirement_flow.dart';
 import 'package:class_realm/shared/widgets/inputs/app_text_field.dart';
+
+class FakeClassworkRepo implements TeacherClassworkRepository {
+  ActivityModel? savedActivity;
+  String? savedOfferingId;
+
+  @override
+  Future<List<ActivityModel>> getActivities({String? subjectOfferingId}) async => [];
+
+  @override
+  Future<ActivityModel> saveActivity({
+    required ActivityModel activity,
+    required String subjectOfferingId,
+    dynamic fileBytes,
+    String? fileName,
+    String? mimeType,
+    bool removeExistingAttachment = false,
+  }) async {
+    savedActivity = activity;
+    savedOfferingId = subjectOfferingId;
+    return activity;
+  }
+
+  @override
+  Future<void> deleteActivity(String activityId) async {}
+
+  @override
+  Future<bool> isGradebookSlotOccupied({
+    required String subjectOfferingId,
+    required String gradingCategory,
+    required int termNumber,
+    required int gradebookColumnIndex,
+    String? excludeClassworkId,
+  }) async => false;
+}
 
 void main() {
   group('AppTextField Tests', () {
@@ -184,6 +220,158 @@ void main() {
       expect(find.text('Select date submitted'), findsOneWidget);
       // Attachment section is hidden in in-person mode
       expect(find.textContaining('Classwork Attachment'), findsNothing);
+    });
+
+    testWidgets('creates a Performance Task (PT) successfully and saves to repository', (tester) async {
+      tester.view.physicalSize = const Size(1200, 1000);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final repo = FakeClassworkRepo();
+      bool createdCalled = false;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: CreateRequirementFlowDialog(
+              onRequirementCreated: () => createdCalled = true,
+              initialOfferings: singleTermOffering,
+              initialOfferingId: 'offering-1',
+              isPerformanceTask: true,
+              repository: repo,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Verify Header
+      expect(find.text('Create Performance Task'), findsOneWidget);
+
+      // Switch to In-Person mode
+      await tester.tap(find.text('In-Person (Manual Record)'));
+      await tester.pumpAndSettle();
+
+      // Enter Title
+      await tester.enterText(
+        find.descendant(
+          of: find.widgetWithText(AppTextField, 'Performance Task Title *'),
+          matching: find.byType(TextFormField),
+        ),
+        'Stage Play Presentation',
+      );
+      await tester.pumpAndSettle();
+
+      // Select PT Slot (PT 1)
+      await tester.tap(find.text('Select PT Slot'), warnIfMissed: false);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('PT 1').last);
+      await tester.pumpAndSettle();
+
+      // Select submission date
+      await tester.tap(find.text('Select date submitted'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Confirm Date'));
+      await tester.pumpAndSettle();
+
+      // Enter Instructions
+      await tester.enterText(
+        find.descendant(
+          of: find.widgetWithText(AppTextField, 'Detailed Instructions & Rubrics *'),
+          matching: find.byType(TextFormField),
+        ),
+        'Prepare a 5-minute creative monologue about modern art.',
+      );
+      await tester.pumpAndSettle();
+
+      // Tap Publish
+      await tester.ensureVisible(find.text('Publish Performance Task'));
+      await tester.tap(find.text('Publish Performance Task'));
+      await tester.pumpAndSettle();
+
+      expect(createdCalled, isTrue);
+      expect(repo.savedActivity, isNotNull);
+      expect(repo.savedActivity!.title, 'Stage Play Presentation');
+      expect(repo.savedActivity!.isRequirement, isTrue);
+      expect(repo.savedActivity!.gradebookColumnIndex, 1);
+      expect(repo.savedActivity!.completionMode, 'in_person');
+    });
+
+    testWidgets('creates an Activity (Written Work) successfully and saves to repository', (tester) async {
+      tester.view.physicalSize = const Size(1200, 1000);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final repo = FakeClassworkRepo();
+      bool createdCalled = false;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: CreateRequirementFlowDialog(
+              onRequirementCreated: () => createdCalled = true,
+              initialOfferings: singleTermOffering,
+              initialOfferingId: 'offering-1',
+              isPerformanceTask: false,
+              repository: repo,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Verify Header
+      expect(find.text('Create Activity / Assignment'), findsOneWidget);
+
+      // Switch to In-Person mode
+      await tester.tap(find.text('In-Person (Manual Record)'));
+      await tester.pumpAndSettle();
+
+      // Enter Title
+      await tester.enterText(
+        find.descendant(
+          of: find.widgetWithText(AppTextField, 'Activity / Assignment Title *'),
+          matching: find.byType(TextFormField),
+        ),
+        'Reading Reflection 1',
+      );
+      await tester.pumpAndSettle();
+
+      // Select WW Slot (WW 1)
+      await tester.tap(find.text('Select WW Slot'), warnIfMissed: false);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('WW 1').last);
+      await tester.pumpAndSettle();
+
+      // Select submission date
+      await tester.tap(find.text('Select date submitted'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Confirm Date'));
+      await tester.pumpAndSettle();
+
+      // Enter Instructions
+      await tester.enterText(
+        find.descendant(
+          of: find.widgetWithText(AppTextField, 'Detailed Instructions & Rubrics *'),
+          matching: find.byType(TextFormField),
+        ),
+        'Read Chapter 1 and summarize the main themes.',
+      );
+      await tester.pumpAndSettle();
+
+      // Tap Publish
+      await tester.ensureVisible(find.text('Publish Activity / Assignment'));
+      await tester.tap(find.text('Publish Activity / Assignment'));
+      await tester.pumpAndSettle();
+
+      expect(createdCalled, isTrue);
+      expect(repo.savedActivity, isNotNull);
+      expect(repo.savedActivity!.title, 'Reading Reflection 1');
+      expect(repo.savedActivity!.isRequirement, isFalse);
+      expect(repo.savedActivity!.gradebookColumnIndex, 1);
+      expect(repo.savedActivity!.completionMode, 'in_person');
     });
   });
 }
