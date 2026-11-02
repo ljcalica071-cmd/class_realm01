@@ -464,6 +464,7 @@ class QuizOrExamModel {
   }) : sectionDeadlines = sectionDeadlines ?? {section: scheduleDate};
 
   double get totalPoints => questions.fold(0, (sum, q) => sum + q.points);
+  DateTime get scheduledDate => scheduleDate;
   List<String> get assignedSections => sectionDeadlines.keys.toList();
   DateTime deadlineForSection(String targetSection) =>
       sectionDeadlines[targetSection] ?? scheduleDate;

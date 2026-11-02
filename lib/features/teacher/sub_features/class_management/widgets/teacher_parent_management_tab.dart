@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -380,6 +380,7 @@ class _TeacherParentManagementTabState
       }
       return _sortAscending ? cmp : -cmp;
     });
+    }
 
     int totalPages = (displayList.length / _itemsPerPage).ceil();
     if (totalPages == 0) totalPages = 1;
