@@ -334,52 +334,40 @@ class _TeacherParentManagementTabState
         int cmp = 0;
         switch (_sortColumn) {
           case 'lastName':
-          final aLast =
-              a.lastName ??
-              (a.fullName.contains(' ')
-                  ? a.fullName.split(' ').last
-                  : a.fullName);
-          final bLast =
-              b.lastName ??
-              (b.fullName.contains(' ')
-                  ? b.fullName.split(' ').last
-                  : b.fullName);
-          cmp = aLast.compareTo(bLast);
-          break;
-        case 'firstName':
-          final aFirst =
-              a.firstName ??
-              (a.fullName.contains(' ') ? a.fullName.split(' ').first : '');
-          final bFirst =
-              b.firstName ??
-              (b.fullName.contains(' ') ? b.fullName.split(' ').first : '');
-          cmp = aFirst.compareTo(bFirst);
-          break;
-        case 'relationship':
-          cmp = (a.parentGuardianRelationship ?? '').compareTo(
-            b.parentGuardianRelationship ?? '',
-          );
-          break;
-        case 'birthdate':
-          if (a.birthday == null) {
-            cmp = b.birthday == null ? 0 : 1;
-          } else if (b.birthday == null) {
-            cmp = -1;
-          } else {
-            cmp = a.birthday!.compareTo(b.birthday!);
-          }
-          break;
-        case 'username':
-          cmp = a.username.compareTo(b.username);
-          break;
-        case 'status':
-          cmp = a.status.name.compareTo(b.status.name);
-          break;
-        default:
-          cmp = 0;
-      }
-      return _sortAscending ? cmp : -cmp;
-    });
+            final aLast = a.lastName ?? (a.fullName.contains(' ') ? a.fullName.split(' ').last : a.fullName);
+            final bLast = b.lastName ?? (b.fullName.contains(' ') ? b.fullName.split(' ').last : b.fullName);
+            cmp = aLast.compareTo(bLast);
+            break;
+          case 'firstName':
+            final aFirst = a.firstName ?? (a.fullName.contains(' ') ? a.fullName.split(' ').first : '');
+            final bFirst = b.firstName ?? (b.fullName.contains(' ') ? b.fullName.split(' ').first : '');
+            cmp = aFirst.compareTo(bFirst);
+            break;
+          case 'relationship':
+            cmp = (a.parentGuardianRelationship ?? '').compareTo(b.parentGuardianRelationship ?? '');
+            break;
+          case 'birthdate':
+            if (a.birthday == null) {
+              cmp = b.birthday == null ? 0 : 1;
+            } else if (b.birthday == null) {
+              cmp = -1;
+            } else {
+              cmp = a.birthday!.compareTo(b.birthday!);
+            }
+            break;
+          case 'username':
+            cmp = a.username.compareTo(b.username);
+            break;
+          case 'status':
+            cmp = a.status.name.compareTo(b.status.name);
+            break;
+          default:
+            cmp = 0;
+            break;
+        }
+        return _sortAscending ? cmp : -cmp;
+      });
+    }
 
     int totalPages = (displayList.length / _itemsPerPage).ceil();
     if (totalPages == 0) totalPages = 1;

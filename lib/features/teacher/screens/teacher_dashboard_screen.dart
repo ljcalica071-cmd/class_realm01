@@ -146,10 +146,16 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
 
   Future<void> _loadActivities() async {
     try {
+      final teacherId =
+          widget.teacher?.id ?? AuthRepository.instance.currentUser?.id;
       final activitiesFuture =
-          SupabaseTeacherClassworkRepository.instance.getActivities();
+          SupabaseTeacherClassworkRepository.instance.getActivities(
+            teacherId: teacherId,
+          );
       final assessmentsFuture =
-          SupabaseTeacherClassworkRepository.instance.getAssessments();
+          SupabaseTeacherClassworkRepository.instance.getAssessments(
+            teacherId: teacherId,
+          );
       final results = await Future.wait([activitiesFuture, assessmentsFuture]);
       if (mounted) {
         setState(() {

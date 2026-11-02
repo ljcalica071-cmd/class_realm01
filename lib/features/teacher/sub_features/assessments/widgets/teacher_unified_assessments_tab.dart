@@ -185,14 +185,20 @@ class _TeacherUnifiedAssessmentsTabState
   bool _matchesItem(String? itemSubject, String? itemSection, List<String> assignedSections) {
     // If user has chosen a section
     if (_selectedClassSection != null && _selectedClassSection!.isNotEmpty) {
-      final matchesSection = (itemSection != null && itemSection.contains(_selectedClassSection!)) ||
-          assignedSections.contains(_selectedClassSection!);
+      final targetSec = _selectedClassSection!.trim().toLowerCase();
+      final sec = itemSection?.trim().toLowerCase();
+      final matchesSection = (sec != null && (sec == targetSec || sec.contains(targetSec) || targetSec.contains(sec))) ||
+          assignedSections.any((s) {
+            final clean = s.trim().toLowerCase();
+            return clean == targetSec || clean.contains(targetSec) || targetSec.contains(clean);
+          });
       if (!matchesSection) return false;
     }
     // If user has chosen a subject
-    if (_selectedSubject != null && _selectedSubject!.isNotEmpty && itemSubject != null && itemSubject.isNotEmpty) {
-      if (!itemSubject.toLowerCase().contains(_selectedSubject!.toLowerCase()) &&
-          !_selectedSubject!.toLowerCase().contains(itemSubject.toLowerCase())) {
+    if (_selectedSubject != null && _selectedSubject!.isNotEmpty) {
+      final targetSub = _selectedSubject!.trim().toLowerCase();
+      final sub = itemSubject?.trim().toLowerCase();
+      if (sub == null || (!sub.contains(targetSub) && !targetSub.contains(sub))) {
         return false;
       }
     }

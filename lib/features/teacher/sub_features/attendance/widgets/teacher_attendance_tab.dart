@@ -6,6 +6,9 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:class_realm/core/services/local_storage_service.dart';
+import 'package:class_realm/core/services/phone_nfc_service.dart';
+
+
 import 'package:class_realm/core/theme/app_theme.dart';
 import 'package:class_realm/data/repositories/attendance_repository.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
@@ -123,6 +126,23 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
     _analyticsCustomEndDate = today;
     HardwareKeyboard.instance.addHandler(_handleGlobalHardwareKey);
 
+    PhoneNfcService.instance.startNfcCapture(
+      onCardScanned: (scannedUid) {
+        if (!mounted) return;
+        if (_inlineLinkingStudentId != null) {
+          final targetId = _inlineLinkingStudentId!;
+          setState(() => _inlineLinkingStudentId = null);
+          unawaited(_assignRfidDirectly(targetId, scannedUid));
+        } else if (_selectedAttendanceView == 'Take Attendance' &&
+            _selectedSubjectId != null) {
+          _processScannedRfid(scannedUid);
+        }
+      },
+      onError: (err) {
+        debugPrint('Phone NFC: $err');
+      },
+    );
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && !_hasEditableFocus()) {
         _scannerFocusNode.requestFocus();
@@ -144,6 +164,7 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
 
   @override
   void dispose() {
+    PhoneNfcService.instance.stopNfcCapture();
     HardwareKeyboard.instance.removeHandler(_handleGlobalHardwareKey);
     _unsubscribeRealtime();
     _scannerFocusNode.dispose();
@@ -1277,6 +1298,11 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
     return '$y-$m-$d';
   }
 
+  static String _formatReadableDate(DateTime dt) {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return '${months[dt.month - 1]} ${dt.day}, ${dt.year}';
+  }
+
   static String _formatTimeHHmmss(DateTime dt) {
     final h = dt.hour.toString().padLeft(2, '0');
     final m = dt.minute.toString().padLeft(2, '0');
@@ -1973,15 +1999,35 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
                   title: 'Select Start Date',
                 );
                 if (picked != null) {
-                  setState(() => _analyticsCustomStartDate = picked);
-                  if (!_analyticsCustomStartDate.isAfter(
-                    _analyticsCustomEndDate,
-                  )) {
-                    _analyticsViewKey.currentState?.setCustomRange(
-                      _analyticsCustomStartDate,
-                      _analyticsCustomEndDate,
-                    );
+                  final newStart = DateTime(picked.year, picked.month, picked.day);
+                  final currentEnd = DateTime(_analyticsCustomEndDate.year, _analyticsCustomEndDate.month, _analyticsCustomEndDate.day);
+                  
+                  if (newStart.isAtSameMomentAs(currentEnd)) {
+                    if (mounted) {
+                      AppModals.showErrorDialog(
+                        context: context,
+                        title: 'Invalid Date',
+                        message: 'Start date and End date cannot be the same.',
+                      );
+                    }
+                    return;
                   }
+                  if (newStart.isAfter(currentEnd)) {
+                    if (mounted) {
+                      AppModals.showErrorDialog(
+                        context: context,
+                        title: 'Invalid Date',
+                        message: 'Start date cannot be after the end date.',
+                      );
+                    }
+                    return;
+                  }
+
+                  setState(() => _analyticsCustomStartDate = newStart);
+                  _analyticsViewKey.currentState?.setCustomRange(
+                    _analyticsCustomStartDate,
+                    _analyticsCustomEndDate,
+                  );
                 }
               },
               borderRadius: BorderRadius.circular(8),
@@ -2011,7 +2057,7 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
                     ),
                     const SizedBox(width: 6),
                     Text(
-                      'Start: ',
+                      'Start: ${_formatReadableDate(_analyticsCustomStartDate)}',
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
@@ -2042,15 +2088,35 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
                   title: 'Select End Date',
                 );
                 if (picked != null) {
-                  setState(() => _analyticsCustomEndDate = picked);
-                  if (!_analyticsCustomStartDate.isAfter(
-                    _analyticsCustomEndDate,
-                  )) {
-                    _analyticsViewKey.currentState?.setCustomRange(
-                      _analyticsCustomStartDate,
-                      _analyticsCustomEndDate,
-                    );
+                  final newEnd = DateTime(picked.year, picked.month, picked.day);
+                  final currentStart = DateTime(_analyticsCustomStartDate.year, _analyticsCustomStartDate.month, _analyticsCustomStartDate.day);
+                  
+                  if (newEnd.isAtSameMomentAs(currentStart)) {
+                    if (mounted) {
+                      AppModals.showErrorDialog(
+                        context: context,
+                        title: 'Invalid Date',
+                        message: 'Start date and End date cannot be the same.',
+                      );
+                    }
+                    return;
                   }
+                  if (newEnd.isBefore(currentStart)) {
+                    if (mounted) {
+                      AppModals.showErrorDialog(
+                        context: context,
+                        title: 'Invalid Date',
+                        message: 'End date cannot be before the start date.',
+                      );
+                    }
+                    return;
+                  }
+
+                  setState(() => _analyticsCustomEndDate = newEnd);
+                  _analyticsViewKey.currentState?.setCustomRange(
+                    _analyticsCustomStartDate,
+                    _analyticsCustomEndDate,
+                  );
                 }
               },
               borderRadius: BorderRadius.circular(8),
@@ -2080,7 +2146,7 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
                     ),
                     const SizedBox(width: 6),
                     Text(
-                      'End: ',
+                      'End: ${_formatReadableDate(_analyticsCustomEndDate)}',
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,

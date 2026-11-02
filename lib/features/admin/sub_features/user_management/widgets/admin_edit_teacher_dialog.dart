@@ -232,7 +232,7 @@ class _AdminEditTeacherDialogState extends State<AdminEditTeacherDialog> {
                       Expanded(
                         flex: 3,
                         child: AppTextField(
-                          label: 'Middle Initial (Optional)',
+                          label: 'Middle Initial',
                           controller: _middleNameCtrl,
                           validator: AppValidators.validateMiddleInitial,
                         ),

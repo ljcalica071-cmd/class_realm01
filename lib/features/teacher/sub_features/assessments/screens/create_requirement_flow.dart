@@ -8,6 +8,8 @@ import 'package:class_realm/data/repositories/teacher_classwork_repository.dart'
 import 'package:class_realm/data/repositories/supabase_teacher_classwork_repository.dart';
 import 'package:class_realm/models/academic_models.dart';
 import 'package:class_realm/models/subject_catalog_model.dart';
+import 'package:class_realm/core/utils/validators.dart';
+import 'package:class_realm/shared/widgets/modals/app_modals.dart';
 import 'package:class_realm/widgets/common/app_buttons.dart';
 import 'package:class_realm/widgets/common/app_text_field.dart';
 import 'package:class_realm/widgets/common/app_date_picker_field.dart';
@@ -371,22 +373,24 @@ class _CreateRequirementFlowDialogState
       }
 
       final file = result.files.first;
+      final fileValidationError = AppValidators.validateClassworkFile(
+        fileName: file.name,
+        fileSizeBytes: file.size,
+      );
+      if (fileValidationError != null) {
+        setState(() {
+          _fileError = fileValidationError;
+        });
+        if (mounted) {
+          AppModals.showErrorDialog(
+            context: context,
+            title: 'Invalid Attachment',
+            message: fileValidationError,
+          );
+        }
+        return;
+      }
       final ext = (file.extension ?? '').toLowerCase();
-      if (!['pdf', 'doc', 'docx'].contains(ext)) {
-        setState(() {
-          _fileError =
-              "Unsupported file format '.$ext'. Only PDF, DOC, and DOCX are allowed.";
-        });
-        return;
-      }
-
-      if (file.size > 10 * 1024 * 1024) {
-        setState(() {
-          _fileError =
-              'File size exceeds the 10 MiB limit (${(file.size / (1024 * 1024)).toStringAsFixed(2)} MiB > 10 MiB).';
-        });
-        return;
-      }
 
       if (file.bytes == null) {
         setState(() {
@@ -517,7 +521,7 @@ class _CreateRequirementFlowDialogState
   String _formatFileSize(int bytes) {
     if (bytes < 1024) return '$bytes B';
     if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
-    return '${(bytes / (1024 * 1024)).toStringAsFixed(2)} MiB';
+    return '${(bytes / (1024 * 1024)).toStringAsFixed(2)} MB';
   }
 
   Future<void> _submitForm() async {
@@ -924,17 +928,14 @@ class _CreateRequirementFlowDialogState
                             ? 'e.g. Stage Play Performance'
                             : 'e.g. Chapter 1 Reading Reflection',
                         controller: _titleCtrl,
-                        maxLength: 50,
+                        maxLength: AppValidators.maxClassworkTitleLength,
                         showCounter: true,
-                        inputFormatters: [LengthLimitingTextInputFormatter(50)],
-                        validator: (value) {
-                          final text = (value ?? '').trim();
-                          if (text.isEmpty) return 'Title is required.';
-                          if (text.length > 50) {
-                            return 'Title must not exceed 50 characters.';
-                          }
-                          return null;
-                        },
+                        inputFormatters: [
+                          LengthLimitingTextInputFormatter(
+                            AppValidators.maxClassworkTitleLength,
+                          ),
+                        ],
+                        validator: AppValidators.validateClassworkTitle,
                       ),
                       const SizedBox(height: 16),
 
@@ -1278,28 +1279,21 @@ class _CreateRequirementFlowDialogState
                             'Provide step-by-step instructions for students...',
                         controller: _instructionsCtrl,
                         maxLines: 4,
-                        maxLength: 1000,
+                        maxLength: AppValidators.maxClassworkInstructionsLength,
                         showCounter: true,
                         inputFormatters: [
-                          LengthLimitingTextInputFormatter(1000),
+                          LengthLimitingTextInputFormatter(
+                            AppValidators.maxClassworkInstructionsLength,
+                          ),
                         ],
-                        validator: (value) {
-                          final text = (value ?? '').trim();
-                          if (text.isEmpty) {
-                            return 'Detailed instructions are required.';
-                          }
-                          if (text.length > 1000) {
-                            return 'Must not exceed 1,000 characters.';
-                          }
-                          return null;
-                        },
+                        validator: AppValidators.validateClassworkInstructions,
                       ),
                       const SizedBox(height: 16),
 
                       // G. Optional Attachment (Online Mode Only)
                       if (_completionMode == 'online') ...[
                         const Text(
-                          'Classwork Attachment (Optional - PDF, DOC, DOCX up to 5 MiB)',
+                          'Classwork Attachment (Optional - PDF, DOC, DOCX up to 15 MB)',
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,

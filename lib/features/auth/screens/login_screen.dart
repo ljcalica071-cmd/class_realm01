@@ -33,6 +33,7 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _isLoading = false;
   bool _obscurePassword = true;
   bool _rememberMe = false;
+  bool _hasSubmitted = false;
   Timer? _lockoutTimer;
   Duration? _lockoutRemaining;
 
@@ -152,6 +153,7 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void _handleLogin() async {
+    setState(() => _hasSubmitted = true);
     if (_isRateLimited || _isLoading) return;
     if (!_formKey.currentState!.validate()) return;
 
@@ -457,7 +459,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     autofillHints: const [AutofillHints.username, AutofillHints.email],
                     inputFormatters: AppValidators.emailFormatters,
                     textInputAction: TextInputAction.next,
-                    autovalidateMode: AutovalidateMode.onUserInteraction,
+                    autovalidateMode: _hasSubmitted ? AutovalidateMode.onUserInteraction : AutovalidateMode.disabled,
                     onFieldSubmitted: (_) {
                       FocusScope.of(context).requestFocus(_passwordFocusNode);
                     },

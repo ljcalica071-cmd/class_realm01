@@ -409,7 +409,7 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
                     _rulesAccepted
                         ? () {
                             final now = DateTime.now();
-                            if (widget.assessment.scheduledDate != null && now.isBefore(widget.assessment.scheduledDate!)) {
+                            if (now.isBefore(widget.assessment.scheduleDate)) {
                                AppModals.showErrorDialog(
                                   context: context,
                                   title: 'Assessment Locked',

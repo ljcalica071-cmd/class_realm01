@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -111,10 +112,17 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
   void _startAutoResumeListener() {
     _autoResumeTimer?.cancel();
     _autoResumeTimer = Timer.periodic(const Duration(seconds: 5), (_) async {
-      if (!mounted || _resumableBatch == null || _isSubmitting || _isProcessingBatch) return;
+      if (!mounted ||
+          _resumableBatch == null ||
+          _isSubmitting ||
+          _isProcessingBatch)
+        return;
       try {
         await Supabase.instance.client.from('users').select('id').limit(1);
-        if (mounted && _resumableBatch != null && !_isSubmitting && !_isProcessingBatch) {
+        if (mounted &&
+            _resumableBatch != null &&
+            !_isSubmitting &&
+            !_isProcessingBatch) {
           _autoResumeTimer?.cancel();
           _autoResumeTimer = null;
           await _resumeBatchEnrollment();
@@ -176,12 +184,17 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
         gender: map['gender'] as String,
         birthday: DateTime.parse(map['birthday'] as String),
         email: map['email'] as String,
-        isExistingGlobalStudent: map['isExistingGlobalStudent'] as bool? ?? false,
+        isExistingGlobalStudent:
+            map['isExistingGlobalStudent'] as bool? ?? false,
         existingStudentId: map['existingStudentId'] as String?,
       );
     }).toList();
 
-    await _executeBatchEnrollment(students, isResumed: true, fileName: fileName);
+    await _executeBatchEnrollment(
+      students,
+      isResumed: true,
+      fileName: fileName,
+    );
   }
 
   @override
@@ -333,14 +346,18 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
 
     // 1. Email deliverability & DNS check (verifies valid domain / MX records)
     setState(() => _isSubmitting = true);
-    final deliverability = await AppValidators.checkDomainDeliverability(rawEmail);
+    final deliverability = await AppValidators.checkDomainDeliverability(
+      rawEmail,
+    );
     if (!deliverability.isDeliverable) {
       if (mounted) {
         setState(() => _isSubmitting = false);
         AppModals.showErrorDialog(
           context: context,
           title: 'Invalid Email Address',
-          message: deliverability.error ?? 'The email domain is invalid or cannot receive emails.',
+          message:
+              deliverability.error ??
+              'The email domain is invalid or cannot receive emails.',
         );
       }
       return;
@@ -348,18 +365,22 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
 
     // 2. Email typo suggestion
     if (!_hasCheckedTypo) {
-      final typoMatch = RegExp(r'@(gamil\.com|yaho\.com|gmail\.con|gmal\.com|yahoo\.con)$').firstMatch(rawEmail);
+      final typoMatch = RegExp(
+        r'@(gamil\.com|yaho\.com|gmail\.con|gmal\.com|yahoo\.con)$',
+      ).firstMatch(rawEmail);
       if (typoMatch != null) {
         final typo = typoMatch.group(1);
         final isGmail = typo?.startsWith('g') == true;
         final suggestion = isGmail ? 'gmail.com' : 'yahoo.com';
         final suggestedEmail = rawEmail.replaceAll(typo!, suggestion);
-        
+
         final useSuggestion = await showDialog<bool>(
           context: context,
           builder: (ctx) => AlertDialog(
             title: const Text('Did you mean?'),
-            content: Text('It looks like there might be a typo in the email address.\n\nDid you mean "$suggestedEmail"?'),
+            content: Text(
+              'It looks like there might be a typo in the email address.\n\nDid you mean "$suggestedEmail"?',
+            ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx, false),
@@ -442,8 +463,9 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
     final iso = DateTime.tryParse(clean);
     if (iso != null) return iso;
 
-    // 3. YYYY/MM/DD or YYYY-MM-DD
-    final slashYmd = RegExp(r'^(\d{4})[/-](\d{1,2})[/-](\d{1,2})$').firstMatch(clean);
+    // 3. YYYY/MM/DD, YYYY-MM-DD, YYYY MM DD, or YYYY.MM.DD
+    final slashYmd = RegExp(r'^(\d{4})[/\-\s\.](\d{1,2})[/\-\s\.](\d{1,2})$')
+        .firstMatch(clean);
     if (slashYmd != null) {
       final y = int.parse(slashYmd.group(1)!);
       final m = int.parse(slashYmd.group(2)!);
@@ -451,8 +473,9 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
       return DateTime(y, m, d);
     }
 
-    // 4. MM/DD/YYYY or DD/MM/YYYY
-    final slashMdy = RegExp(r'^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$').firstMatch(clean);
+    // 4. MM/DD/YYYY, DD/MM/YYYY, or with spaces / dots
+    final slashMdy = RegExp(r'^(\d{1,2})[/\-\s\.](\d{1,2})[/\-\s\.](\d{4})$')
+        .firstMatch(clean);
     if (slashMdy != null) {
       final p1 = int.parse(slashMdy.group(1)!);
       final p2 = int.parse(slashMdy.group(2)!);
@@ -480,11 +503,14 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
   String _toTitleCase(String text) {
     final clean = text.trim();
     if (clean.isEmpty) return '';
-    return clean.split(RegExp(r'\s+')).map((word) {
-      if (word.isEmpty) return '';
-      if (word.length == 1) return word.toUpperCase();
-      return word[0].toUpperCase() + word.substring(1).toLowerCase();
-    }).join(' ');
+    return clean
+        .split(RegExp(r'\s+'))
+        .map((word) {
+          if (word.isEmpty) return '';
+          if (word.length == 1) return word.toUpperCase();
+          return word[0].toUpperCase() + word.substring(1).toLowerCase();
+        })
+        .join(' ');
   }
 
   Future<void> _downloadOfficialTemplate() async {
@@ -520,7 +546,9 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
           if (userProfile != null) {
             final downloadsDir = Directory('$userProfile\\Downloads');
             if (downloadsDir.existsSync()) {
-              final target = File('${downloadsDir.path}\\classrealm_student_template.xlsx');
+              final target = File(
+                '${downloadsDir.path}\\classrealm_student_template.xlsx',
+              );
               await target.writeAsBytes(bytes);
               selectedPath = target.path;
             }
@@ -536,11 +564,16 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
           builder: (ctx) {
             final theme = Theme.of(ctx);
             return Dialog(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(18),
+              ),
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 440),
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 20),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 22,
+                    vertical: 20,
+                  ),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -551,10 +584,16 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
                           Container(
                             padding: const EdgeInsets.all(10),
                             decoration: BoxDecoration(
-                              color: theme.colorScheme.primary.withValues(alpha: 0.12),
+                              color: theme.colorScheme.primary.withValues(
+                                alpha: 0.12,
+                              ),
                               borderRadius: BorderRadius.circular(12),
                             ),
-                            child: Icon(LucideIcons.fileSpreadsheet, color: theme.colorScheme.primary, size: 24),
+                            child: Icon(
+                              LucideIcons.fileSpreadsheet,
+                              color: theme.colorScheme.primary,
+                              size: 24,
+                            ),
                           ),
                           const SizedBox(width: 12),
                           Expanded(
@@ -563,14 +602,20 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
                               children: [
                                 const Text(
                                   'Official Template Ready',
-                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                  ),
                                 ),
                                 const SizedBox(height: 2),
                                 Text(
-                                  kIsWeb ? 'Saved to Downloads folder' : 'Saved to computer successfully',
+                                  kIsWeb
+                                      ? 'Saved to Downloads folder'
+                                      : 'Saved to computer successfully',
                                   style: TextStyle(
                                     fontSize: 12,
-                                    color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
+                                    color: theme.colorScheme.onSurface
+                                        .withValues(alpha: 0.65),
                                   ),
                                 ),
                               ],
@@ -589,37 +634,42 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.25),
+                          color: theme.colorScheme.surfaceContainerHighest
+                              .withValues(alpha: 0.25),
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
-                            color: theme.colorScheme.outline.withValues(alpha: 0.15),
+                            color: theme.colorScheme.outline.withValues(
+                              alpha: 0.15,
+                            ),
                           ),
                         ),
                         child: Column(
                           children: [
                             _buildTemplateStepItem(
-                               stepNum: '1',
-                               title: 'Download Template',
-                               subtitle: 'classrealm_student_template.xlsx',
-                               isDone: true,
-                               theme: theme,
-                             ),
-                             const Divider(height: 14, thickness: 0.8),
-                             _buildTemplateStepItem(
-                               stepNum: '2',
-                               title: 'Enter Students (Row 3 onwards)',
-                               subtitle: 'Row 1 is headers; Row 2 sample is skipped',
-                               isDone: false,
-                               theme: theme,
-                             ),
-                             const Divider(height: 14, thickness: 0.8),
-                             _buildTemplateStepItem(
-                               stepNum: '3',
-                               title: 'Upload File to ClassRealm',
-                               subtitle: 'Instant validation with real-time feedback',
-                               isDone: false,
-                               theme: theme,
-                             ),
+                              stepNum: '1',
+                              title: 'Download Template',
+                              subtitle: 'classrealm_student_template.xlsx',
+                              isDone: true,
+                              theme: theme,
+                            ),
+                            const Divider(height: 14, thickness: 0.8),
+                            _buildTemplateStepItem(
+                              stepNum: '2',
+                              title: 'Enter Students (Row 3 onwards)',
+                              subtitle:
+                                  'Row 1 is headers; Row 2 sample is skipped',
+                              isDone: false,
+                              theme: theme,
+                            ),
+                            const Divider(height: 14, thickness: 0.8),
+                            _buildTemplateStepItem(
+                              stepNum: '3',
+                              title: 'Upload File to ClassRealm',
+                              subtitle:
+                                  'Instant validation with real-time feedback',
+                              isDone: false,
+                              theme: theme,
+                            ),
                           ],
                         ),
                       ),
@@ -629,10 +679,14 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: theme.colorScheme.primary.withValues(alpha: 0.06),
+                          color: theme.colorScheme.primary.withValues(
+                            alpha: 0.06,
+                          ),
                           borderRadius: BorderRadius.circular(10),
                           border: Border.all(
-                            color: theme.colorScheme.primary.withValues(alpha: 0.2),
+                            color: theme.colorScheme.primary.withValues(
+                              alpha: 0.2,
+                            ),
                           ),
                         ),
                         child: Column(
@@ -640,7 +694,11 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
                           children: [
                             Row(
                               children: [
-                                Icon(LucideIcons.shieldCheck, size: 14, color: theme.colorScheme.primary),
+                                Icon(
+                                  LucideIcons.shieldCheck,
+                                  size: 14,
+                                  color: theme.colorScheme.primary,
+                                ),
                                 const SizedBox(width: 6),
                                 const Text(
                                   'Required Field Formats',
@@ -662,7 +720,9 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
                                 _buildFormatChip('Name: Letters only'),
                                 _buildFormatChip('M.I.: 1 char (optional)'),
                                 _buildFormatChip('Gender: Male / Female'),
-                                _buildFormatChip('Birthday: YYYY-MM-DD (Age 10-50)'),
+                                _buildFormatChip(
+                                  'Birthday: YYYY-MM-DD (Age 5-60)',
+                                ),
                               ],
                             ),
                           ],
@@ -678,9 +738,14 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
                           onPressed: () => Navigator.pop(ctx),
                           style: FilledButton.styleFrom(
                             backgroundColor: const Color(0xFF0F8A48),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
                           ),
-                          child: const Text('Got It, Proceed to Upload', style: TextStyle(fontWeight: FontWeight.w600)),
+                          child: const Text(
+                            'Got It, Proceed to Upload',
+                            style: TextStyle(fontWeight: FontWeight.w600),
+                          ),
                         ),
                       ),
                     ],
@@ -739,7 +804,10 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
             children: [
               Text(
                 title,
-                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               Text(
                 subtitle,
@@ -761,11 +829,17 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.9),
         borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: const Color(0xFF0F8A48).withValues(alpha: 0.25)),
+        border: Border.all(
+          color: const Color(0xFF0F8A48).withValues(alpha: 0.25),
+        ),
       ),
       child: Text(
         label,
-        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: Color(0xFF0F8A48)),
+        style: const TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w500,
+          color: Color(0xFF0F8A48),
+        ),
       ),
     );
   }
@@ -830,7 +904,9 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
       return;
     }
 
-    String ext = fileName.contains('.') ? fileName.split('.').last.toLowerCase().trim() : '';
+    String ext = fileName.contains('.')
+        ? fileName.split('.').last.toLowerCase().trim()
+        : '';
 
     // File Format check
     if (ext != 'xlsx' && ext != 'xls' && ext != 'csv') {
@@ -839,12 +915,14 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
         _batchFileSize = fileSize;
         _isProcessingBatch = false;
         _batchWarningTitle = 'Invalid File Format';
-        _batchWarningMessage = 'Invalid file format. Please use the official downloaded template.';
+        _batchWarningMessage =
+            'Invalid file format. Please use the official downloaded template.';
       });
       AppModals.showErrorDialog(
         context: context,
         title: 'Invalid File Format',
-        message: 'Invalid file format. Please use the official downloaded template.',
+        message:
+            'Invalid file format. Please use the official downloaded template.',
       );
       return;
     }
@@ -860,7 +938,8 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
       AppModals.showErrorDialog(
         context: context,
         title: 'Invalid File Format',
-        message: 'Invalid file format. Please use the official downloaded template.',
+        message:
+            'Invalid file format. Please use the official downloaded template.',
       );
       return;
     }
@@ -873,7 +952,8 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
         _batchFileName = fileName;
         _batchFileSize = fileSize;
         _isProcessingBatch = false;
-        _batchWarningMessage = 'The selected file is $mb MB, which exceeds the 10 MB maximum limit.';
+        _batchWarningMessage =
+            'The selected file is $mb MB, which exceeds the 10 MB maximum limit.';
       });
       return;
     }
@@ -919,17 +999,57 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
         return;
       }
 
-      final header = rows.first.map((e) => e.toString().replaceAll('\uFEFF', '').toLowerCase().trim()).toList();
-      final lrnIndex = header.indexWhere((h) => h == 'lrn' || h.contains('lrn') || h.contains('student id'));
-      final emailIndex = header.indexWhere((h) => h == 'email' || h.contains('email'));
-      final lastNameIndex = header.indexWhere((h) => h == 'last name' || h == 'lastname' || h == 'last_name' || h == 'surname' || h.contains('last'));
-      final firstNameIndex = header.indexWhere((h) => h == 'first name' || h == 'firstname' || h == 'first_name' || h.contains('first'));
-      final middleNameIndex = header.indexWhere((h) => h == 'middle name' || h == 'middlename' || h == 'middle_name' || h.contains('middle') || h.contains('initial') || h == 'mi' || h == 'm.i.');
-      final genderIndex = header.indexWhere((h) => h == 'gender' || h == 'sex');
-      final birthdayIndex = header.indexWhere((h) => h == 'birthday' || h == 'birthdate' || h == 'birth date' || h == 'dob' || h.contains('birth'));
+      final header = rows.first
+          .map(
+            (e) => e.toString().replaceAll('\uFEFF', '').toLowerCase().trim(),
+          )
+          .toList();
+      final lrnIndex = header.indexWhere(
+        (h) => h == 'lrn' || h.contains('lrn') || h.contains('student id'),
+      );
+      final emailIndex = header.indexWhere(
+        (h) => h == 'email' || h.contains('email'),
+      );
+      final lastNameIndex = header.indexWhere(
+        (h) =>
+            h == 'last name' ||
+            h == 'lastname' ||
+            h == 'last_name' ||
+            h == 'surname' ||
+            h.contains('last'),
+      );
+      final firstNameIndex = header.indexWhere(
+        (h) =>
+            h == 'first name' ||
+            h == 'firstname' ||
+            h == 'first_name' ||
+            h.contains('first'),
+      );
+      final middleNameIndex = header.indexWhere(
+        (h) =>
+            h == 'middle name' ||
+            h == 'middlename' ||
+            h == 'middle_name' ||
+            h.contains('middle') ||
+            h.contains('initial') ||
+            h == 'mi' ||
+            h == 'm.i.',
+      );
+      final genderIndex = header.indexWhere(
+        (h) => h == 'gender' || h == 'sex' || h.contains('gender'),
+      );
+      final birthdayIndex = header.indexWhere(
+        (h) =>
+            h == 'birthday' ||
+            h == 'birthdate' ||
+            h == 'birth date' ||
+            h == 'dob' ||
+            h.contains('birth'),
+      );
 
       // Check 1: Wrong File Uploaded (Required headers match)
-      final hasRequiredHeaders = lrnIndex != -1 &&
+      final hasRequiredHeaders =
+          lrnIndex != -1 &&
           emailIndex != -1 &&
           lastNameIndex != -1 &&
           firstNameIndex != -1 &&
@@ -974,7 +1094,9 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
         '@deped.gov.ph',
         '@lu.edu.ph',
       ];
-      final emailStrictRegex = RegExp(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$');
+      final emailStrictRegex = RegExp(
+        r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$',
+      );
 
       for (int i = 1; i < rows.length; i++) {
         final row = rows[i];
@@ -984,16 +1106,43 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
           continue;
         }
 
-        final rawLrn = (lrnIndex < row.length ? row[lrnIndex] : '').toString().replaceAll('\uFEFF', '').trim();
-        final rawFirst = (firstNameIndex < row.length ? row[firstNameIndex] : '').toString().replaceAll('\uFEFF', '').trim();
-        final rawMiddle = (middleNameIndex != -1 && middleNameIndex < row.length ? row[middleNameIndex] : '').toString().replaceAll('\uFEFF', '');
-        final rawLast = (lastNameIndex < row.length ? row[lastNameIndex] : '').toString().replaceAll('\uFEFF', '').trim();
-        final rawGender = (genderIndex < row.length ? row[genderIndex] : '').toString().replaceAll('\uFEFF', '').trim();
-        final rawBday = (birthdayIndex < row.length ? row[birthdayIndex] : '').toString().replaceAll('\uFEFF', '').trim();
-        final rawEmail = (emailIndex < row.length ? row[emailIndex] : '').toString().replaceAll('\uFEFF', '').trim().toLowerCase();
+        final rawLrn = (lrnIndex < row.length ? row[lrnIndex] : '')
+            .toString()
+            .replaceAll('\uFEFF', '')
+            .trim();
+        final rawFirst =
+            (firstNameIndex < row.length ? row[firstNameIndex] : '')
+                .toString()
+                .replaceAll('\uFEFF', '')
+                .trim();
+        final rawMiddle =
+            (middleNameIndex != -1 && middleNameIndex < row.length
+                    ? row[middleNameIndex]
+                    : '')
+                .toString()
+                .replaceAll('\uFEFF', '');
+        final rawLast = (lastNameIndex < row.length ? row[lastNameIndex] : '')
+            .toString()
+            .replaceAll('\uFEFF', '')
+            .trim();
+        final rawGender = (genderIndex < row.length ? row[genderIndex] : '')
+            .toString()
+            .replaceAll('\uFEFF', '')
+            .trim();
+        final rawBday = (birthdayIndex < row.length ? row[birthdayIndex] : '')
+            .toString()
+            .replaceAll('\uFEFF', '')
+            .trim();
+        final rawEmail = (emailIndex < row.length ? row[emailIndex] : '')
+            .toString()
+            .replaceAll('\uFEFF', '')
+            .trim()
+            .toLowerCase();
 
         final cleanLrn = rawLrn.replaceAll(RegExp(r'\D'), '');
-        final studentLabel = rawFirst.isNotEmpty ? '$rawFirst $rawLast' : (rawLrn.isNotEmpty ? 'LRN $rawLrn' : 'Row $rowNum');
+        final studentLabel = rawFirst.isNotEmpty
+            ? '$rawFirst $rawLast'
+            : (rawLrn.isNotEmpty ? 'LRN $rawLrn' : 'Row $rowNum');
 
         // Live real-time in-card progress update
         if (mounted) {
@@ -1013,7 +1162,8 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
         }
 
         // Silently skip sample row (Row 2 in template)
-        final isSampleRow = (cleanLrn == '123456789012' &&
+        final isSampleRow =
+            (cleanLrn == '123456789012' &&
                 (rawFirst.toLowerCase() == 'juana' ||
                     rawFirst.toLowerCase() == 'rexsa' ||
                     rawLast.toLowerCase().contains('dela cruz') ||
@@ -1029,31 +1179,42 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
         final isPureDigits = RegExp(r'^\d+$').hasMatch(rawLrn);
         final startsWithZero = rawLrn.startsWith('0');
         final isRepeatingDigits = RegExp(r'^(\d)\1{11}$').hasMatch(rawLrn);
-        if (rawLrn.isEmpty || !isPureDigits || rawLrn.length != 12 || startsWithZero || isRepeatingDigits) {
-          invalidRows.add(_InvalidStudentRow(
-            rowNumber: rowNum,
-            fieldTag: 'LRN',
-            identifier: rawLrn.isEmpty ? 'Empty' : rawLrn,
-            reason: 'Must be exactly 12 digits.',
-          ));
+        if (rawLrn.isEmpty ||
+            !isPureDigits ||
+            rawLrn.length != 12 ||
+            startsWithZero ||
+            isRepeatingDigits) {
+          invalidRows.add(
+            _InvalidStudentRow(
+              rowNumber: rowNum,
+              fieldTag: 'LRN',
+              identifier: rawLrn.isEmpty ? 'Empty' : rawLrn,
+              reason: 'Must be exactly 12 digits.',
+            ),
+          );
           continue;
         }
 
         // 4. Duplicate LRN (In File)
         if (seenLrnsInFile.contains(cleanLrn)) {
-          invalidRows.add(_InvalidStudentRow(
-            rowNumber: rowNum,
-            fieldTag: 'LRN',
-            identifier: cleanLrn,
-            reason: 'Duplicate LRN in file.',
-          ));
+          invalidRows.add(
+            _InvalidStudentRow(
+              rowNumber: rowNum,
+              fieldTag: 'LRN',
+              identifier: cleanLrn,
+              reason: 'Duplicate LRN in file.',
+            ),
+          );
           continue;
         }
         seenLrnsInFile.add(cleanLrn);
 
         // 5. Email Strict Format / Domain Check
-        final hasAllowedDomain = allowedEmailDomains.any((d) => rawEmail.endsWith(d));
-        final isTypoOrDummy = rawEmail == 'example@gmail.com' ||
+        final hasAllowedDomain = allowedEmailDomains.any(
+          (d) => rawEmail.endsWith(d),
+        );
+        final isTypoOrDummy =
+            rawEmail == 'example@gmail.com' ||
             rawEmail == 'sample@gmail.com' ||
             rawEmail == 'test@test.com' ||
             rawEmail == 'none@gmail.com' ||
@@ -1063,24 +1224,30 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
             rawEmail.endsWith('.con') ||
             rawEmail.endsWith('.test');
 
-        if (!emailStrictRegex.hasMatch(rawEmail) || !hasAllowedDomain || isTypoOrDummy) {
-          invalidRows.add(_InvalidStudentRow(
-            rowNumber: rowNum,
-            fieldTag: 'Email',
-            identifier: rawEmail.isEmpty ? 'Empty' : rawEmail,
-            reason: 'Invalid email address.',
-          ));
+        if (!emailStrictRegex.hasMatch(rawEmail) ||
+            !hasAllowedDomain ||
+            isTypoOrDummy) {
+          invalidRows.add(
+            _InvalidStudentRow(
+              rowNumber: rowNum,
+              fieldTag: 'Email',
+              identifier: rawEmail.isEmpty ? 'Empty' : rawEmail,
+              reason: 'Invalid email address.',
+            ),
+          );
           continue;
         }
 
         // Duplicate Email within file
         if (seenEmailsInFile.contains(rawEmail)) {
-          invalidRows.add(_InvalidStudentRow(
-            rowNumber: rowNum,
-            fieldTag: 'Email',
-            identifier: rawEmail,
-            reason: 'Duplicate email in file.',
-          ));
+          invalidRows.add(
+            _InvalidStudentRow(
+              rowNumber: rowNum,
+              fieldTag: 'Email',
+              identifier: rawEmail,
+              reason: 'Duplicate email in file.',
+            ),
+          );
           continue;
         }
         seenEmailsInFile.add(rawEmail);
@@ -1088,91 +1255,110 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
         // 7. Name Format (First, Middle, Last)
         // First Name
         if (rawFirst.isEmpty) {
-          invalidRows.add(_InvalidStudentRow(
-            rowNumber: rowNum,
-            fieldTag: 'First Name',
-            identifier: 'Empty',
-            reason: 'First name is required.',
-          ));
+          invalidRows.add(
+            _InvalidStudentRow(
+              rowNumber: rowNum,
+              fieldTag: 'First Name',
+              identifier: 'Empty',
+              reason: 'First name is required.',
+            ),
+          );
           continue;
         }
         if (RegExp(r'[0-9]').hasMatch(rawFirst)) {
-          invalidRows.add(_InvalidStudentRow(
-            rowNumber: rowNum,
-            fieldTag: 'First Name',
-            identifier: rawFirst,
-            reason: 'Cannot contain numbers.',
-          ));
+          invalidRows.add(
+            _InvalidStudentRow(
+              rowNumber: rowNum,
+              fieldTag: 'First Name',
+              identifier: rawFirst,
+              reason: 'Cannot contain numbers.',
+            ),
+          );
           continue;
         }
         if (!RegExp(r"^[a-zA-Z\s\-\.\'ñÑ]+$").hasMatch(rawFirst)) {
-          invalidRows.add(_InvalidStudentRow(
-            rowNumber: rowNum,
-            fieldTag: 'First Name',
-            identifier: rawFirst,
-            reason: 'Invalid special characters.',
-          ));
+          invalidRows.add(
+            _InvalidStudentRow(
+              rowNumber: rowNum,
+              fieldTag: 'First Name',
+              identifier: rawFirst,
+              reason: 'Invalid special characters.',
+            ),
+          );
           continue;
         }
         if (rawFirst.length < 2 || rawFirst.length > 30) {
-          invalidRows.add(_InvalidStudentRow(
-            rowNumber: rowNum,
-            fieldTag: 'First Name',
-            identifier: rawFirst,
-            reason: 'First name must be between 2 and 30 characters.',
-          ));
+          invalidRows.add(
+            _InvalidStudentRow(
+              rowNumber: rowNum,
+              fieldTag: 'First Name',
+              identifier: rawFirst,
+              reason: 'First name must be between 2 and 30 characters.',
+            ),
+          );
           continue;
         }
 
         // Last Name
         if (rawLast.isEmpty) {
-          invalidRows.add(_InvalidStudentRow(
-            rowNumber: rowNum,
-            fieldTag: 'Last Name',
-            identifier: 'Empty',
-            reason: 'Last name is required.',
-          ));
+          invalidRows.add(
+            _InvalidStudentRow(
+              rowNumber: rowNum,
+              fieldTag: 'Last Name',
+              identifier: 'Empty',
+              reason: 'Last name is required.',
+            ),
+          );
           continue;
         }
         if (RegExp(r'[0-9]').hasMatch(rawLast)) {
-          invalidRows.add(_InvalidStudentRow(
-            rowNumber: rowNum,
-            fieldTag: 'Last Name',
-            identifier: rawLast,
-            reason: 'Cannot contain numbers.',
-          ));
+          invalidRows.add(
+            _InvalidStudentRow(
+              rowNumber: rowNum,
+              fieldTag: 'Last Name',
+              identifier: rawLast,
+              reason: 'Cannot contain numbers.',
+            ),
+          );
           continue;
         }
         if (!RegExp(r"^[a-zA-Z\s\-\.\'ñÑ]+$").hasMatch(rawLast)) {
-          invalidRows.add(_InvalidStudentRow(
-            rowNumber: rowNum,
-            fieldTag: 'Last Name',
-            identifier: rawLast,
-            reason: 'Invalid special characters.',
-          ));
+          invalidRows.add(
+            _InvalidStudentRow(
+              rowNumber: rowNum,
+              fieldTag: 'Last Name',
+              identifier: rawLast,
+              reason: 'Invalid special characters.',
+            ),
+          );
           continue;
         }
         if (rawLast.length < 2 || rawLast.length > 30) {
-          invalidRows.add(_InvalidStudentRow(
-            rowNumber: rowNum,
-            fieldTag: 'Last Name',
-            identifier: rawLast,
-            reason: 'Last name must be between 2 and 30 characters.',
-          ));
+          invalidRows.add(
+            _InvalidStudentRow(
+              rowNumber: rowNum,
+              fieldTag: 'Last Name',
+              identifier: rawLast,
+              reason: 'Last name must be between 2 and 30 characters.',
+            ),
+          );
           continue;
         }
 
         // The middle initial is optional, but a provided value must match
         // the canonical one-letter-and-period format.
-        final middleInitialError =
-            AppValidators.validateMiddleInitial(rawMiddle);
+        final middleInitialError = AppValidators.validateMiddleInitial(
+          rawMiddle,
+        );
         if (middleInitialError != null) {
-          invalidRows.add(_InvalidStudentRow(
-            rowNumber: rowNum,
-            fieldTag: 'Middle Initial',
-            identifier: rawMiddle.trim().isEmpty ? 'blank' : rawMiddle.trim(),
-            reason: AppValidators.invalidBulkMiddleInitialMessage,
-          ));
+          invalidRows.add(
+            _InvalidStudentRow(
+              rowNumber: rowNum,
+              fieldTag: 'Middle Initial',
+              identifier: rawMiddle.trim().isEmpty ? 'blank' : rawMiddle.trim(),
+              reason: AppValidators.invalidBulkMiddleInitialMessage,
+            ),
+          );
           continue;
         }
         final cleanMiddle =
@@ -1181,52 +1367,61 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
         // Gender Check
         final parsedGender = _parseGender(rawGender);
         if (parsedGender == null) {
-          invalidRows.add(_InvalidStudentRow(
-            rowNumber: rowNum,
-            fieldTag: 'Gender',
-            identifier: rawGender.isEmpty ? 'Empty' : rawGender,
-            reason: 'Must be Male or Female.',
-          ));
+          invalidRows.add(
+            _InvalidStudentRow(
+              rowNumber: rowNum,
+              fieldTag: 'Gender',
+              identifier: rawGender.isEmpty ? 'Empty' : rawGender,
+              reason: 'Must be Male or Female.',
+            ),
+          );
           continue;
         }
 
         // 8. Birthday Parsing (Handles YYYY-MM-DD and Excel serial date)
         final parsedBday = _parseBirthday(rawBday);
         if (parsedBday == null || RegExp(r'[a-zA-Z]').hasMatch(rawBday)) {
-          invalidRows.add(_InvalidStudentRow(
-            rowNumber: rowNum,
-            fieldTag: 'Birthday',
-            identifier: rawBday.isEmpty ? 'Empty' : rawBday,
-            reason: 'Use YYYY-MM-DD format.',
-          ));
+          invalidRows.add(
+            _InvalidStudentRow(
+              rowNumber: rowNum,
+              fieldTag: 'Birthday',
+              identifier: rawBday.isEmpty ? 'Empty' : rawBday,
+              reason: 'Use YYYY-MM-DD format.',
+            ),
+          );
           continue;
         }
 
         // 9. Age Limits Check (10 - 50 years old)
         int age = now.year - parsedBday.year;
-        if (now.month < parsedBday.month || (now.month == parsedBday.month && now.day < parsedBday.day)) {
+        if (now.month < parsedBday.month ||
+            (now.month == parsedBday.month && now.day < parsedBday.day)) {
           age--;
         }
         if (parsedBday.isAfter(now) || age < 10 || age > 50) {
-          invalidRows.add(_InvalidStudentRow(
-            rowNumber: rowNum,
-            fieldTag: 'Birthday',
-            identifier: rawBday,
-            reason: 'Must be 10-50 years old.',
-          ));
+          invalidRows.add(
+            _InvalidStudentRow(
+              rowNumber: rowNum,
+              fieldTag: 'Birthday',
+              identifier: rawBday,
+              reason: 'Must be 10-50 years old.',
+            ),
+          );
           continue;
         }
 
-        candidateStudents.add(_ParsedStudentRow(
-          rowNumber: rowNum,
-          lrn: cleanLrn,
-          firstName: _toTitleCase(rawFirst),
-          middleName: cleanMiddle,
-          lastName: _toTitleCase(rawLast),
-          gender: parsedGender,
-          birthday: parsedBday,
-          email: rawEmail,
-        ));
+        candidateStudents.add(
+          _ParsedStudentRow(
+            rowNumber: rowNum,
+            lrn: cleanLrn,
+            firstName: _toTitleCase(rawFirst),
+            middleName: cleanMiddle,
+            lastName: _toTitleCase(rawLast),
+            gender: parsedGender,
+            birthday: parsedBday,
+            email: rawEmail,
+          ),
+        );
       }
 
       // Check 2: Blank File / No Data (Valid headers, but 0 data rows found)
@@ -1341,15 +1536,18 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
           final existingUser = userEmailMap[s.email];
           if (existingUser != null) {
             final existingUserId = existingUser['id']?.toString() ?? '';
-            final expectedStudentId = existingProfile?['student_id']?.toString() ?? '';
+            final expectedStudentId =
+                existingProfile?['student_id']?.toString() ?? '';
 
             if (existingUserId != expectedStudentId) {
-              invalidRows.add(_InvalidStudentRow(
-                rowNumber: s.rowNumber,
-                fieldTag: 'Email',
-                identifier: s.email,
-                reason: 'Email already in use.',
-              ));
+              invalidRows.add(
+                _InvalidStudentRow(
+                  rowNumber: s.rowNumber,
+                  fieldTag: 'Email',
+                  identifier: s.email,
+                  reason: 'Email already in use.',
+                ),
+              );
               continue;
             }
           }
@@ -1358,23 +1556,29 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
             // 12. Section Capacity Limit (New Student)
             if (s.gender.toLowerCase() == 'male') {
               if (currentMaleEnrolled >= 50) {
-                invalidRows.add(_InvalidStudentRow(
-                  rowNumber: s.rowNumber,
-                  fieldTag: 'Capacity',
-                  identifier: s.gender,
-                  reason: 'Capacity exceeded. Max 50 per gender. (Found: Male (${currentMaleEnrolled + 1})).',
-                ));
+                invalidRows.add(
+                  _InvalidStudentRow(
+                    rowNumber: s.rowNumber,
+                    fieldTag: 'Capacity',
+                    identifier: s.gender,
+                    reason:
+                        'Capacity exceeded. Max 50 per gender. (Found: Male (${currentMaleEnrolled + 1})).',
+                  ),
+                );
                 continue;
               }
               currentMaleEnrolled++;
             } else if (s.gender.toLowerCase() == 'female') {
               if (currentFemaleEnrolled >= 50) {
-                invalidRows.add(_InvalidStudentRow(
-                  rowNumber: s.rowNumber,
-                  fieldTag: 'Capacity',
-                  identifier: s.gender,
-                  reason: 'Capacity exceeded. Max 50 per gender. (Found: Female (${currentFemaleEnrolled + 1})).',
-                ));
+                invalidRows.add(
+                  _InvalidStudentRow(
+                    rowNumber: s.rowNumber,
+                    fieldTag: 'Capacity',
+                    identifier: s.gender,
+                    reason:
+                        'Capacity exceeded. Max 50 per gender. (Found: Female (${currentFemaleEnrolled + 1})).',
+                  ),
+                );
                 continue;
               }
               currentFemaleEnrolled++;
@@ -1384,23 +1588,32 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
             eligibleNewStudents.add(s);
           } else {
             // 10. Duplicate LRN (In Database) - Check name match
-            final dbFirst = (existingProfile['first_name'] ?? '').toString().trim().toLowerCase();
-            final dbLast = (existingProfile['last_name'] ?? '').toString().trim().toLowerCase();
+            final dbFirst = (existingProfile['first_name'] ?? '')
+                .toString()
+                .trim()
+                .toLowerCase();
+            final dbLast = (existingProfile['last_name'] ?? '')
+                .toString()
+                .trim()
+                .toLowerCase();
             final uploadFirst = s.firstName.trim().toLowerCase();
             final uploadLast = s.lastName.trim().toLowerCase();
 
             if (dbFirst != uploadFirst || dbLast != uploadLast) {
-              invalidRows.add(_InvalidStudentRow(
-                rowNumber: s.rowNumber,
-                fieldTag: 'LRN',
-                identifier: s.lrn,
-                reason: 'LRN already registered.',
-              ));
+              invalidRows.add(
+                _InvalidStudentRow(
+                  rowNumber: s.rowNumber,
+                  fieldTag: 'LRN',
+                  identifier: s.lrn,
+                  reason: 'LRN already registered.',
+                ),
+              );
               continue;
             }
 
             // 11. Already Enrolled in class: Skip re-enrolling, but continue with remaining students!
-            final existingStudentId = (existingProfile['student_id'] ?? '').toString();
+            final existingStudentId = (existingProfile['student_id'] ?? '')
+                .toString();
             final enrollStatus = enrollmentMap[existingStudentId];
 
             if (enrollStatus == 'enrolled') {
@@ -1408,53 +1621,63 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
               // Safely skipped: student is already enrolled in this class, continue with remaining records
               continue;
             } else if (enrollStatus == 'archived') {
-              invalidRows.add(_InvalidStudentRow(
-                rowNumber: s.rowNumber,
-                fieldTag: 'Class',
-                identifier: s.lrn,
-                reason: 'Archived in this class (use Restore in Manage Students).',
-              ));
+              invalidRows.add(
+                _InvalidStudentRow(
+                  rowNumber: s.rowNumber,
+                  fieldTag: 'Class',
+                  identifier: s.lrn,
+                  reason: 'Archived in this class (use Restore in Manage Students).',
+                ),
+              );
               continue;
             }
 
             // 12. Section Capacity Limit (Existing Student from another class)
             if (s.gender.toLowerCase() == 'male') {
               if (currentMaleEnrolled >= 50) {
-                invalidRows.add(_InvalidStudentRow(
-                  rowNumber: s.rowNumber,
-                  fieldTag: 'Capacity',
-                  identifier: s.gender,
-                  reason: 'Capacity exceeded. Max 50 per gender. (Found: Male (${currentMaleEnrolled + 1})).',
-                ));
+                invalidRows.add(
+                  _InvalidStudentRow(
+                    rowNumber: s.rowNumber,
+                    fieldTag: 'Capacity',
+                    identifier: s.gender,
+                    reason:
+                        'Capacity exceeded. Max 50 per gender. (Found: Male (${currentMaleEnrolled + 1})).',
+                  ),
+                );
                 continue;
               }
               currentMaleEnrolled++;
             } else if (s.gender.toLowerCase() == 'female') {
               if (currentFemaleEnrolled >= 50) {
-                invalidRows.add(_InvalidStudentRow(
-                  rowNumber: s.rowNumber,
-                  fieldTag: 'Capacity',
-                  identifier: s.gender,
-                  reason: 'Capacity exceeded. Max 50 per gender. (Found: Female (${currentFemaleEnrolled + 1})).',
-                ));
+                invalidRows.add(
+                  _InvalidStudentRow(
+                    rowNumber: s.rowNumber,
+                    fieldTag: 'Capacity',
+                    identifier: s.gender,
+                    reason:
+                        'Capacity exceeded. Max 50 per gender. (Found: Female (${currentFemaleEnrolled + 1})).',
+                  ),
+                );
                 continue;
               }
               currentFemaleEnrolled++;
             }
 
             // Eligible Existing Student
-            eligibleExistingStudents.add(_ParsedStudentRow(
-              rowNumber: s.rowNumber,
-              lrn: s.lrn,
-              firstName: s.firstName,
-              middleName: s.middleName,
-              lastName: s.lastName,
-              gender: s.gender,
-              birthday: s.birthday,
-              email: s.email,
-              isExistingGlobalStudent: true,
-              existingStudentId: existingStudentId,
-            ));
+            eligibleExistingStudents.add(
+              _ParsedStudentRow(
+                rowNumber: s.rowNumber,
+                lrn: s.lrn,
+                firstName: s.firstName,
+                middleName: s.middleName,
+                lastName: s.lastName,
+                gender: s.gender,
+                birthday: s.birthday,
+                email: s.email,
+                isExistingGlobalStudent: true,
+                existingStudentId: existingStudentId,
+              ),
+            );
           }
         }
       }
@@ -1477,7 +1700,8 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
         if (mounted) {
           setState(() {
             _batchPhase = 'Validation Issues Found';
-            _batchActiveRecord = '${invalidRows.length} issue${invalidRows.length > 1 ? "s" : ""} detected in spreadsheet';
+            _batchActiveRecord =
+                '${invalidRows.length} issue${invalidRows.length > 1 ? "s" : ""} detected in spreadsheet';
           });
         }
         await _showIssuesErrorDialog();
@@ -1486,7 +1710,8 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
         if (mounted) {
           setState(() {
             _batchPhase = 'Enrolling in Database...';
-            _batchActiveRecord = 'All ${allEligible.length} student${allEligible.length > 1 ? "s" : ""} valid. Writing to database...';
+            _batchActiveRecord =
+                'All ${allEligible.length} student${allEligible.length > 1 ? "s" : ""} valid. Writing to database...';
           });
         }
         await _executeBatchEnrollment(
@@ -1498,12 +1723,14 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
         if (mounted) {
           setState(() {
             _batchPhase = 'Upload Complete';
-            _batchActiveRecord = 'All ${alreadyEnrolledStudents.length} student(s) already enrolled.';
+            _batchActiveRecord =
+                'All ${alreadyEnrolledStudents.length} student(s) already enrolled.';
           });
           AppModals.showSuccessDialog(
             context: context,
             title: 'Already Enrolled',
-            message: 'All ${alreadyEnrolledStudents.length} student(s) in this file are already enrolled in this class. No duplicate enrollments were made.',
+            message:
+                'All ${alreadyEnrolledStudents.length} student(s) in this file are already enrolled in this class. No duplicate enrollments were made.',
           );
         }
       }
@@ -1537,10 +1764,17 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
                 color: Colors.red.withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(LucideIcons.alertTriangle, color: Colors.red, size: 20),
+              child: const Icon(
+                LucideIcons.alertTriangle,
+                color: Colors.red,
+                size: 20,
+              ),
             ),
             const SizedBox(width: 12),
-            const Text('Spreadsheet Issues Found', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
+            const Text(
+              'Spreadsheet Issues Found',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
+            ),
           ],
         ),
         content: SizedBox(
@@ -1550,15 +1784,26 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 10,
+                ),
                 decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.08),
+                  color: Theme.of(context).colorScheme.primary
+                      .withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.2)),
+                  border: Border.all(
+                    color: Theme.of(context).colorScheme.primary
+                        .withValues(alpha: 0.2),
+                  ),
                 ),
                 child: Row(
                   children: [
-                    Icon(LucideIcons.graduationCap, size: 18, color: Theme.of(context).colorScheme.primary),
+                    Icon(
+                      LucideIcons.graduationCap,
+                      size: 18,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
@@ -1577,13 +1822,29 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
               // 4 Metric Badges in exact order: Issues (X) | New Students (Y) | Existing (Z) | Enrolled (W)
               Row(
                 children: [
-                  _buildStatPill('Issues', _detectedInvalidRows.length, Colors.red),
+                  _buildStatPill(
+                    'Issues',
+                    _detectedInvalidRows.length,
+                    Colors.red,
+                  ),
                   const SizedBox(width: 6),
-                  _buildStatPill('New Students', _eligibleNewStudents.length, const Color(0xFF0F8A48)),
+                  _buildStatPill(
+                    'New Students',
+                    _eligibleNewStudents.length,
+                    const Color(0xFF0F8A48),
+                  ),
                   const SizedBox(width: 6),
-                  _buildStatPill('Existing', _eligibleExistingStudents.length, Colors.blue),
+                  _buildStatPill(
+                    'Existing',
+                    _eligibleExistingStudents.length,
+                    Colors.blue,
+                  ),
                   const SizedBox(width: 6),
-                  _buildStatPill('Enrolled', _alreadyEnrolledStudents.length, Colors.grey),
+                  _buildStatPill(
+                    'Enrolled',
+                    _alreadyEnrolledStudents.length,
+                    Colors.grey,
+                  ),
                 ],
               ),
               const SizedBox(height: 14),
@@ -1592,11 +1853,19 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
                 children: [
                   const Text(
                     'Issues Detected (Upload Blocked):',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.red),
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                      color: Colors.red,
+                    ),
                   ),
                   Text(
                     '${_detectedInvalidRows.length} error${_detectedInvalidRows.length > 1 ? "s" : ""}',
-                    style: const TextStyle(fontSize: 11, color: Colors.red, fontWeight: FontWeight.bold),
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: Colors.red,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ],
               ),
@@ -1618,11 +1887,17 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
                       padding: const EdgeInsets.symmetric(vertical: 3),
                       child: RichText(
                         text: TextSpan(
-                          style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurface),
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Theme.of(context).colorScheme.onSurface,
+                          ),
                           children: [
                             TextSpan(
                               text: 'Row ${item.rowNumber} ',
-                              style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.red),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.red,
+                              ),
                             ),
                             if (item.fieldTag == 'Middle Initial')
                               TextSpan(
@@ -1634,12 +1909,19 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
                               )
                             else ...[
                               TextSpan(
-                                text: '(${item.fieldTag}: ${item.identifier}): ',
-                                style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.red),
+                                text:
+                                    '(${item.fieldTag}: ${item.identifier}): ',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.red,
+                                ),
                               ),
                               TextSpan(
                                 text: item.reason,
-                                style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.85)),
+                                style: TextStyle(
+                                  color: Theme.of(context).colorScheme.onSurface
+                                      .withValues(alpha: 0.85),
+                                ),
                               ),
                             ],
                           ],
@@ -1651,20 +1933,33 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
               ),
               const SizedBox(height: 10),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.orange.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: Colors.orange.withValues(alpha: 0.25)),
+                  border: Border.all(
+                    color: Colors.orange.withValues(alpha: 0.25),
+                  ),
                 ),
                 child: const Row(
                   children: [
-                    Icon(LucideIcons.alertCircle, size: 14, color: Colors.deepOrange),
+                    Icon(
+                      LucideIcons.alertCircle,
+                      size: 14,
+                      color: Colors.deepOrange,
+                    ),
                     SizedBox(width: 8),
                     Expanded(
                       child: Text(
                         'Strict Policy: All issues must be corrected in your spreadsheet before enrolling.',
-                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.deepOrange),
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.deepOrange,
+                        ),
                       ),
                     ),
                   ],
@@ -1675,7 +1970,8 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
                 'Please fix all ${_detectedInvalidRows.length} issue${_detectedInvalidRows.length > 1 ? "s" : ""} in your spreadsheet and upload again to proceed.',
                 style: TextStyle(
                   fontSize: 12,
-                  color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.8),
+                  color: Theme.of(context).colorScheme.onSurface
+                      .withValues(alpha: 0.8),
                 ),
               ),
             ],
@@ -1727,10 +2023,14 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
       if (ssFile != null) {
         final ssXml = utf8.decode(ssFile.content as List<int>);
         // OpenXML shared strings are <si>...</si> entries with one or more <t> runs
-        final siMatches = RegExp(r'<si\b[^>]*>(.*?)<\/si>', dotAll: true).allMatches(ssXml);
+        final siMatches = RegExp(
+          r'<si\b[^>]*>(.*?)<\/si>',
+          dotAll: true,
+        ).allMatches(ssXml);
         for (final si in siMatches) {
           final siContent = si.group(1) ?? '';
-          final tMatches = RegExp(r'<t(?:\s[^>]*)?>([^<]*)<\/t>').allMatches(siContent);
+          final tMatches = RegExp(r'<t(?:\s[^>]*)?>([^<]*)<\/t>')
+              .allMatches(siContent);
           final buffer = StringBuffer();
           for (final tm in tMatches) {
             buffer.write(tm.group(1) ?? '');
@@ -1742,7 +2042,8 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
       ArchiveFile? sheetFile = archive.findFile('xl/worksheets/sheet1.xml');
       if (sheetFile == null) {
         for (final f in archive.files) {
-          if (f.name.startsWith('xl/worksheets/sheet') && f.name.endsWith('.xml')) {
+          if (f.name.startsWith('xl/worksheets/sheet') &&
+              f.name.endsWith('.xml')) {
             sheetFile = f;
             break;
           }
@@ -1754,12 +2055,18 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
       }
 
       final sheetXml = utf8.decode(sheetFile.content as List<int>);
-      final rowMatches = RegExp(r'<row\b[^>]*>(.*?)<\/row>', dotAll: true).allMatches(sheetXml);
+      final rowMatches = RegExp(
+        r'<row\b[^>]*>(.*?)<\/row>',
+        dotAll: true,
+      ).allMatches(sheetXml);
 
       final allRows = <List<dynamic>>[];
       for (final rm in rowMatches) {
         final rowXml = rm.group(1) ?? '';
-        final cellTagMatches = RegExp(r'<c\b([^>]*)(?:\/>|>(.*?)<\/c>)', dotAll: true).allMatches(rowXml);
+        final cellTagMatches = RegExp(
+          r'<c\b([^>]*)(?:\/>|>(.*?)<\/c>)',
+          dotAll: true,
+        ).allMatches(rowXml);
 
         final rowMap = <int, dynamic>{};
         int maxCol = -1;
@@ -1782,7 +2089,8 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
           if (vMatch != null) {
             rawVal = vMatch.group(1) ?? '';
           } else {
-            final tMatchInBody = RegExp(r'<t\b[^>]*>([^<]*)<\/t>').firstMatch(body);
+            final tMatchInBody = RegExp(r'<t\b[^>]*>([^<]*)<\/t>')
+                .firstMatch(body);
             if (tMatchInBody != null) {
               rawVal = tMatchInBody.group(1) ?? '';
             }
@@ -1812,7 +2120,9 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
       }
       return allRows;
     } catch (e) {
-      throw Exception('Failed to read Excel (.xlsx) file: ${e.toString().replaceAll('Exception: ', '')}. You can also save as .csv and upload.');
+      throw Exception(
+        'Failed to read Excel (.xlsx) file: ${e.toString().replaceAll('Exception: ', '')}. You can also save as .csv and upload.',
+      );
     }
   }
 
@@ -1829,12 +2139,20 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
           children: [
             Text(
               count.toString(),
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: color),
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: color,
+              ),
             ),
             const SizedBox(height: 2),
             Text(
               label,
-              style: TextStyle(fontSize: 10, color: color, fontWeight: FontWeight.w600),
+              style: TextStyle(
+                fontSize: 10,
+                color: color,
+                fontWeight: FontWeight.w600,
+              ),
               textAlign: TextAlign.center,
             ),
           ],
@@ -1881,25 +2199,32 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
       prefs = await SharedPreferences.getInstance();
       sessionKey = 'batch_enroll_session_$_selectedOfferingId';
 
-      pendingJson = students.map((s) => {
-        'rowNumber': s.rowNumber,
-        'lrn': s.lrn,
-        'firstName': s.firstName,
-        'middleName': s.middleName,
-        'lastName': s.lastName,
-        'gender': s.gender,
-        'birthday': s.birthday.toIso8601String(),
-        'email': s.email,
-        'isExistingGlobalStudent': s.isExistingGlobalStudent,
-        'existingStudentId': s.existingStudentId,
-      }).toList();
+      pendingJson = students
+          .map(
+            (s) => {
+              'rowNumber': s.rowNumber,
+              'lrn': s.lrn,
+              'firstName': s.firstName,
+              'middleName': s.middleName,
+              'lastName': s.lastName,
+              'gender': s.gender,
+              'birthday': s.birthday.toIso8601String(),
+              'email': s.email,
+              'isExistingGlobalStudent': s.isExistingGlobalStudent,
+              'existingStudentId': s.existingStudentId,
+            },
+          )
+          .toList();
 
-      await prefs.setString(sessionKey, jsonEncode({
-        'fileName': fileName,
-        'offeringId': _selectedOfferingId,
-        'total': students.length,
-        'pending': pendingJson,
-      }));
+      await prefs.setString(
+        sessionKey,
+        jsonEncode({
+          'fileName': fileName,
+          'offeringId': _selectedOfferingId,
+          'total': students.length,
+          'pending': pendingJson,
+        }),
+      );
     } catch (_) {}
 
     final enrollProgressNotifier = ValueNotifier<_EnrollmentProgressData>(
@@ -1923,7 +2248,9 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
               final progress = prog.progress;
               final percent = prog.percent;
               return AlertDialog(
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
                 title: Row(
                   children: [
                     const SizedBox(
@@ -1933,8 +2260,13 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
                     ),
                     const SizedBox(width: 12),
                     Text(
-                      isResumed ? 'Resuming Enrollment...' : 'Enrolling Students in Bulk...',
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                      isResumed
+                          ? 'Resuming Enrollment...'
+                          : 'Enrolling Students in Bulk...',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
                     ),
                   ],
                 ),
@@ -1948,7 +2280,8 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
                         child: LinearProgressIndicator(
                           value: progress,
                           minHeight: 8,
-                          backgroundColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.15),
+                          backgroundColor: Theme.of(context).colorScheme.primary
+                              .withValues(alpha: 0.15),
                         ),
                       ),
                       const SizedBox(height: 12),
@@ -1957,7 +2290,10 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
                         children: [
                           Text(
                             '${prog.phase} (${prog.currentIdx} of ${prog.totalCount})',
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                            ),
                           ),
                           Text(
                             '$percent%',
@@ -1971,10 +2307,13 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
                       ),
                       const SizedBox(height: 6),
                       Text(
-                        prog.currentStudentName.isNotEmpty ? prog.currentStudentName : 'Preparing student accounts...',
+                        prog.currentStudentName.isNotEmpty
+                            ? prog.currentStudentName
+                            : 'Preparing student accounts...',
                         style: TextStyle(
                           fontSize: 12,
-                          color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
+                          color: Theme.of(context).colorScheme.onSurface
+                              .withValues(alpha: 0.7),
                         ),
                         textAlign: TextAlign.center,
                         maxLines: 1,
@@ -2036,16 +2375,20 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
         // Update persisted pending batch session on each successful row
         pendingJson.removeWhere((item) => item['lrn'] == s.lrn);
         if (prefs != null && sessionKey != null) {
-          await prefs.setString(sessionKey, jsonEncode({
-            'fileName': fileName,
-            'offeringId': _selectedOfferingId,
-            'total': students.length,
-            'pending': pendingJson,
-          }));
+          await prefs.setString(
+            sessionKey,
+            jsonEncode({
+              'fileName': fileName,
+              'offeringId': _selectedOfferingId,
+              'total': students.length,
+              'pending': pendingJson,
+            }),
+          );
         }
       } catch (e) {
         final errLower = e.toString().toLowerCase();
-        final isNet = errLower.contains('socketexception') ||
+        final isNet =
+            errLower.contains('socketexception') ||
             errLower.contains('clientexception') ||
             errLower.contains('network') ||
             errLower.contains('failed host lookup') ||
@@ -2061,20 +2404,20 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
         } else {
           final errorMessage =
               AppValidators.isMiddleInitialConstraintViolation(e)
-                  ? 'Row ${s.rowNumber} ${AppValidators.invalidBulkMiddleInitialMessage}'
-                  : e.toString().replaceAll('Exception: ', '').trim();
-          failed.add({
-            'student': s,
-            'error': errorMessage,
-          });
+              ? 'Row ${s.rowNumber} ${AppValidators.invalidBulkMiddleInitialMessage}'
+              : e.toString().replaceAll('Exception: ', '').trim();
+          failed.add({'student': s, 'error': errorMessage});
           pendingJson.removeWhere((item) => item['lrn'] == s.lrn);
           if (prefs != null && sessionKey != null) {
-            await prefs.setString(sessionKey, jsonEncode({
-              'fileName': fileName,
-              'offeringId': _selectedOfferingId,
-              'total': students.length,
-              'pending': pendingJson,
-            }));
+            await prefs.setString(
+              sessionKey,
+              jsonEncode({
+                'fileName': fileName,
+                'offeringId': _selectedOfferingId,
+                'total': students.length,
+                'pending': pendingJson,
+              }),
+            );
           }
         }
       }
@@ -2090,7 +2433,9 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
         await showDialog(
           context: context,
           builder: (ctx) => AlertDialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
             title: Row(
               children: [
                 Container(
@@ -2099,10 +2444,17 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
                     color: Colors.amber.withValues(alpha: 0.15),
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(LucideIcons.wifiOff, color: Colors.amber, size: 22),
+                  child: const Icon(
+                    LucideIcons.wifiOff,
+                    color: Colors.amber,
+                    size: 22,
+                  ),
                 ),
                 const SizedBox(width: 12),
-                const Text('Network Disconnected', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
+                const Text(
+                  'Network Disconnected',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
+                ),
               ],
             ),
             content: Column(
@@ -2126,7 +2478,9 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
               FilledButton.icon(
                 icon: const Icon(LucideIcons.refreshCw, size: 15),
                 label: const Text('Resume Upload Now'),
-                style: FilledButton.styleFrom(backgroundColor: const Color(0xFF0F8A48)),
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFF0F8A48),
+                ),
                 onPressed: () {
                   Navigator.pop(ctx);
                   _resumeBatchEnrollment();
@@ -2153,7 +2507,9 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
 
       const chunkSize = 4;
       for (int i = 0; i < newlyCreatedStudents.length; i += chunkSize) {
-        final end = (i + chunkSize < newlyCreatedStudents.length) ? i + chunkSize : newlyCreatedStudents.length;
+        final end = (i + chunkSize < newlyCreatedStudents.length)
+            ? i + chunkSize
+            : newlyCreatedStudents.length;
         final chunk = newlyCreatedStudents.sublist(i, end);
 
         await Future.wait(
@@ -2218,17 +2574,24 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: (failed.isEmpty ? const Color(0xFF0F8A48) : Colors.orange).withValues(alpha: 0.1),
+                color:
+                    (failed.isEmpty ? const Color(0xFF0F8A48) : Colors.orange)
+                        .withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
               child: Icon(
-                failed.isEmpty ? LucideIcons.checkCheck : LucideIcons.alertTriangle,
+                failed.isEmpty
+                    ? LucideIcons.checkCheck
+                    : LucideIcons.alertTriangle,
                 color: failed.isEmpty ? const Color(0xFF0F8A48) : Colors.orange,
                 size: 22,
               ),
             ),
             const SizedBox(width: 12),
-            const Text('Batch Enrollment Result', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
+            const Text(
+              'Batch Enrollment Result',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
+            ),
           ],
         ),
         content: SizedBox(
@@ -2239,28 +2602,46 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
             children: [
               Row(
                 children: [
-                  _buildStatPill('Enrolled', successful.length, const Color(0xFF0F8A48)),
+                  _buildStatPill(
+                    'Enrolled',
+                    successful.length,
+                    const Color(0xFF0F8A48),
+                  ),
                   const SizedBox(width: 8),
                   _buildStatPill('Emails Sent', emailSentCount, Colors.blue),
                   const SizedBox(width: 8),
-                  _buildStatPill('Issues/Skipped', failed.length, failed.isEmpty ? Colors.grey : Colors.red),
+                  _buildStatPill(
+                    'Issues/Skipped',
+                    failed.length,
+                    failed.isEmpty ? Colors.grey : Colors.red,
+                  ),
                 ],
               ),
               if (emailFailedCount > 0) ...[
                 const SizedBox(height: 8),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.amber.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Row(
                     children: [
-                      const Icon(LucideIcons.info, size: 14, color: Colors.amber),
+                      const Icon(
+                        LucideIcons.info,
+                        size: 14,
+                        color: Colors.amber,
+                      ),
                       const SizedBox(width: 6),
                       Text(
                         '$emailFailedCount email${emailFailedCount > 1 ? "s" : ""} could not be delivered. You can copy the credentials below.',
-                        style: const TextStyle(fontSize: 11, color: Colors.amber),
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: Colors.amber,
+                        ),
                       ),
                     ],
                   ),
@@ -2268,7 +2649,10 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
               ],
               if (failed.isNotEmpty) ...[
                 const SizedBox(height: 14),
-                const Text('Students Not Enrolled:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                const Text(
+                  'Students Not Enrolled:',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                ),
                 const SizedBox(height: 6),
                 Container(
                   constraints: const BoxConstraints(maxHeight: 130),
@@ -2276,7 +2660,9 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
                   decoration: BoxDecoration(
                     color: Colors.red.withValues(alpha: 0.05),
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.red.withValues(alpha: 0.2)),
+                    border: Border.all(
+                      color: Colors.red.withValues(alpha: 0.2),
+                    ),
                   ),
                   child: ListView.builder(
                     shrinkWrap: true,
@@ -2291,7 +2677,10 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
                           err.startsWith('Row ')
                               ? '• $err'
                               : '• ${s.firstName} ${s.lastName} (${s.lrn}): $err',
-                          style: const TextStyle(fontSize: 11, color: Colors.red),
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: Colors.red,
+                          ),
                         ),
                       );
                     },
@@ -2317,12 +2706,16 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
                 final buffer = StringBuffer();
                 buffer.writeln('LRN\tStudent Name\tEmail\tTemporary Password');
                 for (final c in credentialsRoster) {
-                  buffer.writeln('${c['lrn']}\t${c['name']}\t${c['email']}\t${c['password']}');
+                  buffer.writeln(
+                    '${c['lrn']}\t${c['name']}\t${c['email']}\t${c['password']}',
+                  );
                 }
                 Clipboard.setData(ClipboardData(text: buffer.toString()));
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
-                    content: Text('Student credentials roster copied to clipboard!'),
+                    content: Text(
+                      'Student credentials roster copied to clipboard!',
+                    ),
                     backgroundColor: Color(0xFF0F8A48),
                     duration: Duration(seconds: 3),
                   ),
@@ -2381,7 +2774,10 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
                 decoration: BoxDecoration(
                   color: AppTheme.catGreen.withValues(alpha: 0.12),
                   shape: BoxShape.circle,
-                  border: Border.all(color: AppTheme.catGreen.withValues(alpha: 0.2), width: 6),
+                  border: Border.all(
+                    color: AppTheme.catGreen.withValues(alpha: 0.2),
+                    width: 6,
+                  ),
                 ),
                 child: const Icon(
                   Icons.how_to_reg_rounded,
@@ -2390,9 +2786,11 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
                 ),
               ),
               const SizedBox(height: 24),
-              
+
               Text(
-                createdAccount ? 'Student Successfully Added' : 'Student Enrolled',
+                createdAccount
+                    ? 'Student Successfully Added'
+                    : 'Student Enrolled',
                 style: TextStyle(
                   fontSize: 22,
                   fontWeight: FontWeight.w900,
@@ -2402,7 +2800,7 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 12),
-              
+
               Text(
                 createdAccount
                     ? 'Login credentials were sent to the student\'s email address. They will be prompted to create a new password upon their first login.'
@@ -2419,11 +2817,18 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
               // Modern Details Card
               Container(
                 decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+                  color: isDark
+                      ? const Color(0xFF0F172A)
+                      : const Color(0xFFF8FAFC),
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: isDark ? Colors.white10 : const Color(0xFFE2E8F0)),
+                  border: Border.all(
+                    color: isDark ? Colors.white10 : const Color(0xFFE2E8F0),
+                  ),
                 ),
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 16,
+                ),
                 child: Column(
                   children: [
                     _buildInfoRow('Student Name', fullName, theme),
@@ -2437,7 +2842,12 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
                         padding: EdgeInsets.symmetric(vertical: 8),
                         child: Divider(height: 1),
                       ),
-                      _buildInfoRow('Temporary Password', tempPassword, theme, isCode: true),
+                      _buildInfoRow(
+                        'Temporary Password',
+                        tempPassword,
+                        theme,
+                        isCode: true,
+                      ),
                     ],
                   ],
                 ),
@@ -2450,10 +2860,15 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
                 child: FilledButton(
                   style: FilledButton.styleFrom(
                     backgroundColor: theme.colorScheme.primary,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                   ),
                   onPressed: () => Navigator.of(ctx).pop(),
-                  child: const Text('Continue', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                  child: const Text(
+                    'Continue',
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                  ),
                 ),
               ),
             ],
@@ -2463,7 +2878,12 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
     );
   }
 
-  Widget _buildInfoRow(String label, String value, ThemeData theme, {bool isCode = false}) {
+  Widget _buildInfoRow(
+    String label,
+    String value,
+    ThemeData theme, {
+    bool isCode = false,
+  }) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       crossAxisAlignment: CrossAxisAlignment.center,
@@ -2479,12 +2899,17 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
         const SizedBox(width: 12),
         Flexible(
           child: Container(
-            padding: EdgeInsets.symmetric(horizontal: isCode ? 10 : 0, vertical: isCode ? 4 : 0),
+            padding: EdgeInsets.symmetric(
+              horizontal: isCode ? 10 : 0,
+              vertical: isCode ? 4 : 0,
+            ),
             decoration: isCode
                 ? BoxDecoration(
                     color: AppTheme.catBlue.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: AppTheme.catBlue.withValues(alpha: 0.2)),
+                    border: Border.all(
+                      color: AppTheme.catBlue.withValues(alpha: 0.2),
+                    ),
                   )
                 : null,
             child: Text(
@@ -2514,8 +2939,13 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
         child: Dialog(
           backgroundColor: theme.colorScheme.surface,
           elevation: 12,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 20,
+            vertical: 24,
+          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -2527,7 +2957,9 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
                     Container(
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                        color: theme.colorScheme.primary.withValues(alpha: 0.12),
+                        color: theme.colorScheme.primary.withValues(
+                          alpha: 0.12,
+                        ),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Icon(
@@ -2554,8 +2986,9 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
                             'Enroll into subjects & sections or import in bulk',
                             style: TextStyle(
                               fontSize: 12,
-                              color: theme.colorScheme.onSurface
-                                  .withValues(alpha: 0.6),
+                              color: theme.colorScheme.onSurface.withValues(
+                                alpha: 0.6,
+                              ),
                             ),
                           ),
                         ],
@@ -2576,7 +3009,9 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
                   height: 42,
                   decoration: BoxDecoration(
                     color: isDark
-                        ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3)
+                        ? theme.colorScheme.surfaceContainerHighest.withValues(
+                            alpha: 0.3,
+                          )
                         : const Color(0xFFF1F5F9),
                     borderRadius: BorderRadius.circular(10),
                   ),
@@ -2630,7 +3065,10 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
               ),
 
               const SizedBox(height: 12),
-              Divider(height: 1, color: theme.colorScheme.outline.withValues(alpha: 0.2)),
+              Divider(
+                height: 1,
+                color: theme.colorScheme.outline.withValues(alpha: 0.2),
+              ),
 
               // ── Tab Views ──
               Expanded(
@@ -2661,11 +3099,8 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
         : <String>[];
     final sections =
         (_selectedGradeLevel != null && _selectedSubjectName != null)
-            ? _getSectionsForSubject(
-                _selectedGradeLevel!,
-                _selectedSubjectName!,
-              )
-            : <Map<String, dynamic>>[];
+        ? _getSectionsForSubject(_selectedGradeLevel!, _selectedSubjectName!)
+        : <Map<String, dynamic>>[];
 
     return Container(
       padding: const EdgeInsets.all(14),
@@ -2683,7 +3118,11 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
         children: [
           Row(
             children: [
-              Icon(LucideIcons.graduationCap, size: 16, color: theme.colorScheme.primary),
+              Icon(
+                LucideIcons.graduationCap,
+                size: 16,
+                color: theme.colorScheme.primary,
+              ),
               const SizedBox(width: 6),
               Text(
                 'ENROLLMENT TARGET',
@@ -2720,11 +3159,17 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
                         setState(() {
                           _selectedGradeLevel = val;
                           final subs = _getSubjectsForGrade(val);
-                          _selectedSubjectName = subs.isNotEmpty ? subs.first : null;
+                          _selectedSubjectName = subs.isNotEmpty
+                              ? subs.first
+                              : null;
                           if (_selectedSubjectName != null) {
-                            final secs = _getSectionsForSubject(val, _selectedSubjectName!);
-                            _selectedOfferingId =
-                                secs.isNotEmpty ? secs.first['id']?.toString() : null;
+                            final secs = _getSectionsForSubject(
+                              val,
+                              _selectedSubjectName!,
+                            );
+                            _selectedOfferingId = secs.isNotEmpty
+                                ? secs.first['id']?.toString()
+                                : null;
                           } else {
                             _selectedOfferingId = null;
                           }
@@ -2745,7 +3190,10 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
                     initialValue: _selectedSubjectName,
                     isExpanded: true,
                     decoration: _inputDecoration(theme),
-                    hint: const Text('Select Subject', style: TextStyle(fontSize: 12)),
+                    hint: const Text(
+                      'Select Subject',
+                      style: TextStyle(fontSize: 12),
+                    ),
                     items: subjects.map((sub) {
                       return DropdownMenuItem(
                         value: sub,
@@ -2764,8 +3212,9 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
                             _selectedGradeLevel ?? '',
                             val,
                           );
-                          _selectedOfferingId =
-                              secs.isNotEmpty ? secs.first['id']?.toString() : null;
+                          _selectedOfferingId = secs.isNotEmpty
+                              ? secs.first['id']?.toString()
+                              : null;
                         });
                         _checkResumableBatch();
                       }
@@ -2783,15 +3232,22 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
                     initialValue: _selectedOfferingId,
                     isExpanded: true,
                     decoration: _inputDecoration(theme),
-                    hint: const Text('Select Section', style: TextStyle(fontSize: 12)),
+                    hint: const Text(
+                      'Select Section',
+                      style: TextStyle(fontSize: 12),
+                    ),
                     items: sections.map((sec) {
                       final id = sec['id']?.toString() ?? '';
-                      final secName = sec['section_name']?.toString() ?? 'Section';
+                      final secName =
+                          sec['section_name']?.toString() ?? 'Section';
                       return DropdownMenuItem(
                         value: id,
                         child: Text(
                           secName,
-                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
                           overflow: TextOverflow.ellipsis,
                         ),
                       );
@@ -2819,7 +3275,8 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
           style: TextStyle(
             fontSize: 11,
             fontWeight: FontWeight.w600,
-            color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
+            color: Theme.of(context).colorScheme.onSurface
+                .withValues(alpha: 0.7),
           ),
         ),
         const SizedBox(height: 4),
@@ -2882,7 +3339,7 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
                 Expanded(
                   flex: 3,
                   child: AppTextField(
-                    label: 'Middle Initial (Optional)',
+                    label: 'Middle Initial',
                     controller: _middleNameCtrl,
                     textCapitalization: TextCapitalization.characters,
                     inputFormatters: [
@@ -2921,14 +3378,12 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
                     firstDate: BirthdayValidator.getMinDate('student'),
                     lastDate: BirthdayValidator.getMaxDate('student'),
                     onDateSelected: (d) => setState(() => _birthday = d),
-                    validator: (d) => BirthdayValidator.validateBirthday(d, 'student'),
+                    validator: (d) =>
+                        BirthdayValidator.validateBirthday(d, 'student'),
                   ),
                 ),
                 const SizedBox(width: 12),
-                Expanded(
-                  flex: 5,
-                  child: _buildGenderField(theme),
-                ),
+                Expanded(flex: 5, child: _buildGenderField(theme)),
               ],
             ),
             const SizedBox(height: 16),
@@ -3081,7 +3536,11 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
                       color: Colors.amber.withValues(alpha: 0.2),
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(LucideIcons.alertCircle, color: Colors.amber, size: 20),
+                    child: const Icon(
+                      LucideIcons.alertCircle,
+                      color: Colors.amber,
+                      size: 20,
+                    ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -3090,14 +3549,19 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
                       children: [
                         const Text(
                           'Upload Paused (Offline Resilience)',
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
                         ),
                         const SizedBox(height: 2),
                         Text(
                           'Connection lost. Upload paused (${(_resumableBatch!['pending'] as List?)?.length ?? 0} students remaining). Will resume automatically when online.',
                           style: TextStyle(
                             fontSize: 12,
-                            color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
+                            color: theme.colorScheme.onSurface.withValues(
+                              alpha: 0.8,
+                            ),
                           ),
                         ),
                       ],
@@ -3106,17 +3570,29 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
                   const SizedBox(width: 8),
                   TextButton(
                     onPressed: _discardResumableBatch,
-                    child: const Text('Discard', style: TextStyle(color: Colors.red, fontSize: 12)),
+                    child: const Text(
+                      'Discard',
+                      style: TextStyle(color: Colors.red, fontSize: 12),
+                    ),
                   ),
                   const SizedBox(width: 4),
                   FilledButton.icon(
                     style: FilledButton.styleFrom(
                       backgroundColor: Colors.amber[700],
                       foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 8,
+                      ),
                     ),
                     icon: const Icon(LucideIcons.refreshCw, size: 14),
-                    label: const Text('Resume Now', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                    label: const Text(
+                      'Resume Now',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                     onPressed: _resumeBatchEnrollment,
                   ),
                 ],
@@ -3133,7 +3609,9 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
             decoration: BoxDecoration(
               color: theme.colorScheme.primary.withValues(alpha: 0.06),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: theme.colorScheme.primary.withValues(alpha: 0.22)),
+              border: Border.all(
+                color: theme.colorScheme.primary.withValues(alpha: 0.22),
+              ),
             ),
             child: Row(
               children: [
@@ -3143,7 +3621,11 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
                     color: theme.colorScheme.primary.withValues(alpha: 0.12),
                     shape: BoxShape.circle,
                   ),
-                  child: Icon(LucideIcons.fileSpreadsheet, color: theme.colorScheme.primary, size: 20),
+                  child: Icon(
+                    LucideIcons.fileSpreadsheet,
+                    color: theme.colorScheme.primary,
+                    size: 20,
+                  ),
                 ),
                 const SizedBox(width: 14),
                 Expanded(
@@ -3164,7 +3646,9 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
                         'Enter student records starting on Row 3, then upload below.',
                         style: TextStyle(
                           fontSize: 11,
-                          color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                          color: theme.colorScheme.onSurface.withValues(
+                            alpha: 0.7,
+                          ),
                         ),
                       ),
                     ],
@@ -3175,11 +3659,19 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
                   style: FilledButton.styleFrom(
                     backgroundColor: theme.colorScheme.primary,
                     foregroundColor: theme.colorScheme.onPrimary,
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 10,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
                   ),
                   icon: const Icon(LucideIcons.download, size: 14),
-                  label: const Text('Download .xlsx', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  label: const Text(
+                    'Download .xlsx',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                  ),
                   onPressed: _downloadOfficialTemplate,
                 ),
               ],
@@ -3239,8 +3731,12 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
             child: LinearProgressIndicator(
               value: _batchProgress,
               minHeight: 10,
-              backgroundColor: theme.colorScheme.primary.withValues(alpha: 0.15),
-              valueColor: AlwaysStoppedAnimation<Color>(theme.colorScheme.primary),
+              backgroundColor: theme.colorScheme.primary.withValues(
+                alpha: 0.15,
+              ),
+              valueColor: AlwaysStoppedAnimation<Color>(
+                theme.colorScheme.primary,
+              ),
             ),
           ),
           const SizedBox(height: 10),
@@ -3250,7 +3746,10 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
               Expanded(
                 child: Text(
                   _batchPhase.isNotEmpty ? _batchPhase : 'Scanning rows...',
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                  ),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
@@ -3271,19 +3770,29 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
             decoration: BoxDecoration(
               color: theme.colorScheme.surface,
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: theme.colorScheme.outline.withValues(alpha: 0.2)),
+              border: Border.all(
+                color: theme.colorScheme.outline.withValues(alpha: 0.2),
+              ),
             ),
             child: Row(
               children: [
-                Icon(LucideIcons.userCheck, size: 14, color: theme.colorScheme.primary),
+                Icon(
+                  LucideIcons.userCheck,
+                  size: 14,
+                  color: theme.colorScheme.primary,
+                ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    _batchActiveRecord.isNotEmpty ? _batchActiveRecord : 'Scanning data rows...',
+                    _batchActiveRecord.isNotEmpty
+                        ? _batchActiveRecord
+                        : 'Scanning data rows...',
                     style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w500,
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.85),
+                      color: theme.colorScheme.onSurface.withValues(
+                        alpha: 0.85,
+                      ),
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -3317,7 +3826,11 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
             const SizedBox(height: 12),
             Text(
               _batchWarningTitle ?? 'Spreadsheet Needs Attention',
-              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.amber),
+              style: const TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.bold,
+                color: Colors.amber,
+              ),
             ),
             const SizedBox(height: 8),
             Text(
@@ -3337,21 +3850,37 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
               children: [
                 OutlinedButton.icon(
                   style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 8,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
                   ),
                   icon: const Icon(LucideIcons.download, size: 14),
-                  label: const Text('Download Template', style: TextStyle(fontSize: 12)),
+                  label: const Text(
+                    'Download Template',
+                    style: TextStyle(fontSize: 12),
+                  ),
                   onPressed: _downloadOfficialTemplate,
                 ),
                 FilledButton.icon(
                   style: FilledButton.styleFrom(
                     backgroundColor: theme.colorScheme.primary,
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
                   ),
                   icon: const Icon(LucideIcons.folderOpen, size: 14),
-                  label: const Text('Choose Another File', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  label: const Text(
+                    'Choose Another File',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                  ),
                   onPressed: _processBatchImport,
                 ),
               ],
@@ -3360,7 +3889,8 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
         );
       }
 
-      final totalEligible = _eligibleNewStudents.length + _eligibleExistingStudents.length;
+      final totalEligible =
+          _eligibleNewStudents.length + _eligibleExistingStudents.length;
 
       // State 2A: Issues Detected
       if (_detectedInvalidRows.isNotEmpty) {
@@ -3382,7 +3912,11 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
             const SizedBox(height: 12),
             Text(
               'Spreadsheet Has ${_detectedInvalidRows.length} Issue${_detectedInvalidRows.length > 1 ? "s" : ""}',
-              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.red),
+              style: const TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.bold,
+                color: Colors.red,
+              ),
             ),
             const SizedBox(height: 6),
             Text(
@@ -3400,10 +3934,26 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
               runSpacing: 6,
               alignment: WrapAlignment.center,
               children: [
-                _buildCardBadge('Issues', _detectedInvalidRows.length, Colors.red),
-                _buildCardBadge('New Students', _eligibleNewStudents.length, const Color(0xFF0F8A48)),
-                _buildCardBadge('Existing', _eligibleExistingStudents.length, Colors.blue),
-                _buildCardBadge('Enrolled', _alreadyEnrolledStudents.length, Colors.grey),
+                _buildCardBadge(
+                  'Issues',
+                  _detectedInvalidRows.length,
+                  Colors.red,
+                ),
+                _buildCardBadge(
+                  'New Students',
+                  _eligibleNewStudents.length,
+                  const Color(0xFF0F8A48),
+                ),
+                _buildCardBadge(
+                  'Existing',
+                  _eligibleExistingStudents.length,
+                  Colors.blue,
+                ),
+                _buildCardBadge(
+                  'Enrolled',
+                  _alreadyEnrolledStudents.length,
+                  Colors.grey,
+                ),
               ],
             ),
             const SizedBox(height: 16),
@@ -3415,20 +3965,39 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
                 FilledButton.icon(
                   style: FilledButton.styleFrom(
                     backgroundColor: Colors.red,
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
                   ),
                   icon: const Icon(LucideIcons.listChecks, size: 14),
-                  label: Text('View Issues (${_detectedInvalidRows.length})', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  label: Text(
+                    'View Issues (${_detectedInvalidRows.length})',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                   onPressed: _showIssuesErrorDialog,
                 ),
                 OutlinedButton.icon(
                   style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 8,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
                   ),
                   icon: const Icon(LucideIcons.refreshCw, size: 14),
-                  label: const Text('Upload Fixed File', style: TextStyle(fontSize: 12)),
+                  label: const Text(
+                    'Upload Fixed File',
+                    style: TextStyle(fontSize: 12),
+                  ),
                   onPressed: _processBatchImport,
                 ),
               ],
@@ -3478,11 +4047,16 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
             alignment: WrapAlignment.center,
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 5,
+                ),
                 decoration: BoxDecoration(
                   color: const Color(0xFF0F8A48).withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: const Color(0xFF0F8A48).withValues(alpha: 0.3)),
+                  border: Border.all(
+                    color: const Color(0xFF0F8A48).withValues(alpha: 0.3),
+                  ),
                 ),
                 child: Text(
                   '✓ $totalEligible Student${totalEligible > 1 ? "s" : ""} Enrolled',
@@ -3495,11 +4069,16 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
               ),
               if (_alreadyEnrolledStudents.isNotEmpty)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 5,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.grey.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: Colors.grey.withValues(alpha: 0.3)),
+                    border: Border.all(
+                      color: Colors.grey.withValues(alpha: 0.3),
+                    ),
                   ),
                   child: Text(
                     '• ${_alreadyEnrolledStudents.length} Already Enrolled (Skipped)',
@@ -3516,10 +4095,15 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
           OutlinedButton.icon(
             style: OutlinedButton.styleFrom(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
             ),
             icon: const Icon(LucideIcons.plus, size: 14),
-            label: const Text('Upload Another File', style: TextStyle(fontSize: 12)),
+            label: const Text(
+              'Upload Another File',
+              style: TextStyle(fontSize: 12),
+            ),
             onPressed: _processBatchImport,
           ),
         ],
@@ -3544,10 +4128,7 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
         const SizedBox(height: 14),
         const Text(
           'Click to upload or drag & drop completed file',
-          style: TextStyle(
-            fontSize: 15,
-            fontWeight: FontWeight.bold,
-          ),
+          style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 4),
         Text(
@@ -3562,10 +4143,15 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
           style: FilledButton.styleFrom(
             backgroundColor: theme.colorScheme.primary,
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
           ),
           icon: const Icon(LucideIcons.folderOpen, size: 16),
-          label: const Text('Browse Excel File', style: TextStyle(fontWeight: FontWeight.w600)),
+          label: const Text(
+            'Browse Excel File',
+            style: TextStyle(fontWeight: FontWeight.w600),
+          ),
           onPressed: _processBatchImport,
         ),
         const SizedBox(height: 14),
@@ -3581,11 +4167,15 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(LucideIcons.shieldCheck, size: 14, color: theme.colorScheme.primary),
+              Icon(
+                LucideIcons.shieldCheck,
+                size: 14,
+                color: theme.colorScheme.primary,
+              ),
               const SizedBox(width: 8),
               Flexible(
                 child: Text(
-                  'Strict Validation: LRN (12 digits) • Email • Name (letters) • M.I. (optional) • Gender • Birthday (Age 10-50)',
+                  'Strict Validation: LRN (12 digits) • Email • Name (letters) • M.I. (optional) • Gender • Birthday (Age 5-60)',
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
@@ -3661,7 +4251,8 @@ class _InvalidStudentRow {
     required this.reason,
   });
 
-  String get formattedMessage => 'Row $rowNumber ($fieldTag: $identifier): $reason';
+  String get formattedMessage =>
+      'Row $rowNumber ($fieldTag: $identifier): $reason';
 }
 
 class _EnrollmentProgressData {
@@ -3677,7 +4268,8 @@ class _EnrollmentProgressData {
     required this.currentStudentName,
   });
 
-  double get progress => totalCount <= 0 ? 0.0 : (currentIdx / totalCount).clamp(0.0, 1.0);
+  double get progress =>
+      totalCount <= 0 ? 0.0 : (currentIdx / totalCount).clamp(0.0, 1.0);
   int get percent => (progress * 100).toInt();
 }
 
@@ -3693,7 +4285,8 @@ class _AnimatedMarchingAntsBox extends StatefulWidget {
   });
 
   @override
-  State<_AnimatedMarchingAntsBox> createState() => _AnimatedMarchingAntsBoxState();
+  State<_AnimatedMarchingAntsBox> createState() =>
+      _AnimatedMarchingAntsBoxState();
 }
 
 class _AnimatedMarchingAntsBoxState extends State<_AnimatedMarchingAntsBox>
@@ -3753,16 +4346,20 @@ class _AnimatedMarchingAntsBoxState extends State<_AnimatedMarchingAntsBox>
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
                 width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 32,
+                ),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(14),
                   color: widget.isDark
                       ? (_isHovered
-                          ? theme.colorScheme.primary.withValues(alpha: 0.12)
-                          : theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.15))
+                            ? theme.colorScheme.primary.withValues(alpha: 0.12)
+                            : theme.colorScheme.surfaceContainerHighest
+                                  .withValues(alpha: 0.15))
                       : (_isHovered
-                          ? theme.colorScheme.primary.withValues(alpha: 0.05)
-                          : const Color(0xFFF8FAFC)),
+                            ? theme.colorScheme.primary.withValues(alpha: 0.05)
+                            : const Color(0xFFF8FAFC)),
                 ),
                 child: widget.child,
               ),
@@ -3805,7 +4402,12 @@ class _MarchingAntsPainter extends CustomPainter {
     canvas.drawPath(dashedPath, paint);
   }
 
-  Path _createDashedPath(Path source, double dashLength, double gapLength, double distanceOffset) {
+  Path _createDashedPath(
+    Path source,
+    double dashLength,
+    double gapLength,
+    double distanceOffset,
+  ) {
     final dest = Path();
     for (final metric in source.computeMetrics()) {
       double distance = distanceOffset % (dashLength + gapLength);

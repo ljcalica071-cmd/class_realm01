@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:typed_data';
+
 import 'package:archive/archive.dart';
 
 /// Generates an official, beautifully styled Excel spreadsheet (.xlsx)
@@ -10,25 +11,50 @@ class ExcelTemplateGenerator {
     final archive = Archive();
 
     // 1. [Content_Types].xml
-    const contentTypesXml = '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+    const contentTypesXml =
+        '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
   <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
   <Default Extension="xml" ContentType="application/xml"/>
   <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
   <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
   <Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
+  <Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>
+  <Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>
 </Types>''';
     _addFile(archive, '[Content_Types].xml', contentTypesXml);
 
     // 2. _rels/.rels
-    const rootRelsXml = '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+    const rootRelsXml =
+        '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
   <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>
+  <Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/>
 </Relationships>''';
     _addFile(archive, '_rels/.rels', rootRelsXml);
 
+    // 2b. docProps/core.xml
+    const corePropsXml =
+        '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:dcmitype="http://purl.org/dc/dcmitype/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <dc:title>ClassRealm Student Enrollment Template</dc:title>
+  <dc:creator>ClassRealm</dc:creator>
+  <cp:lastModifiedBy>ClassRealm</cp:lastModifiedBy>
+</cp:coreProperties>''';
+    _addFile(archive, 'docProps/core.xml', corePropsXml);
+
+    // 2c. docProps/app.xml
+    const appPropsXml =
+        '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">
+  <Application>ClassRealm</Application>
+</Properties>''';
+    _addFile(archive, 'docProps/app.xml', appPropsXml);
+
     // 3. xl/_rels/workbook.xml.rels
-    const workbookRelsXml = '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+    const workbookRelsXml =
+        '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
   <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
   <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
@@ -36,7 +62,8 @@ class ExcelTemplateGenerator {
     _addFile(archive, 'xl/_rels/workbook.xml.rels', workbookRelsXml);
 
     // 4. xl/workbook.xml
-    const workbookXml = '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+    const workbookXml =
+        '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
   <sheets>
     <sheet name="Student_Enrollment" sheetId="1" r:id="rId1"/>
@@ -101,7 +128,7 @@ class ExcelTemplateGenerator {
   <cellStyleXfs count="1">
     <xf numFmtId="0" fontId="0" fillId="0" borderId="0"/>
   </cellStyleXfs>
-  <cellXfs count="4">
+  <cellXfs count="5">
     <!-- 0: Standard Default -->
     <xf numFmtId="49" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>
     <!-- 1: Header (ClassRealm Steel Blue, Bold White, Centered, Text) -->
@@ -114,6 +141,10 @@ class ExcelTemplateGenerator {
     </xf>
     <!-- 3: Input Data Cells (Normal, Border, Text format) -->
     <xf numFmtId="49" fontId="0" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1" applyNumberFormat="1">
+      <alignment horizontal="center" vertical="center"/>
+    </xf>
+    <!-- 4: Input Data Cells (Date format YYYY-MM-DD) -->
+    <xf numFmtId="14" fontId="0" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1" applyNumberFormat="1">
       <alignment horizontal="center" vertical="center"/>
     </xf>
   </cellXfs>
@@ -174,7 +205,8 @@ class ExcelTemplateGenerator {
     </row>''');
     }
 
-    final sheetXml = '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+    final sheetXml =
+        '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
   <sheetViews>
     <sheetView tabSelected="1" workbookViewId="0">
@@ -218,10 +250,10 @@ $rowsBuffer
     <dataValidation type="list" errorStyle="stop" allowBlank="1" showInputMessage="1" showErrorMessage="1" errorTitle="Invalid Gender" error="Please select 'Male' or 'Female' from the dropdown list." promptTitle="Gender" prompt="Select Male or Female" sqref="F3:F100">
       <formula1>&quot;Male,Female&quot;</formula1>
     </dataValidation>
-    <!-- Validation 7: Birthday (Date validation: 10 to 50 years old from TODAY()) -->
-    <dataValidation type="date" operator="between" errorStyle="stop" allowBlank="1" showInputMessage="1" showErrorMessage="1" errorTitle="Invalid Birthday" error="Student must be between 10 and 50 years old." promptTitle="Birthday [YYYY-MM-DD]" prompt="Enter date in YYYY-MM-DD format (Age 10-50)" sqref="G3:G100">
-      <formula1>DATE(YEAR(TODAY())-50,1,1)</formula1>
-      <formula2>DATE(YEAR(TODAY())-10,12,31)</formula2>
+    <!-- Validation 7: Birthday (Supports YYYY-MM-DD, YYYY/MM/DD, YYYY MM DD, or Excel date; Age 10 to 50) -->
+    <dataValidation type="custom" errorStyle="stop" allowBlank="1" showInputMessage="1" showErrorMessage="1" errorTitle="Invalid Birthday" error="Student must be between 10 and 50 years old (e.g., 2011-01-01)." promptTitle="Birthday [YYYY-MM-DD]" prompt="Enter date in YYYY-MM-DD format (Age 10-50, e.g., 2011-01-01)" sqref="G3:G100">
+      <formula1>OR(ISBLANK(G3),AND(ISNUMBER(G3),G3&gt;=27758,G3&lt;=42735),AND(LEN(TRIM(G3))&gt;=8,LEN(TRIM(G3))&lt;=10,ISNUMBER(--LEFT(TRIM(G3),4)),--LEFT(TRIM(G3),4)&gt;=1976,--LEFT(TRIM(G3),4)&lt;=2016),AND(LEN(TRIM(G3))&gt;=8,LEN(TRIM(G3))&lt;=10,ISNUMBER(--RIGHT(TRIM(G3),4)),--RIGHT(TRIM(G3),4)&gt;=1976,--RIGHT(TRIM(G3),4)&lt;=2016))</formula1>
+
     </dataValidation>
   </dataValidations>
 </worksheet>''';
