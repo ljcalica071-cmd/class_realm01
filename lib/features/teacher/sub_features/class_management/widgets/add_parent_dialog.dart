@@ -10,6 +10,7 @@ import 'package:class_realm/widgets/common/app_text_field.dart';
 import 'package:class_realm/widgets/common/app_date_picker_field.dart';
 import 'package:class_realm/core/utils/validators.dart';
 import 'package:class_realm/core/utils/parent_credential_helper.dart';
+import 'package:class_realm/core/utils/search_utils.dart';
 import 'package:class_realm/data/repositories/supabase_parent_repository.dart';
 
 class AddParentDialog extends StatefulWidget {
@@ -540,7 +541,10 @@ class _AddParentDialogState extends State<AddParentDialog> {
                           label: 'Middle Initial',
                           controller: _middleNameCtrl,
                           textCapitalization: TextCapitalization.characters,
-                          validator: AppValidators.validateMiddleInitial,
+                          inputFormatters: [
+                            ...AppValidators.nameFormatters,
+                            LengthLimitingTextInputFormatter(2),
+                          ],
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -1346,19 +1350,27 @@ class _AddParentDialogState extends State<AddParentDialog> {
     final candidateStudents = widget.students ?? const <UserModel>[];
 
     final query = _studentSearchQuery.trim().toLowerCase();
-    final matchingStudents = query.isEmpty
-        ? <UserModel>[]
-        : candidateStudents
-              .where((u) {
-                final nameMatch = u.fullName.toLowerCase().contains(query);
-                final lrnMatch = (u.lrn ?? '').toLowerCase().contains(query);
-                final isAlreadySelected = _selectedStudents.any(
-                  (s) => s.id == u.id,
-                );
-                return !isAlreadySelected && (nameMatch || lrnMatch);
-              })
-              .take(6)
-              .toList();
+    
+    List<UserModel> matchingStudents = [];
+    if (query.isNotEmpty) {
+      matchingStudents = candidateStudents.where((u) {
+        final nameMatch = u.fullName.toLowerCase().contains(query);
+        final lrnMatch = (u.lrn ?? '').toLowerCase().contains(query);
+        final isAlreadySelected = _selectedStudents.any((s) => s.id == u.id);
+        return !isAlreadySelected && (nameMatch || lrnMatch);
+      }).toList();
+      
+      SearchUtils.sortByRelevance<UserModel>(
+        query, 
+        matchingStudents, 
+        (u) => u.fullName,
+        secondaryExtractor: (u) => u.lrn ?? '',
+      );
+      
+      if (matchingStudents.length > 6) {
+        matchingStudents = matchingStudents.take(6).toList();
+      }
+    }
 
     return FormField<List<UserModel>>(
       initialValue: _selectedStudents,

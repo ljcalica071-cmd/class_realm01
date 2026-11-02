@@ -14,6 +14,7 @@ import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/data/repositories/subject_repository.dart';
 import 'package:class_realm/data/repositories/supabase_student_repository.dart';
 import 'package:class_realm/core/services/local_storage_service.dart';
+import 'package:class_realm/core/utils/search_utils.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:class_realm/shared/widgets/shimmer_loading.dart';
 
@@ -314,9 +315,44 @@ class _TeacherStudentManagementTabState
         }).toList();
 
     // Sort logic
-    displayList.sort((a, b) {
-      int cmp = 0;
-      switch (_sortColumn) {
+    if (_studentSearchQuery.trim().isNotEmpty) {
+       SearchUtils.sortByRelevance<UserModel>(
+         _studentSearchQuery, 
+         displayList, 
+         (s) => s.fullName,
+         secondaryExtractor: (s) => s.lrn ?? '',
+       );
+    } else {
+      displayList.sort((a, b) {
+        int cmp = 0;
+        switch (_sortColumn) {
+          case 'lastName':
+            cmp = (a.lastName ?? '').compareTo(b.lastName ?? '');
+            break;
+          case 'firstName':
+            cmp = (a.firstName ?? '').compareTo(b.firstName ?? '');
+            break;
+          case 'lrn':
+            cmp = (a.lrn ?? '').compareTo(b.lrn ?? '');
+            break;
+          case 'gender':
+            cmp = (a.gender ?? '').compareTo(b.gender ?? '');
+            break;
+          case 'birthdate':
+            cmp = (a.birthday?.toIso8601String() ?? '').compareTo(b.birthday?.toIso8601String() ?? '');
+            break;
+          case 'email':
+            cmp = a.email.compareTo(b.email);
+            break;
+          case 'status':
+            cmp = a.status.toString().compareTo(b.status.toString());
+            break;
+          default:
+            cmp = 0;
+        }
+        return _sortAscending ? cmp : -cmp;
+      });
+    }
         case 'lastName':
           final aLast =
               a.lastName ??

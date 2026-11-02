@@ -17,6 +17,7 @@ import 'package:class_realm/data/repositories/supabase_parent_repository.dart';
 import 'package:class_realm/core/services/local_storage_service.dart';
 import 'package:class_realm/core/services/app_data_cache.dart';
 import 'package:class_realm/core/utils/parent_credential_helper.dart';
+import 'package:class_realm/core/utils/search_utils.dart';
 import 'package:class_realm/shared/widgets/shimmer_loading.dart';
 
 class TeacherParentManagementTab extends StatefulWidget {
@@ -322,10 +323,17 @@ class _TeacherParentManagementTabState
         .toList();
 
     // Sort logic
-    displayList.sort((a, b) {
-      int cmp = 0;
-      switch (_sortColumn) {
-        case 'lastName':
+    if (_parentSearchQuery.trim().isNotEmpty) {
+       SearchUtils.sortByRelevance<UserModel>(
+         _parentSearchQuery, 
+         displayList, 
+         (p) => p.fullName,
+       );
+    } else {
+      displayList.sort((a, b) {
+        int cmp = 0;
+        switch (_sortColumn) {
+          case 'lastName':
           final aLast =
               a.lastName ??
               (a.fullName.contains(' ')

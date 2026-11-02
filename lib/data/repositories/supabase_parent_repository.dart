@@ -402,6 +402,7 @@ class SupabaseParentRepository {
       'first_name': firstName,
       'middle_name': cleanMiddleName,
       'last_name': lastName,
+      'contact_number': 'N/A', // Passing default value to satisfy database NOT NULL constraint
       'birthday': bdayIso,
       'status': 'pending_first_login',
     });

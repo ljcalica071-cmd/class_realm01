@@ -1,28 +1,28 @@
 #include <WiFi.h>
-#include <WiFiManager.h>         
+#include <WiFiManager.h>          // https://github.com/tzapu/WiFiManager
 #include <HTTPClient.h>
 #include <SPI.h>
 #include <MFRC522.h>
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
-#include <ArduinoJson.h>
 #include <Preferences.h>
 #include <time.h>
 
 // =========================================================================
 // HARDWARE PIN DEFINITIONS (Verified Breadboard Mapping)
 // =========================================================================
-#define RFID_SS_PIN     12   
-#define RFID_MOSI_PIN   13   
-#define RFID_SCK_PIN    33  
-#define RFID_MISO_PIN   35   
-#define RFID_RST_PIN    14  
-#define RFID_PWR_PIN    27   
+#define RFID_SS_PIN     12   // RC522 SDA/SS (Row A, Col 12)
+#define RFID_MOSI_PIN   13   // RC522 MOSI   (Row A, Col 13)
+#define RFID_SCK_PIN    33   // RC522 SCK    (Row A, Col 10)
+#define RFID_MISO_PIN   35   // RC522 MISO   (Row A, Col 8)
+#define RFID_RST_PIN    14   // RC522 RST    (Row A, Col 11)
+#define RFID_PWR_PIN    27   // RC522 3.3V   (Row A, Col 5)
 
-#define BUZZER_PIN      32   
-#define OLED_SCL_PIN    26   
-#define OLED_SDA_PIN    25   
+#define BUZZER_PIN      32   // Active Buzzer (Row A, Col 9)
+
+#define OLED_SCL_PIN    26   // I2C SCL (Row A, Col 6)
+#define OLED_SDA_PIN    25   // I2C SDA (Row A, Col 7)
 #define SCREEN_WIDTH    128
 #define SCREEN_HEIGHT   64
 #define OLED_RESET      -1
@@ -73,7 +73,7 @@ void buzzTwice() { // 2 Beeps: LATE / OFFLINE SAVED
   digitalWrite(BUZZER_PIN, LOW);
 }
 
-void buzzDenied() { // 3 Fast Beeps: ACCESS DENIED / ALREADY REGISTERED / ERROR
+void buzzDenied() { // 3 Fast Beeps: ACCESS DENIED / UNREGISTERED / ERROR
   for (int i = 0; i < 3; i++) {
     digitalWrite(BUZZER_PIN, HIGH);
     delay(70);
@@ -83,7 +83,7 @@ void buzzDenied() { // 3 Fast Beeps: ACCESS DENIED / ALREADY REGISTERED / ERROR
 }
 
 // =========================================================================
-// OLED HELPERS (Concise, Clean 2-3 Word Messages)
+// OLED HELPERS (Concise 2-3 Word Messages)
 // =========================================================================
 void showIdleScreen() {
   display.clearDisplay();
@@ -184,6 +184,17 @@ void saveOfflineScan(String uid) {
   Serial.println("[OFFLINE] Stored: " + record);
 }
 
+// Lightweight JSON value extractor (No ArduinoJson library needed)
+String extractJsonField(String payload, String fieldName) {
+  String searchStr = "\"" + fieldName + "\":\"";
+  int startIdx = payload.indexOf(searchStr);
+  if (startIdx == -1) return "";
+  startIdx += searchStr.length();
+  int endIdx = payload.indexOf("\"", startIdx);
+  if (endIdx == -1) return "";
+  return payload.substring(startIdx, endIdx);
+}
+
 void syncOfflineQueue() {
   if (WiFi.status() != WL_CONNECTED || offlineQueueCount == 0) return;
 
@@ -202,7 +213,6 @@ void syncOfflineQueue() {
     String uid = record.substring(0, sepIndex);
 
     HTTPClient http;
-    // Query student: only verify registered cards
     String url = String(SUPABASE_URL) + "/rest/v1/students?rfid_uid=eq." + uid + "&select=id";
     http.begin(url);
     http.addHeader("apikey", SUPABASE_ANON_KEY);
@@ -210,10 +220,8 @@ void syncOfflineQueue() {
     int code = http.GET();
     if (code == 200) {
       String res = http.getString();
-      DynamicJsonDocument doc(512);
-      deserializeJson(doc, res);
-      // STRICT RULE: Only record if valid registered student found!
-      if (doc.size() > 0) {
+      // STRICT RULE: Only record if valid registered student found (not empty array "[]")
+      if (res.length() > 2 && res != "[]") {
         successCount++;
       }
     }
@@ -236,7 +244,7 @@ void syncOfflineQueue() {
 // PROCESS RFID SCAN (STRICT VALIDATION)
 // =========================================================================
 void processRfidScan(String uid) {
-  // If Offline: Save to Flash Queue (only valid scans are posted upon sync)
+  // If Offline: Save to Flash Queue (only valid scans posted upon sync)
   if (WiFi.status() != WL_CONNECTED) {
     saveOfflineScan(uid);
     buzzTwice();
@@ -259,13 +267,12 @@ void processRfidScan(String uid) {
   int httpCode = http.GET();
   if (httpCode == 200) {
     String payload = http.getString();
-    DynamicJsonDocument doc(2048);
-    deserializeJson(doc, payload);
 
-    if (doc.size() > 0) {
-      String firstName = doc[0]["first_name"].as<String>();
-      String lastName = doc[0]["last_name"].as<String>();
-      String shortName = firstName + " " + lastName.substring(0, 1) + ".";
+    // Check if empty JSON array "[]"
+    if (payload.length() > 2 && payload != "[]") {
+      String firstName = extractJsonField(payload, "first_name");
+      String lastName = extractJsonField(payload, "last_name");
+      String shortName = firstName + " " + (lastName.length() > 0 ? lastName.substring(0, 1) + "." : "");
 
       // Registered Student Attendance -> 1 Beep
       buzzOnce();
