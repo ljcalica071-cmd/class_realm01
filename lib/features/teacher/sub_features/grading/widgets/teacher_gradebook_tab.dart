@@ -837,7 +837,7 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
           _buildTopControls(theme, isDark),
           const SizedBox(height: 16),
 
-          if (_teacherSubjects.isEmpty || _students.isEmpty) ...[
+          if (!_isLoadingSubjects && !_isLoadingStudents && (_teacherSubjects.isEmpty || _students.isEmpty)) ...[
             _buildNoStudentsBanner(theme, isDark),
             const SizedBox(height: 12),
           ],
@@ -1024,7 +1024,7 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
               value: _selectedSubject,
               isDense: true,
               hint: Text(
-                'No subject yet',
+                _isLoadingSubjects ? 'Loading subjects...' : 'No subject yet',
                 style: TextStyle(
                   fontSize: 13,
                   color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
@@ -1246,7 +1246,7 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  sub ?? 'No subject yet',
+                  sub ?? (_isLoadingSubjects ? 'Loading...' : 'No subject yet'),
                   style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.bold,
@@ -1256,7 +1256,9 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  sec != null ? 'Section: $sec' : 'No section yet',
+                  sec != null
+                      ? 'Section: $sec'
+                      : (_isLoadingSubjects ? 'Loading...' : 'No section yet'),
                   style: TextStyle(
                     fontSize: 12,
                     color: text.withValues(alpha: 0.7),
@@ -1419,9 +1421,9 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
             ),
             child: Row(
               children: [
-                // Left fixed header (width 230)
+                // Left fixed header (width 231.5 accommodates 1.5 border without child overflow)
                 Container(
-                  width: 230.0,
+                  width: 231.5,
                   decoration: BoxDecoration(
                     color: cellBg,
                     border: Border(
@@ -1525,10 +1527,10 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Left fixed student names (width 230)
+                // Left fixed student names (width 231.5 accommodates 1.5 border without child overflow)
                 RepaintBoundary(
                   child: Container(
-                    width: 230.0,
+                    width: 231.5,
                     decoration: BoxDecoration(
                       color: cellBg,
                       border: Border(
@@ -1540,48 +1542,62 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
                     ),
                     child: Column(
                       children: [
-                        if (_selectedGender == 'All' ||
-                            _selectedGender == 'Male') ...[
-                          _buildGenderHeader(
-                            'MALE (${_maleStudents.length})',
-                            genderHeaderBg,
-                            isLeft: true,
+                        Visibility(
+                          visible: _selectedGender == 'All' ||
+                              _selectedGender == 'Male',
+                          maintainState: true,
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              _buildGenderHeader(
+                                'MALE (${_maleStudents.length})',
+                                genderHeaderBg,
+                                isLeft: true,
+                              ),
+                              ..._buildStudentRows(
+                                _maleStudents,
+                                theme,
+                                isDark,
+                                cellText,
+                                borderColor,
+                                altRowBg,
+                                cellBg,
+                                wwWeight,
+                                ptWeight,
+                                exWeight,
+                                isLeft: true,
+                              ),
+                            ],
                           ),
-                          ..._buildStudentRows(
-                            _maleStudents,
-                            theme,
-                            isDark,
-                            cellText,
-                            borderColor,
-                            altRowBg,
-                            cellBg,
-                            wwWeight,
-                            ptWeight,
-                            exWeight,
-                            isLeft: true,
+                        ),
+                        Visibility(
+                          visible: _selectedGender == 'All' ||
+                              _selectedGender == 'Female',
+                          maintainState: true,
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              _buildGenderHeader(
+                                'FEMALE (${_femaleStudents.length})',
+                                genderHeaderBg,
+                                isLeft: true,
+                              ),
+                              ..._buildStudentRows(
+                                _femaleStudents,
+                                theme,
+                                isDark,
+                                cellText,
+                                borderColor,
+                                altRowBg,
+                                cellBg,
+                                wwWeight,
+                                ptWeight,
+                                exWeight,
+                                isLeft: true,
+                              ),
+                            ],
                           ),
-                        ],
-                        if (_selectedGender == 'All' ||
-                            _selectedGender == 'Female') ...[
-                          _buildGenderHeader(
-                            'FEMALE (${_femaleStudents.length})',
-                            genderHeaderBg,
-                            isLeft: true,
-                          ),
-                          ..._buildStudentRows(
-                            _femaleStudents,
-                            theme,
-                            isDark,
-                            cellText,
-                            borderColor,
-                            altRowBg,
-                            cellBg,
-                            wwWeight,
-                            ptWeight,
-                            exWeight,
-                            isLeft: true,
-                          ),
-                        ],
+                        ),
                       ],
                     ),
                   ),
@@ -1595,7 +1611,7 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
                     interactive: true,
                     child: SingleChildScrollView(
                       key: ValueKey(
-                        'gradebook-scroll-grid-$_selectedGender-$_selectedTerm-$_wwColumns-$_ptColumns',
+                        'gradebook-scroll-grid-$_selectedTerm-$_wwColumns-$_ptColumns',
                       ),
                       scrollDirection: Axis.horizontal,
                       controller: _termBodyHorizontalController,
@@ -1604,48 +1620,62 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
                         width: _calculateTotalWidth() - 230.0,
                         child: Column(
                           children: [
-                            if (_selectedGender == 'All' ||
-                                _selectedGender == 'Male') ...[
-                              _buildGenderHeader(
-                                '',
-                                genderHeaderBg,
-                                isLeft: false,
+                            Visibility(
+                              visible: _selectedGender == 'All' ||
+                                  _selectedGender == 'Male',
+                              maintainState: true,
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  _buildGenderHeader(
+                                    '',
+                                    genderHeaderBg,
+                                    isLeft: false,
+                                  ),
+                                  ..._buildStudentRows(
+                                    _maleStudents,
+                                    theme,
+                                    isDark,
+                                    cellText,
+                                    borderColor,
+                                    altRowBg,
+                                    cellBg,
+                                    wwWeight,
+                                    ptWeight,
+                                    exWeight,
+                                    isLeft: false,
+                                  ),
+                                ],
                               ),
-                              ..._buildStudentRows(
-                                _maleStudents,
-                                theme,
-                                isDark,
-                                cellText,
-                                borderColor,
-                                altRowBg,
-                                cellBg,
-                                wwWeight,
-                                ptWeight,
-                                exWeight,
-                                isLeft: false,
+                            ),
+                            Visibility(
+                              visible: _selectedGender == 'All' ||
+                                  _selectedGender == 'Female',
+                              maintainState: true,
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  _buildGenderHeader(
+                                    '',
+                                    genderHeaderBg,
+                                    isLeft: false,
+                                  ),
+                                  ..._buildStudentRows(
+                                    _femaleStudents,
+                                    theme,
+                                    isDark,
+                                    cellText,
+                                    borderColor,
+                                    altRowBg,
+                                    cellBg,
+                                    wwWeight,
+                                    ptWeight,
+                                    exWeight,
+                                    isLeft: false,
+                                  ),
+                                ],
                               ),
-                            ],
-                            if (_selectedGender == 'All' ||
-                                _selectedGender == 'Female') ...[
-                              _buildGenderHeader(
-                                '',
-                                genderHeaderBg,
-                                isLeft: false,
-                              ),
-                              ..._buildStudentRows(
-                                _femaleStudents,
-                                theme,
-                                isDark,
-                                cellText,
-                                borderColor,
-                                altRowBg,
-                                cellBg,
-                                wwWeight,
-                                ptWeight,
-                                exWeight,
-                                isLeft: false,
-                              ),
-                            ],
+                            ),
                           ],
                         ),
                       ),
@@ -1864,38 +1894,54 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          if (_selectedGender == 'All' ||
-                              _selectedGender == 'Male') ...[
-                            genderHeader('MALE (${_maleStudents.length})'),
-                            if (_maleStudents.isEmpty)
-                              ..._buildFinalGradeEmptyRows(widths, borderColor, theme)
-                            else
-                              ..._maleStudents.asMap().entries.map(
-                                (entry) => _buildFinalGradeStudentRow(
-                                  entry.value,
-                                  entry.key + 1,
-                                  widths,
-                                  borderColor,
-                                  theme,
-                                ),
-                              ),
-                          ],
-                          if (_selectedGender == 'All' ||
-                              _selectedGender == 'Female') ...[
-                            genderHeader('FEMALE (${_femaleStudents.length})'),
-                            if (_femaleStudents.isEmpty)
-                              ..._buildFinalGradeEmptyRows(widths, borderColor, theme)
-                            else
-                              ..._femaleStudents.asMap().entries.map(
-                                (entry) => _buildFinalGradeStudentRow(
-                                  entry.value,
-                                  entry.key + 1,
-                                  widths,
-                                  borderColor,
-                                  theme,
-                                ),
-                              ),
-                          ],
+                          Visibility(
+                            visible: _selectedGender == 'All' ||
+                                _selectedGender == 'Male',
+                            maintainState: true,
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                genderHeader('MALE (${_maleStudents.length})'),
+                                if (_maleStudents.isEmpty)
+                                  ..._buildFinalGradeEmptyRows(widths, borderColor, theme)
+                                else
+                                  ..._maleStudents.asMap().entries.map(
+                                    (entry) => _buildFinalGradeStudentRow(
+                                      entry.value,
+                                      entry.key + 1,
+                                      widths,
+                                      borderColor,
+                                      theme,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                          Visibility(
+                            visible: _selectedGender == 'All' ||
+                                _selectedGender == 'Female',
+                            maintainState: true,
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                genderHeader('FEMALE (${_femaleStudents.length})'),
+                                if (_femaleStudents.isEmpty)
+                                  ..._buildFinalGradeEmptyRows(widths, borderColor, theme)
+                                else
+                                  ..._femaleStudents.asMap().entries.map(
+                                    (entry) => _buildFinalGradeStudentRow(
+                                      entry.value,
+                                      entry.key + 1,
+                                      widths,
+                                      borderColor,
+                                      theme,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
                         ],
                       ),
                     ),
