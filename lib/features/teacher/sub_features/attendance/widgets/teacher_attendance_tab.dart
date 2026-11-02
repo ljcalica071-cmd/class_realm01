@@ -117,7 +117,9 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
     final today = DateTime(now.year, now.month, now.day);
     final min2026 = DateTime(2026, 1, 1);
     final sevenDaysAgo = today.subtract(const Duration(days: 7));
-    _analyticsCustomStartDate = sevenDaysAgo.isBefore(min2026) ? min2026 : sevenDaysAgo;
+    _analyticsCustomStartDate = sevenDaysAgo.isBefore(min2026)
+        ? min2026
+        : sevenDaysAgo;
     _analyticsCustomEndDate = today;
     HardwareKeyboard.instance.addHandler(_handleGlobalHardwareKey);
 
@@ -836,6 +838,30 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
   // ===========================================================================
 
   Future<void> _assignRfidDirectly(String studentId, String scannedUid) async {
+    final alreadyAssignedStudent = _rosterStudents
+        .cast<AttendanceRosterStudent?>()
+        .firstWhere(
+          (s) =>
+              s != null &&
+              s.studentId != studentId &&
+              s.rfidUid?.trim().toUpperCase() == scannedUid.toUpperCase(),
+          orElse: () => null,
+        );
+
+    if (alreadyAssignedStudent != null) {
+      if (!mounted) return;
+      setState(() {
+        _inlineNotice = _WorkspaceInlineNotice(
+          tone: _WorkspaceNoticeTone.warning,
+          title: 'Already Registered',
+          message:
+              'Card $scannedUid is already linked to ${alreadyAssignedStudent.displayName}.',
+          code: 'ALREADY_REGISTERED',
+          scannedUid: scannedUid,
+        );
+      });
+      return;
+    }
     try {
       await _repository.assignStudentRfid(
         studentId: studentId,
@@ -1204,12 +1230,19 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
         SnackBar(
           content: Row(
             children: [
-              const Icon(Icons.check_circle_outline, color: Colors.white, size: 20),
+              const Icon(
+                Icons.check_circle_outline,
+                color: Colors.white,
+                size: 20,
+              ),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
                   'Attendance saved (${recordsToSave.length} record${recordsToSave.length == 1 ? '' : 's'}) for ${_formatDate(_attendanceSelectedDate)}.',
-                  style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.white),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                  ),
                 ),
               ),
             ],
@@ -1306,7 +1339,6 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
             else if (_teacherSubjects.isEmpty)
               _buildNoClassesAvailable(theme)
             else ...[
-
               // ── CASCADING FILTERS & DATE SELECTOR ──
               _buildClassAndDateControls(theme, isDark),
               const SizedBox(height: 14),
@@ -1637,7 +1669,9 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
             onPressed: () {
               setState(() => _selectedAnalyticsPreset = preset);
               if (preset == AttendanceDatePreset.custom) {
-                if (!_analyticsCustomStartDate.isAfter(_analyticsCustomEndDate)) {
+                if (!_analyticsCustomStartDate.isAfter(
+                  _analyticsCustomEndDate,
+                )) {
                   _analyticsViewKey.currentState?.setCustomRange(
                     _analyticsCustomStartDate,
                     _analyticsCustomEndDate,
@@ -1774,20 +1808,21 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
                             onPressed: isEarliestAllowed
                                 ? null
                                 : () => _onDateChanged(
-                                      _attendanceSelectedDate.subtract(
-                                        const Duration(days: 1),
-                                      ),
+                                    _attendanceSelectedDate.subtract(
+                                      const Duration(days: 1),
                                     ),
+                                  ),
                             padding: const EdgeInsets.symmetric(horizontal: 8),
                             constraints: const BoxConstraints(),
                           ),
                           InkWell(
                             onTap: () async {
-                              final initial = _attendanceSelectedDate.isBefore(min2026)
+                              final initial =
+                                  _attendanceSelectedDate.isBefore(min2026)
                                   ? min2026
                                   : (_attendanceSelectedDate.isAfter(today)
-                                      ? today
-                                      : _attendanceSelectedDate);
+                                        ? today
+                                        : _attendanceSelectedDate);
                               final picked = await showAppDatePickerDialog(
                                 context,
                                 initialDate: initial,
@@ -1841,10 +1876,10 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
                             onPressed: isSelectedTodayOrFuture
                                 ? null
                                 : () => _onDateChanged(
-                                      _attendanceSelectedDate.add(
-                                        const Duration(days: 1),
-                                      ),
+                                    _attendanceSelectedDate.add(
+                                      const Duration(days: 1),
                                     ),
+                                  ),
                             padding: const EdgeInsets.symmetric(horizontal: 8),
                             constraints: const BoxConstraints(),
                           ),
@@ -1911,8 +1946,9 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
     DateTime today,
     DateTime min2026,
   ) {
-    final hasRangeError =
-        _analyticsCustomStartDate.isAfter(_analyticsCustomEndDate);
+    final hasRangeError = _analyticsCustomStartDate.isAfter(
+      _analyticsCustomEndDate,
+    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1927,8 +1963,8 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
                 final initial = _analyticsCustomStartDate.isAfter(today)
                     ? today
                     : (_analyticsCustomStartDate.isBefore(min2026)
-                        ? min2026
-                        : _analyticsCustomStartDate);
+                          ? min2026
+                          : _analyticsCustomStartDate);
                 final picked = await showAppDatePickerDialog(
                   context,
                   initialDate: initial,
@@ -1938,8 +1974,9 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
                 );
                 if (picked != null) {
                   setState(() => _analyticsCustomStartDate = picked);
-                  if (!_analyticsCustomStartDate
-                      .isAfter(_analyticsCustomEndDate)) {
+                  if (!_analyticsCustomStartDate.isAfter(
+                    _analyticsCustomEndDate,
+                  )) {
                     _analyticsViewKey.currentState?.setCustomRange(
                       _analyticsCustomStartDate,
                       _analyticsCustomEndDate,
@@ -1949,8 +1986,10 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
               },
               borderRadius: BorderRadius.circular(8),
               child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 7,
+                ),
                 decoration: BoxDecoration(
                   color: theme.colorScheme.surface,
                   borderRadius: BorderRadius.circular(8),
@@ -1993,8 +2032,8 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
                 final initial = _analyticsCustomEndDate.isAfter(today)
                     ? today
                     : (_analyticsCustomEndDate.isBefore(min2026)
-                        ? min2026
-                        : _analyticsCustomEndDate);
+                          ? min2026
+                          : _analyticsCustomEndDate);
                 final picked = await showAppDatePickerDialog(
                   context,
                   initialDate: initial,
@@ -2004,8 +2043,9 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
                 );
                 if (picked != null) {
                   setState(() => _analyticsCustomEndDate = picked);
-                  if (!_analyticsCustomStartDate
-                      .isAfter(_analyticsCustomEndDate)) {
+                  if (!_analyticsCustomStartDate.isAfter(
+                    _analyticsCustomEndDate,
+                  )) {
                     _analyticsViewKey.currentState?.setCustomRange(
                       _analyticsCustomStartDate,
                       _analyticsCustomEndDate,
@@ -2015,8 +2055,10 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
               },
               borderRadius: BorderRadius.circular(8),
               child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 7,
+                ),
                 decoration: BoxDecoration(
                   color: theme.colorScheme.surface,
                   borderRadius: BorderRadius.circular(8),
@@ -2195,6 +2237,7 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
 
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
+      width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
         color: bannerColor.withValues(alpha: isDark ? 0.16 : 0.08),
@@ -2220,7 +2263,7 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
               ),
               const SizedBox(width: 10),
               ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 640),
+                constraints: const BoxConstraints(maxWidth: 850),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -2521,8 +2564,6 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
       ),
     );
   }
-
-
 
   Widget _buildErrorContainer(
     ThemeData theme,

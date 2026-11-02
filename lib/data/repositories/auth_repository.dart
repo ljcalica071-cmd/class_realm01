@@ -187,6 +187,10 @@ class AuthRepository {
         return _currentUser;
       }
     } on firebase.FirebaseAuthException catch (e) {
+      if (e.code == 'network-request-failed' || e.message?.contains('network AuthError') == true) {
+        throw Exception("We're having trouble connecting to the network right now. Please check your internet connection and try again.");
+      }
+      
       // Record failure on both account-level and device-level progressive trackers
       final accFail = await RateLimitService.instance.recordFailure(
         feature: 'login_account',

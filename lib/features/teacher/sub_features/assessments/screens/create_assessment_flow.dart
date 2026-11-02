@@ -17,6 +17,7 @@ import 'package:class_realm/widgets/common/app_buttons.dart';
 import 'package:class_realm/widgets/common/app_modals.dart';
 import 'package:class_realm/widgets/common/app_date_picker_field.dart';
 import 'package:class_realm/widgets/common/app_time_picker_field.dart';
+import 'package:class_realm/features/teacher/sub_features/assessments/widgets/anti_cheating_documentation_modal.dart';
 import 'package:class_realm/features/teacher/sub_features/assessments/quiz_exam_authoring/quiz_exam_authoring.dart';
 
 /// Active draft of an individual question during step 2 authoring.
@@ -132,9 +133,9 @@ class _CreateAssessmentFlowDialogState
   String? _distributionError;
 
   // Question distributions (3 types only, max 3 digits)
-  final _mcCountCtrl = TextEditingController(text: '5');
-  final _tfCountCtrl = TextEditingController(text: '3');
-  final _idCountCtrl = TextEditingController(text: '2');
+  final _mcCountCtrl = TextEditingController(text: '0');
+  final _tfCountCtrl = TextEditingController(text: '0');
+  final _idCountCtrl = TextEditingController(text: '0');
 
   // Step 2: Question Builder
   List<QuestionDraft> _plannedQuestions = [];
@@ -361,9 +362,9 @@ class _CreateAssessmentFlowDialogState
     }
 
     final instructions = _instructionsCtrl.text.trim();
-    if (instructions.length < 2) {
+    if (instructions.isNotEmpty && instructions.length < 2) {
       setState(() {
-        _instructionsError = 'Instructions & Guidelines are required (min 2 characters).';
+        _instructionsError = 'Instructions & Guidelines must be at least 2 characters if provided.';
       });
       return;
     }
@@ -403,7 +404,23 @@ class _CreateAssessmentFlowDialogState
       return;
     }
 
-    // Initialize Question Drafts for Step 2
+    if (_plannedQuestions.isNotEmpty) {
+      // Logic for Back Button Adjustments
+      final existingMc = _plannedQuestions.where((q) => q.type == QuestionType.multipleChoice).toList();
+      final existingTf = _plannedQuestions.where((q) => q.type == QuestionType.trueFalse).toList();
+      final existingId = _plannedQuestions.where((q) => q.type == QuestionType.identification).toList();
+
+      if (mc < existingMc.length || tf < existingTf.length || id < existingId.length) {
+        // Reduced count - needs confirmation modal
+        _showCountReductionWarning(mc, tf, id, existingMc, existingTf, existingId);
+        return;
+      } else {
+        _applyQuestionCountAdjustments(mc, tf, id, existingMc, existingTf, existingId);
+        setState(() => _currentStep = 2);
+        return;
+      }
+    }
+
     final drafts = <QuestionDraft>[];
     int pos = 1;
     for (int i = 0; i < mc; i++) {
@@ -423,6 +440,95 @@ class _CreateAssessmentFlowDialogState
     });
 
     _loadQuestionIntoEditor(0);
+  }
+
+  void _applyQuestionCountAdjustments(
+      int targetMc, int targetTf, int targetId,
+      List<QuestionDraft> exMc, List<QuestionDraft> exTf, List<QuestionDraft> exId) {
+    
+    // Create new list preserving order Part 1 -> Part 2 -> Part 3
+    final newDrafts = <QuestionDraft>[];
+    int pos = 1;
+
+    // Multiple Choice
+    for (int i = 0; i < targetMc; i++) {
+      if (i < exMc.length) {
+        newDrafts.add(QuestionDraft(position: pos++, type: QuestionType.multipleChoice, statement: exMc[i].statement, choices: exMc[i].choices, correctAnswer: exMc[i].correctAnswer, points: exMc[i].points));
+      } else {
+        newDrafts.add(QuestionDraft(position: pos++, type: QuestionType.multipleChoice));
+      }
+    }
+
+    // True/False
+    for (int i = 0; i < targetTf; i++) {
+      if (i < exTf.length) {
+        newDrafts.add(QuestionDraft(position: pos++, type: QuestionType.trueFalse, statement: exTf[i].statement, correctAnswer: exTf[i].correctAnswer, points: exTf[i].points));
+      } else {
+        newDrafts.add(QuestionDraft(position: pos++, type: QuestionType.trueFalse));
+      }
+    }
+
+    // Identification
+    for (int i = 0; i < targetId; i++) {
+      if (i < exId.length) {
+        newDrafts.add(QuestionDraft(position: pos++, type: QuestionType.identification, statement: exId[i].statement, correctAnswer: exId[i].correctAnswer, points: exId[i].points));
+      } else {
+        newDrafts.add(QuestionDraft(position: pos++, type: QuestionType.identification));
+      }
+    }
+
+    setState(() {
+      _plannedQuestions = newDrafts;
+      if (_activeQuestionIndex >= _plannedQuestions.length) {
+        _activeQuestionIndex = _plannedQuestions.length - 1;
+      }
+    });
+    _loadQuestionIntoEditor(_activeQuestionIndex);
+  }
+
+  void _showCountReductionWarning(
+      int targetMc, int targetTf, int targetId,
+      List<QuestionDraft> exMc, List<QuestionDraft> exTf, List<QuestionDraft> exId) {
+    
+    int reducedMc = exMc.length > targetMc ? exMc.length - targetMc : 0;
+    int reducedTf = exTf.length > targetTf ? exTf.length - targetTf : 0;
+    int reducedId = exId.length > targetId ? exId.length - targetId : 0;
+    
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Reduce Questions?'),
+        content: Text(
+          'You reduced the number of questions. The last '
+          '${reducedMc > 0 ? '$reducedMc MC, ' : ''}'
+          '${reducedTf > 0 ? '$reducedTf TF, ' : ''}'
+          '${reducedId > 0 ? '$reducedId ID ' : ''}'
+          'question(s) will be permanently deleted. Do you want to proceed?'
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx); // Close modal
+              // Revert counters in UI
+              setState(() {
+                _mcCountCtrl.text = exMc.length.toString();
+                _tfCountCtrl.text = exTf.length.toString();
+                _idCountCtrl.text = exId.length.toString();
+              });
+            },
+            child: const Text('Cancel'),
+          ),
+          AppButton.danger(
+            label: 'Proceed',
+            onPressed: () {
+              Navigator.pop(ctx); // Close modal
+              _applyQuestionCountAdjustments(targetMc, targetTf, targetId, exMc, exTf, exId);
+              setState(() => _currentStep = 2);
+            },
+          ),
+        ],
+      ),
+    );
   }
 
   void _loadQuestionIntoEditor(int index) {
@@ -454,8 +560,8 @@ class _CreateAssessmentFlowDialogState
     }
     final q = _plannedQuestions[_activeQuestionIndex];
     final statement = _qStatementCtrl.text.trim();
-    if (statement.isEmpty) {
-      setState(() => _editorError = 'Question statement cannot be empty.');
+    if (statement.length < 2) {
+      setState(() => _editorError = 'Question statement must be at least 2 characters.');
       return false;
     }
 
@@ -470,8 +576,8 @@ class _CreateAssessmentFlowDialogState
       final b = _choiceBCtrl.text.trim();
       final c = _choiceCCtrl.text.trim();
       final d = _choiceDCtrl.text.trim();
-      if (a.isEmpty || b.isEmpty || c.isEmpty || d.isEmpty) {
-        setState(() => _editorError = 'All 4 choices (A, B, C, D) are required.');
+      if (a.length < 2 || b.length < 2 || c.length < 2 || d.length < 2) {
+        setState(() => _editorError = 'All 4 choices (A, B, C, D) are required (min 2 characters each).');
         return false;
       }
       if (_selectedMcAnswer == null || _selectedMcAnswer!.isEmpty) {
@@ -493,8 +599,8 @@ class _CreateAssessmentFlowDialogState
       q.correctAnswer = _selectedTfAnswer!;
     } else if (q.type == QuestionType.identification) {
       final key = _qIdAnswerCtrl.text.trim();
-      if (key.isEmpty) {
-        setState(() => _editorError = 'Please specify the official answer key for identification.');
+      if (key.length < 2) {
+        setState(() => _editorError = 'Please specify the official answer key for identification (min 2 characters).');
         return false;
       }
       q.statement = statement;
@@ -767,6 +873,49 @@ class _CreateAssessmentFlowDialogState
     }
   }
 
+  bool _hasUnsavedChanges() {
+    if (_currentStep == 1) {
+      if (_instructionsCtrl.text.trim().isNotEmpty) return true;
+      if (_mcCountCtrl.text != '0' && _mcCountCtrl.text.isNotEmpty) return true;
+      if (_tfCountCtrl.text != '0' && _tfCountCtrl.text.isNotEmpty) return true;
+      if (_idCountCtrl.text != '0' && _idCountCtrl.text.isNotEmpty) return true;
+      return false;
+    } else {
+      // Step 2 always has generated questions
+      return _plannedQuestions.any((q) => q.statement.trim().isNotEmpty);
+    }
+  }
+
+  void _handleClose() {
+    if (_hasUnsavedChanges()) {
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Discard Assessment?'),
+          content: const Text(
+              'You have unsaved changes. Are you sure you want to close this? Your progress will be lost.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Keep Editing'),
+            ),
+            AppPrimaryButton(
+              label: 'Discard',
+              icon: Icons.delete_outline,
+              backgroundColor: const Color(0xFFDC2626), // Keep discard action red
+              onPressed: () {
+                Navigator.pop(ctx);
+                Navigator.of(context).pop();
+              },
+            ),
+          ],
+        ),
+      );
+    } else {
+      Navigator.of(context).pop();
+    }
+  }
+
   void _openAiGeneration() {
     final subName = _selectedOffering?['subject_name']?.toString() ?? 'General Subject';
     AiGenerationModal.show(
@@ -857,7 +1006,7 @@ class _CreateAssessmentFlowDialogState
                   ),
                   IconButton(
                     icon: Icon(Icons.close, color: theme.colorScheme.onSurface.withValues(alpha: 0.6)),
-                    onPressed: () => Navigator.of(context).pop(),
+                    onPressed: _handleClose,
                   ),
                 ],
               ),
@@ -895,7 +1044,7 @@ class _CreateAssessmentFlowDialogState
                   Row(
                     children: [
                       TextButton(
-                        onPressed: () => Navigator.of(context).pop(),
+                        onPressed: _handleClose,
                         child: Text(
                           'Cancel',
                           style: TextStyle(
@@ -914,8 +1063,8 @@ class _CreateAssessmentFlowDialogState
                               ? Icons.publish
                               : Icons.arrow_forward,
                           height: 42,
-                          backgroundColor: AppTheme.catRed,
-                          onPressed: (_areAllSlotsFilled || _isPublishing)
+                          backgroundColor: theme.colorScheme.primary, // 30% Primary
+                          onPressed: (_areAllSlotsFilled || _isPublishing || (_completionMode == 'online' && (_totalPlannedQuestions == 0 || _totalPlannedQuestions > 100)))
                               ? null
                               : _handleContinueOrPublish,
                         ),
@@ -926,7 +1075,7 @@ class _CreateAssessmentFlowDialogState
                               : 'Save & Publish Examination',
                           icon: Icons.check_circle_outline,
                           height: 42,
-                          backgroundColor: AppTheme.catRed,
+                          backgroundColor: theme.colorScheme.primary, // 30% Primary
                           onPressed: _isPublishing ? null : _publishOnlineExam,
                         ),
                     ],
@@ -1343,7 +1492,7 @@ class _CreateAssessmentFlowDialogState
                           LengthLimitingTextInputFormatter(3),
                         ],
                         decoration: InputDecoration(
-                          hintText: '60',
+                          hintText: 'e.g. 60',
                           filled: true,
                           fillColor: theme.colorScheme.surface,
                           contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -1443,12 +1592,12 @@ class _CreateAssessmentFlowDialogState
           ],
           const SizedBox(height: 18),
 
-          // 5. Instructions & Guidelines (Mandatory with live counter & inline error)
+          // 5. Instructions & Guidelines (Optional)
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                'Instructions & Guidelines *',
+                'Instructions & Guidelines',
                 style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: theme.colorScheme.onSurface),
               ),
               Text(
@@ -1471,7 +1620,7 @@ class _CreateAssessmentFlowDialogState
             buildCounter: (_, {required currentLength, required isFocused, maxLength}) => const SizedBox.shrink(),
             onChanged: (_) => setState(() {}),
             decoration: InputDecoration(
-              hintText: 'Provide test-taking guidelines, permitted calculators/materials, and proctoring rules...',
+              hintText: 'e.g. Provide test-taking guidelines, no calculators allowed...',
               filled: true,
               fillColor: theme.colorScheme.surface,
               contentPadding: const EdgeInsets.all(12),
@@ -1495,6 +1644,25 @@ class _CreateAssessmentFlowDialogState
                 borderSide: const BorderSide(color: Color(0xFFDC2626), width: 2.0),
               ),
               errorStyle: const TextStyle(fontSize: 12, color: Color(0xFFDC2626), fontWeight: FontWeight.w500),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton.icon(
+              onPressed: () {
+                 AntiCheatingDocumentationModal.show(context);
+              },
+              icon: const Icon(Icons.shield_outlined, size: 16),
+              label: const Text(
+                'View Complete Anti-Cheating & Exam Taking Guidelines',
+                style: TextStyle(fontSize: 12),
+              ),
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
             ),
           ),
           const SizedBox(height: 18),
@@ -1582,14 +1750,14 @@ class _CreateAssessmentFlowDialogState
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
           decoration: BoxDecoration(
             color: isSelected
-                ? AppTheme.catRed.withValues(alpha: 0.1)
+                ? theme.colorScheme.primary.withValues(alpha: 0.1) // 30% Primary Theme applied here
                 : (isCreated
                     ? Colors.grey.shade100
                     : theme.colorScheme.surface),
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
               color: isSelected
-                  ? AppTheme.catRed
+                  ? theme.colorScheme.primary // 10% action color border
                   : (isCreated
                       ? Colors.grey.shade300
                       : theme.colorScheme.outline.withValues(alpha: 0.3)),
@@ -1604,7 +1772,7 @@ class _CreateAssessmentFlowDialogState
                   fontSize: 14,
                   fontWeight: FontWeight.bold,
                   color: isSelected
-                      ? AppTheme.catRed
+                      ? theme.colorScheme.primary
                       : (isCreated ? Colors.grey : theme.colorScheme.onSurface),
                 ),
               ),
@@ -1922,7 +2090,7 @@ class _CreateAssessmentFlowDialogState
                         icon: const Icon(Icons.check, size: 16),
                         label: const Text('Review Complete'),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: AppTheme.catGreen,
+                          backgroundColor: theme.colorScheme.primary, // 30% primary theme
                           foregroundColor: Colors.white,
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -1963,60 +2131,16 @@ class _CreateAssessmentFlowDialogState
                 ),
                 const SizedBox(height: 12),
 
-                // Question Chips Grid
+                // Question Chips List grouped by type
                 Expanded(
-                  child: GridView.builder(
-                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 5,
-                      mainAxisSpacing: 6,
-                      crossAxisSpacing: 6,
-                      childAspectRatio: 1.1,
-                    ),
-                    itemCount: _plannedQuestions.length,
-                    itemBuilder: (ctx, i) {
-                      final q = _plannedQuestions[i];
-                      final isActive = i == _activeQuestionIndex;
-                      final isDone = q.isComplete;
-
-                      return InkWell(
-                        onTap: () {
-                          if (_saveCurrentEditorState()) {
-                            _loadQuestionIntoEditor(i);
-                          }
-                        },
-                        borderRadius: BorderRadius.circular(8),
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 150),
-                          decoration: BoxDecoration(
-                            color: isActive
-                                ? theme.colorScheme.primary
-                                : (isDone
-                                    ? AppTheme.catGreen.withValues(alpha: 0.15)
-                                    : Colors.grey.shade100),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                              color: isActive
-                                  ? theme.colorScheme.primary
-                                  : (isDone
-                                      ? AppTheme.catGreen
-                                      : Colors.grey.shade300),
-                              width: isActive ? 2 : 1,
-                            ),
-                          ),
-                          alignment: Alignment.center,
-                          child: Text(
-                            '${q.position}',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                              color: isActive
-                                  ? Colors.white
-                                  : (isDone ? AppTheme.catGreen : Colors.black87),
-                            ),
-                          ),
-                        ),
-                      );
-                    },
+                  child: ListView(
+                    children: [
+                      _buildQuestionNavigatorCategory('Multiple Choice', QuestionType.multipleChoice),
+                      const SizedBox(height: 12),
+                      _buildQuestionNavigatorCategory('True or False', QuestionType.trueFalse),
+                      const SizedBox(height: 12),
+                      _buildQuestionNavigatorCategory('Identification', QuestionType.identification),
+                    ],
                   ),
                 ),
 
@@ -2033,6 +2157,83 @@ class _CreateAssessmentFlowDialogState
               ],
             ),
           ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildQuestionNavigatorCategory(String title, QuestionType type) {
+    final theme = Theme.of(context);
+    final categoryQuestions = <int>[];
+    for (int i = 0; i < _plannedQuestions.length; i++) {
+      if (_plannedQuestions[i].type == type) {
+        categoryQuestions.add(i);
+      }
+    }
+
+    if (categoryQuestions.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+          ),
+        ),
+        const SizedBox(height: 6),
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: categoryQuestions.map((index) {
+            final q = _plannedQuestions[index];
+            final isActive = index == _activeQuestionIndex;
+            final isDone = q.isComplete;
+
+            return InkWell(
+              onTap: () {
+                if (_saveCurrentEditorState()) {
+                  _loadQuestionIntoEditor(index);
+                }
+              },
+              borderRadius: BorderRadius.circular(8),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 150),
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: isActive
+                      ? theme.colorScheme.primary
+                      : (isDone
+                          ? theme.colorScheme.primary.withValues(alpha: 0.1) // 30% theme
+                          : Colors.grey.shade100), // 60% theme
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: isActive
+                        ? theme.colorScheme.primary
+                        : (isDone
+                            ? theme.colorScheme.primary
+                            : Colors.grey.shade300),
+                    width: isActive ? 2 : 1,
+                  ),
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  '${q.position}',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: isActive
+                        ? Colors.white
+                        : (isDone ? theme.colorScheme.primary : Colors.black87),
+                  ),
+                ),
+              ),
+            );
+          }).toList(),
         ),
       ],
     );

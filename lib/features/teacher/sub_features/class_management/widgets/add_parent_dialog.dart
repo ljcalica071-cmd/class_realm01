@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:class_realm/core/theme/app_theme.dart';
@@ -94,14 +95,16 @@ class _AddParentDialogState extends State<AddParentDialog> {
         if (!mounted) return;
         setState(() => _isCheckingExisting = true);
         try {
-          final results = await SupabaseParentRepository().searchExistingParents(
-            query: '$first $last',
-          );
+          final results = await SupabaseParentRepository()
+              .searchExistingParents(query: '$first $last');
           if (!mounted) return;
 
           Map<String, dynamic>? match;
           for (final r in results) {
-            final rFirst = (r['firstName'] ?? '').toString().toLowerCase().trim();
+            final rFirst = (r['firstName'] ?? '')
+                .toString()
+                .toLowerCase()
+                .trim();
             final rLast = (r['lastName'] ?? '').toString().toLowerCase().trim();
             if (rFirst == first.toLowerCase() && rLast == last.toLowerCase()) {
               match = r;
@@ -141,8 +144,9 @@ class _AddParentDialogState extends State<AddParentDialog> {
     setState(() => _isQuickSearching = true);
     _quickSearchDebounce = Timer(const Duration(milliseconds: 300), () async {
       try {
-        final results = await SupabaseParentRepository()
-            .searchExistingParents(query: query);
+        final results = await SupabaseParentRepository().searchExistingParents(
+          query: query,
+        );
         if (mounted) {
           setState(() {
             _quickSearchResults = results;
@@ -202,7 +206,8 @@ class _AddParentDialogState extends State<AddParentDialog> {
       AppModals.showErrorDialog(
         context: context,
         title: 'Relationship Required',
-        message: 'Please select the relationship (e.g. Father, Mother, Guardian).',
+        message:
+            'Please select the relationship (e.g. Father, Mother, Guardian).',
       );
       return;
     }
@@ -276,7 +281,9 @@ class _AddParentDialogState extends State<AddParentDialog> {
     setState(() => _isSubmitting = true);
 
     final firstName = _firstNameCtrl.text.trim();
-    final middleName = AppValidators.normalizeMiddleInitial(_middleNameCtrl.text);
+    final middleName = AppValidators.normalizeMiddleInitial(
+      _middleNameCtrl.text,
+    );
     final lastName = _lastNameCtrl.text.trim();
     final fullName = [firstName, ?middleName, lastName].join(' ');
 
@@ -385,7 +392,8 @@ class _AddParentDialogState extends State<AddParentDialog> {
                 'Account for $fullName has been created and linked to $linkedStudentName.',
                 style: TextStyle(
                   fontSize: 13,
-                  color: Theme.of(ctx).colorScheme.onSurface.withValues(alpha: 0.65),
+                  color: Theme.of(ctx).colorScheme.onSurface
+                      .withValues(alpha: 0.65),
                 ),
                 textAlign: TextAlign.center,
               ),
@@ -393,16 +401,21 @@ class _AddParentDialogState extends State<AddParentDialog> {
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: Theme.of(ctx).colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
+                  color: Theme.of(ctx).colorScheme.surfaceContainerHighest
+                      .withValues(alpha: 0.4),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
-                    color: Theme.of(ctx).colorScheme.outline.withValues(alpha: 0.2),
+                    color: Theme.of(ctx).colorScheme.outline
+                        .withValues(alpha: 0.2),
                   ),
                 ),
                 child: Column(
                   children: [
                     _CredentialRow(label: 'Login Email', value: email),
-                    _CredentialRow(label: 'Temporary Password', value: tempPassword),
+                    _CredentialRow(
+                      label: 'Temporary Password',
+                      value: tempPassword,
+                    ),
                   ],
                 ),
               ),
@@ -585,9 +598,7 @@ class _AddParentDialogState extends State<AddParentDialog> {
                   const SizedBox(height: 16),
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(child: _buildRelationshipField(theme)),
-                    ],
+                    children: [Expanded(child: _buildRelationshipField(theme))],
                   ),
                   if (_relationship == 'Other') ...[
                     const SizedBox(height: 16),
@@ -631,7 +642,9 @@ class _AddParentDialogState extends State<AddParentDialog> {
                             'Checking for existing parent account...',
                             style: TextStyle(
                               fontSize: 12,
-                              color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                              color: theme.colorScheme.onSurface.withValues(
+                                alpha: 0.6,
+                              ),
                               fontStyle: FontStyle.italic,
                             ),
                           ),
@@ -656,10 +669,14 @@ class _AddParentDialogState extends State<AddParentDialog> {
                               vertical: 2,
                             ),
                             decoration: BoxDecoration(
-                              color: theme.colorScheme.primary.withValues(alpha: 0.1),
+                              color: theme.colorScheme.primary.withValues(
+                                alpha: 0.1,
+                              ),
                               borderRadius: BorderRadius.circular(12),
                               border: Border.all(
-                                color: theme.colorScheme.primary.withValues(alpha: 0.25),
+                                color: theme.colorScheme.primary.withValues(
+                                  alpha: 0.25,
+                                ),
                               ),
                             ),
                             child: Row(
@@ -735,8 +752,8 @@ class _AddParentDialogState extends State<AddParentDialog> {
               onPressed: _isSubmitting
                   ? null
                   : (_detectedExistingParent != null
-                      ? _submitLinkToExistingParent
-                      : _submitNewParent),
+                        ? _submitLinkToExistingParent
+                        : _submitNewParent),
               width: 220,
               height: 44,
             ),
@@ -766,9 +783,7 @@ class _AddParentDialogState extends State<AddParentDialog> {
                   ),
                   const SizedBox(width: 6),
                   Text(
-                    _showQuickSearch
-                        ? 'Hide search'
-                        : 'Already know this parent is registered? Search to autofill',
+                    _showQuickSearch ? 'Hide search' : 'Already know this parent is registered? Search to autofill',
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
@@ -802,7 +817,10 @@ class _AddParentDialogState extends State<AddParentDialog> {
                     : null,
                 filled: true,
                 fillColor: theme.colorScheme.surface,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(10),
                   borderSide: BorderSide(
@@ -842,16 +860,21 @@ class _AddParentDialogState extends State<AddParentDialog> {
                           color: theme.colorScheme.surface,
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(
-                            color: theme.colorScheme.outline.withValues(alpha: 0.2),
+                            color: theme.colorScheme.outline.withValues(
+                              alpha: 0.2,
+                            ),
                           ),
                         ),
                         child: Row(
                           children: [
                             CircleAvatar(
                               radius: 14,
-                              backgroundColor: theme.colorScheme.primary.withValues(alpha: 0.1),
+                              backgroundColor: theme.colorScheme.primary
+                                  .withValues(alpha: 0.1),
                               child: Text(
-                                fullName.isNotEmpty ? fullName[0].toUpperCase() : 'P',
+                                fullName.isNotEmpty
+                                    ? fullName[0].toUpperCase()
+                                    : 'P',
                                 style: TextStyle(
                                   fontSize: 11,
                                   fontWeight: FontWeight.bold,
@@ -875,7 +898,8 @@ class _AddParentDialogState extends State<AddParentDialog> {
                                     '$email ${childNames.isNotEmpty ? "• Child: $childNames" : ""}',
                                     style: TextStyle(
                                       fontSize: 11,
-                                      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                                      color: theme.colorScheme.onSurface
+                                          .withValues(alpha: 0.6),
                                     ),
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
@@ -909,7 +933,9 @@ class _AddParentDialogState extends State<AddParentDialog> {
   Widget _buildExistingParentDetectedCard(ThemeData theme) {
     final parent = _detectedExistingParent!;
     final fullName = parent['fullName']?.toString() ?? 'Registered Parent';
-    final email = parent['email']?.toString() ?? '${parent['lastName']?.toString().toLowerCase()}@classrealm.com';
+    final email =
+        parent['email']?.toString() ??
+        '${parent['lastName']?.toString().toLowerCase()}@classrealm.com';
     final children = (parent['linkedChildren'] as List? ?? []);
     final childNames = children
         .map((c) => c['fullName']?.toString() ?? '')
@@ -991,7 +1017,10 @@ class _AddParentDialogState extends State<AddParentDialog> {
                     ),
                     const SizedBox(width: 8),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
                       decoration: BoxDecoration(
                         color: const Color(0xFFDCFCE7),
                         borderRadius: BorderRadius.circular(4),
@@ -1093,17 +1122,24 @@ class _AddParentDialogState extends State<AddParentDialog> {
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
-                        color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.6,
+                        ),
                       ),
                     ),
                     const SizedBox(height: 4),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
                       decoration: BoxDecoration(
                         color: theme.colorScheme.surface,
                         borderRadius: BorderRadius.circular(6),
                         border: Border.all(
-                          color: theme.colorScheme.outline.withValues(alpha: 0.25),
+                          color: theme.colorScheme.outline.withValues(
+                            alpha: 0.25,
+                          ),
                         ),
                       ),
                       child: Text(
@@ -1130,17 +1166,24 @@ class _AddParentDialogState extends State<AddParentDialog> {
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
-                        color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.6,
+                        ),
                       ),
                     ),
                     const SizedBox(height: 4),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
                       decoration: BoxDecoration(
                         color: theme.colorScheme.surface,
                         borderRadius: BorderRadius.circular(6),
                         border: Border.all(
-                          color: theme.colorScheme.outline.withValues(alpha: 0.25),
+                          color: theme.colorScheme.outline.withValues(
+                            alpha: 0.25,
+                          ),
                         ),
                       ),
                       child: Text(
@@ -1150,7 +1193,9 @@ class _AddParentDialogState extends State<AddParentDialog> {
                           fontWeight: FontWeight.w700,
                           color: _birthday != null
                               ? AppTheme.catGreen
-                              : theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                              : theme.colorScheme.onSurface.withValues(
+                                  alpha: 0.5,
+                                ),
                           fontFamily: 'monospace',
                         ),
                         overflow: TextOverflow.ellipsis,
@@ -1185,7 +1230,10 @@ class _AddParentDialogState extends State<AddParentDialog> {
           decoration: InputDecoration(
             filled: true,
             fillColor: theme.colorScheme.surface,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 14,
+              vertical: 12,
+            ),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: BorderSide(
@@ -1301,16 +1349,16 @@ class _AddParentDialogState extends State<AddParentDialog> {
     final matchingStudents = query.isEmpty
         ? <UserModel>[]
         : candidateStudents
-            .where((u) {
-              final nameMatch = u.fullName.toLowerCase().contains(query);
-              final lrnMatch = (u.lrn ?? '').toLowerCase().contains(query);
-              final isAlreadySelected = _selectedStudents.any(
-                (s) => s.id == u.id,
-              );
-              return !isAlreadySelected && (nameMatch || lrnMatch);
-            })
-            .take(6)
-            .toList();
+              .where((u) {
+                final nameMatch = u.fullName.toLowerCase().contains(query);
+                final lrnMatch = (u.lrn ?? '').toLowerCase().contains(query);
+                final isAlreadySelected = _selectedStudents.any(
+                  (s) => s.id == u.id,
+                );
+                return !isAlreadySelected && (nameMatch || lrnMatch);
+              })
+              .take(6)
+              .toList();
 
     return FormField<List<UserModel>>(
       initialValue: _selectedStudents,
@@ -1420,7 +1468,9 @@ class _AddParentDialogState extends State<AddParentDialog> {
                           return InkWell(
                             onTap: () {
                               setState(() {
-                                if (!_selectedStudents.any((sel) => sel.id == s.id)) {
+                                if (!_selectedStudents.any(
+                                  (sel) => sel.id == s.id,
+                                )) {
                                   _selectedStudents.add(s);
                                   field.didChange(_selectedStudents);
                                 }
@@ -1453,7 +1503,8 @@ class _AddParentDialogState extends State<AddParentDialog> {
                                   const SizedBox(width: 12),
                                   Expanded(
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         Text(
                                           s.fullName,
@@ -1531,7 +1582,9 @@ class _AddParentDialogState extends State<AddParentDialog> {
                     Icon(
                       Icons.info_outline,
                       size: 18,
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.45),
+                      color: theme.colorScheme.onSurface.withValues(
+                        alpha: 0.45,
+                      ),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
@@ -1539,7 +1592,9 @@ class _AddParentDialogState extends State<AddParentDialog> {
                         'No students linked yet. Search and select up to 15 students to link.',
                         style: TextStyle(
                           fontSize: 12,
-                          color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
+                          color: theme.colorScheme.onSurface.withValues(
+                            alpha: 0.65,
+                          ),
                         ),
                       ),
                     ),
@@ -1558,7 +1613,8 @@ class _AddParentDialogState extends State<AddParentDialog> {
                       ),
                       const SizedBox(width: 6),
                       Text(
-                        field.errorText ?? 'Please select at least one student to link.',
+                        field.errorText ??
+                            'Please select at least one student to link.',
                         style: TextStyle(
                           fontSize: 12,
                           color: theme.colorScheme.error,
@@ -1574,12 +1630,17 @@ class _AddParentDialogState extends State<AddParentDialog> {
                 runSpacing: 8,
                 children: _selectedStudents.map((student) {
                   return Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
                     decoration: BoxDecoration(
                       color: theme.colorScheme.primary.withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(10),
                       border: Border.all(
-                        color: theme.colorScheme.primary.withValues(alpha: 0.25),
+                        color: theme.colorScheme.primary.withValues(
+                          alpha: 0.25,
+                        ),
                       ),
                     ),
                     child: Row(
@@ -1607,7 +1668,9 @@ class _AddParentDialogState extends State<AddParentDialog> {
                               'LRN: ${student.lrn ?? "N/A"} • ${student.departmentOrSection ?? "Enrolled"}',
                               style: TextStyle(
                                 fontSize: 10.5,
-                                color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                                color: theme.colorScheme.onSurface.withValues(
+                                  alpha: 0.6,
+                                ),
                               ),
                             ),
                           ],
@@ -1665,13 +1728,11 @@ class _SectionLabel extends StatelessWidget {
           const SizedBox(width: 12),
           Expanded(
             child: Divider(
-              color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.2),
+              color: Theme.of(context).colorScheme.primary
+                  .withValues(alpha: 0.2),
             ),
           ),
-          if (trailing != null) ...[
-            const SizedBox(width: 8),
-            trailing!,
-          ],
+          if (trailing != null) ...[const SizedBox(width: 8), trailing!],
         ],
       ),
     );
@@ -1695,7 +1756,8 @@ class _CredentialRow extends StatelessWidget {
               label,
               style: TextStyle(
                 fontSize: 13,
-                color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+                color: Theme.of(context).colorScheme.onSurface
+                    .withValues(alpha: 0.6),
               ),
             ),
           ),
@@ -1706,7 +1768,8 @@ class _CredentialRow extends StatelessWidget {
                 color: Theme.of(context).colorScheme.surface,
                 borderRadius: BorderRadius.circular(6),
                 border: Border.all(
-                  color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
+                  color: Theme.of(context).colorScheme.outline
+                      .withValues(alpha: 0.2),
                 ),
               ),
               child: Row(
@@ -1717,7 +1780,9 @@ class _CredentialRow extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
-                        fontFamily: label.contains('Password') ? 'monospace' : null,
+                        fontFamily: label.contains('Password')
+                            ? 'monospace'
+                            : null,
                       ),
                     ),
                   ),
@@ -1726,7 +1791,9 @@ class _CredentialRow extends StatelessWidget {
                       onTap: () {
                         Clipboard.setData(ClipboardData(text: value));
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Password copied to clipboard')),
+                          const SnackBar(
+                            content: Text('Password copied to clipboard'),
+                          ),
                         );
                       },
                       child: Icon(

@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -21,7 +22,8 @@ class AttendanceRosterTable extends StatefulWidget {
   final bool isLoading;
   final String? errorMessage;
   final VoidCallback? onRetry;
-  final void Function(String studentId, AttendanceStatus? status) onStatusChanged;
+  final void Function(String studentId, AttendanceStatus? status)
+  onStatusChanged;
   final void Function(String studentId, String? remark) onRemarkChanged;
   final ValueChanged<AttendanceRosterStudent> onLinkRfidTap;
   final VoidCallback? onMarkAllPresent;
@@ -71,7 +73,7 @@ class _AttendanceRosterTableState extends State<AttendanceRosterTable> {
   static const double _colNameWidth = 190.0;
   static const double _pinnedWidth = _colNumWidth + _colNameWidth;
 
-  static const double _colRfidWidth = 145.0;
+  static const double _colRfidWidth = 165.0;
   static const double _colStatusWidth = 210.0;
   static const double _colTimeInWidth = 95.0;
   static const double _colMethodWidth = 95.0;
@@ -180,12 +182,12 @@ class _AttendanceRosterTableState extends State<AttendanceRosterTable> {
     // Strict Alphabetical Sorting: lastName.toLowerCase(), then firstName.toLowerCase()
     filtered.sort((a, b) {
       final lnCmp = a.lastName.trim().toLowerCase().compareTo(
-            b.lastName.trim().toLowerCase(),
-          );
+        b.lastName.trim().toLowerCase(),
+      );
       if (lnCmp != 0) return lnCmp;
       return a.firstName.trim().toLowerCase().compareTo(
-            b.firstName.trim().toLowerCase(),
-          );
+        b.firstName.trim().toLowerCase(),
+      );
     });
 
     return filtered;
@@ -276,9 +278,7 @@ class _AttendanceRosterTableState extends State<AttendanceRosterTable> {
         decoration: BoxDecoration(
           color: theme.colorScheme.surface,
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: AppTheme.catRed.withValues(alpha: 0.25),
-          ),
+          border: Border.all(color: AppTheme.catRed.withValues(alpha: 0.25)),
         ),
         child: AppEmptyState(
           icon: LucideIcons.circleAlert,
@@ -302,8 +302,7 @@ class _AttendanceRosterTableState extends State<AttendanceRosterTable> {
         child: const AppEmptyState(
           icon: LucideIcons.users,
           title: 'No Students Enrolled',
-          message:
-              'Enroll students in this class section from the Student Directory tab to begin recording attendance.',
+          message: 'Enroll students in this class section from the Student Directory tab to begin recording attendance.',
         ),
       );
     }
@@ -338,76 +337,88 @@ class _AttendanceRosterTableState extends State<AttendanceRosterTable> {
         borderRadius: BorderRadius.circular(14),
         child: SingleChildScrollView(
           child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // ── TOP FILTER & BULK ACTION BAR ──
-            _buildTopFilterBar(
-              theme: theme,
-              isDark: isDark,
-              totalCount: totalCount,
-              maleCount: maleCount,
-              femaleCount: femaleCount,
-              unmarkedCount: unmarkedCount,
-            ),
-
-            // ── ROSTER BODY ──
-            if (filteredStudents.isEmpty)
-              AppEmptyState(
-                icon: LucideIcons.searchX,
-                title: 'No Matching Students',
-                message:
-                    'No students match your active gender tab or search query.',
-                actionLabel: 'Reset Filters',
-                onAction: () {
-                  setState(() {
-                    _genderFilter = RosterGenderFilter.all;
-                    _searchController.clear();
-                  });
-                  widget.onSearchChanged('');
-                },
-              )
-            else ...[
-              LayoutBuilder(
-                builder: (context, constraints) {
-                  final visibleStudents = filteredStudents.take(_visibleCount).toList();
-                  final isWideDesktop = constraints.maxWidth >= 900;
-                  if (isWideDesktop) {
-                    return _buildWideDesktopTable(
-                      theme: theme,
-                      isDark: isDark,
-                      students: visibleStudents,
-                    );
-                  } else {
-                    return _buildNarrowStickyTable(
-                      theme: theme,
-                      isDark: isDark,
-                      students: visibleStudents,
-                      maxHeight: constraints.maxHeight,
-                    );
-                  }
-                },
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // ── TOP FILTER & BULK ACTION BAR ──
+              _buildTopFilterBar(
+                theme: theme,
+                isDark: isDark,
+                totalCount: totalCount,
+                maleCount: maleCount,
+                femaleCount: femaleCount,
+                unmarkedCount: unmarkedCount,
               ),
-              if (_visibleCount < filteredStudents.length)
-                Container(
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: isDark ? const Color(0xFF1E293B) : Colors.grey.shade50,
-                    border: Border(top: BorderSide(color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0))),
-                  ),
-                  child: TextButton.icon(
-                    onPressed: () => setState(() => _visibleCount += 20),
-                    icon: const Icon(LucideIcons.chevronDown, size: 16),
-                    label: Text(
-                      'Load More (${filteredStudents.length - _visibleCount} remaining)',
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+
+              // ── ROSTER BODY ──
+              if (filteredStudents.isEmpty)
+                AppEmptyState(
+                  icon: LucideIcons.searchX,
+                  title: 'No Matching Students',
+                  message: 'No students match your active gender tab or search query.',
+                  actionLabel: 'Reset Filters',
+                  onAction: () {
+                    setState(() {
+                      _genderFilter = RosterGenderFilter.all;
+                      _searchController.clear();
+                    });
+                    widget.onSearchChanged('');
+                  },
+                )
+              else ...[
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final visibleStudents = filteredStudents
+                        .take(_visibleCount)
+                        .toList();
+                    final isWideDesktop = constraints.maxWidth >= 900;
+                    if (isWideDesktop) {
+                      return _buildWideDesktopTable(
+                        theme: theme,
+                        isDark: isDark,
+                        students: visibleStudents,
+                      );
+                    } else {
+                      return _buildNarrowStickyTable(
+                        theme: theme,
+                        isDark: isDark,
+                        students: visibleStudents,
+                        maxHeight: constraints.maxHeight,
+                      );
+                    }
+                  },
+                ),
+                if (_visibleCount < filteredStudents.length)
+                  Container(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? const Color(0xFF1E293B)
+                          : Colors.grey.shade50,
+                      border: Border(
+                        top: BorderSide(
+                          color: isDark
+                              ? const Color(0xFF334155)
+                              : const Color(0xFFE2E8F0),
+                        ),
+                      ),
+                    ),
+                    child: TextButton.icon(
+                      onPressed: () => setState(() => _visibleCount += 20),
+                      icon: const Icon(LucideIcons.chevronDown, size: 16),
+                      label: Text(
+                        'Load More (${filteredStudents.length - _visibleCount} remaining)',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
+                      ),
                     ),
                   ),
-                ),
+              ],
             ],
-          ],
-        ),
+          ),
         ),
       ),
     );
@@ -472,10 +483,7 @@ class _AttendanceRosterTableState extends State<AttendanceRosterTable> {
       child: TextField(
         controller: _searchController,
         onChanged: widget.onSearchChanged,
-        style: TextStyle(
-          fontSize: 12.5,
-          color: theme.colorScheme.onSurface,
-        ),
+        style: TextStyle(fontSize: 12.5, color: theme.colorScheme.onSurface),
         decoration: InputDecoration(
           hintText: 'Search student or LRN...',
           hintStyle: TextStyle(
@@ -538,10 +546,7 @@ class _AttendanceRosterTableState extends State<AttendanceRosterTable> {
             spacing: 12,
             runSpacing: 10,
             crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              genderTabs,
-              searchBox,
-            ],
+            children: [genderTabs, searchBox],
           ),
           if (!widget.isLocked)
             Wrap(
@@ -563,8 +568,9 @@ class _AttendanceRosterTableState extends State<AttendanceRosterTable> {
                         : 'Auto-Absent Unmarked',
                     icon: LucideIcons.clockAlert,
                     isSmall: true,
-                    onPressed:
-                        unmarkedCount > 0 ? widget.onAutoAbsentUnmarked : null,
+                    onPressed: unmarkedCount > 0
+                        ? widget.onAutoAbsentUnmarked
+                        : null,
                   ),
                 if (widget.onSaveAttendance != null)
                   AppButton.primary(
@@ -574,7 +580,9 @@ class _AttendanceRosterTableState extends State<AttendanceRosterTable> {
                     icon: LucideIcons.check,
                     isSmall: true,
                     isLoading: widget.isSavingBatch ?? false,
-                    onPressed: (widget.dirtyCount ?? 0) > 0 ? widget.onSaveAttendance : null,
+                    onPressed: (widget.dirtyCount ?? 0) > 0
+                        ? widget.onSaveAttendance
+                        : null,
                   ),
               ],
             ),
@@ -637,8 +645,9 @@ class _AttendanceRosterTableState extends State<AttendanceRosterTable> {
         ? theme.colorScheme.primary.withValues(alpha: 0.14)
         : theme.colorScheme.primary.withValues(alpha: 0.08);
     final headerBorder = theme.colorScheme.primary.withValues(alpha: 0.25);
-    final rowBorderColor =
-        theme.colorScheme.onSurface.withValues(alpha: isDark ? 0.1 : 0.07);
+    final rowBorderColor = theme.colorScheme.onSurface.withValues(
+      alpha: isDark ? 0.1 : 0.07,
+    );
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -788,8 +797,9 @@ class _AttendanceRosterTableState extends State<AttendanceRosterTable> {
         ? theme.colorScheme.primary.withValues(alpha: 0.14)
         : theme.colorScheme.primary.withValues(alpha: 0.08);
     final headerBorder = theme.colorScheme.primary.withValues(alpha: 0.25);
-    final rowBorderColor =
-        theme.colorScheme.onSurface.withValues(alpha: isDark ? 0.1 : 0.07);
+    final rowBorderColor = theme.colorScheme.onSurface.withValues(
+      alpha: isDark ? 0.1 : 0.07,
+    );
     final stickyDividerColor = isDark
         ? theme.colorScheme.onSurface.withValues(alpha: 0.18)
         : const Color(0xFFCBD5E1);
@@ -1161,10 +1171,7 @@ class _AttendanceRosterTableState extends State<AttendanceRosterTable> {
     final ln = student.lastName.trim();
     final fn = student.firstName.trim();
     final mi = student.middleInitial;
-    final restParts = [
-      if (fn.isNotEmpty) fn,
-      ?mi,
-    ].join(' ');
+    final restParts = [if (fn.isNotEmpty) fn, ?mi].join(' ');
 
     return Align(
       alignment: Alignment.centerLeft,
@@ -1205,12 +1212,10 @@ class _AttendanceRosterTableState extends State<AttendanceRosterTable> {
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
-          color: const Color(0xFF2563EB).withValues(alpha: isDark ? 0.25 : 0.12),
+          color: const Color(0xFF2563EB)
+              .withValues(alpha: isDark ? 0.25 : 0.12),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: const Color(0xFF2563EB),
-            width: 1.2,
-          ),
+          border: Border.all(color: const Color(0xFF2563EB), width: 1.2),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -1218,12 +1223,15 @@ class _AttendanceRosterTableState extends State<AttendanceRosterTable> {
             const SizedBox(
               width: 10,
               height: 10,
-              child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF2563EB)),
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Color(0xFF2563EB),
+              ),
             ),
             const SizedBox(width: 5),
             const Flexible(
               child: Text(
-                'Waiting RFID',
+                'Tap RFID Card',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
@@ -1236,7 +1244,11 @@ class _AttendanceRosterTableState extends State<AttendanceRosterTable> {
             const SizedBox(width: 4),
             InkWell(
               onTap: widget.onCancelLinkingRfid,
-              child: const Icon(Icons.close, size: 13, color: Color(0xFF2563EB)),
+              child: const Icon(
+                Icons.close,
+                size: 13,
+                color: Color(0xFF2563EB),
+              ),
             ),
           ],
         ),
@@ -1260,9 +1272,7 @@ class _AttendanceRosterTableState extends State<AttendanceRosterTable> {
           decoration: BoxDecoration(
             color: AppTheme.catTeal.withValues(alpha: isDark ? 0.2 : 0.1),
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: AppTheme.catTeal.withValues(alpha: 0.4),
-            ),
+            border: Border.all(color: AppTheme.catTeal.withValues(alpha: 0.4)),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -1319,11 +1329,7 @@ class _AttendanceRosterTableState extends State<AttendanceRosterTable> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              LucideIcons.plus,
-              size: 12,
-              color: theme.colorScheme.primary,
-            ),
+            Icon(LucideIcons.plus, size: 12, color: theme.colorScheme.primary),
             const SizedBox(width: 3),
             Flexible(
               child: Text(
@@ -1416,8 +1422,8 @@ class _AttendanceRosterTableState extends State<AttendanceRosterTable> {
     final bgColor = isSelected
         ? (isDisabled ? activeColor.withValues(alpha: 0.55) : activeColor)
         : (isDark
-            ? Colors.white.withValues(alpha: 0.05)
-            : const Color(0xFFF1F5F9));
+              ? Colors.white.withValues(alpha: 0.05)
+              : const Color(0xFFF1F5F9));
 
     final borderColor = isSelected
         ? activeColor
@@ -1532,9 +1538,7 @@ class _AttendanceRosterTableState extends State<AttendanceRosterTable> {
       decoration: BoxDecoration(
         color: badgeColor.withValues(alpha: isDark ? 0.22 : 0.12),
         borderRadius: BorderRadius.circular(5),
-        border: Border.all(
-          color: badgeColor.withValues(alpha: 0.35),
-        ),
+        border: Border.all(color: badgeColor.withValues(alpha: 0.35)),
       ),
       child: Text(
         source.label,
@@ -1662,8 +1666,7 @@ class _AttendanceRemarkModalState extends State<_AttendanceRemarkModal> {
 
     if (raw.isNotEmpty && trimmed.isEmpty) {
       setState(() {
-        _errorText =
-            'Remark cannot contain spaces only. Enter a note or clear the field.';
+        _errorText = 'Remark cannot contain spaces only. Enter a note or clear the field.';
       });
       return;
     }
@@ -1749,9 +1752,7 @@ class _AttendanceRemarkModalState extends State<_AttendanceRemarkModal> {
                 controller: _controller,
                 autofocus: true,
                 maxLines: 3,
-                inputFormatters: [
-                  LengthLimitingTextInputFormatter(180),
-                ],
+                inputFormatters: [LengthLimitingTextInputFormatter(180)],
                 onChanged: (_) {
                   if (_errorText != null) {
                     setState(() => _errorText = null);

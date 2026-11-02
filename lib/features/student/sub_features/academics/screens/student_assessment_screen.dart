@@ -146,13 +146,13 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
       }).catchError((_) {});
     } catch (_) {}
 
-    // Strictly informational warning notice - NEVER auto-submit or lock student on violations
-    AppModals.showWarningDialog(
-      context: context,
-      title: 'Proctor Advisory Notice',
-      message:
-          'Warning: $event.\nLoss of window focus has been recorded (#$_violations) for instructor review. Please remain on the assessment screen.',
-    );
+    // Strictly SILENT violation logging - Do NOT show warning pop-ups on the student's screen per user request
+    // This allows organic tracking without panicking the student.
+    // context: context,
+    // title: 'Proctor Advisory Notice',
+    // message:
+    //    'Warning: $event.\nLoss of window focus has been recorded (#$_violations) for instructor review. Please remain on the assessment screen.',
+    //);
   }
 
   void _submitAssessment({bool autoSubmit = false}) {
@@ -408,6 +408,15 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
                 onPressed:
                     _rulesAccepted
                         ? () {
+                            final now = DateTime.now();
+                            if (widget.assessment.scheduledDate != null && now.isBefore(widget.assessment.scheduledDate!)) {
+                               AppModals.showErrorDialog(
+                                  context: context,
+                                  title: 'Assessment Locked',
+                                  message: 'You cannot start this assessment yet. It is scheduled to begin later.',
+                               );
+                               return;
+                            }
                           setState(() => _currentStep = 1);
                           _startTimer();
                         }

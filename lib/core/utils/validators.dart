@@ -103,18 +103,18 @@ class AppValidators {
     // Must have exactly one '@' symbol
     final parts = trimmed.split('@');
     if (parts.length != 2) {
-      return 'Please enter a valid email address with an @ symbol.';
+      return 'Please enter a valid email address.';
     }
 
     final localPart = parts[0];
     final domainPart = parts[1];
 
     if (localPart.isEmpty) {
-      return 'Email username is missing before @.';
+      return 'Please enter a valid email address.';
     }
 
     if (domainPart.isEmpty) {
-      return 'Email domain is missing after @.';
+      return 'Please complete the email domain (e.g. @gmail.com).';
     }
 
     // Local part constraints: alphanumeric and standard allowed symbols, no double dots
@@ -124,10 +124,12 @@ class AppValidators {
       return 'Invalid email username format.';
     }
 
-    // Domain part must contain at least one dot separating domain and TLD
+    // Domain part must contain at least one dot separating domain and TLD.
+    // If it doesn't have a dot yet, the user might still be typing the domain. We won't block or error heavily here 
+    // unless they try to submit, but since it's a live validator, returning null lets them type.
     final domainParts = domainPart.split('.');
     if (domainParts.length < 2 || domainParts.any((part) => part.isEmpty)) {
-      return 'Please enter a valid domain (e.g. gmail.com).';
+      return null; // Suppress error while typing domain before the dot
     }
 
     final tld = domainParts.last;
@@ -220,7 +222,7 @@ class AppValidators {
     if (!majorProviders.contains(domainPart)) {
       for (final provider in majorProviders) {
         if (_levenshtein(domainPart, provider) <= 2) {
-          return 'Invalid domain. Did you mean @$provider?';
+          return 'Did you mean @$provider?';
         }
       }
     }
