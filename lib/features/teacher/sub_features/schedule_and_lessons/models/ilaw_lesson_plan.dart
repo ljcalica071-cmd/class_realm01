@@ -302,6 +302,8 @@ class IlawLessonPlan {
 
   bool get isApproved => status == IlawPlanStatus.approved;
 
+  String get term => quarter;
+
   String get formattedDuration => '$durationMinutes mins';
 
   List<IlawSessionData> get effectiveSessions {
@@ -334,6 +336,7 @@ class IlawLessonPlan {
     String? teacherName,
     String? gradeLevel,
     String? quarter,
+    String? term,
     String? subject,
     String? topic,
     int? durationMinutes,
@@ -360,7 +363,7 @@ class IlawLessonPlan {
       teacherId: teacherId ?? this.teacherId,
       teacherName: teacherName ?? this.teacherName,
       gradeLevel: gradeLevel ?? this.gradeLevel,
-      quarter: quarter ?? this.quarter,
+      quarter: term ?? quarter ?? this.quarter,
       subject: subject ?? this.subject,
       topic: topic ?? this.topic,
       durationMinutes: durationMinutes ?? this.durationMinutes,
@@ -390,6 +393,7 @@ class IlawLessonPlan {
       'teacher_id': teacherId,
       'teacher_name': teacherName,
       'grade_level': gradeLevel,
+      'term': quarter,
       'quarter': quarter,
       'subject': subject,
       'topic': topic,
@@ -458,7 +462,7 @@ class IlawLessonPlan {
       teacherId: (json['teacher_id'] ?? '').toString(),
       teacherName: (json['teacher_name'] ?? '').toString(),
       gradeLevel: (json['grade_level'] ?? 'Grade 11').toString(),
-      quarter: (json['quarter'] ?? 'Quarter 1').toString(),
+      quarter: _normalizeTerm((json['term'] ?? json['quarter'] ?? 'Term 1').toString()),
       subject: (json['subject'] ?? '').toString(),
       topic: (json['topic'] ?? '').toString(),
       durationMinutes: (json['duration_minutes'] is int)
@@ -492,6 +496,17 @@ class IlawLessonPlan {
       createdAt: created,
       updatedAt: updated,
     );
+  }
+
+  static String _normalizeTerm(String raw) {
+    final trimmed = raw.trim();
+    if (trimmed.isEmpty) return 'Term 1';
+    if (trimmed == 'Quarter 1' || trimmed == 'Term 1') return 'Term 1';
+    if (trimmed == 'Quarter 2' || trimmed == 'Term 2') return 'Term 2';
+    if (trimmed == 'Quarter 3' || trimmed == 'Quarter 4' || trimmed == 'Term 3') {
+      return 'Term 3';
+    }
+    return trimmed;
   }
 
   /// Structured SHS New Curriculum iLAW template draft for manual authoring or

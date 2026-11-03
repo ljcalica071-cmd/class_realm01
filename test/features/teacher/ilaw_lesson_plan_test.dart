@@ -25,7 +25,7 @@ void main() {
         teacherId: 'teacher-naruto',
         teacherName: 'Naruto Uzumaki',
         gradeLevel: 'Grade 11',
-        quarter: 'Quarter 1',
+        quarter: 'Term 1',
         subject: 'General Mathematics',
         topic: 'Rational Functions and Equations',
         durationMinutes: 60,
@@ -45,7 +45,8 @@ void main() {
       expect(restored.teacherId, 'teacher-naruto');
       expect(restored.teacherName, 'Naruto Uzumaki');
       expect(restored.gradeLevel, 'Grade 11');
-      expect(restored.quarter, 'Quarter 1');
+      expect(restored.term, 'Term 1');
+      expect(restored.quarter, 'Term 1');
       expect(restored.subject, 'General Mathematics');
       expect(restored.topic, 'Rational Functions and Equations');
       expect(restored.durationMinutes, 60);
@@ -59,8 +60,11 @@ void main() {
       expect(IlawLessonPlanValidator.validateGradeLevel('Grade 11'), isNull);
       expect(IlawLessonPlanValidator.validateGradeLevel('Grade 12'), isNull);
 
-      expect(IlawLessonPlanValidator.validateQuarter(''), isNotNull);
-      expect(IlawLessonPlanValidator.validateQuarter('Quarter 1'), isNull);
+      expect(IlawLessonPlanValidator.validateTerm(''), isNotNull);
+      expect(IlawLessonPlanValidator.validateTerm('Term 1'), isNull);
+      expect(IlawLessonPlanValidator.validateTerm('Term 2'), isNull);
+      expect(IlawLessonPlanValidator.validateTerm('Term 3'), isNull);
+      expect(IlawLessonPlanValidator.allowedTerms, ['Term 1', 'Term 2', 'Term 3']);
 
       expect(IlawLessonPlanValidator.validateSubject('   '), isNotNull);
       expect(IlawLessonPlanValidator.validateSubject('AB'), isNotNull);
@@ -979,35 +983,35 @@ void main() {
       await tester.tap(find.text('Generate New Lesson Plan'));
       await tester.pumpAndSettle();
 
-      final quarterField = find.byKey(const Key('ilaw_quarter_dropdown'));
-      expect(quarterField, findsOneWidget);
-      final quarterFieldBottom = tester.getBottomLeft(quarterField).dy;
+      final termField = find.byKey(const Key('ilaw_term_dropdown'));
+      expect(termField, findsOneWidget);
+      final termFieldBottom = tester.getBottomLeft(termField).dy;
 
-      // Open Quarter dropdown while Quarter 1 is selected
-      await tester.tap(quarterField);
+      // Open Term dropdown while Term 1 is selected
+      await tester.tap(termField);
       await tester.pumpAndSettle();
 
-      expect(find.widgetWithText(MenuItemButton, 'Quarter 2'), findsOneWidget);
-      final q1ItemTopWhenQ1 = tester
-          .getTopLeft(find.widgetWithText(MenuItemButton, 'Quarter 1'))
+      expect(find.widgetWithText(MenuItemButton, 'Term 2'), findsOneWidget);
+      final t1ItemTopWhenT1 = tester
+          .getTopLeft(find.widgetWithText(MenuItemButton, 'Term 1'))
           .dy;
-      expect(q1ItemTopWhenQ1, greaterThanOrEqualTo(quarterFieldBottom));
+      expect(t1ItemTopWhenT1, greaterThanOrEqualTo(termFieldBottom));
 
-      // Select Quarter 4 (bottom item)
-      await tester.tap(find.widgetWithText(MenuItemButton, 'Quarter 4'));
+      // Select Term 3 (bottom item of 3 terms)
+      await tester.tap(find.widgetWithText(MenuItemButton, 'Term 3'));
       await tester.pumpAndSettle();
 
-      // Re-open Quarter dropdown while Quarter 4 is selected -> stays in the exact same fixed spot below the field!
-      await tester.tap(quarterField);
+      // Re-open Term dropdown while Term 3 is selected -> stays in the exact same fixed spot below the field!
+      await tester.tap(termField);
       await tester.pumpAndSettle();
 
-      final q1ItemTopWhenQ4 = tester
-          .getTopLeft(find.widgetWithText(MenuItemButton, 'Quarter 1'))
+      final t1ItemTopWhenT3 = tester
+          .getTopLeft(find.widgetWithText(MenuItemButton, 'Term 1'))
           .dy;
-      expect(q1ItemTopWhenQ4, equals(q1ItemTopWhenQ1));
-      expect(q1ItemTopWhenQ4, greaterThanOrEqualTo(quarterFieldBottom));
+      expect(t1ItemTopWhenT3, equals(t1ItemTopWhenT1));
+      expect(t1ItemTopWhenT3, greaterThanOrEqualTo(termFieldBottom));
 
-      await tester.tap(find.widgetWithText(MenuItemButton, 'Quarter 4'));
+      await tester.tap(find.widgetWithText(MenuItemButton, 'Term 3'));
       await tester.pumpAndSettle();
 
       final gradeField = find.byKey(const Key('ilaw_grade_dropdown'));
@@ -1096,9 +1100,9 @@ void main() {
       await tester.tap(find.text('Generate New Lesson Plan'));
       await tester.pumpAndSettle();
 
-      // Verify SHS Grade and Quarter pickers
+      // Verify SHS Grade and Term pickers
       expect(find.byKey(const Key('ilaw_grade_dropdown')), findsOneWidget);
-      expect(find.byKey(const Key('ilaw_quarter_dropdown')), findsOneWidget);
+      expect(find.byKey(const Key('ilaw_term_dropdown')), findsOneWidget);
       expect(find.byKey(const Key('ilaw_sessions_dropdown')), findsOneWidget);
       expect(find.byKey(const Key('ilaw_proficiency_dropdown')), findsOneWidget);
 

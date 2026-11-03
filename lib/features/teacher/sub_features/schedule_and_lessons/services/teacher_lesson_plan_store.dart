@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/features/teacher/sub_features/schedule_and_lessons/models/ilaw_lesson_plan.dart';
@@ -13,26 +14,37 @@ class LessonPlanAccessDeniedException implements Exception {
   String toString() => message;
 }
 
-/// Strictly isolated per-teacher storage for SHS iLAW Lesson Plans.
+/// Dual-storage (Cloud Supabase + Local SharedPreferences Cache) for SHS iLAW Lesson Plans.
 ///
 /// Guarantees:
-/// 1. Zero mutations to Supabase SQL schema/tables.
-/// 2. Only active authenticated users with `UserRole.teacher` can read, save,
-///    or delete lesson plans (Students, Parents, and logged-out users are blocked).
-/// 3. Each teacher's lesson plans live in a dedicated key partitioned by their
-///    unique `teacherId`, and ownership (`plan.teacherId == activeTeacher.id`)
-///    is verified on every operation so no teacher can ever view or modify
-///    another teacher's plans.
+/// 1. Persists to Supabase `public.teacher_lesson_plans` table so plans survive restarts and browser clears.
+/// 2. Caches locally in SharedPreferences for offline resilience and fast loading.
+/// 3. Only active authenticated users with `UserRole.teacher` can read, save, or delete lesson plans.
+/// 4. Strict isolation: each teacher's plans are filtered by `teacher.id`.
 class TeacherLessonPlanStore {
   static const String _storagePrefix = 'ilaw_teacher_lesson_plans_v1_';
 
   final UserModel? Function() _currentUserProvider;
+  final SupabaseClient? _supabaseClientOverride;
 
-  TeacherLessonPlanStore({UserModel? Function()? currentUserProvider})
-    : _currentUserProvider =
-          currentUserProvider ?? (() => AuthRepository.instance.currentUser);
+  TeacherLessonPlanStore({
+    UserModel? Function()? currentUserProvider,
+    SupabaseClient? supabaseClient,
+  })  : _currentUserProvider =
+            currentUserProvider ?? (() => AuthRepository.instance.currentUser),
+        _supabaseClientOverride = supabaseClient;
 
   static final TeacherLessonPlanStore instance = TeacherLessonPlanStore();
+
+  SupabaseClient? get _supabase {
+    if (_supabaseClientOverride != null) return _supabaseClientOverride;
+    try {
+      if (Supabase.instance.isInitialized) {
+        return Supabase.instance.client;
+      }
+    } catch (_) {}
+    return null;
+  }
 
   UserModel _requireActiveTeacher() {
     final user = _currentUserProvider();
@@ -61,8 +73,39 @@ class TeacherLessonPlanStore {
 
   Future<List<IlawLessonPlan>> loadPlansForCurrentTeacher() async {
     final teacher = _requireActiveTeacher();
+
+    // 1. Try Supabase cloud database first
+    final client = _supabase;
+    if (client != null) {
+      try {
+        final response = await client
+            .from('teacher_lesson_plans')
+            .select()
+            .eq('teacher_id', teacher.id)
+            .order('updated_at', ascending: false);
+
+        final plans = response
+            .whereType<Map>()
+            .map((m) => IlawLessonPlan.fromJson(Map<String, dynamic>.from(m)))
+            .where((p) => p.teacherId == teacher.id)
+            .toList();
+        plans.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+
+        // Sync cloud records into local cache
+        await _persistForTeacher(teacher.id, plans);
+        return plans;
+      } catch (_) {
+        // Table not ready or offline - gracefully fall back to local storage
+      }
+    }
+
+    // 2. Fall back to local SharedPreferences cache
+    return _loadLocalPlans(teacher.id);
+  }
+
+  Future<List<IlawLessonPlan>> _loadLocalPlans(String teacherId) async {
     final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_storageKeyForTeacher(teacher.id));
+    final raw = prefs.getString(_storageKeyForTeacher(teacherId));
     if (raw == null || raw.isEmpty) return [];
 
     try {
@@ -71,7 +114,7 @@ class TeacherLessonPlanStore {
       final plans = decoded
           .whereType<Map>()
           .map((m) => IlawLessonPlan.fromJson(Map<String, dynamic>.from(m)))
-          .where((p) => p.teacherId == teacher.id)
+          .where((p) => p.teacherId == teacherId)
           .toList();
       plans.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
       return plans;
@@ -99,7 +142,6 @@ class TeacherLessonPlanStore {
       );
     }
 
-    final existing = await loadPlansForCurrentTeacher();
     final ownedPlan = plan.copyWith(
       teacherId: teacher.id,
       teacherName: plan.teacherName.trim().isNotEmpty
@@ -108,6 +150,18 @@ class TeacherLessonPlanStore {
       updatedAt: DateTime.now(),
     );
 
+    // 1. Save to Supabase cloud database
+    final client = _supabase;
+    if (client != null) {
+      try {
+        await client.from('teacher_lesson_plans').upsert(ownedPlan.toJson());
+      } catch (_) {
+        // Safe fallback if table is not yet migrated in Supabase
+      }
+    }
+
+    // 2. Save to local SharedPreferences cache
+    final existing = await _loadLocalPlans(teacher.id);
     final index = existing.indexWhere(
       (p) => p.id == ownedPlan.id && p.teacherId == teacher.id,
     );
@@ -124,7 +178,21 @@ class TeacherLessonPlanStore {
 
   Future<void> deletePlan(String planId) async {
     final teacher = _requireActiveTeacher();
-    final existing = await loadPlansForCurrentTeacher();
+
+    // 1. Delete from Supabase cloud database
+    final client = _supabase;
+    if (client != null) {
+      try {
+        await client
+            .from('teacher_lesson_plans')
+            .delete()
+            .eq('id', planId)
+            .eq('teacher_id', teacher.id);
+      } catch (_) {}
+    }
+
+    // 2. Delete from local cache
+    final existing = await _loadLocalPlans(teacher.id);
     final filtered = existing
         .where((p) => !(p.id == planId && p.teacherId == teacher.id))
         .toList();

@@ -46,7 +46,7 @@ class _IlawLessonPlanWizardDialogState
   late IlawPlanStatus _status;
 
   String _selectedGrade = 'Grade 11';
-  String _selectedQuarter = 'Quarter 1';
+  String _selectedTerm = 'Term 1';
   int _selectedSessions = 4;
   DepEdProficiencyLevel _selectedProficiency = DepEdProficiencyLevel.developing;
   IlawTemplateType _selectedTemplate = IlawTemplateType.ilawModified;
@@ -80,7 +80,7 @@ class _IlawLessonPlanWizardDialogState
 
   // Inline validation error states
   String? _gradeError;
-  String? _quarterError;
+  String? _termError;
   String? _sessionsError;
   String? _proficiencyError;
   String? _subjectError;
@@ -116,7 +116,7 @@ class _IlawLessonPlanWizardDialogState
     _status = existing?.status ?? IlawPlanStatus.draft;
 
     _selectedGrade = existing?.gradeLevel ?? 'Grade 11';
-    _selectedQuarter = existing?.quarter ?? 'Quarter 1';
+    _selectedTerm = existing?.term ?? 'Term 1';
     _selectedSessions = existing?.numberOfSessions ?? 4;
     _selectedProficiency =
         existing?.targetProficiency ?? DepEdProficiencyLevel.developing;
@@ -229,7 +229,7 @@ class _IlawLessonPlanWizardDialogState
 
   bool _validateStep1() {
     final gErr = IlawLessonPlanValidator.validateGradeLevel(_selectedGrade);
-    final qErr = IlawLessonPlanValidator.validateQuarter(_selectedQuarter);
+    final qErr = IlawLessonPlanValidator.validateTerm(_selectedTerm);
     final sesErr = IlawLessonPlanValidator.validateNumberOfSessions(
       _selectedSessions,
     );
@@ -245,7 +245,7 @@ class _IlawLessonPlanWizardDialogState
 
     setState(() {
       _gradeError = gErr;
-      _quarterError = qErr;
+      _termError = qErr;
       _sessionsError = sesErr;
       _subjectError = sErr;
       _topicError = tErr;
@@ -350,7 +350,7 @@ class _IlawLessonPlanWizardDialogState
       subject: _subjectCtrl.text.trim(),
       topic: _topicCtrl.text.trim(),
       gradeLevel: _selectedGrade,
-      quarter: _selectedQuarter,
+      quarter: _selectedTerm,
       durationMinutes: durationMins,
       teachingStrategy: _strategyCtrl.text.trim(),
       learningCompetency: _competencyCtrl.text.trim(),
@@ -451,7 +451,7 @@ class _IlawLessonPlanWizardDialogState
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'Targeting: $_selectedGrade • $_selectedQuarter • $_selectedSessions Sessions • ${_selectedProficiency.label}',
+                        'Targeting: $_selectedGrade • $_selectedTerm • $_selectedSessions Sessions • ${_selectedProficiency.label}',
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
@@ -495,7 +495,7 @@ class _IlawLessonPlanWizardDialogState
       subject: sub,
       topic: top,
       gradeLevel: _selectedGrade,
-      quarter: _selectedQuarter,
+      quarter: _selectedTerm,
       durationMinutes: durationMins,
       teachingStrategy: _strategyCtrl.text.trim(),
       learningCompetency: _competencyCtrl.text.trim(),
@@ -530,7 +530,7 @@ class _IlawLessonPlanWizardDialogState
       teacherId: teacher?.id ?? 'teacher_local',
       teacherName: teacher?.fullName ?? 'Senior High School Teacher',
       gradeLevel: _selectedGrade,
-      quarter: _selectedQuarter,
+      quarter: _selectedTerm,
       subject: _subjectCtrl.text.trim(),
       topic: _topicCtrl.text.trim(),
       durationMinutes: durationMins,
@@ -901,20 +901,20 @@ class _IlawLessonPlanWizardDialogState
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Row 1: Grade Level & Quarter
+            // Row 1: Grade Level & Term
             if (isWide)
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Expanded(child: _buildGradeDropdown(theme)),
                   const SizedBox(width: 16),
-                  Expanded(child: _buildQuarterDropdown(theme)),
+                  Expanded(child: _buildTermDropdown(theme)),
                 ],
               )
             else ...[
               _buildGradeDropdown(theme),
               const SizedBox(height: 16),
-              _buildQuarterDropdown(theme),
+              _buildTermDropdown(theme),
             ],
             const SizedBox(height: 16),
 
@@ -1086,7 +1086,7 @@ class _IlawLessonPlanWizardDialogState
     final comps = DepEdCurriculumCatalog.getCompetenciesFor(
       gradeLevel: _selectedGrade,
       subject: _subjectCtrl.text,
-      quarter: _selectedQuarter,
+      term: _selectedTerm,
     );
 
     return Container(
@@ -1108,7 +1108,7 @@ class _IlawLessonPlanWizardDialogState
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  'DepEd Curriculum Competencies ($_selectedGrade • $_selectedQuarter)',
+                  'DepEd Curriculum Competencies ($_selectedGrade • $_selectedTerm)',
                   style: TextStyle(
                     fontSize: 12.5,
                     fontWeight: FontWeight.w700,
@@ -1245,19 +1245,19 @@ class _IlawLessonPlanWizardDialogState
     );
   }
 
-  Widget _buildQuarterDropdown(ThemeData theme) {
+  Widget _buildTermDropdown(ThemeData theme) {
     return _buildDropdownField(
       theme: theme,
-      fieldKey: const Key('ilaw_quarter_dropdown'),
-      label: 'Quarter *',
-      value: _selectedQuarter,
-      items: IlawLessonPlanValidator.allowedQuarters,
-      errorText: _quarterError,
+      fieldKey: const Key('ilaw_term_dropdown'),
+      label: 'Term *',
+      value: _selectedTerm,
+      items: IlawLessonPlanValidator.allowedTerms,
+      errorText: _termError,
       onChanged: (val) {
         if (val != null) {
           setState(() {
-            _selectedQuarter = val;
-            _quarterError = null;
+            _selectedTerm = val;
+            _termError = null;
           });
         }
       },
@@ -1345,7 +1345,7 @@ class _IlawLessonPlanWizardDialogState
                 runSpacing: 6,
                 children: [
                   Text(
-                    '$_selectedGrade  •  $_selectedQuarter  •  $_selectedSessions Sessions  •  ${_selectedProficiency.label}',
+                    '$_selectedGrade  •  $_selectedTerm  •  $_selectedSessions Sessions  •  ${_selectedProficiency.label}',
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
@@ -1761,7 +1761,7 @@ class _IlawLessonPlanWizardDialogState
                 ),
                 child: Column(
                   children: [
-                    _buildMetaPair('Subject', plan.subject, 'Grade & Quarter', '${plan.gradeLevel} - ${plan.quarter}'),
+                    _buildMetaPair('Subject', plan.subject, 'Grade & Term', '${plan.gradeLevel} - ${plan.term}'),
                     const SizedBox(height: 8),
                     _buildMetaPair('Topic', plan.topic, 'Duration & Sessions', '${plan.durationMinutes}m • ${plan.numberOfSessions} Sessions'),
                     const SizedBox(height: 8),

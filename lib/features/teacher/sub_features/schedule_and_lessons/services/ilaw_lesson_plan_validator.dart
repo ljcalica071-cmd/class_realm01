@@ -36,8 +36,10 @@ class DepEdCurriculumCatalog {
   static List<String> getCompetenciesFor({
     required String gradeLevel,
     required String subject,
-    required String quarter,
+    String? term,
+    String? quarter,
   }) {
+    final effectiveTerm = term ?? quarter ?? 'Term 1';
     final cleanSubject = subject.trim().toLowerCase();
 
     if (cleanSubject.contains('general math') ||
@@ -111,19 +113,20 @@ class DepEdCurriculumCatalog {
       'SHS-COMP-01: Analyzes fundamental concepts, principles, and frameworks in $subject.',
       'SHS-COMP-02: Applies inquiry-based critical reasoning to solve contextualized SHS challenges in $subject.',
       'SHS-COMP-03: Evaluates real-world situations and ethical implications within the domain of $subject.',
-      'SHS-COMP-04: Creates collaborative, output-oriented artifacts demonstrating mastery of $subject ($quarter).',
+      'SHS-COMP-04: Creates collaborative, output-oriented artifacts demonstrating mastery of $subject ($effectiveTerm).',
     ];
   }
 }
 
 class IlawLessonPlanValidator {
   static const List<String> allowedGrades = ['Grade 11', 'Grade 12'];
-  static const List<String> allowedQuarters = [
-    'Quarter 1',
-    'Quarter 2',
-    'Quarter 3',
-    'Quarter 4',
+  static const List<String> allowedTerms = [
+    'Term 1',
+    'Term 2',
+    'Term 3',
   ];
+  // Backward compatibility alias for legacy code:
+  static List<String> get allowedQuarters => allowedTerms;
 
   static const int minSessions = 1;
   static const int maxSessions = 5;
@@ -153,16 +156,20 @@ class IlawLessonPlanValidator {
     return null;
   }
 
-  static String? validateQuarter(String? value) {
+  static String? validateTerm(String? value) {
     final trimmed = value?.trim() ?? '';
     if (trimmed.isEmpty) {
-      return 'Please select a quarter.';
+      return 'Please select a term.';
     }
-    if (!allowedQuarters.contains(trimmed)) {
-      return 'Quarter must be between Quarter 1 and Quarter 4.';
+    if (!allowedTerms.contains(trimmed) &&
+        !['Quarter 1', 'Quarter 2', 'Quarter 3', 'Quarter 4'].contains(trimmed)) {
+      return 'Term must be Term 1, Term 2, or Term 3.';
     }
     return null;
   }
+
+  // Backward compatibility alias:
+  static String? validateQuarter(String? value) => validateTerm(value);
 
   static String? validateNumberOfSessions(int? value) {
     if (value == null) {

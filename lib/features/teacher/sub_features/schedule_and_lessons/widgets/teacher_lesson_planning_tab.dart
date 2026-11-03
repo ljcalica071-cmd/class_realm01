@@ -238,7 +238,7 @@ class _TeacherLessonPlanningTabState extends State<TeacherLessonPlanningTab> {
       }
       if (query.isNotEmpty) {
         final haystack =
-            '${plan.topic} ${plan.subject} ${plan.gradeLevel} ${plan.quarter}'
+            '${plan.topic} ${plan.subject} ${plan.gradeLevel} ${plan.term}'
                 .toLowerCase();
         if (!haystack.contains(query)) return false;
       }
@@ -778,7 +778,7 @@ class _TeacherLessonPlanningTabState extends State<TeacherLessonPlanningTab> {
             runSpacing: 8,
             children: [
               Text(
-                '${plan.subject}  •  ${plan.gradeLevel}  •  ${plan.quarter}',
+                '${plan.subject}  •  ${plan.gradeLevel}  •  ${plan.term}',
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w700,

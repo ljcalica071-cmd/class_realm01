@@ -211,8 +211,8 @@ class IlawDocxExporter {
       _metaRow(
         'Subject',
         plan.subject,
-        'Grade & Quarter',
-        '${plan.gradeLevel}  •  ${plan.quarter}',
+        'Grade & Term',
+        '${plan.gradeLevel}  •  ${plan.term}',
       ),
     );
     sb.writeln(
