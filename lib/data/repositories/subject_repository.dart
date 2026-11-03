@@ -217,71 +217,76 @@ class SubjectRepository {
     String teacherId, {
     String schoolYear = '2026-2027',
     bool onlyWithEnrolledStudents = false,
+    bool forceRefresh = false,
   }) async {
     final cacheKey =
         'teacher_subjects_${teacherId}_${schoolYear}_$onlyWithEnrolledStudents';
-    final cached = AppDataCache.instance.getCached<List<Map<String, dynamic>>>(
-      cacheKey,
-      (json) => (json as List)
-          .map((e) => Map<String, dynamic>.from(e as Map))
-          .toList(),
-    );
-    if (cached != null && AppDataCache.instance.isFresh(cacheKey)) {
-      return cached;
+    if (!forceRefresh) {
+      final cached = AppDataCache.instance.getCached<List<Map<String, dynamic>>>(
+        cacheKey,
+        (json) => (json as List)
+            .map((e) => Map<String, dynamic>.from(e as Map))
+            .toList(),
+      );
+      if (cached != null && AppDataCache.instance.isFresh(cacheKey)) {
+        return cached;
+      }
     }
     List<Map<String, dynamic>> results;
-    // 1. FAST LOCAL DRIFT SQLITE READ (0 milliseconds load)
-    try {
-      final localOfferings = await AppDatabase.instance.getOfferingsForTeacher(
-        teacherId,
-      );
-      if (localOfferings.isNotEmpty) {
-        final cachedMetadata = {
-          for (final offering in LocalStorageService.getTeacherSubjects(
-            teacherId,
-          ))
-            offering['id']?.toString() ?? '': offering,
-        };
-        // Trigger silent background sync without blocking UI
-        unawaited(_syncOfferingsFromCloud(teacherId, schoolYear));
-
-        results = localOfferings.map((r) {
-          final metadata = cachedMetadata[r.id] ?? const <String, dynamic>{};
-          return {
-            'id': r.id,
-            'subject_id': r.subjectId,
-            'subject_name': r.subjectName,
-            'grade_level': r.gradeLevel,
-            'section_id': r.sectionId,
-            'section_name': r.sectionName,
-            'ww_weight': r.wwWeight,
-            'pt_weight': r.ptWeight,
-            'ex_weight': r.exWeight,
-            'terms_taught': metadata['terms_taught'] ?? 3,
-            'term_block': metadata['term_block'] ?? '1ST, 2ND, 3RD',
-            'units_per_term': metadata['units_per_term'] ?? 2.0,
-            'st1_weight': metadata['st1_weight'] ?? 30.0,
-            'st2_weight': metadata['st2_weight'] ?? 30.0,
-            'te_weight': metadata['te_weight'] ?? 40.0,
-            'school_year': r.schoolYear,
+    // 1. FAST LOCAL DRIFT SQLITE READ (0 milliseconds load) - skipped on forceRefresh
+    if (!forceRefresh) {
+      try {
+        final localOfferings = await AppDatabase.instance.getOfferingsForTeacher(
+          teacherId,
+        );
+        if (localOfferings.isNotEmpty) {
+          final cachedMetadata = {
+            for (final offering in LocalStorageService.getTeacherSubjects(
+              teacherId,
+            ))
+              offering['id']?.toString() ?? '': offering,
           };
-        }).toList();
+          // Trigger silent background sync without blocking UI
+          unawaited(_syncOfferingsFromCloud(teacherId, schoolYear));
 
-        if (onlyWithEnrolledStudents) {
-          final filtered = await _filterOfferingsWithEnrolledStudents(
-            teacherId,
-            results,
-          );
-          unawaited(AppDataCache.instance.setCache(cacheKey, filtered));
-          return filtered;
+          results = localOfferings.map((r) {
+            final metadata = cachedMetadata[r.id] ?? const <String, dynamic>{};
+            return {
+              'id': r.id,
+              'subject_id': r.subjectId,
+              'subject_name': r.subjectName,
+              'grade_level': r.gradeLevel,
+              'section_id': r.sectionId,
+              'section_name': r.sectionName,
+              'ww_weight': r.wwWeight,
+              'pt_weight': r.ptWeight,
+              'ex_weight': r.exWeight,
+              'terms_taught': metadata['terms_taught'] ?? 3,
+              'term_block': metadata['term_block'] ?? '1ST, 2ND, 3RD',
+              'units_per_term': metadata['units_per_term'] ?? 2.0,
+              'st1_weight': metadata['st1_weight'] ?? 30.0,
+              'st2_weight': metadata['st2_weight'] ?? 30.0,
+              'te_weight': metadata['te_weight'] ?? 40.0,
+              'school_year': r.schoolYear,
+            };
+          }).toList();
+
+          if (onlyWithEnrolledStudents) {
+            final filtered = await _filterOfferingsWithEnrolledStudents(
+              teacherId,
+              results,
+            );
+            unawaited(AppDataCache.instance.setCache(cacheKey, filtered));
+            return filtered;
+          }
+          return results;
         }
-        return results;
+      } catch (e) {
+        debugPrint('Drift local read notice: $e');
       }
-    } catch (e) {
-      debugPrint('Drift local read notice: $e');
     }
 
-    // 2. Fallback / Initial fetch from cloud
+    // 2. Direct fetch and cache sync from cloud
     results = await _syncOfferingsFromCloud(teacherId, schoolYear);
     if (onlyWithEnrolledStudents) {
       final filtered = await _filterOfferingsWithEnrolledStudents(
@@ -382,7 +387,14 @@ class SubjectRepository {
 
       final rows = response as List;
       if (rows.isEmpty) {
-        return getCachedTeacherSubjects(teacherId);
+        try {
+          await AppDatabase.instance.pruneOfferingsForTeacher(teacherId, const {});
+        } catch (_) {}
+        try {
+          await LocalStorageService.saveTeacherSubjects(teacherId, []);
+        } catch (_) {}
+        AppDataCache.instance.invalidatePrefix('teacher_subjects_$teacherId');
+        return [];
       }
 
       final mapped = rows.map<Map<String, dynamic>>((row) {
@@ -407,6 +419,20 @@ class SubjectRepository {
           'school_year': schoolYear,
         };
       }).toList();
+
+      // Prune Drift SQLite of any local offerings no longer present in cloud
+      final activeOfferingIds = mapped
+          .map((m) => m['id']?.toString() ?? '')
+          .where((id) => id.isNotEmpty)
+          .toSet();
+      try {
+        await AppDatabase.instance.pruneOfferingsForTeacher(
+          teacherId,
+          activeOfferingIds,
+        );
+      } catch (dbPruneErr) {
+        debugPrint('Drift local prune notice: $dbPruneErr');
+      }
 
       // Persist into Drift SQLite safely without blocking data return on web
       try {
@@ -852,7 +878,7 @@ class SubjectRepository {
     }
   }
 
-  /// Checks if an offering contains any student academic records (grades, term sheets, or submissions)
+  /// Checks if an offering contains any student academic records (grades, attendance, term sheets, or submissions)
   Future<bool> hasAcademicRecords(String offeringId) async {
     try {
       // 1. Gradebook term sheets
@@ -871,7 +897,15 @@ class SubjectRepository {
           .limit(1);
       if ((termGrades as List).isNotEmpty) return true;
 
-      // 3. Classwork submissions
+      // 3. Attendance records
+      final attendance = await _client
+          .from('attendance_records')
+          .select('id')
+          .eq('subject_offering_id', offeringId)
+          .limit(1);
+      if ((attendance as List).isNotEmpty) return true;
+
+      // 4. Classwork submissions
       final cwItems = await _client
           .from('classwork_items')
           .select('id')
@@ -889,7 +923,7 @@ class SubjectRepository {
         if ((subs as List).isNotEmpty) return true;
       }
 
-      // 4. Digital assessment attempts
+      // 5. Digital assessment attempts
       final assessments = await _client
           .from('digital_assessments')
           .select('id')
@@ -943,7 +977,7 @@ class SubjectRepository {
   Future<void> archiveSingleOffering(String offeringId) async {
     final offRow = await _client
         .from('subject_offerings')
-        .select('id, teacher_id')
+        .select('id, teacher_id, subject_id')
         .eq('id', offeringId)
         .maybeSingle();
 
@@ -951,6 +985,26 @@ class SubjectRepository {
         .from('subject_offerings')
         .update({'is_archived': true})
         .eq('id', offeringId);
+
+    final subjectId = offRow?['subject_id']?.toString();
+    if (subjectId != null) {
+      try {
+        final activeRemaining = await _client
+            .from('subject_offerings')
+            .select('id')
+            .eq('subject_id', subjectId)
+            .eq('is_archived', false)
+            .limit(1);
+        if ((activeRemaining as List).isEmpty) {
+          await _client
+              .from('subjects')
+              .update({'is_archived': true})
+              .eq('id', subjectId);
+        }
+      } catch (e) {
+        debugPrint('Notice updating subjects is_archived: $e');
+      }
+    }
 
     try {
       await AppDatabase.instance.updateSingleOfferingArchivedStatus(
@@ -968,6 +1022,7 @@ class SubjectRepository {
           .where((s) => s['id']?.toString() != offeringId)
           .toList();
       await LocalStorageService.saveTeacherSubjects(teacherId, updated);
+      AppDataCache.instance.invalidatePrefix('teacher_subjects_$teacherId');
     }
   }
 
@@ -975,7 +1030,7 @@ class SubjectRepository {
   Future<void> restoreSingleOffering(String offeringId) async {
     final offRow = await _client
         .from('subject_offerings')
-        .select('id, teacher_id')
+        .select('id, teacher_id, subject_id')
         .eq('id', offeringId)
         .maybeSingle();
 
@@ -983,6 +1038,18 @@ class SubjectRepository {
         .from('subject_offerings')
         .update({'is_archived': false})
         .eq('id', offeringId);
+
+    final subjectId = offRow?['subject_id']?.toString();
+    if (subjectId != null) {
+      try {
+        await _client
+            .from('subjects')
+            .update({'is_archived': false})
+            .eq('id', subjectId);
+      } catch (e) {
+        debugPrint('Notice un-archiving subject: $e');
+      }
+    }
 
     try {
       await AppDatabase.instance.updateSingleOfferingArchivedStatus(
@@ -995,6 +1062,7 @@ class SubjectRepository {
 
     final teacherId = offRow?['teacher_id']?.toString();
     if (teacherId != null) {
+      AppDataCache.instance.invalidatePrefix('teacher_subjects_$teacherId');
       await _syncOfferingsFromCloud(teacherId, '2026-2027');
     }
   }
@@ -1009,6 +1077,23 @@ class SubjectRepository {
         .update({'is_archived': true})
         .eq('teacher_id', teacherId)
         .eq('subject_id', subjectId);
+
+    try {
+      final activeRemaining = await _client
+          .from('subject_offerings')
+          .select('id')
+          .eq('subject_id', subjectId)
+          .eq('is_archived', false)
+          .limit(1);
+      if ((activeRemaining as List).isEmpty) {
+        await _client
+            .from('subjects')
+            .update({'is_archived': true})
+            .eq('id', subjectId);
+      }
+    } catch (e) {
+      debugPrint('Notice updating subjects is_archived: $e');
+    }
 
     try {
       await AppDatabase.instance.updateOfferingsArchivedStatus(
@@ -1026,6 +1111,7 @@ class SubjectRepository {
         .where((s) => s['subject_id']?.toString() != subjectId)
         .toList();
     await LocalStorageService.saveTeacherSubjects(teacherId, updated);
+    AppDataCache.instance.invalidatePrefix('teacher_subjects_$teacherId');
   }
 
   /// Restores all subject offerings for a teacher and subject, synchronizing Drift & LocalStorage
@@ -1040,6 +1126,15 @@ class SubjectRepository {
         .eq('subject_id', subjectId);
 
     try {
+      await _client
+          .from('subjects')
+          .update({'is_archived': false})
+          .eq('id', subjectId);
+    } catch (e) {
+      debugPrint('Notice un-archiving subject: $e');
+    }
+
+    try {
       await AppDatabase.instance.updateOfferingsArchivedStatus(
         teacherId: teacherId,
         subjectId: subjectId,
@@ -1049,6 +1144,7 @@ class SubjectRepository {
       debugPrint('Drift restore update notice: $e');
     }
 
+    AppDataCache.instance.invalidatePrefix('teacher_subjects_$teacherId');
     // Resync active offerings from cloud into Drift & LocalStorage
     await _syncOfferingsFromCloud(teacherId, '2026-2027');
   }
@@ -1290,6 +1386,7 @@ class SubjectRepository {
         .where((s) => s['subject_id']?.toString() != subjectId)
         .toList();
     await LocalStorageService.saveTeacherSubjects(teacherId, updatedCached);
+    AppDataCache.instance.invalidatePrefix('teacher_subjects_$teacherId');
   }
 
   /// Permanently deletes a single subject offering with safe cascade
@@ -1343,6 +1440,7 @@ class SubjectRepository {
           .where((s) => s['id']?.toString() != offeringId)
           .toList();
       await LocalStorageService.saveTeacherSubjects(teacherId, updated);
+      AppDataCache.instance.invalidatePrefix('teacher_subjects_$teacherId');
     }
   }
 

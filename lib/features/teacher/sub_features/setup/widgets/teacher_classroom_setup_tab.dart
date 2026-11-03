@@ -801,7 +801,7 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
                   ],
                 ),
               ),
-              // Archive / Edit Actions on Active Cards (Archived cards have actions in footer)
+              // Archive / Edit / Delete Actions on Active Cards (Archived cards have actions in footer)
               if (!isArchived) ...[
                 IconButton(
                   tooltip: 'Edit subject and sections',
@@ -814,6 +814,16 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
                   visualDensity: VisualDensity.compact,
                   icon: Icon(LucideIcons.archive, size: 17, color: muted),
                   onPressed: () => _confirmArchive(subject),
+                ),
+                IconButton(
+                  tooltip: 'Delete subject permanently',
+                  visualDensity: VisualDensity.compact,
+                  icon: Icon(
+                    LucideIcons.trash2,
+                    size: 17,
+                    color: theme.colorScheme.error.withValues(alpha: 0.8),
+                  ),
+                  onPressed: () => _confirmPermanentDelete(subject),
                 ),
               ],
             ],
@@ -1233,7 +1243,7 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
           ),
           const SizedBox(height: 16),
           Text(
-            'The ${isSection ? "section" : "subject"} "$itemName" contains existing student grades, scores, or classwork submissions.',
+            'The ${isSection ? "section" : "subject"} "$itemName" cannot be permanently deleted because students already have recorded grades, attendance, or classwork.',
             style: TextStyle(
               fontSize: 13.5,
               fontWeight: FontWeight.w600,
@@ -1264,8 +1274,8 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    'To protect historical student records and grading accuracy, items with academic activity cannot be deleted. '
-                    'They will remain safely stored in your Archive.',
+                    'To protect historical student records and grading accuracy, items with academic activity or attendance cannot be deleted. '
+                    'You can archive this ${isSection ? "section" : "subject"} instead to safely store and hide it from active views.',
                     style: TextStyle(
                       fontSize: 12,
                       height: 1.45,
@@ -2276,6 +2286,7 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
       final activeRows = await SubjectRepository.instance.getTeacherSubjects(
         teacherId,
         schoolYear: _currentSchoolYear,
+        forceRefresh: true,
       );
       final archivedRows = await SubjectRepository.instance
           .getTeacherArchivedSubjects(
