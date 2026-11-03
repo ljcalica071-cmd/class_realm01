@@ -1,0 +1,1 @@
+ALTER TABLE public.parent_profiles DROP COLUMN IF EXISTS contact_number;

@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import 'package:class_realm/core/services/app_data_cache.dart';
+import 'package:class_realm/core/services/phone_nfc_service.dart';
 import 'package:class_realm/core/theme/app_theme.dart';
 import 'package:class_realm/data/repositories/attendance_repository.dart';
 import 'package:class_realm/data/repositories/supabase_attendance_repository.dart';
@@ -96,6 +97,20 @@ class _RfidAssignmentModalState extends State<RfidAssignmentModal> {
     _lastCaptureFromScanner =
         widget.prefillRfidUid != null && widget.prefillRfidUid!.trim().isNotEmpty;
 
+    // Start listening for NFC card taps on mobile
+    PhoneNfcService.instance.startNfcCapture(
+      onCardScanned: (scannedUid) {
+        if (!mounted) return;
+        setState(() {
+          _uidController.text = scannedUid;
+          _uidController.selection = TextSelection.collapsed(offset: scannedUid.length);
+          _uidError = null;
+          _lastCaptureFromScanner = true;
+        });
+        _validateAndSubmit();
+      },
+    );
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         _inputFocusNode.requestFocus();
@@ -109,6 +124,7 @@ class _RfidAssignmentModalState extends State<RfidAssignmentModal> {
 
   @override
   void dispose() {
+    PhoneNfcService.instance.stopNfcCapture();
     _uidController.dispose();
     _keyboardFocusNode.dispose();
     _inputFocusNode.dispose();

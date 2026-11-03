@@ -500,6 +500,7 @@ class FirebaseAuthAdminService {
     final clean = pem
         .replaceAll(RegExp(r'-----BEGIN [A-Z ]+-----'), '')
         .replaceAll(RegExp(r'-----END [A-Z ]+-----'), '')
+        .replaceAll(r'\n', '')
         .replaceAll(RegExp(r'\s+'), '');
     final der = base64Decode(clean);
 
@@ -542,7 +543,8 @@ class FirebaseAuthAdminService {
 
       // Version inside PKCS#1
       if (der[offset++] != 0x02) throw Exception('Expected version inside PKCS#1');
-      offset += readLength();
+      final v1Len = readLength();
+      offset += v1Len;
     }
 
     // Modulus (n)

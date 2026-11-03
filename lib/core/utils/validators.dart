@@ -39,6 +39,52 @@ class AppValidators {
     _PasswordInputFormatter(),
   ];
 
+  /// Classwork & Assessment limits (Performance Tasks & Activities)
+  static const int maxClassworkTitleLength = 100;
+  static const int maxClassworkInstructionsLength = 30000;
+  static const int maxClassworkFileSizeBytes =
+      15 * 1024 * 1024; // 15 MB (15,728,640 bytes)
+  static const List<String> allowedClassworkExtensions = ['pdf', 'doc', 'docx'];
+
+  /// Validates Performance Task / Activity titles (Max 100 characters)
+  static String? validateClassworkTitle(String? value) {
+    final text = (value ?? '').trim();
+    if (text.isEmpty) return 'Title is required.';
+    if (text.length > maxClassworkTitleLength) {
+      return 'Title must not exceed $maxClassworkTitleLength characters.';
+    }
+    return null;
+  }
+
+  /// Validates Performance Task / Activity detailed instructions & rubrics (Max 30,000 characters)
+  static String? validateClassworkInstructions(String? value) {
+    final text = (value ?? '').trim();
+    if (text.isEmpty) {
+      return 'Detailed instructions are required.';
+    }
+    if (text.length > maxClassworkInstructionsLength) {
+      return 'Must not exceed 30,000 characters.';
+    }
+    return null;
+  }
+
+  /// Validates Performance Task / Activity file attachment format and size (Max 15 MB)
+  static String? validateClassworkFile({
+    required String fileName,
+    required int fileSizeBytes,
+  }) {
+    final dot = fileName.lastIndexOf('.');
+    final ext = dot == -1 ? '' : fileName.substring(dot + 1).toLowerCase();
+    if (!allowedClassworkExtensions.contains(ext)) {
+      return "Unsupported file format '.$ext'. Only PDF, DOC, and DOCX are allowed.";
+    }
+    if (fileSizeBytes > maxClassworkFileSizeBytes) {
+      final mb = (fileSizeBytes / (1024 * 1024)).toStringAsFixed(2);
+      return 'File size exceeds the 15 MB limit ($mb MB > 15 MB).';
+    }
+    return null;
+  }
+
   /// Name validator
   static String? validateName(String? value, String fieldName) {
     if (value == null || value.trim().isEmpty) {
@@ -125,7 +171,7 @@ class AppValidators {
     }
 
     // Domain part must contain at least one dot separating domain and TLD.
-    // If it doesn't have a dot yet, the user might still be typing the domain. We won't block or error heavily here 
+    // If it doesn't have a dot yet, the user might still be typing the domain. We won't block or error heavily here
     // unless they try to submit, but since it's a live validator, returning null lets them type.
     final domainParts = domainPart.split('.');
     if (domainParts.length < 2 || domainParts.any((part) => part.isEmpty)) {
@@ -571,9 +617,10 @@ extension BirthdayValidator on AppValidators {
 
     // Role-specific age logic
     if (role == 'teacher' || role == 'parent') {
-      if (date.year <= 1950) {
-        return 'Birthdates from 1950 and below are not supported.';
+      if (date.year <= 1949) {
+        return 'Birthdates from 1949 and below are not supported.';
       }
+      if (age > 75) return 'Cannot be older than 75 years old.';
       if (age < 18) return 'Must be at least 18 years old.';
     } else if (role == 'student') {
       if (age > 50) return 'Student cannot be older than 50 years old.';
@@ -588,7 +635,7 @@ extension BirthdayValidator on AppValidators {
     if (role == 'student') {
       return DateTime(now.year - 50, now.month, now.day);
     }
-    return DateTime(1951, 1, 1);
+    return DateTime(1950, 1, 1);
   }
 
   static DateTime getMaxDate(String role) {

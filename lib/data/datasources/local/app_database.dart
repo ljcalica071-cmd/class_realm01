@@ -178,6 +178,26 @@ class AppDatabase extends _$AppDatabase {
         .go();
   }
 
+  /// Prune offerings for a teacher that are not in the active set
+  Future<void> pruneOfferingsForTeacher(
+    String teacherId,
+    Set<String> keepOfferingIds,
+  ) async {
+    if (keepOfferingIds.isEmpty) {
+      await (delete(localSubjectOfferings)
+            ..where((t) => t.teacherId.equals(teacherId)))
+          .go();
+    } else {
+      await (delete(localSubjectOfferings)
+            ..where(
+              (t) =>
+                  t.teacherId.equals(teacherId) &
+                  t.id.isNotIn(keepOfferingIds),
+            ))
+          .go();
+    }
+  }
+
   // =========================================================================
   // Students & RFID Local Persistence
   // =========================================================================

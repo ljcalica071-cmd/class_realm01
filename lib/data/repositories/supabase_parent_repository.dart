@@ -124,7 +124,6 @@ class SupabaseParentRepository {
               first_name,
               middle_name,
               last_name,
-              contact_number,
               birthday,
               status
             )
@@ -257,7 +256,6 @@ class SupabaseParentRepository {
     required String firstName,
     String? middleName,
     required String lastName,
-    String contactNumber = '',
     required DateTime birthday,
     required String relationship,
     required List<String> studentIds,
@@ -402,7 +400,6 @@ class SupabaseParentRepository {
       'first_name': firstName,
       'middle_name': cleanMiddleName,
       'last_name': lastName,
-      'contact_number': 'N/A', // Passing default value to satisfy database NOT NULL constraint
       'birthday': bdayIso,
       'status': 'pending_first_login',
     });
@@ -440,9 +437,6 @@ class SupabaseParentRepository {
     );
   }
 
-  /// Verifies the parent's identity for first login:
-  /// checks contact number matches public.parent_profiles
-  /// and at least one linked student's 12-digit LRN ends with childLrnLast4.
   /// Searches for existing parent profiles in the school database by parent name or linked child LRN / name.
   /// Used in AddParentDialog to easily link siblings to an already registered parent account.
   Future<List<Map<String, dynamic>>> searchExistingParents({
@@ -820,7 +814,6 @@ class SupabaseParentRepository {
         'first_name': oldProfile?['first_name'] ?? parent.firstName ?? '',
         'middle_name': oldProfile?['middle_name'] ?? parent.middleName,
         'last_name': oldProfile?['last_name'] ?? parent.lastName ?? '',
-        'contact_number': oldProfile?['contact_number'] ?? parent.contactNumber ?? '',
         'birthday': bdayIso,
         'status': 'pending_first_login',
       });

@@ -10,7 +10,10 @@ class FakeClassworkRepo implements TeacherClassworkRepository {
   String? savedOfferingId;
 
   @override
-  Future<List<ActivityModel>> getActivities({String? subjectOfferingId}) async => [];
+  Future<List<ActivityModel>> getActivities({
+    String? subjectOfferingId,
+    String? teacherId,
+  }) async => [];
 
   @override
   Future<ActivityModel> saveActivity({
@@ -159,8 +162,8 @@ void main() {
       expect(find.text('Select deadline'), findsOneWidget);
 
       // Verify Title counter & Rubrics counter
-      expect(find.text('0/50'), findsOneWidget);
-      expect(find.text('0/1000'), findsOneWidget);
+      expect(find.text('0/100'), findsOneWidget);
+      expect(find.text('0/30000'), findsOneWidget);
     });
 
     testWidgets('multi-term subject shows dropdown with only available terms', (tester) async {

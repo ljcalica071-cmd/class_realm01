@@ -267,7 +267,7 @@ class _AddStudentDialogState extends State<AddStudentDialog> {
                     Expanded(
                       flex: 2,
                       child: AppTextField(
-                        label: 'Middle Initial (Optional)',
+                        label: 'Middle Initial',
                         controller: _middleNameCtrl,
                         textCapitalization: TextCapitalization.characters,
                         validator: AppValidators.validateMiddleInitial,

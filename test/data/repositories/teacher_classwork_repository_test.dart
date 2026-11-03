@@ -5,10 +5,10 @@ import 'package:class_realm/data/repositories/supabase_teacher_classwork_reposit
 
 void main() {
   group('SupabaseTeacherClassworkRepository Unit Tests', () {
-    test('saveActivity rejects file size > 5 MiB before network invocation', () async {
+    test('saveActivity rejects file size > 15 MB before network invocation', () async {
       final repo = SupabaseTeacherClassworkRepository();
 
-      final oversizedBytes = Uint8List(5 * 1024 * 1024 + 1); // 5 MiB + 1 byte
+      final oversizedBytes = Uint8List(15 * 1024 * 1024 + 1); // 15 MB + 1 byte
       final activity = ActivityModel(
         id: '',
         title: 'Activity 1',

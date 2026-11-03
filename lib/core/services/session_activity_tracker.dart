@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
@@ -46,7 +47,8 @@ class _SessionActivityTrackerState extends State<SessionActivityTracker>
     SessionActivityTracker._state = this;
     WidgetsBinding.instance.addObserver(this);
 
-    _lastInteractionAt = LocalStorageService.getLastInteraction() ?? DateTime.now();
+    _lastInteractionAt =
+        LocalStorageService.getLastInteraction() ?? DateTime.now();
     LocalStorageService.saveLastInteraction(_lastInteractionAt);
 
     _initSessionLog();
@@ -81,7 +83,8 @@ class _SessionActivityTrackerState extends State<SessionActivityTracker>
     if (user == null) return;
 
     final existingSessionId =
-        LocalStorageService.getActiveSessionId() ?? AuthRepository.instance.activeSessionId;
+        LocalStorageService.getActiveSessionId() ??
+        AuthRepository.instance.activeSessionId;
     if (existingSessionId != null) {
       _activeSessionLogId = existingSessionId;
       return;
@@ -105,17 +108,21 @@ class _SessionActivityTrackerState extends State<SessionActivityTracker>
       final user = AuthRepository.instance.currentUser;
       if (user == null) return;
 
-      final sessionId = _activeSessionLogId ?? LocalStorageService.getActiveSessionId();
+      final sessionId =
+          _activeSessionLogId ?? LocalStorageService.getActiveSessionId();
       if (sessionId == null) return;
 
       final nowUtc = DateTime.now().toUtc();
       final totalSeconds = DateTime.now().difference(_sessionStart).inSeconds;
 
       try {
-        await Supabase.instance.client.from('user_session_logs').update({
-          'last_active_at': nowUtc.toIso8601String(),
-          'duration_seconds': totalSeconds >= 0 ? totalSeconds : 0,
-        }).eq('id', sessionId);
+        await Supabase.instance.client
+            .from('user_session_logs')
+            .update({
+              'last_active_at': nowUtc.toIso8601String(),
+              'duration_seconds': totalSeconds >= 0 ? totalSeconds : 0,
+            })
+            .eq('id', sessionId);
       } catch (e) {
         // Edge Case #18: Silent try-catch with local cache fallback
         debugPrint('Heartbeat sync silent retry notice: $e');
@@ -169,12 +176,21 @@ class _SessionActivityTrackerState extends State<SessionActivityTracker>
       barrierDismissible: false,
       builder: (dialogContext) {
         return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
           title: const Row(
             children: [
-              Icon(Icons.warning_amber_rounded, color: AppTheme.catOrange, size: 28),
+              Icon(
+                Icons.warning_amber_rounded,
+                color: AppTheme.catOrange,
+                size: 28,
+              ),
               SizedBox(width: 12),
-              Text('Inactivity Warning', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+              Text(
+                'Inactivity Warning',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+              ),
             ],
           ),
           content: const Text(
@@ -186,14 +202,19 @@ class _SessionActivityTrackerState extends State<SessionActivityTracker>
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppTheme.catGreen,
                 foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
               ),
               onPressed: () {
                 _recordInteraction();
                 _isWarningDialogShowing = false;
                 Navigator.of(dialogContext).pop();
               },
-              child: const Text('Stay Logged In', style: TextStyle(fontWeight: FontWeight.bold)),
+              child: const Text(
+                'Stay Logged In',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
             ),
           ],
         );
@@ -260,7 +281,10 @@ class _SessionActivityTrackerState extends State<SessionActivityTracker>
           children: [
             Icon(Icons.build_circle_outlined, color: AppTheme.catRed, size: 28),
             SizedBox(width: 12),
-            Text('System Maintenance', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+            Text(
+              'System Maintenance',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+            ),
           ],
         ),
         content: const Text(

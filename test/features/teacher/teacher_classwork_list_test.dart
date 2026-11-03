@@ -12,7 +12,7 @@ class MockClassworkRepo implements TeacherClassworkRepository {
   MockClassworkRepo(this.items);
 
   @override
-  Future<List<ActivityModel>> getActivities({String? subjectOfferingId}) async {
+  Future<List<ActivityModel>> getActivities({String? subjectOfferingId, String? teacherId}) async {
     return items;
   }
 

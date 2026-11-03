@@ -59,3 +59,8 @@ firebase-service-account.json
 # Temporary Office locks
 ~$*.docx
 ~$*.xlsx
+
+# Graphify index cache
+graphify-out/
+.graphify_analysis.json
+.graphify_labels.json

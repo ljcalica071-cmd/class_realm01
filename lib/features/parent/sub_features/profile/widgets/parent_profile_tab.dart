@@ -226,9 +226,6 @@ class _ParentProfileTabState extends State<ParentProfileTab> {
     final initial = parent.fullName.trim().isNotEmpty
         ? parent.fullName.trim()[0].toUpperCase()
         : 'P';
-    final contactValue = parent.contactNumber?.trim().isNotEmpty == true
-        ? parent.contactNumber!.trim()
-        : 'Not provided';
     final emailValue = parent.email.trim().isNotEmpty
         ? parent.email.trim()
         : 'Not provided';
@@ -357,13 +354,6 @@ class _ParentProfileTabState extends State<ParentProfileTab> {
                   ? linkedStudent.lrn!.trim()
                   : 'Not provided',
             ),
-          _buildInfoTile(
-            theme: theme,
-            isDark: isDark,
-            icon: Icons.phone_outlined,
-            title: 'Contact Number',
-            value: contactValue,
-          ),
           _buildInfoTile(
             theme: theme,
             isDark: isDark,

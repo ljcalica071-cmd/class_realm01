@@ -305,7 +305,6 @@ class _AddParentDialogState extends State<AddParentDialog> {
         firstName: firstName,
         middleName: middleName,
         lastName: lastName,
-        contactNumber: '',
         birthday: _birthday!,
         relationship: relationship,
         studentIds: _selectedStudents.map((s) => s.id).toList(),

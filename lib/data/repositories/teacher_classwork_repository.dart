@@ -4,7 +4,7 @@ import 'package:class_realm/models/academic_models.dart';
 abstract class TeacherClassworkRepository {
   /// Fetches all classwork items (activities, assignments, and performance tasks)
   /// owned by the authenticated teacher. Optionally filters by [subjectOfferingId].
-  Future<List<ActivityModel>> getActivities({String? subjectOfferingId});
+  Future<List<ActivityModel>> getActivities({String? subjectOfferingId, String? teacherId});
 
   /// Saves (creates or updates) a classwork item.
   /// If [fileBytes] and [fileName] are supplied, uploads the attachment to private storage

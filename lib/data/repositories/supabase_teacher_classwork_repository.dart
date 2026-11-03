@@ -1,4 +1,5 @@
 import 'package:class_realm/core/services/app_data_cache.dart';
+import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:class_realm/core/services/supabase_service.dart';
@@ -8,13 +9,14 @@ import 'teacher_classwork_repository.dart';
 
 class SupabaseTeacherClassworkRepository implements TeacherClassworkRepository {
   static const int maxFileSizeBytes =
-      10 * 1024 * 1024; // 10 MiB = 10,485,760 bytes
+      15 * 1024 * 1024; // 15 MB = 15,728,640 bytes
   static const List<String> allowedExtensions = ['.pdf', '.doc', '.docx'];
 
-  final SupabaseClient _client;
+  final SupabaseClient? _customClient;
+  SupabaseClient get _client => _customClient ?? SupabaseService().client;
 
   SupabaseTeacherClassworkRepository({SupabaseClient? client})
-    : _client = client ?? SupabaseService().client;
+    : _customClient = client;
 
   static final SupabaseTeacherClassworkRepository instance =
       SupabaseTeacherClassworkRepository();
@@ -28,7 +30,7 @@ class SupabaseTeacherClassworkRepository implements TeacherClassworkRepository {
   void _validateFile(String fileName, Uint8List fileBytes) {
     if (fileBytes.lengthInBytes > maxFileSizeBytes) {
       throw ArgumentError(
-        'File size exceeds the 10 MiB limit (${fileBytes.lengthInBytes} bytes > $maxFileSizeBytes bytes).',
+        'File size exceeds the 15 MB limit (${fileBytes.lengthInBytes} bytes > $maxFileSizeBytes bytes).',
       );
     }
     final ext = _getFileExtension(fileName);
@@ -40,22 +42,44 @@ class SupabaseTeacherClassworkRepository implements TeacherClassworkRepository {
   }
 
   @override
-  Future<List<ActivityModel>> getActivities({String? subjectOfferingId}) async {
-    final cacheKey = 'teacher_activities_${subjectOfferingId ?? "all"}';
+  Future<List<ActivityModel>> getActivities({
+    String? subjectOfferingId,
+    String? teacherId,
+  }) async {
+    final effectiveTeacherId =
+        teacherId ?? AuthRepository.instance.currentUser?.id;
+    final cacheKey =
+        'teacher_activities_${effectiveTeacherId ?? "all"}_${subjectOfferingId ?? "all"}';
     return AppDataCache.instance.fetchWithSvr<List<ActivityModel>>(
       cacheKey: cacheKey,
       fetcher: () async {
         try {
-          var query = _client
-              .from('classwork_items')
-              .select()
-              .eq('is_archived', false);
+          var query = _client.from('classwork_items').select('''
+            *,
+            subject_offerings!inner (
+              id,
+              teacher_id,
+              subjects:subject_id (
+                id,
+                subject_code,
+                subject_name
+              ),
+              sections:section_id (
+                id,
+                section_name,
+                grade_level
+              )
+            )
+          ''').eq('is_archived', false);
 
           if (subjectOfferingId != null && subjectOfferingId.isNotEmpty) {
             query = query.eq('subject_offering_id', subjectOfferingId);
+          } else if (effectiveTeacherId != null &&
+              effectiveTeacherId.isNotEmpty) {
+            query = query.eq('subject_offerings.teacher_id', effectiveTeacherId);
           }
 
-          final rows = await query;
+          final rows = await query.order('created_at', ascending: false);
           final list = rows as List? ?? [];
           return list.map((item) {
             return ActivityModel.fromJson(
@@ -143,14 +167,30 @@ class SupabaseTeacherClassworkRepository implements TeacherClassworkRepository {
         final res = await _client
             .from('classwork_items')
             .insert(insertData)
-            .select()
+            .select('''
+              *,
+              subject_offerings:subject_offering_id (
+                id,
+                teacher_id,
+                subjects:subject_id (
+                  id,
+                  subject_code,
+                  subject_name
+                ),
+                sections:section_id (
+                  id,
+                  section_name,
+                  grade_level
+                )
+              )
+            ''')
             .single();
         AppDataCache.instance.invalidatePrefix('teacher_activities_');
         AppDataCache.instance.invalidatePrefix('student_dashboard_');
         return ActivityModel.fromJson(Map<String, dynamic>.from(res));
       } catch (e) {
-        debugPrint('Pure Dart insert classwork notice: $e');
-        return activity;
+        debugPrint('Pure Dart insert classwork error: $e');
+        rethrow;
       }
     } else {
       final updateData = <String, dynamic>{
@@ -174,14 +214,30 @@ class SupabaseTeacherClassworkRepository implements TeacherClassworkRepository {
             .from('classwork_items')
             .update(updateData)
             .eq('id', activity.id)
-            .select()
+            .select('''
+              *,
+              subject_offerings:subject_offering_id (
+                id,
+                teacher_id,
+                subjects:subject_id (
+                  id,
+                  subject_code,
+                  subject_name
+                ),
+                sections:section_id (
+                  id,
+                  section_name,
+                  grade_level
+                )
+              )
+            ''')
             .single();
         AppDataCache.instance.invalidatePrefix('teacher_activities_');
         AppDataCache.instance.invalidatePrefix('student_dashboard_');
         return ActivityModel.fromJson(Map<String, dynamic>.from(res));
       } catch (e) {
-        debugPrint('Pure Dart update classwork notice: $e');
-        return activity;
+        debugPrint('Pure Dart update classwork error: $e');
+        rethrow;
       }
     }
   }
@@ -233,7 +289,12 @@ class SupabaseTeacherClassworkRepository implements TeacherClassworkRepository {
     }
   }
 
-  Future<List<QuizOrExamModel>> getAssessments({String? subjectOfferingId}) async {
+  Future<List<QuizOrExamModel>> getAssessments({
+    String? subjectOfferingId,
+    String? teacherId,
+  }) async {
+    final effectiveTeacherId =
+        teacherId ?? AuthRepository.instance.currentUser?.id;
     try {
       var query = _client
           .from('digital_assessments')
@@ -250,7 +311,8 @@ class SupabaseTeacherClassworkRepository implements TeacherClassworkRepository {
             is_published,
             results_released,
             is_archived,
-            subject_offerings (
+            subject_offerings!inner (
+              teacher_id,
               subjects ( subject_name ),
               sections ( section_name, grade_level )
             ),
@@ -272,6 +334,8 @@ class SupabaseTeacherClassworkRepository implements TeacherClassworkRepository {
 
       if (subjectOfferingId != null && subjectOfferingId.isNotEmpty) {
         query = query.eq('subject_offering_id', subjectOfferingId);
+      } else if (effectiveTeacherId != null && effectiveTeacherId.isNotEmpty) {
+        query = query.eq('subject_offerings.teacher_id', effectiveTeacherId);
       }
 
       final rows = await query.order('created_at', ascending: false);

@@ -182,12 +182,22 @@ class AuthRepository {
         );
 
         await LocalStorageService.saveUser(_currentUser!);
+        await LocalStorageService.markCredentialsSaved(cleanEmail);
         unawaited(LocalStorageService.saveLastInteraction(DateTime.now()));
         unawaited(startSessionLog(_currentUser!));
         return _currentUser;
       }
     } on firebase.FirebaseAuthException catch (e) {
       if (e.code == 'network-request-failed' || e.message?.contains('network AuthError') == true) {
+        final cached = LocalStorageService.getCachedUser();
+        if (cached != null &&
+            cached.email.toLowerCase() == cleanEmail &&
+            cached.role == custom.UserRole.teacher &&
+            LocalStorageService.hasSavedCredentials(cleanEmail)) {
+          _currentUser = cached;
+          markWarmSession();
+          return _currentUser;
+        }
         throw Exception("We're having trouble connecting to the network right now. Please check your internet connection and try again.");
       }
       
@@ -464,7 +474,7 @@ class AuthRepository {
           _supabaseClient
               .from('parent_profiles')
               .select(
-                'parent_id, first_name, middle_name, last_name, contact_number, birthday, status',
+                'parent_id, first_name, middle_name, last_name, birthday, status',
               )
               .eq('parent_id', uid)
               .maybeSingle(),
@@ -487,7 +497,6 @@ class AuthRepository {
         final firstName = profileResp?['first_name']?.toString() ?? '';
         final middleName = profileResp?['middle_name']?.toString();
         final lastName = profileResp?['last_name']?.toString() ?? '';
-        final contactNumber = profileResp?['contact_number']?.toString();
         final birthdayStr = profileResp?['birthday']?.toString();
         final statusStr =
             profileResp?['status']?.toString() ?? 'pending_first_login';
@@ -500,7 +509,7 @@ class AuthRepository {
 
         return custom.UserModel(
           id: uid,
-          username: userResp['email'] ?? contactNumber,
+          username: userResp['email'] ?? uid,
           fullName: fullName.trim().isNotEmpty
               ? fullName
               : (userResp['email'] ?? 'Parent'),
@@ -509,7 +518,6 @@ class AuthRepository {
           firstName: firstName,
           middleName: middleName,
           lastName: lastName,
-          contactNumber: contactNumber,
           birthday: birthdayStr != null ? DateTime.tryParse(birthdayStr) : null,
           parentGuardianRelationship: relationship,
           linkedStudentId: linkedStudentId,
