@@ -2410,7 +2410,6 @@ class AuthRepository {
     // 6. Persist challenge in Supabase admin_teacher_email_challenges
     final bdayStr =
         '${birthday.year.toString().padLeft(4, '0')}-${birthday.month.toString().padLeft(2, '0')}-${birthday.day.toString().padLeft(2, '0')}';
-    final deviceId = LocalStorageService.getSyncDeviceId();
 
     try {
       await _supabaseClient.from('admin_teacher_email_challenges').upsert({
@@ -2426,7 +2425,6 @@ class AuthRepository {
         'last_sent_at': now.toUtc().toIso8601String(),
         'failed_attempts': rateStatus.failedAttempts,
         'resend_count': currentResendCount,
-        'device_id': deviceId,
         'locked_until': null,
       });
     } catch (e) {

@@ -184,10 +184,10 @@ c26_x = col_start_x + 26 * col_pitch
 esp_d14_x = col_start_x + 4 * col_pitch
 draw.line([(c26_x, row_y['C']), (c26_x, row_y['A'] - 45), (esp_d14_x, row_y['A'] - 45), (esp_d14_x, row_y['A'])], fill=(249, 115, 22), width=3)
 
-# 3.3V (Col 27) -> Row A, Col 5 (D27)
+# 3.3V (Col 27) -> Row J, Col 0 (3V3)
 c27_x = col_start_x + 27 * col_pitch
-esp_d27_x = col_start_x + 5 * col_pitch
-draw.line([(c27_x, row_y['C']), (c27_x, row_y['A'] - 50), (esp_d27_x, row_y['A'] - 50), (esp_d27_x, row_y['A'])], fill=(239, 68, 68), width=3)
+esp_3v3_x = col_start_x + 0 * col_pitch
+draw.line([(c27_x, row_y['C']), (c27_x, row_y['A'] - 50), (esp_3v3_x, row_y['A'] - 50), (esp_3v3_x, row_y['J'])], fill=(239, 68, 68), width=3)
 
 # 3. Buzzer (Cols 35 and 38)
 c35_x = col_start_x + 35 * col_pitch
@@ -262,7 +262,7 @@ b_o_lines = [
     '* RFID MISO (Col 23) -> Row A, Col 10 (D35)',
     '* RFID GND  (Col 25) -> UP [-] Block E, Hole 1',
     '* RFID RST  (Col 26) -> Row A, Col 4 (D14)',
-    '* RFID 3.3V (Col 27) -> Row A, Col 5 (D27)',
+    '* RFID 3.3V (Col 27) -> Row J, Col 0 (3V3)',
     '* BUZZER (+) [Col 35] -> Row A, Col 9 (D32)',
     '* BUZZER (-) [Col 38] -> UP [-] Block G, Hole 3',
 ]

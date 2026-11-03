@@ -270,7 +270,7 @@ class _AddStudentDialogState extends State<AddStudentDialog> {
                         label: 'Middle Initial',
                         controller: _middleNameCtrl,
                         textCapitalization: TextCapitalization.characters,
-                        validator: AppValidators.validateMiddleInitial,
+                        inputFormatters: AppValidators.middleInitialFormatters,
                       ),
                     ),
                     const SizedBox(width: 12),
