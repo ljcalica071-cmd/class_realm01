@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:class_realm/core/services/gemini_service.dart';
 import 'package:class_realm/core/theme/app_theme.dart';
+import 'package:class_realm/data/repositories/auth_repository.dart';
+import 'package:class_realm/data/repositories/subject_repository.dart';
 import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/shared/widgets/shared_widgets.dart';
 import 'package:class_realm/features/teacher/sub_features/schedule_and_lessons/models/ilaw_lesson_plan.dart';
@@ -68,6 +70,7 @@ class _IlawLessonPlanWizardDialogState
   List<IlawSessionData> _sessions = [];
   List<IlawRubricItem> _rubricItems = [];
   int _activeSessionIndex = 0;
+  List<String> _teacherSubjectNames = [];
 
   // Session edit controllers
   final List<TextEditingController> _sessionTitleCtrls = [];
@@ -86,7 +89,6 @@ class _IlawLessonPlanWizardDialogState
   String? _subjectError;
   String? _topicError;
   String? _durationError;
-  String? _strategyError;
   String? _competencyError;
 
   String? _outcomesError;
@@ -151,6 +153,48 @@ class _IlawLessonPlanWizardDialogState
             : IlawRubricItem.defaultRubrics();
 
     _syncSessionControllers();
+    _loadTeacherSubjects();
+  }
+
+  void _loadTeacherSubjects() async {
+    final teacherId = widget.currentTeacher?.id ?? AuthRepository.instance.currentUser?.id;
+    if (teacherId == null || teacherId.trim().isEmpty) return;
+
+    // 1. Synchronously populate from cached subjects first
+    try {
+      final cached = SubjectRepository.instance.getCachedTeacherSubjects(teacherId);
+      final cachedNames = cached
+          .map((m) => (m['subject_name'] ?? m['name'])?.toString().trim() ?? '')
+          .where((s) => s.isNotEmpty)
+          .toSet()
+          .toList();
+
+      if (cachedNames.isNotEmpty) {
+        _teacherSubjectNames = cachedNames;
+        if (widget.existingPlan == null && _subjectCtrl.text.trim().isEmpty) {
+          _subjectCtrl.text = cachedNames.first;
+        }
+      }
+    } catch (_) {}
+
+    // 2. Refresh asynchronously from repository
+    try {
+      final activeRows = await SubjectRepository.instance.getTeacherSubjects(teacherId);
+      final refreshedNames = activeRows
+          .map((m) => (m['subject_name'] ?? m['name'])?.toString().trim() ?? '')
+          .where((s) => s.isNotEmpty)
+          .toSet()
+          .toList();
+
+      if (mounted && refreshedNames.isNotEmpty) {
+        setState(() {
+          _teacherSubjectNames = refreshedNames;
+          if (widget.existingPlan == null && _subjectCtrl.text.trim().isEmpty) {
+            _subjectCtrl.text = refreshedNames.first;
+          }
+        });
+      }
+    } catch (_) {}
   }
 
   void _syncSessionControllers() {
@@ -250,7 +294,6 @@ class _IlawLessonPlanWizardDialogState
       _subjectError = sErr;
       _topicError = tErr;
       _durationError = dErr;
-      _strategyError = stErr;
       _competencyError = cErr;
     });
 
@@ -952,26 +995,56 @@ class _IlawLessonPlanWizardDialogState
               },
             ),
 
-            // Suggested SHS Subjects
+            // Suggested SHS Subjects (Teacher's own active subjects only)
             const SizedBox(height: 8),
-            Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              children: DepEdCurriculumCatalog.getStandardSubjects(_selectedGrade)
-                  .take(6)
-                  .map((sub) {
-                return ActionChip(
-                  label: Text(sub, style: const TextStyle(fontSize: 11)),
-                  visualDensity: VisualDensity.compact,
-                  onPressed: () {
-                    setState(() {
-                      _subjectCtrl.text = sub;
-                      _subjectError = null;
-                    });
-                  },
-                );
-              }).toList(),
-            ),
+            if (_teacherSubjectNames.isNotEmpty) ...[
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: _teacherSubjectNames.map((sub) {
+                  final isSelected = _subjectCtrl.text.trim().toLowerCase() == sub.toLowerCase();
+                  return ActionChip(
+                    avatar: isSelected
+                        ? Icon(Icons.check_circle_rounded, size: 14, color: theme.colorScheme.primary)
+                        : null,
+                    label: Text(
+                      sub,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                      ),
+                    ),
+                    visualDensity: VisualDensity.compact,
+                    backgroundColor: isSelected ? theme.colorScheme.primary.withValues(alpha: 0.1) : null,
+                    onPressed: () {
+                      setState(() {
+                        _subjectCtrl.text = sub;
+                        _subjectError = null;
+                      });
+                    },
+                  );
+                }).toList(),
+              ),
+            ] else ...[
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: DepEdCurriculumCatalog.getStandardSubjects(_selectedGrade)
+                    .take(6)
+                    .map((sub) {
+                  return ActionChip(
+                    label: Text(sub, style: const TextStyle(fontSize: 11)),
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () {
+                      setState(() {
+                        _subjectCtrl.text = sub;
+                        _subjectError = null;
+                      });
+                    },
+                  );
+                }).toList(),
+              ),
+            ],
             const SizedBox(height: 16),
 
             // Template & Source Toggles
@@ -1000,21 +1073,8 @@ class _IlawLessonPlanWizardDialogState
             ),
             const SizedBox(height: 16),
 
-            // Duration and Strategy
-            if (isWide)
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(child: _buildDurationSection(theme)),
-                  const SizedBox(width: 16),
-                  Expanded(child: _buildStrategySection(theme)),
-                ],
-              )
-            else ...[
-              _buildDurationSection(theme),
-              const SizedBox(height: 16),
-              _buildStrategySection(theme),
-            ],
+            // Duration per Session
+            _buildDurationSection(theme),
             const SizedBox(height: 16),
 
             // Competency / Teacher Notes
@@ -1206,23 +1266,6 @@ class _IlawLessonPlanWizardDialogState
           }).toList(),
         ),
       ],
-    );
-  }
-
-  Widget _buildStrategySection(ThemeData theme) {
-    return _buildValidatedTextField(
-      theme: theme,
-      fieldKey: const Key('ilaw_strategy_field'),
-      label: 'Teaching Approach (Optional)',
-      hint: 'e.g., Inquiry-Based / Collaborative',
-      controller: _strategyCtrl,
-      errorText: _strategyError,
-      maxLength: IlawLessonPlanValidator.maxStrategyLength,
-      onChanged: (_) {
-        if (_strategyError != null) {
-          setState(() => _strategyError = null);
-        }
-      },
     );
   }
 
