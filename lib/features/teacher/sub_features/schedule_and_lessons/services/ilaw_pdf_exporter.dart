@@ -16,7 +16,6 @@ class IlawPdfExporter {
   static const double _margin = 36.0;
   static const double _contentWidth = _pageWidth - (_margin * 2);
   static const double _col1W = 145.0;
-  static const double _col2W = _contentWidth - _col1W;
   static const double _bottomLimit = 48.0;
 
   // DepEd Cyan/Teal Brand Colors
@@ -126,18 +125,27 @@ class IlawPdfExporter {
       required List<String> contentLines,
       double minHeight = 28.0,
     }) {
+      final titleWrapped = _wrapMultiline(categoryTitle, maxChars: 22);
       final promptWrapped = categoryPrompt != null && categoryPrompt.trim().isNotEmpty
-          ? _wrapMultiline(categoryPrompt.trim(), maxChars: 28)
+          ? _wrapMultiline(categoryPrompt.trim(), maxChars: 24)
           : <String>[];
 
-      final leftLinesCount = 1 + (promptWrapped.isNotEmpty ? promptWrapped.length + 1 : 0);
-      final rightLinesCount = contentLines.isEmpty ? 1 : contentLines.length;
+      final allContentLines = <String>[];
+      for (final raw in contentLines) {
+        if (raw.isEmpty) {
+          allContentLines.add('');
+        } else {
+          allContentLines.addAll(_wrapMultiline(raw, maxChars: 64));
+        }
+      }
 
-      final requiredH = [
-        minHeight,
-        leftLinesCount * 11.5 + 10.0,
-        rightLinesCount * 11.5 + 10.0,
-      ].reduce((a, b) => a > b ? a : b);
+      final leftTitleH = titleWrapped.length * 11.5;
+      final leftPromptH = promptWrapped.isNotEmpty ? (promptWrapped.length * 9.5) + 4.0 : 0.0;
+      final leftTotalH = leftTitleH + leftPromptH + 16.0;
+
+      final rightTotalH = (allContentLines.length * 11.5) + 16.0;
+
+      final requiredH = [minHeight, leftTotalH, rightTotalH].reduce((a, b) => a > b ? a : b);
 
       ensureSpace(requiredH);
 
@@ -186,43 +194,50 @@ class IlawPdfExporter {
       );
 
       // Draw Left Column: Title & Prompt
-      var leftY = boxTop - 12;
-      _drawText(
-        currentStream,
-        text: categoryTitle,
-        x: _margin + 6,
-        y: leftY,
-        fontSize: 8.5,
-        bold: true,
-        r: 0.055,
-        g: 0.294,
-        b: 0.333,
-      );
-      leftY -= 11;
-
-      for (final pLine in promptWrapped) {
+      var leftY = boxTop - 12.0;
+      for (final tLine in titleWrapped) {
         _drawText(
           currentStream,
-          text: pLine,
+          text: tLine,
           x: _margin + 6,
           y: leftY,
-          fontSize: 7.0,
-          bold: false,
-          r: 0.25,
-          g: 0.30,
-          b: 0.35,
+          fontSize: 8.5,
+          bold: true,
+          r: 0.055,
+          g: 0.294,
+          b: 0.333,
         );
-        leftY -= 9.0;
+        leftY -= 11.5;
+      }
+
+      if (promptWrapped.isNotEmpty) {
+        leftY -= 2.0;
+        for (final pLine in promptWrapped) {
+          _drawText(
+            currentStream,
+            text: pLine,
+            x: _margin + 6,
+            y: leftY,
+            fontSize: 7.0,
+            bold: false,
+            r: 0.25,
+            g: 0.30,
+            b: 0.35,
+          );
+          leftY -= 9.5;
+        }
       }
 
       // Draw Right Column: Content Lines
-      var rightY = boxTop - 12;
-      for (final cLine in contentLines) {
+      var rightY = boxTop - 12.0;
+      for (final cLine in allContentLines) {
         if (cLine.isEmpty) {
-          rightY -= 5;
+          rightY -= 5.0;
           continue;
         }
-        final isSubHeader = cLine.endsWith(':') || cLine.startsWith('Session ') || cLine.startsWith('DAY ');
+        final isSubHeader = cLine.endsWith(':') ||
+            cLine.startsWith('Session ') ||
+            cLine.startsWith('DAY ');
         _drawText(
           currentStream,
           text: cLine,
@@ -234,7 +249,7 @@ class IlawPdfExporter {
           g: isSubHeader ? 0.294 : 0.10,
           b: isSubHeader ? 0.333 : 0.14,
         );
-        rightY -= 10.5;
+        rightY -= 11.5;
       }
 
       cursorY = boxBottom;
@@ -293,7 +308,11 @@ class IlawPdfExporter {
 
     // Metadata Table Grid (School, Grade, Teacher, Learning Area, Dates, Term)
     void drawTwoColMeta(String leftKey, String leftVal, String rightKey, String rightVal) {
-      final rowH = 22.0;
+      final leftValLines = _wrapMultiline(leftVal, maxChars: 28);
+      final rightValLines = _wrapMultiline(rightVal, maxChars: 28);
+      final maxLines = [1, leftValLines.length, rightValLines.length].reduce((a, b) => a > b ? a : b);
+      final rowH = (maxLines * 11.0) + 12.0;
+
       ensureSpace(rowH);
       final rTop = cursorY;
       final rBottom = rTop - rowH;
@@ -327,12 +346,20 @@ class IlawPdfExporter {
       );
 
       // Left Meta
-      _drawText(currentStream, text: '$leftKey:', x: _margin + 8, y: rTop - 14, fontSize: 8.0, bold: true, r: 0.055, g: 0.294, b: 0.333);
-      _drawText(currentStream, text: leftVal, x: _margin + 80, y: rTop - 14, fontSize: 8.0, bold: false, r: 0.08, g: 0.10, b: 0.14);
+      _drawText(currentStream, text: '$leftKey:', x: _margin + 8, y: rTop - 13, fontSize: 8.0, bold: true, r: 0.055, g: 0.294, b: 0.333);
+      var lValY = rTop - 13;
+      for (final lv in leftValLines) {
+        _drawText(currentStream, text: lv, x: _margin + 75, y: lValY, fontSize: 7.8, bold: false, r: 0.08, g: 0.10, b: 0.14);
+        lValY -= 10.5;
+      }
 
       // Right Meta
-      _drawText(currentStream, text: '$rightKey:', x: midX + 8, y: rTop - 14, fontSize: 8.0, bold: true, r: 0.055, g: 0.294, b: 0.333);
-      _drawText(currentStream, text: rightVal, x: midX + 85, y: rTop - 14, fontSize: 8.0, bold: false, r: 0.08, g: 0.10, b: 0.14);
+      _drawText(currentStream, text: '$rightKey:', x: midX + 8, y: rTop - 13, fontSize: 8.0, bold: true, r: 0.055, g: 0.294, b: 0.333);
+      var rValY = rTop - 13;
+      for (final rv in rightValLines) {
+        _drawText(currentStream, text: rv, x: midX + 75, y: rValY, fontSize: 7.8, bold: false, r: 0.08, g: 0.10, b: 0.14);
+        rValY -= 10.5;
+      }
 
       cursorY = rBottom;
     }
@@ -427,7 +454,7 @@ class IlawPdfExporter {
     final learnersContextLines = <String>[
       'Learners enter the lesson with prerequisite foundational knowledge. Instruction begins with recall and catch-up activities before formalizing abstract notations.',
       'Contextualized examples (real-life transactions, ride fares, digital data plans) make abstract conditions concrete. Guided scaffolding is provided for emerging learners.',
-      'Proficiency Focus: Target diagnostic level set to ${plan.targetProficiency.label}.',
+      'Target Diagnostic Level: ${plan.targetProficiency.label}.',
     ];
     drawTableRow(
       categoryTitle: 'Learners Context',
@@ -566,147 +593,46 @@ class IlawPdfExporter {
     );
 
     // =============================================================
-    // 6. REMARKS & EVALUATION MATRIX
+    // 6. OFFICIAL SIGNATORY BLOCK (Teacher Only)
     // =============================================================
-    ensureSpace(120);
-    final evalH = 92.0;
-    final evalTop = cursorY;
-    final evalBottom = evalTop - evalH;
+    ensureSpace(65);
+    final sigTop = cursorY - 14;
 
-    _drawBox(
+    _drawText(
       currentStream,
+      text: 'Prepared by:',
       x: _margin,
-      y: evalBottom,
-      w: _contentWidth,
-      h: evalH,
-      fillR: 1.0,
-      fillG: 1.0,
-      fillB: 1.0,
-      strokeR: _borderR,
-      strokeG: _borderG,
-      strokeB: _borderB,
-      lineWidth: 0.8,
-    );
-
-    // Left label for REMARKS
-    _drawFilledRect(
-      currentStream,
-      x: _margin + 0.5,
-      y: evalBottom + 0.5,
-      w: _col1W - 0.5,
-      h: evalH - 1.0,
-      r: _col1FillR,
-      g: _col1FillG,
-      b: _col1FillB,
-    );
-    _drawLine(
-      currentStream,
-      x1: _margin + _col1W,
-      y1: evalTop,
-      x2: _margin + _col1W,
-      y2: evalBottom,
-      strokeR: _borderR,
-      strokeG: _borderG,
-      strokeB: _borderB,
-      lineWidth: 0.8,
+      y: sigTop,
+      fontSize: 8.0,
+      bold: false,
+      r: 0.30,
+      g: 0.35,
+      b: 0.40,
     );
 
     _drawText(
       currentStream,
-      text: 'REMARKS',
-      x: _margin + 8,
-      y: evalTop - 14,
-      fontSize: 8.5,
+      text: teacher.toUpperCase(),
+      x: _margin,
+      y: sigTop - 16,
+      fontSize: 9.0,
       bold: true,
-      r: 0.055,
-      g: 0.294,
-      b: 0.333,
+      r: 0.05,
+      g: 0.08,
+      b: 0.12,
     );
+
     _drawText(
       currentStream,
-      text: 'Evaluation & Mastery Tracking',
-      x: _margin + 8,
-      y: evalTop - 26,
-      fontSize: 7.0,
+      text: 'SHS Subject Teacher',
+      x: _margin,
+      y: sigTop - 28,
+      fontSize: 7.5,
       bold: false,
       r: 0.25,
       g: 0.30,
       b: 0.35,
     );
-
-    // Right side evaluation columns: Section 1, Section 2
-    final colW = (_col2W) / 4;
-    for (int c = 1; c <= 4; c++) {
-      _drawLine(
-        currentStream,
-        x1: _margin + _col1W + (c * colW),
-        y1: evalTop,
-        x2: _margin + _col1W + (c * colW),
-        y2: evalBottom,
-        strokeR: _borderR,
-        strokeG: _borderG,
-        strokeB: _borderB,
-        lineWidth: 0.5,
-      );
-    }
-
-    _drawText(currentStream, text: 'ANDROMEDA', x: _margin + _col1W + 6, y: evalTop - 12, fontSize: 7.0, bold: true, r: 0.055, g: 0.294, b: 0.333);
-    _drawText(currentStream, text: 'MILKY WAY', x: _margin + _col1W + colW + 6, y: evalTop - 12, fontSize: 7.0, bold: true, r: 0.055, g: 0.294, b: 0.333);
-    _drawText(currentStream, text: 'ORION', x: _margin + _col1W + (colW * 2) + 6, y: evalTop - 12, fontSize: 7.0, bold: true, r: 0.055, g: 0.294, b: 0.333);
-    _drawText(currentStream, text: 'PEGASUS', x: _margin + _col1W + (colW * 3) + 6, y: evalTop - 12, fontSize: 7.0, bold: true, r: 0.055, g: 0.294, b: 0.333);
-
-    final scoreLabels = ['Score 5', 'Score 4', 'Score 3', 'Score 2', 'Score 1 / 0', 'MEAN / MPS'];
-    var sY = evalTop - 24;
-    for (final sl in scoreLabels) {
-      _drawText(
-        currentStream,
-        text: sl,
-        x: _margin + 8,
-        y: sY - 6,
-        fontSize: 6.5,
-        bold: false,
-        r: 0.25,
-        g: 0.30,
-        b: 0.35,
-      );
-      _drawLine(
-        currentStream,
-        x1: _margin + _col1W,
-        y1: sY + 3,
-        x2: _margin + _contentWidth,
-        y2: sY + 3,
-        strokeR: _borderR,
-        strokeG: _borderG,
-        strokeB: _borderB,
-        lineWidth: 0.4,
-      );
-      sY -= 11;
-    }
-
-    cursorY = evalBottom - 18;
-
-    // =============================================================
-    // 7. OFFICIAL SIGNATORIES BLOCK
-    // =============================================================
-    ensureSpace(70);
-    final sigColW = _contentWidth / 3;
-
-    // 1. Prepared by
-    _drawText(currentStream, text: 'Prepared by:', x: _margin, y: cursorY, fontSize: 8.0, bold: false, r: 0.3, g: 0.35, b: 0.4);
-    _drawText(currentStream, text: teacher.toUpperCase(), x: _margin, y: cursorY - 14, fontSize: 8.8, bold: true, r: 0.05, g: 0.08, b: 0.12);
-    _drawText(currentStream, text: 'SHS Teacher I', x: _margin, y: cursorY - 24, fontSize: 7.5, bold: false, r: 0.2, g: 0.25, b: 0.3);
-
-    // 2. Checked by
-    final sig2X = _margin + sigColW;
-    _drawText(currentStream, text: 'Checked by:', x: sig2X, y: cursorY, fontSize: 8.0, bold: false, r: 0.3, g: 0.35, b: 0.4);
-    _drawText(currentStream, text: 'BRYAN ANTHONY O. SARIO', x: sig2X, y: cursorY - 14, fontSize: 8.8, bold: true, r: 0.05, g: 0.08, b: 0.12);
-    _drawText(currentStream, text: 'Head Teacher II', x: sig2X, y: cursorY - 24, fontSize: 7.5, bold: false, r: 0.2, g: 0.25, b: 0.3);
-
-    // 3. Approved by
-    final sig3X = _margin + (sigColW * 2);
-    _drawText(currentStream, text: 'Approved by:', x: sig3X, y: cursorY, fontSize: 8.0, bold: false, r: 0.3, g: 0.35, b: 0.4);
-    _drawText(currentStream, text: 'SUSAN D. SAMSON', x: sig3X, y: cursorY - 14, fontSize: 8.8, bold: true, r: 0.05, g: 0.08, b: 0.12);
-    _drawText(currentStream, text: 'Principal I', x: sig3X, y: cursorY - 24, fontSize: 7.5, bold: false, r: 0.2, g: 0.25, b: 0.3);
 
     return _assemblePdf(pages);
   }
@@ -843,6 +769,23 @@ class IlawPdfExporter {
     var current = StringBuffer();
 
     for (final w in words) {
+      if (w.isEmpty) continue;
+      if (w.length > maxChars) {
+        if (current.isNotEmpty) {
+          results.add(current.toString());
+          current = StringBuffer();
+        }
+        var remaining = w;
+        while (remaining.length > maxChars) {
+          results.add(remaining.substring(0, maxChars));
+          remaining = remaining.substring(maxChars);
+        }
+        if (remaining.isNotEmpty) {
+          current.write(remaining);
+        }
+        continue;
+      }
+
       if (current.isEmpty) {
         current.write(w);
       } else if (current.length + 1 + w.length <= maxChars) {
