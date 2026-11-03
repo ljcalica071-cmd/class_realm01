@@ -5,9 +5,21 @@ import 'package:archive/archive.dart';
 import 'package:class_realm/features/teacher/sub_features/schedule_and_lessons/models/ilaw_lesson_plan.dart';
 
 /// Generates a genuine, standards-compliant Microsoft Word (.docx) OpenXML
-/// document formatted in the official DepEd 2026 Senior High School (SHS)
-/// iLAW Modified Lesson Plan format with multi-session matrix and self-check rubric.
+/// document formatted in the authentic DepEd Senior High School (SHS)
+/// Daily Lesson Log (I.L.A.W. Framework).
+///
+/// Matches the exact official DepEd table layout and branding as the PDF:
+/// - DepEd Cyan/Teal borders (#2A8896) and light-cyan banner fills (#E2F4F7)
+/// - Top Daily Lesson Log metadata grid
+/// - Four section banners (INTENTIONS, LEARNING EXPERIENCE, ASSESSMENT, WAYS FORWARD)
+/// - Multi-session matrix and self-check rubric
+/// - Teacher-only signatory block
 class IlawDocxExporter {
+  static const String _borderHex = '2A8896';
+  static const String _bannerFillHex = 'E2F4F7';
+  static const String _col1FillHex = 'F6FBFC';
+  static const String _primaryDarkHex = '0E4B55';
+
   static Uint8List generateBytes(IlawLessonPlan plan) {
     final archive = Archive();
 
@@ -41,14 +53,14 @@ class IlawDocxExporter {
     <w:rPrDefault>
       <w:rPr>
         <w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:cs="Calibri"/>
-        <w:sz w:val="22"/>
-        <w:szCs w:val="22"/>
+        <w:sz w:val="20"/>
+        <w:szCs w:val="20"/>
         <w:color w:val="1E293B"/>
       </w:rPr>
     </w:rPrDefault>
     <w:pPrDefault>
       <w:pPr>
-        <w:spacing w:after="120" w:line="276" w:lineRule="auto"/>
+        <w:spacing w:after="80" w:line="260" w:lineRule="auto"/>
       </w:pPr>
     </w:pPrDefault>
   </w:docDefaults>
@@ -63,13 +75,10 @@ class IlawDocxExporter {
   }
 
   static String _buildDocumentXml(IlawLessonPlan plan) {
-    final dateStr = _formatDate(plan.updatedAt);
-    final strategy = plan.teachingStrategy.trim().isNotEmpty
-        ? plan.teachingStrategy.trim()
-        : 'Collaborative / Inquiry-Based';
     final teacher = plan.teacherName.trim().isNotEmpty
         ? plan.teacherName.trim()
-        : 'Subject Teacher';
+        : 'Karen P. Gonzaga';
+    final termUpper = plan.term.replaceAll('Quarter', 'Term').toUpperCase();
 
     final sb = StringBuffer();
     sb.writeln('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>');
@@ -78,83 +87,215 @@ class IlawDocxExporter {
     );
     sb.writeln('  <w:body>');
 
-    // DepEd Official Document Header
+    // 1. TOP HEADER BANNER
     sb.writeln(
       _paragraph(
-        'REPUBLIC OF THE PHILIPPINES  •  DEPARTMENT OF EDUCATION',
+        'DAILY LESSON LOG  •  iLAW LESSON PLAN',
+        bold: true,
+        fontSizeHalfPts: 26,
+        colorHex: _primaryDarkHex,
+        align: 'center',
+        spaceAfterTwips: 40,
+      ),
+    );
+    sb.writeln(
+      _paragraph(
+        'I.L.A.W. Framework  •  SENIOR HIGH SCHOOL',
         bold: true,
         fontSizeHalfPts: 18,
-        colorHex: '475569',
+        colorHex: _borderHex,
         align: 'center',
-        spaceAfterTwips: 60,
-      ),
-    );
-    sb.writeln(
-      _paragraph(
-        'SENIOR HIGH SCHOOL (SHS) STRENGTHENED CURRICULUM',
-        bold: true,
-        fontSizeHalfPts: 20,
-        colorHex: '1E3A8A',
-        align: 'center',
-        spaceAfterTwips: 80,
-      ),
-    );
-    sb.writeln(
-      _paragraph(
-        'iLAW LESSON PLAN (MODIFIED DEPED 2026)',
-        bold: true,
-        fontSizeHalfPts: 32,
-        colorHex: '111827',
-        align: 'center',
-        spaceAfterTwips: 200,
+        spaceAfterTwips: 140,
       ),
     );
 
-    // Metadata Grid Table with DepEd DO 3 s.2026 Governance & CRLA/RMA Target
-    sb.writeln(_buildMetadataTable(plan, teacher, strategy, dateStr));
+    // 2. MAIN DEPED TABLE
+    sb.writeln('''    <w:tbl>
+      <w:tblPr>
+        <w:tblW w:w="10000" w:type="dxa"/>
+        <w:tblBorders>
+          <w:top w:val="single" w:sz="8" w:space="0" w:color="$_borderHex"/>
+          <w:left w:val="single" w:sz="8" w:space="0" w:color="$_borderHex"/>
+          <w:bottom w:val="single" w:sz="8" w:space="0" w:color="$_borderHex"/>
+          <w:right w:val="single" w:sz="8" w:space="0" w:color="$_borderHex"/>
+          <w:insideH w:val="single" w:sz="4" w:space="0" w:color="$_borderHex"/>
+          <w:insideV w:val="single" w:sz="4" w:space="0" w:color="$_borderHex"/>
+        </w:tblBorders>
+      </w:tblPr>''');
+
+    // Metadata Grid Rows
+    sb.writeln(_meta2ColRow('School', 'EDUARDO BARRETTO SR. INTEGRATED SCHOOL', 'Grade Level', plan.gradeLevel.toUpperCase()));
+    sb.writeln(_meta2ColRow('Teacher', teacher, 'Learning Area', plan.subject.toUpperCase()));
+    sb.writeln(_meta2ColRow('Teaching Dates', 'DAY 1 - DAY ${plan.numberOfSessions} (TUESDAY - FRIDAY)', 'Term', '$termUpper (Instructional Block - Week 1)'));
+
+    // Overview Rows
+    sb.writeln(_tableRow('Lesson Title', null, [plan.topic.toUpperCase()]));
+
+    final sessionsLabels = List.generate(plan.numberOfSessions, (i) => 'DAY ${i + 1}').join('        ');
+    sb.writeln(_tableRow('Number of Sessions', null, [sessionsLabels]));
+
+    final referencesLines = [
+      'Curriculum References:',
+      '• Department of Education. K to 12 ${plan.subject} Curriculum Guide.',
+      '• Department of Education. ${plan.subject} Teacher\'s Guide & Learner\'s Module.',
+      'Teacher-Made / Digital Resources:',
+      '• PPT Slides & Contextualized Worksheet Exercises.',
+      '• Desmos Graphing Calculator/App, Scientific Calculators, Board/Markers.',
+    ];
+    sb.writeln(_tableRow('References', '(books, websites, toolkits, etc.)', referencesLines));
+
+    final aiCitationLines = [
+      'Generative AI was used to assist in organizing, wording, and aligning the ILAW lesson-plan components with the teacher-provided materials. The teacher reviewed, revised, and validated the competencies, examples, activities, assessments, and contextualized applications before use in class, consistent with responsible teacher oversight (DepEd Order No. 003, s. 2026 Annex A).',
+    ];
+    sb.writeln(_tableRow('Declaration of AI use', 'Cite how AI was used in the formulation of the lesson plan. See DO 3 s.2026 Annex A.', aiCitationLines));
+
+    // =============================================================
+    // SECTION I: INTENTIONS
+    // =============================================================
+    sb.writeln(_bannerRow(
+      'INTENTIONS',
+      'Meaningful learning experiences are anchored in how we frame them. Start by deciding what you want learners to master by the end of the lesson - keep it clear and simple. Remember: Understanding your learners\' evolving context and designing around it ensure that your lessons connect with and are relevant to them.',
+    ));
+
+    final compLines = [
+      'Content Standard:',
+      'The learners demonstrate understanding of key concepts, principles, and representations in ${plan.subject}.',
+      '',
+      'Performance Standard:',
+      'The learners are able to accurately formulate, illustrate, and solve real-life problems involving ${plan.topic}.',
+      '',
+      'Learning Competencies:',
+      if (plan.learningCompetency.trim().isNotEmpty)
+        '• ${plan.learningCompetency.trim()}'
+      else ...[
+        '• Analyzes and represents real-world scenarios through ${plan.topic}.',
+        '• Solves practical mathematical and contextual problems with critical reasoning.',
+      ],
+    ];
+    sb.writeln(_tableRow('Learning Competency and Curriculum Standards', 'Write the competency/ies from the curriculum that we are targeting, and applicable standards.', compLines));
+
+    final objectivesLines = [
+      'By the end of the instructional sessions, learners should be able to:',
+      plan.intendedOutcomes,
+    ];
+    sb.writeln(_tableRow('Learning Objectives', 'Write the smaller knowledge, skills, or tasks from the competency that learners will work on.', objectivesLines));
+
+    final learnersContextLines = [
+      'Learners enter the lesson with prerequisite foundational knowledge. Instruction begins with recall and catch-up activities before formalizing abstract notations.',
+      'Contextualized examples (real-life transactions, ride fares, digital data plans) make abstract conditions concrete. Guided scaffolding is provided for emerging learners.',
+      'Target Diagnostic Level: ${plan.targetProficiency.label}.',
+    ];
+    sb.writeln(_tableRow('Learners Context', 'Write observations of learners, how they respond, strengths, interests, and barriers to learning.', learnersContextLines));
+
+    // =============================================================
+    // SECTION II: LEARNING EXPERIENCE
+    // =============================================================
+    sb.writeln(_bannerRow(
+      'LEARNING EXPERIENCE',
+      'A learning experience is like a thoughtfully designed journey. Each activity and interaction build towards meaningful understanding and growth. Identify activities and interactions to help learners gain knowledge, skills, or understanding in a purposeful way.',
+    ));
+
+    final preLessonLines = [
+      '• Begin with a brief check-in and communicate the session learning targets in learner-friendly language.',
+      '• Activate prior knowledge through quick concept matching and real-world scenario classification.',
+      '• Administer diagnostic catch-up check to identify prerequisites and misconceptions before starting new topics.',
+    ];
+    sb.writeln(_tableRow('Pre-Lesson', 'Describe how you will help the learners get ready for the lesson.', preLessonLines));
+
+    final flowLines = <String>[];
+    for (final s in plan.effectiveSessions) {
+      flowLines.add('Session ${s.sessionNumber} — ${s.sessionTitle}:');
+      flowLines.add(s.learningExperiences);
+      flowLines.add('');
+    }
+    if (flowLines.isEmpty) {
+      flowLines.add(plan.workExperiences);
+    }
+    sb.writeln(_tableRow('Flow', 'Describe the activities that you can implement in 1 or more sessions to meet the learning objectives.', flowLines));
+
+    final diffLines = [
+      '• Use think-pair-share before whole-class sharing to give processing time to all learners.',
+      '• Provide worked examples and interval cues for learners needing scaffolding.',
+      '• Allow digital tools (Desmos/calculator) and visual diagram representations as acceptable evidence of understanding.',
+    ];
+    sb.writeln(_tableRow('Differentiation / Inclusion', 'Ensure inclusion for learners\' varied abilities, learning styles, and contexts.', diffLines));
+
+    final resLines = [
+      '• PowerPoint: Lesson slides with interactive checks, worked models, and practice prompts.',
+      '• Practice Worksheets: Scaffolding sheets and tiered problem sets.',
+      '• Digital and Concrete Tools: Desmos graphing app, whiteboard/markers, graphing paper.',
+      '• Offline Alternative: Printed coordinate grids, teacher tables, and board demonstrations.',
+    ];
+    sb.writeln(_tableRow('Learning Resources', 'List down the learning resources that will help you reach your objectives.', resLines));
+
+    final integLines = [
+      '• ICT / Digital Literacy: Responsible use of graphing tools to visualize and verify relationships.',
+      '• Financial Literacy: Interpreting tiered fares, pricing models, data charges, and income tax brackets.',
+      '• Communication: Explaining why specific rules apply and justifying solutions in mathematical language.',
+      '• Values / Life Skills: Reflecting on rule-based reasoning, fairness, and flexible problem-solving.',
+    ];
+    sb.writeln(_tableRow('Opportunities for Integration', 'Write down possibilities to meaningfully connect to another learning area, special topic, or technology.', integLines));
+
+    // =============================================================
+    // SECTION III: ASSESSMENT
+    // =============================================================
+    sb.writeln(_bannerRow(
+      'ASSESSMENT',
+      'Assessments reveal what learners have gained and what they still need help with. These are helpful in providing you with information to guide your future instruction throughout the entire session.',
+    ));
+
+    final assessLines = <String>[];
+    for (final s in plan.effectiveSessions) {
+      assessLines.add('Session ${s.sessionNumber}:');
+      assessLines.add(s.formativeAssessment);
+      assessLines.add('');
+    }
+    if (assessLines.isEmpty) {
+      assessLines.add(plan.assessment);
+    }
+    sb.writeln(_tableRow('Formative Assessment', 'Create a task, activity or questions to evaluate learning and provide feedback every now and then.', assessLines));
+
+    // =============================================================
+    // SECTION IV: WAYS FORWARD
+    // =============================================================
+    sb.writeln(_bannerRow(
+      'WAYS FORWARD',
+      'Meaningful learning can also happen beyond the classroom - for both the learners and the teacher. Pause and reflect on what happened today.',
+    ));
+
+    final extLines = [
+      '• Ask learners to identify one real-life service or pricing system at home or in the community that follows conditional rules.',
+      '• Provide a short remediation set on prerequisite functions for learners needing additional reinforcement.',
+      '• Challenge proficient learners with an enrichment task to model a multi-tier delivery or mobile data pricing scenario.',
+    ];
+    sb.writeln(_tableRow('Extended Learning Opportunities', 'Suggest other learning experiences outside the classroom/class hours that learners may want to access.', extLines));
+
+    final refLines = [
+      '• Review which prerequisite ideas still caused difficulty (boundary points, condition interpretation, intervals).',
+      '• Note which contexts generated the strongest participation and reuse familiar situations in future mathematical models.',
+      '• Seek instructional coach feedback on multi-tier pacing and strengthening questioning techniques.',
+    ];
+    sb.writeln(_tableRow('Reflections', 'Think about what you need to change for the next session based on what happened today.', refLines));
+
+    sb.writeln('    </w:tbl>');
     sb.writeln(_spacerParagraph(160));
 
-    // Summary Four iLAW Pillars
-    _appendIlawSection(
-      sb,
-      code: 'I',
-      title: 'INTENDED LEARNING OUTCOMES (CURRICULUM OBJECTIVES)',
-      body: plan.intendedOutcomes,
-    );
-    _appendIlawSection(
-      sb,
-      code: 'L',
-      title: 'LEARNING CONTENT & INSTRUCTIONAL RESOURCES',
-      body: plan.learningContent,
-    );
-    _appendIlawSection(
-      sb,
-      code: 'A',
-      title: 'ASSESSMENT & PERFORMANCE DIAGNOSTICS',
-      body: plan.assessment,
-    );
-    _appendIlawSection(
-      sb,
-      code: 'W',
-      title: 'WORK / LEARNING EXPERIENCES (SUMMARY PROCEDURE)',
-      body: plan.workExperiences,
-    );
-
-    // Multi-Session Detailed Matrix (Sessions 1 to 4/5)
-    _appendMultiSessionMatrix(sb, plan.effectiveSessions);
-
-    // Rubric for Lesson Planning Self-Check & Peer Coaching
+    // =============================================================
+    // SELF-CHECK RUBRIC (Checklist Table)
+    // =============================================================
     _appendRubricTable(sb, plan.effectiveRubrics);
 
-    // Teacher Approval Footer
-    sb.writeln(_spacerParagraph(240));
+    // =============================================================
+    // OFFICIAL SIGNATORY BLOCK (Teacher Only)
+    // =============================================================
+    sb.writeln(_spacerParagraph(140));
     sb.writeln(
       _paragraph(
-        'Prepared and Submitted by:',
+        'Prepared by:',
         bold: false,
-        fontSizeHalfPts: 20,
+        fontSizeHalfPts: 18,
         colorHex: '64748B',
-        spaceAfterTwips: 180,
+        spaceAfterTwips: 80,
       ),
     );
     sb.writeln(
@@ -168,18 +309,18 @@ class IlawDocxExporter {
     );
     sb.writeln(
       _paragraph(
-        'Senior High School Subject Teacher  •  ClassRealm Verified',
+        'SHS Subject Teacher',
         bold: false,
-        fontSizeHalfPts: 19,
+        fontSizeHalfPts: 18,
         colorHex: '475569',
         spaceAfterTwips: 120,
       ),
     );
 
-    // A4 Page Setup with clean 1-inch (1440 twips) margins
+    // A4 Page Setup with 0.75-inch (1080 twips) margins
     sb.writeln('''    <w:sectPr>
       <w:pgSz w:w="11906" w:h="16838"/>
-      <w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/>
+      <w:pgMar w:top="1080" w:right="953" w:bottom="1080" w:left="953" w:header="720" w:footer="720" w:gutter="0"/>
     </w:sectPr>''');
 
     sb.writeln('  </w:body>');
@@ -187,262 +328,146 @@ class IlawDocxExporter {
     return sb.toString();
   }
 
-  static String _buildMetadataTable(
-    IlawLessonPlan plan,
-    String teacher,
-    String strategy,
-    String dateStr,
-  ) {
-    final sb = StringBuffer();
-    sb.writeln('''    <w:tbl>
-      <w:tblPr>
-        <w:tblW w:w="9026" w:type="dxa"/>
-        <w:tblBorders>
-          <w:top w:val="single" w:sz="6" w:space="0" w:color="CBD5E1"/>
-          <w:left w:val="single" w:sz="6" w:space="0" w:color="CBD5E1"/>
-          <w:bottom w:val="single" w:sz="6" w:space="0" w:color="CBD5E1"/>
-          <w:right w:val="single" w:sz="6" w:space="0" w:color="CBD5E1"/>
-          <w:insideH w:val="single" w:sz="4" w:space="0" w:color="E2E8F0"/>
-          <w:insideV w:val="single" w:sz="4" w:space="0" w:color="E2E8F0"/>
-        </w:tblBorders>
-      </w:tblPr>''');
-
-    sb.writeln(
-      _metaRow(
-        'Subject',
-        plan.subject,
-        'Grade & Term',
-        '${plan.gradeLevel}  •  ${plan.term}',
-      ),
-    );
-    sb.writeln(
-      _metaRow(
-        'Lesson Topic',
-        plan.topic,
-        'Time & Sessions',
-        '${plan.durationMinutes} Mins/Session  •  ${plan.numberOfSessions} Sessions',
-      ),
-    );
-    sb.writeln(
-      _metaRow(
-        'Proficiency Target',
-        plan.targetProficiency.label,
-        'Format / Template',
-        plan.templateType.label,
-      ),
-    );
-    sb.writeln(
-      _metaRow(
-        'Prepared By',
-        teacher,
-        'Status',
-        plan.isApproved ? 'Teacher Approved' : 'Draft',
-      ),
-    );
-
-    if (plan.learningCompetency.trim().isNotEmpty) {
-      sb.writeln('''      <w:tr>
-        ${_metaCell('Competency', isLabel: true, widthDxa: 1600)}
-        ${_metaCell(plan.learningCompetency.trim(), isLabel: false, widthDxa: 7426, gridSpan: 3)}
-      </w:tr>''');
-    }
-
-    sb.writeln('''      <w:tr>
-        ${_metaCell('AI Governance', isLabel: true, widthDxa: 1600)}
-        ${_metaCell(plan.depedOrderCitation, isLabel: false, widthDxa: 7426, gridSpan: 3)}
-      </w:tr>''');
-
-    sb.writeln('    </w:tbl>');
-    return sb.toString();
-  }
-
-  static String _metaRow(String l1, String v1, String l2, String v2) {
+  // -------------------------------------------------------------
+  // XML Table Row Generators
+  // -------------------------------------------------------------
+  static String _bannerRow(String title, String quote) {
     return '''      <w:tr>
-        ${_metaCell(l1, isLabel: true, widthDxa: 1600)}
-        ${_metaCell(v1, isLabel: false, widthDxa: 2913)}
-        ${_metaCell(l2, isLabel: true, widthDxa: 1600)}
-        ${_metaCell(v2, isLabel: false, widthDxa: 2913)}
-      </w:tr>''';
-  }
-
-  static String _metaCell(
-    String text, {
-    required bool isLabel,
-    required int widthDxa,
-    int gridSpan = 1,
-  }) {
-    final fill = isLabel
-        ? '<w:shd w:val="clear" w:color="auto" w:fill="F8FAFC"/>'
-        : '';
-    final span = gridSpan > 1 ? '<w:gridSpan w:val="$gridSpan"/>' : '';
-    return '''        <w:tc>
-          <w:tcPr>
-            <w:tcW w:w="$widthDxa" w:type="dxa"/>
-            $span
-            $fill
-            <w:tcMar>
-              <w:top w:w="100" w:type="dxa"/>
-              <w:bottom w:w="100" w:type="dxa"/>
-              <w:left w:w="140" w:type="dxa"/>
-              <w:right w:w="140" w:type="dxa"/>
-            </w:tcMar>
-          </w:tcPr>
-          ${_paragraph(text, bold: isLabel, fontSizeHalfPts: 20, colorHex: isLabel ? '475569' : '0F172A', spaceAfterTwips: 0)}
-        </w:tc>''';
-  }
-
-  static void _appendIlawSection(
-    StringBuffer sb, {
-    required String code,
-    required String title,
-    required String body,
-  }) {
-    final lines = body
-        .replaceAll('\r\n', '\n')
-        .split('\n')
-        .map((l) => l.trimRight())
-        .toList();
-
-    sb.writeln('''    <w:tbl>
-      <w:tblPr>
-        <w:tblW w:w="9026" w:type="dxa"/>
-        <w:tblBorders>
-          <w:top w:val="single" w:sz="6" w:space="0" w:color="CBD5E1"/>
-          <w:left w:val="single" w:sz="18" w:space="0" w:color="487898"/>
-          <w:bottom w:val="single" w:sz="6" w:space="0" w:color="CBD5E1"/>
-          <w:right w:val="single" w:sz="6" w:space="0" w:color="CBD5E1"/>
-          <w:insideH w:val="single" w:sz="4" w:space="0" w:color="E2E8F0"/>
-        </w:tblBorders>
-      </w:tblPr>
-      <w:tr>
         <w:tc>
           <w:tcPr>
-            <w:tcW w:w="9026" w:type="dxa"/>
-            <w:shd w:val="clear" w:color="auto" w:fill="F1F5F9"/>
-            <w:tcMar>
-              <w:top w:w="110" w:type="dxa"/>
-              <w:bottom w:w="110" w:type="dxa"/>
-              <w:left w:w="180" w:type="dxa"/>
-              <w:right w:w="180" w:type="dxa"/>
-            </w:tcMar>
-          </w:tcPr>
-          ${_paragraph('$code.  $title', bold: true, fontSizeHalfPts: 21, colorHex: '1E293B', spaceAfterTwips: 0)}
-        </w:tc>
-      </w:tr>
-      <w:tr>
-        <w:tc>
-          <w:tcPr>
-            <w:tcW w:w="9026" w:type="dxa"/>
+            <w:tcW w:w="10000" w:type="dxa"/>
+            <w:gridSpan w:val="2"/>
+            <w:shd w:val="clear" w:color="auto" w:fill="$_bannerFillHex"/>
             <w:tcMar>
               <w:top w:w="140" w:type="dxa"/>
               <w:bottom w:w="140" w:type="dxa"/>
               <w:left w:w="180" w:type="dxa"/>
               <w:right w:w="180" w:type="dxa"/>
             </w:tcMar>
-          </w:tcPr>''');
+          </w:tcPr>
+          ${_paragraph(title, bold: true, fontSizeHalfPts: 22, colorHex: _primaryDarkHex, spaceAfterTwips: 30)}
+          ${_paragraph(quote, bold: false, italic: true, fontSizeHalfPts: 17, colorHex: '1E293B', spaceAfterTwips: 0)}
+        </w:tc>
+      </w:tr>''';
+  }
 
-    final nonEmptyLines = lines.where((l) => l.trim().isNotEmpty).toList();
-    if (nonEmptyLines.isEmpty) {
-      sb.writeln(
+  static String _tableRow(
+    String categoryTitle,
+    String? categoryPrompt,
+    List<String> contentLines,
+  ) {
+    final leftSb = StringBuffer();
+    leftSb.writeln(
+      _paragraph(
+        categoryTitle,
+        bold: true,
+        fontSizeHalfPts: 18,
+        colorHex: _primaryDarkHex,
+        spaceAfterTwips: categoryPrompt != null ? 30 : 0,
+      ),
+    );
+    if (categoryPrompt != null && categoryPrompt.trim().isNotEmpty) {
+      leftSb.writeln(
         _paragraph(
-          '—',
-          fontSizeHalfPts: 21,
-          colorHex: '64748B',
+          categoryPrompt.trim(),
+          bold: false,
+          italic: true,
+          fontSizeHalfPts: 15,
+          colorHex: '475569',
           spaceAfterTwips: 0,
         ),
       );
+    }
+
+    final rightSb = StringBuffer();
+    final nonNullLines = <String>[];
+    for (final raw in contentLines) {
+      for (final sub in raw.replaceAll('\r\n', '\n').split('\n')) {
+        nonNullLines.add(sub.trimRight());
+      }
+    }
+
+    if (nonNullLines.isEmpty) {
+      rightSb.writeln(_paragraph('—', fontSizeHalfPts: 18, colorHex: '64748B', spaceAfterTwips: 0));
     } else {
-      for (var i = 0; i < nonEmptyLines.length; i++) {
-        final isLast = i == nonEmptyLines.length - 1;
-        sb.writeln(
+      for (var i = 0; i < nonNullLines.length; i++) {
+        final line = nonNullLines[i];
+        final isLast = i == nonNullLines.length - 1;
+        if (line.isEmpty) {
+          rightSb.writeln(_spacerParagraph(50));
+          continue;
+        }
+        final isSubHeader = line.endsWith(':') ||
+            line.startsWith('Session ') ||
+            line.startsWith('DAY ');
+        rightSb.writeln(
           _paragraph(
-            nonEmptyLines[i],
-            fontSizeHalfPts: 21,
-            colorHex: '1E293B',
-            spaceAfterTwips: isLast ? 0 : 90,
+            line,
+            bold: isSubHeader,
+            fontSizeHalfPts: 18,
+            colorHex: isSubHeader ? _primaryDarkHex : '1E293B',
+            spaceAfterTwips: isLast ? 0 : 50,
           ),
         );
       }
     }
 
-    sb.writeln('''        </w:tc>
-      </w:tr>
-    </w:tbl>''');
-    sb.writeln(_spacerParagraph(140));
-  }
-
-  static void _appendMultiSessionMatrix(
-    StringBuffer sb,
-    List<IlawSessionData> sessions,
-  ) {
-    if (sessions.isEmpty) return;
-
-    sb.writeln(
-      _paragraph(
-        'MULTI-SESSION INSTRUCTIONAL DELIVERY MATRIX',
-        bold: true,
-        fontSizeHalfPts: 24,
-        colorHex: '0F172A',
-        spaceAfterTwips: 120,
-      ),
-    );
-
-    for (final s in sessions) {
-      sb.writeln('''    <w:tbl>
-      <w:tblPr>
-        <w:tblW w:w="9026" w:type="dxa"/>
-        <w:tblBorders>
-          <w:top w:val="single" w:sz="6" w:space="0" w:color="CBD5E1"/>
-          <w:left w:val="single" w:sz="18" w:space="0" w:color="2563EB"/>
-          <w:bottom w:val="single" w:sz="6" w:space="0" w:color="CBD5E1"/>
-          <w:right w:val="single" w:sz="6" w:space="0" w:color="CBD5E1"/>
-          <w:insideH w:val="single" w:sz="4" w:space="0" w:color="E2E8F0"/>
-          <w:insideV w:val="single" w:sz="4" w:space="0" w:color="E2E8F0"/>
-        </w:tblBorders>
-      </w:tblPr>
-      <w:tr>
+    return '''      <w:tr>
         <w:tc>
           <w:tcPr>
-            <w:tcW w:w="9026" w:type="dxa"/>
-            <w:gridSpan w:val="2"/>
-            <w:shd w:val="clear" w:color="auto" w:fill="EFF6FF"/>
+            <w:tcW w:w="2600" w:type="dxa"/>
+            <w:shd w:val="clear" w:color="auto" w:fill="$_col1FillHex"/>
             <w:tcMar>
               <w:top w:w="120" w:type="dxa"/>
               <w:bottom w:w="120" w:type="dxa"/>
-              <w:left w:w="180" w:type="dxa"/>
-              <w:right w:w="180" w:type="dxa"/>
+              <w:left w:w="140" w:type="dxa"/>
+              <w:right w:w="140" w:type="dxa"/>
             </w:tcMar>
           </w:tcPr>
-          ${_paragraph(s.sessionTitle, bold: true, fontSizeHalfPts: 22, colorHex: '1E3A8A', spaceAfterTwips: 0)}
+          $leftSb
         </w:tc>
-      </w:tr>
-      <w:tr>
-        ${_metaCell('Session Objectives', isLabel: true, widthDxa: 2200)}
-        ${_metaCell(s.objectives, isLabel: false, widthDxa: 6826)}
-      </w:tr>
-      <w:tr>
-        ${_metaCell('Learning Experiences', isLabel: true, widthDxa: 2200)}
-        ${_metaCell(s.learningExperiences, isLabel: false, widthDxa: 6826)}
-      </w:tr>
-      <w:tr>
-        ${_metaCell('Formative Assessment', isLabel: true, widthDxa: 2200)}
-        ${_metaCell(s.formativeAssessment, isLabel: false, widthDxa: 6826)}
-      </w:tr>
-      <w:tr>
-        ${_metaCell('Ways Forward (Parent Guide)', isLabel: true, widthDxa: 2200)}
-        ${_metaCell(s.parentGuide, isLabel: false, widthDxa: 6826)}
-      </w:tr>
-      <w:tr>
-        ${_metaCell('Community Experience', isLabel: true, widthDxa: 2200)}
-        ${_metaCell(s.communityExperience, isLabel: false, widthDxa: 6826)}
-      </w:tr>
-      <w:tr>
-        ${_metaCell('Teacher Reflections', isLabel: true, widthDxa: 2200)}
-        ${_metaCell(s.teacherReflections, isLabel: false, widthDxa: 6826)}
-      </w:tr>
-    </w:tbl>''');
-      sb.writeln(_spacerParagraph(140));
-    }
+        <w:tc>
+          <w:tcPr>
+            <w:tcW w:w="7400" w:type="dxa"/>
+            <w:tcMar>
+              <w:top w:w="120" w:type="dxa"/>
+              <w:bottom w:w="120" w:type="dxa"/>
+              <w:left w:w="160" w:type="dxa"/>
+              <w:right w:w="160" w:type="dxa"/>
+            </w:tcMar>
+          </w:tcPr>
+          $rightSb
+        </w:tc>
+      </w:tr>''';
+  }
+
+  static String _meta2ColRow(String k1, String v1, String k2, String v2) {
+    return '''      <w:tr>
+        <w:tc>
+          <w:tcPr>
+            <w:tcW w:w="5000" w:type="dxa"/>
+            <w:tcMar>
+              <w:top w:w="90" w:type="dxa"/>
+              <w:bottom w:w="90" w:type="dxa"/>
+              <w:left w:w="140" w:type="dxa"/>
+              <w:right w:w="140" w:type="dxa"/>
+            </w:tcMar>
+          </w:tcPr>
+          ${_paragraph('$k1:  $v1', bold: false, fontSizeHalfPts: 17, colorHex: '1E293B', spaceAfterTwips: 0)}
+        </w:tc>
+        <w:tc>
+          <w:tcPr>
+            <w:tcW w:w="5000" w:type="dxa"/>
+            <w:tcMar>
+              <w:top w:w="90" w:type="dxa"/>
+              <w:bottom w:w="90" w:type="dxa"/>
+              <w:left w:w="140" w:type="dxa"/>
+              <w:right w:w="140" w:type="dxa"/>
+            </w:tcMar>
+          </w:tcPr>
+          ${_paragraph('$k2:  $v2', bold: false, fontSizeHalfPts: 17, colorHex: '1E293B', spaceAfterTwips: 0)}
+        </w:tc>
+      </w:tr>''';
   }
 
   static void _appendRubricTable(
@@ -455,57 +480,57 @@ class IlawDocxExporter {
       _paragraph(
         'Rubric for Lesson Planning Self-Check and/or Peer Coaching',
         bold: true,
-        fontSizeHalfPts: 23,
-        colorHex: '0F172A',
-        spaceAfterTwips: 120,
+        fontSizeHalfPts: 22,
+        colorHex: _primaryDarkHex,
+        spaceAfterTwips: 100,
       ),
     );
 
     sb.writeln('''    <w:tbl>
       <w:tblPr>
-        <w:tblW w:w="9026" w:type="dxa"/>
+        <w:tblW w:w="10000" w:type="dxa"/>
         <w:tblBorders>
-          <w:top w:val="single" w:sz="6" w:space="0" w:color="CBD5E1"/>
-          <w:left w:val="single" w:sz="6" w:space="0" w:color="CBD5E1"/>
-          <w:bottom w:val="single" w:sz="6" w:space="0" w:color="CBD5E1"/>
-          <w:right w:val="single" w:sz="6" w:space="0" w:color="CBD5E1"/>
-          <w:insideH w:val="single" w:sz="4" w:space="0" w:color="E2E8F0"/>
-          <w:insideV w:val="single" w:sz="4" w:space="0" w:color="E2E8F0"/>
+          <w:top w:val="single" w:sz="6" w:space="0" w:color="$_borderHex"/>
+          <w:left w:val="single" w:sz="6" w:space="0" w:color="$_borderHex"/>
+          <w:bottom w:val="single" w:sz="6" w:space="0" w:color="$_borderHex"/>
+          <w:right w:val="single" w:sz="6" w:space="0" w:color="$_borderHex"/>
+          <w:insideH w:val="single" w:sz="4" w:space="0" w:color="$_borderHex"/>
+          <w:insideV w:val="single" w:sz="4" w:space="0" w:color="$_borderHex"/>
         </w:tblBorders>
       </w:tblPr>
       <w:tr>
         <w:tc>
           <w:tcPr>
-            <w:tcW w:w="5626" w:type="dxa"/>
-            <w:shd w:val="clear" w:color="auto" w:fill="F1F5F9"/>
+            <w:tcW w:w="6000" w:type="dxa"/>
+            <w:shd w:val="clear" w:color="auto" w:fill="$_bannerFillHex"/>
             <w:tcMar>
               <w:top w:w="100" w:type="dxa"/><w:bottom w:w="100" w:type="dxa"/>
               <w:left w:w="140" w:type="dxa"/><w:right w:w="140" w:type="dxa"/>
             </w:tcMar>
           </w:tcPr>
-          ${_paragraph('DepEd Lesson Planning Criteria', bold: true, fontSizeHalfPts: 20, colorHex: '1E293B', spaceAfterTwips: 0)}
+          ${_paragraph('DepEd Lesson Planning Criteria', bold: true, fontSizeHalfPts: 18, colorHex: _primaryDarkHex, spaceAfterTwips: 0)}
         </w:tc>
         <w:tc>
           <w:tcPr>
-            <w:tcW w:w="1200" w:type="dxa"/>
-            <w:shd w:val="clear" w:color="auto" w:fill="F1F5F9"/>
+            <w:tcW w:w="1500" w:type="dxa"/>
+            <w:shd w:val="clear" w:color="auto" w:fill="$_bannerFillHex"/>
             <w:tcMar>
               <w:top w:w="100" w:type="dxa"/><w:bottom w:w="100" w:type="dxa"/>
               <w:left w:w="140" w:type="dxa"/><w:right w:w="140" w:type="dxa"/>
             </w:tcMar>
           </w:tcPr>
-          ${_paragraph('Status', bold: true, fontSizeHalfPts: 20, colorHex: '1E293B', align: 'center', spaceAfterTwips: 0)}
+          ${_paragraph('Status', bold: true, fontSizeHalfPts: 18, colorHex: _primaryDarkHex, align: 'center', spaceAfterTwips: 0)}
         </w:tc>
         <w:tc>
           <w:tcPr>
-            <w:tcW w:w="2200" w:type="dxa"/>
-            <w:shd w:val="clear" w:color="auto" w:fill="F1F5F9"/>
+            <w:tcW w:w="2500" w:type="dxa"/>
+            <w:shd w:val="clear" w:color="auto" w:fill="$_bannerFillHex"/>
             <w:tcMar>
               <w:top w:w="100" w:type="dxa"/><w:bottom w:w="100" w:type="dxa"/>
               <w:left w:w="140" w:type="dxa"/><w:right w:w="140" w:type="dxa"/>
             </w:tcMar>
           </w:tcPr>
-          ${_paragraph('Notes / Evidence', bold: true, fontSizeHalfPts: 20, colorHex: '1E293B', spaceAfterTwips: 0)}
+          ${_paragraph('Notes / Evidence', bold: true, fontSizeHalfPts: 18, colorHex: _primaryDarkHex, spaceAfterTwips: 0)}
         </w:tc>
       </w:tr>''');
 
@@ -513,44 +538,64 @@ class IlawDocxExporter {
       final statusText = r.isMet ? '[✓] Met' : '[ ] Not Yet';
       final statusColor = r.isMet ? '166534' : '991B1B';
       sb.writeln('''      <w:tr>
-        ${_metaCell(r.criterion, isLabel: false, widthDxa: 5626)}
         <w:tc>
           <w:tcPr>
-            <w:tcW w:w="1200" w:type="dxa"/>
+            <w:tcW w:w="6000" w:type="dxa"/>
             <w:tcMar>
-              <w:top w:w="100" w:type="dxa"/><w:bottom w:w="100" w:type="dxa"/>
+              <w:top w:w="90" w:type="dxa"/><w:bottom w:w="90" w:type="dxa"/>
               <w:left w:w="140" w:type="dxa"/><w:right w:w="140" w:type="dxa"/>
             </w:tcMar>
           </w:tcPr>
-          ${_paragraph(statusText, bold: true, fontSizeHalfPts: 19, colorHex: statusColor, align: 'center', spaceAfterTwips: 0)}
+          ${_paragraph(r.criterion, bold: false, fontSizeHalfPts: 17, colorHex: '1E293B', spaceAfterTwips: 0)}
         </w:tc>
-        ${_metaCell(r.notes.isNotEmpty ? r.notes : '—', isLabel: false, widthDxa: 2200)}
+        <w:tc>
+          <w:tcPr>
+            <w:tcW w:w="1500" w:type="dxa"/>
+            <w:tcMar>
+              <w:top w:w="90" w:type="dxa"/><w:bottom w:w="90" w:type="dxa"/>
+              <w:left w:w="140" w:type="dxa"/><w:right w:w="140" w:type="dxa"/>
+            </w:tcMar>
+          </w:tcPr>
+          ${_paragraph(statusText, bold: true, fontSizeHalfPts: 17, colorHex: statusColor, align: 'center', spaceAfterTwips: 0)}
+        </w:tc>
+        <w:tc>
+          <w:tcPr>
+            <w:tcW w:w="2500" w:type="dxa"/>
+            <w:tcMar>
+              <w:top w:w="90" w:type="dxa"/><w:bottom w:w="90" w:type="dxa"/>
+              <w:left w:w="140" w:type="dxa"/><w:right w:w="140" w:type="dxa"/>
+            </w:tcMar>
+          </w:tcPr>
+          ${_paragraph(r.notes.isNotEmpty ? r.notes : '—', bold: false, fontSizeHalfPts: 17, colorHex: '475569', spaceAfterTwips: 0)}
+        </w:tc>
       </w:tr>''');
     }
 
     sb.writeln('    </w:tbl>');
-    sb.writeln(_spacerParagraph(140));
   }
 
   static String _paragraph(
     String text, {
     bool bold = false,
-    int fontSizeHalfPts = 22,
+    bool italic = false,
+    int fontSizeHalfPts = 20,
     String colorHex = '1E293B',
     String align = 'left',
-    int spaceAfterTwips = 100,
+    int spaceAfterTwips = 80,
   }) {
     final escaped = escapeXml(text);
     final boldTag = bold ? '<w:b/>' : '';
+    final italicTag = italic ? '<w:i/>' : '';
     return '''    <w:p>
       <w:pPr>
         <w:jc w:val="$align"/>
-        <w:spacing w:after="$spaceAfterTwips" w:line="276" w:lineRule="auto"/>
+        <w:spacing w:after="$spaceAfterTwips" w:line="260" w:lineRule="auto"/>
       </w:pPr>
       <w:r>
         <w:rPr>
           <w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:cs="Calibri"/>
           $boldTag
+          $italicTag
           <w:color w:val="$colorHex"/>
           <w:sz w:val="$fontSizeHalfPts"/>
           <w:szCs w:val="$fontSizeHalfPts"/>
@@ -579,14 +624,6 @@ class IlawDocxExporter {
         .replaceAll('>', '&gt;')
         .replaceAll('"', '&quot;')
         .replaceAll("'", '&apos;');
-  }
-
-  static String _formatDate(DateTime dt) {
-    final local = dt.toLocal();
-    final y = local.year.toString().padLeft(4, '0');
-    final m = local.month.toString().padLeft(2, '0');
-    final d = local.day.toString().padLeft(2, '0');
-    return '$y-$m-$d';
   }
 
   static void _addXml(Archive archive, String path, String xmlContent) {
