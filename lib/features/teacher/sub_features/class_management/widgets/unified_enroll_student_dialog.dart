@@ -298,6 +298,35 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
     }).toList();
   }
 
+  String? get _selectedSectionName {
+    if (_selectedOfferingId == null) return null;
+    try {
+      final match = widget.teacherSubjects.firstWhere(
+        (s) => s['id']?.toString() == _selectedOfferingId,
+        orElse: () => <String, dynamic>{},
+      );
+      final sec = match['section_name']?.toString().trim();
+      return (sec != null && sec.isNotEmpty) ? sec : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  String get _targetSummaryText {
+    final parts = <String>[];
+    if (_selectedGradeLevel != null && _selectedGradeLevel!.trim().isNotEmpty) {
+      parts.add(_selectedGradeLevel!.trim());
+    }
+    if (_selectedSubjectName != null && _selectedSubjectName!.trim().isNotEmpty) {
+      parts.add(_selectedSubjectName!.trim());
+    }
+    final sec = _selectedSectionName;
+    if (sec != null && sec.isNotEmpty) {
+      parts.add(sec);
+    }
+    return parts.isEmpty ? 'Target not selected' : 'Target: ${parts.join(" • ")}';
+  }
+
   @override
   void dispose() {
     _autoResumeTimer?.cancel();
@@ -1752,6 +1781,8 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
   Future<void> _showIssuesErrorDialog() async {
     if (_detectedInvalidRows.isEmpty) return;
 
+    final scrollController = ScrollController();
+
     await showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -1779,158 +1810,164 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
         ),
         content: SizedBox(
           width: 520,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 10,
-                ),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.primary
-                      .withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 10,
+                  ),
+                  decoration: BoxDecoration(
                     color: Theme.of(context).colorScheme.primary
-                        .withValues(alpha: 0.2),
+                        .withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: Theme.of(context).colorScheme.primary
+                          .withValues(alpha: 0.2),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        LucideIcons.graduationCap,
+                        size: 18,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          _targetSummaryText,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                child: Row(
+                const SizedBox(height: 14),
+                // 4 Metric Badges in exact order: Issues (X) | New Students (Y) | Existing (Z) | Enrolled (W)
+                Row(
                   children: [
-                    Icon(
-                      LucideIcons.graduationCap,
-                      size: 18,
-                      color: Theme.of(context).colorScheme.primary,
+                    _buildStatPill(
+                      'Issues',
+                      _detectedInvalidRows.length,
+                      Colors.red,
                     ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        'Target: $_selectedGradeLevel • $_selectedSubjectName',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                          color: Theme.of(context).colorScheme.primary,
-                        ),
+                    const SizedBox(width: 6),
+                    _buildStatPill(
+                      'New Students',
+                      _eligibleNewStudents.length,
+                      const Color(0xFF0F8A48),
+                    ),
+                    const SizedBox(width: 6),
+                    _buildStatPill(
+                      'Existing',
+                      _eligibleExistingStudents.length,
+                      Colors.blue,
+                    ),
+                    const SizedBox(width: 6),
+                    _buildStatPill(
+                      'Enrolled',
+                      _alreadyEnrolledStudents.length,
+                      Colors.grey,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Issues Detected (Upload Blocked):',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                        color: Colors.red,
+                      ),
+                    ),
+                    Text(
+                      '${_detectedInvalidRows.length} error${_detectedInvalidRows.length > 1 ? "s" : ""}',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: Colors.red,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
                   ],
                 ),
-              ),
-              const SizedBox(height: 14),
-              // 4 Metric Badges in exact order: Issues (X) | New Students (Y) | Existing (Z) | Enrolled (W)
-              Row(
-                children: [
-                  _buildStatPill(
-                    'Issues',
-                    _detectedInvalidRows.length,
-                    Colors.red,
+                const SizedBox(height: 6),
+                Container(
+                  constraints: const BoxConstraints(maxHeight: 180),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.red.withValues(alpha: 0.05),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.red.withValues(alpha: 0.25)),
                   ),
-                  const SizedBox(width: 6),
-                  _buildStatPill(
-                    'New Students',
-                    _eligibleNewStudents.length,
-                    const Color(0xFF0F8A48),
-                  ),
-                  const SizedBox(width: 6),
-                  _buildStatPill(
-                    'Existing',
-                    _eligibleExistingStudents.length,
-                    Colors.blue,
-                  ),
-                  const SizedBox(width: 6),
-                  _buildStatPill(
-                    'Enrolled',
-                    _alreadyEnrolledStudents.length,
-                    Colors.grey,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 14),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text(
-                    'Issues Detected (Upload Blocked):',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 12,
-                      color: Colors.red,
-                    ),
-                  ),
-                  Text(
-                    '${_detectedInvalidRows.length} error${_detectedInvalidRows.length > 1 ? "s" : ""}',
-                    style: const TextStyle(
-                      fontSize: 11,
-                      color: Colors.red,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 6),
-              Container(
-                constraints: const BoxConstraints(maxHeight: 150),
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: Colors.red.withValues(alpha: 0.05),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.red.withValues(alpha: 0.25)),
-                ),
-                child: ListView.builder(
-                  shrinkWrap: true,
-                  itemCount: _detectedInvalidRows.length,
-                  itemBuilder: (_, idx) {
-                    final item = _detectedInvalidRows[idx];
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 3),
-                      child: RichText(
-                        text: TextSpan(
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: Theme.of(context).colorScheme.onSurface,
-                          ),
-                          children: [
-                            TextSpan(
-                              text: 'Row ${item.rowNumber} ',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: Colors.red,
+                  child: Scrollbar(
+                    thumbVisibility: true,
+                    controller: scrollController,
+                    child: ListView.builder(
+                      controller: scrollController,
+                      shrinkWrap: true,
+                      itemCount: _detectedInvalidRows.length,
+                      itemBuilder: (_, idx) {
+                        final item = _detectedInvalidRows[idx];
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 4),
+                          child: RichText(
+                            text: TextSpan(
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Theme.of(context).colorScheme.onSurface,
                               ),
+                              children: [
+                                TextSpan(
+                                  text: 'Row ${item.rowNumber} ',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.red,
+                                  ),
+                                ),
+                                if (item.fieldTag == 'Middle Initial')
+                                  TextSpan(
+                                    text: item.reason,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.red,
+                                    ),
+                                  )
+                                else ...[
+                                  TextSpan(
+                                    text:
+                                        '(${item.fieldTag}: ${item.identifier}): ',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.red,
+                                    ),
+                                  ),
+                                  TextSpan(
+                                    text: item.reason,
+                                    style: TextStyle(
+                                      color: Theme.of(context).colorScheme.onSurface
+                                          .withValues(alpha: 0.85),
+                                    ),
+                                  ),
+                                ],
+                              ],
                             ),
-                            if (item.fieldTag == 'Middle Initial')
-                              TextSpan(
-                                text: item.reason,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.red,
-                                ),
-                              )
-                            else ...[
-                              TextSpan(
-                                text:
-                                    '(${item.fieldTag}: ${item.identifier}): ',
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.red,
-                                ),
-                              ),
-                              TextSpan(
-                                text: item.reason,
-                                style: TextStyle(
-                                  color: Theme.of(context).colorScheme.onSurface
-                                      .withValues(alpha: 0.85),
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                    );
-                  },
+                          ),
+                        );
+                      },
+                    ),
+                  ),
                 ),
-              ),
               const SizedBox(height: 10),
               Container(
                 padding: const EdgeInsets.symmetric(
@@ -1977,7 +2014,8 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
             ],
           ),
         ),
-        actions: [
+      ),
+      actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
             child: const Text('Close'),
@@ -1996,6 +2034,7 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
         ],
       ),
     );
+    scrollController.dispose();
   }
 
   int _colLetterToIndex(String letters) {
