@@ -503,7 +503,7 @@ class _TeacherDashboardOverviewTabState
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
-                flex: 6,
+                flex: 7,
                 child: Card(
                   child: Padding(
                     padding: const EdgeInsets.all(22),
@@ -649,7 +649,7 @@ class _TeacherDashboardOverviewTabState
 
               // Right: Quick Actions Menu
               Expanded(
-                flex: 4,
+                flex: 3,
                 child: Card(
                   child: Padding(
                     padding: const EdgeInsets.all(22),

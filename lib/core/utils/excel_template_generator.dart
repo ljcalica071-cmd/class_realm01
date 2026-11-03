@@ -251,7 +251,7 @@ $rowsBuffer
       <formula1>&quot;Male,Female&quot;</formula1>
     </dataValidation>
     <!-- Validation 7: Birthday (Supports YYYY-MM-DD, YYYY/MM/DD, YYYY MM DD, or Excel date; Age 10 to 50) -->
-    <dataValidation type="custom" errorStyle="stop" allowBlank="1" showInputMessage="1" showErrorMessage="1" errorTitle="Invalid Birthday" error="Student must be between 10 and 50 years old (e.g., 2011-01-01)." promptTitle="Birthday [YYYY-MM-DD]" prompt="Enter date in YYYY-MM-DD format (Age 10-50, e.g., 2011-01-01)" sqref="G3:G100">
+    <dataValidation type="custom" errorStyle="stop" allowBlank="1" showInputMessage="1" showErrorMessage="1" errorTitle="Invalid Birthday" error="Must be 10-50 years old." promptTitle="Birthday [YYYY-MM-DD]" prompt="YYYY-MM-DD (Age 10-50)" sqref="G3:G100">
       <formula1>OR(ISBLANK(G3),AND(ISNUMBER(G3),G3&gt;=27758,G3&lt;=42735),AND(LEN(TRIM(G3))&gt;=8,LEN(TRIM(G3))&lt;=10,ISNUMBER(--LEFT(TRIM(G3),4)),--LEFT(TRIM(G3),4)&gt;=1976,--LEFT(TRIM(G3),4)&lt;=2016),AND(LEN(TRIM(G3))&gt;=8,LEN(TRIM(G3))&lt;=10,ISNUMBER(--RIGHT(TRIM(G3),4)),--RIGHT(TRIM(G3),4)&gt;=1976,--RIGHT(TRIM(G3),4)&lt;=2016))</formula1>
 
     </dataValidation>

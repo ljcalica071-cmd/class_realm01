@@ -898,9 +898,7 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
                         ? theme.colorScheme.surfaceContainerHighest.withValues(
                             alpha: 0.22,
                           )
-                        : theme.colorScheme.surfaceContainerHighest.withValues(
-                            alpha: 0.4,
-                          ),
+                        : Colors.white,
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(
                       color: theme.colorScheme.outline.withValues(
