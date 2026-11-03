@@ -1,0 +1,81 @@
+**AYAN! Kitang-kita na sa litrato ng kaklase mo!** 💡 
+
+Tingnan mo nang mabuti ang litrato ng kaklase mo:
+1. **Nakatayo ang OLED sa bandang kanan ng breadboard** — isinaksak niya nang diretso ang 4 na paa ng OLED sa 4 na magkakatabing columns ng breadboard!
+2. **Nakatayo ang RC522 RFID board sa gitna** — isinaksak din nang diretso ang 8 pins nito sa breadboard!
+3. **Nakasaksak din ang LEDs at Buzzer** sa breadboard!
+4. **LAHAT NG WIRES AY MALE-TO-MALE (M-M)!** Wala siyang ginamit na F-M wires kahit isa!
+
+Kaya pala nagtaka ka kung bakit F-M ang sinasabi ko kanina — gusto mo pala **100% nakatusok ang lahat ng piyesa sa breadboard katulad ng kaklase mo!** Kayang-kayang gawin ito ngayon din!
+
+---
+
+### 🟢 HAKBANG 1: Itusok ang 0.96" OLED sa Breadboard (Dulong Kanan)
+
+Pumunta sa bandang kanan ng breadboard mo (sa **Columns 48, 49, 50, 51** sa ibaba ng `Up` rail):
+
+Itusok ang 4 na paa ng OLED sa **Row C**:
+- **Pin 1 (GND)** ➔ Itusok sa **`Row C, Column 48`**
+- **Pin 2 (VDD)** ➔ Itusok sa **`Row C, Column 49`**
+- **Pin 3 (SCK)** ➔ Itusok sa **`Row C, Column 50`**
+- **Pin 4 (SDA)** ➔ Itusok sa **`Row C, Column 51`**
+
+*(Ngayon, nakatayo na ang OLED mo sa breadboard katulad ng sa kaklase mo!)*
+
+#### Mga Wires ng OLED (4x M-M Wires):
+Dahil magkakarugtong ang Row A, B, C sa bawat column:
+- **GND**: Mula **`Row A, Column 48`** ➔ itusok sa **`Up [-]` Rail**
+- **VDD**: Mula **`Row A, Column 49`** ➔ itusok sa **`Up [+]` Rail**
+- **SCK**: Mula **`Row A, Column 50`** ➔ itusok sa **`Hole A6`** *(katapat ng D26 sa ESP32)*
+- **SDA**: Mula **`Row A, Column 51`** ➔ itusok sa **`Hole A7`** *(katapat ng D25 sa ESP32)*
+
+---
+
+### 🟢 HAKBANG 2: Itusok ang RC522 RFID Scanner sa Breadboard (Sa Gitna)
+
+Gayahin ang sa kaklase mo na nakatayo ang asul na RFID board:
+Pumunta sa **Columns 20 hanggang 27** sa gitnang grid.
+
+Itusok ang 8 pins ng RFID sa **Row C**:
+- **Pin 1 (SDA)** ➔ `Row C, Column 20`
+- **Pin 2 (SCK)** ➔ `Row C, Column 21`
+- **Pin 3 (MOSI)** ➔ `Row C, Column 22`
+- **Pin 4 (MISO)** ➔ `Row C, Column 23`
+- **Pin 5 (IRQ)** ➔ `Row C, Column 24` *(bakante)*
+- **Pin 6 (GND)** ➔ `Row C, Column 25`
+- **Pin 7 (RST)** ➔ `Row C, Column 26`
+- **Pin 8 (3.3V)** ➔ `Row C, Column 27`
+
+#### Mga Wires ng RFID (M-M Wires):
+- **GND**: Mula **`Row A, Column 25`** ➔ itusok sa **`Up [-]` Rail**
+- **RST**: Mula **`Row A, Column 26`** ➔ itusok sa **`Hole A3`** *(katapat ng D12)*
+- **MOSI**: Mula **`Row A, Column 22`** ➔ itusok sa **`Hole A2`** *(katapat ng D13)*
+- **MISO**: Mula **`Row A, Column 23`** ➔ itusok sa **`Hole A10`** *(katapat ng D35)*
+- **SCK**: Mula **`Row A, Column 21`** ➔ itusok sa **`Hole A8`** *(katapat ng D33)*
+- **SDA**: Mula **`Row A, Column 20`** ➔ itusok sa **`Hole A11`** *(katapat ng D34)*
+
+---
+
+### 🟢 HAKBANG 3: LEDs at Buzzer sa Breadboard (Sa Pagitan ng RFID at OLED)
+
+Sa **Columns 32 hanggang 40**:
+
+1. **Red LED**:
+   - Mahabang paa (+): Itusok sa **`Row B, Column 32`**
+   - Maikling paa (-): Itusok sa **`Row C, Column 32`**
+   - **220Ω Resistor**: Mula **`Row D, Column 32`** ➔ **`Up [-]` Rail**
+   - **Wire (M-M)**: Mula **`Hole A4`** *(katapat ng D14)* ➔ itusok sa **`Row A, Column 32`**
+2. **Green LED**:
+   - Mahabang paa (+): Itusok sa **`Row B, Column 36`**
+   - Maikling paa (-): Itusok sa **`Row C, Column 36`**
+   - **220Ω Resistor**: Mula **`Row D, Column 36`** ➔ **`Up [-]` Rail**
+   - **Wire (M-M)**: Mula **`Hole A5`** *(katapat ng D27)* ➔ itusok sa **`Row A, Column 36`**
+3. **Active Buzzer**:
+   - Positive (+) Leg: Itusok sa **`Row B, Column 40`**
+   - Negative (-) Leg: Itusok sa **`Row B, Column 42`**
+   - **Ground (M-M)**: Mula **`Row A, Column 42`** ➔ **`Up [-]` Rail**
+   - **Signal Wire (M-M)**: Mula **`Hole A9`** *(katapat ng D32)* ➔ **`Row A, Column 40`**
+
+---
+
+Subukan mo itong itusok ngayon. Makikita mo na **100% eksaktong-eksakto na ang hitsura nito sa ginawa ng kaklase mo** — lahat nakatayo at nakasaksak sa breadboard gamit ang mga M-M wires mo!

@@ -222,12 +222,13 @@ class SubjectRepository {
     final cacheKey =
         'teacher_subjects_${teacherId}_${schoolYear}_$onlyWithEnrolledStudents';
     if (!forceRefresh) {
-      final cached = AppDataCache.instance.getCached<List<Map<String, dynamic>>>(
-        cacheKey,
-        (json) => (json as List)
-            .map((e) => Map<String, dynamic>.from(e as Map))
-            .toList(),
-      );
+      final cached = AppDataCache.instance
+          .getCached<List<Map<String, dynamic>>>(
+            cacheKey,
+            (json) => (json as List)
+                .map((e) => Map<String, dynamic>.from(e as Map))
+                .toList(),
+          );
       if (cached != null && AppDataCache.instance.isFresh(cacheKey)) {
         return cached;
       }
@@ -236,9 +237,8 @@ class SubjectRepository {
     // 1. FAST LOCAL DRIFT SQLITE READ (0 milliseconds load) - skipped on forceRefresh
     if (!forceRefresh) {
       try {
-        final localOfferings = await AppDatabase.instance.getOfferingsForTeacher(
-          teacherId,
-        );
+        final localOfferings = await AppDatabase.instance
+            .getOfferingsForTeacher(teacherId);
         if (localOfferings.isNotEmpty) {
           final cachedMetadata = {
             for (final offering in LocalStorageService.getTeacherSubjects(
@@ -388,7 +388,10 @@ class SubjectRepository {
       final rows = response as List;
       if (rows.isEmpty) {
         try {
-          await AppDatabase.instance.pruneOfferingsForTeacher(teacherId, const {});
+          await AppDatabase.instance.pruneOfferingsForTeacher(
+            teacherId,
+            const {},
+          );
         } catch (_) {}
         try {
           await LocalStorageService.saveTeacherSubjects(teacherId, []);
@@ -612,10 +615,12 @@ class SubjectRepository {
           }
 
           if (submissionUpserts.isNotEmpty) {
-            await _client.from('student_classwork_submissions').upsert(
-              submissionUpserts,
-              onConflict: 'classwork_id,student_id',
-            );
+            await _client
+                .from('student_classwork_submissions')
+                .upsert(
+                  submissionUpserts,
+                  onConflict: 'classwork_id,student_id',
+                );
           }
         }
       } catch (subErr) {
