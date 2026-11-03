@@ -910,42 +910,25 @@ class SubjectRepository {
           .limit(1);
       if ((attendance as List).isNotEmpty) return true;
 
-      // 4. Classwork submissions
+      // 4. Classwork items / assessments created by teacher
       final cwItems = await _client
           .from('classwork_items')
           .select('id')
-          .eq('subject_offering_id', offeringId);
-      final cwIds = (cwItems as List)
-          .map((c) => c['id']?.toString())
-          .whereType<String>()
-          .toList();
-      if (cwIds.isNotEmpty) {
-        final subs = await _client
-            .from('student_classwork_submissions')
-            .select('id')
-            .inFilter('classwork_id', cwIds)
-            .limit(1);
-        if ((subs as List).isNotEmpty) return true;
-      }
+          .eq('subject_offering_id', offeringId)
+          .limit(1);
+      if ((cwItems as List).isNotEmpty) return true;
 
-      // 5. Digital assessment attempts
+      // 5. Digital assessments created by teacher
       final assessments = await _client
           .from('digital_assessments')
           .select('id')
-          .eq('subject_offering_id', offeringId);
-      final assessIds = (assessments as List)
-          .map((a) => a['id']?.toString())
-          .whereType<String>()
-          .toList();
-      if (assessIds.isNotEmpty) {
-        final attempts = await _client
-            .from('assessment_attempts')
-            .select('id')
-            .inFilter('assessment_id', assessIds)
-            .limit(1);
-        if ((attempts as List).isNotEmpty) return true;
-      }
+          .eq('subject_offering_id', offeringId)
+          .limit(1);
+      if ((assessments as List).isNotEmpty) return true;
 
+      // Note: If only students are enrolled (in student_enrollments) with no grades,
+      // no attendance, and no teacher-created assessments, this returns false so the
+      // offering can be deleted without affecting student accounts.
       return false;
     } catch (e) {
       debugPrint('Notice checking academic records for $offeringId: $e');

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -801,7 +802,7 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
                   ],
                 ),
               ),
-              // Archive / Edit / Delete Actions on Active Cards (Archived cards have actions in footer)
+              // Archive / Edit Actions on Active Cards (Permanent delete is only in Archived Subjects view)
               if (!isArchived) ...[
                 IconButton(
                   tooltip: 'Edit subject and sections',
@@ -814,16 +815,6 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
                   visualDensity: VisualDensity.compact,
                   icon: Icon(LucideIcons.archive, size: 17, color: muted),
                   onPressed: () => _confirmArchive(subject),
-                ),
-                IconButton(
-                  tooltip: 'Delete subject permanently',
-                  visualDensity: VisualDensity.compact,
-                  icon: Icon(
-                    LucideIcons.trash2,
-                    size: 17,
-                    color: theme.colorScheme.error.withValues(alpha: 0.8),
-                  ),
-                  onPressed: () => _confirmPermanentDelete(subject),
                 ),
               ],
             ],
@@ -1101,7 +1092,7 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
     });
   }
 
-  /// Universal, DRY confirmation dialog for Archive, Restore, and Delete actions
+  /// Universal, DRY confirmation dialog for Archive, Restore, and Delete actions with optional countdown
   Future<bool> _showActionConfirmationDialog({
     required String title,
     required String message,
@@ -1111,6 +1102,7 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
     Color? confirmButtonColor,
     Widget? detailsWidget,
     bool isDestructive = false,
+    int countdownSeconds = 0,
   }) async {
     final theme = Theme.of(context);
     final primaryColor = theme.colorScheme.primary;
@@ -1122,82 +1114,16 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
     final result = await _showConstrainedDialog<bool>(
       context: context,
       maxWidth: 440,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: effectiveIconColor.withValues(alpha: 0.12),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(icon, size: 22, color: effectiveIconColor),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Text(
-            message,
-            style: TextStyle(
-              fontSize: 13,
-              height: 1.45,
-              color: theme.colorScheme.onSurface.withValues(alpha: 0.85),
-            ),
-          ),
-          if (detailsWidget != null) ...[
-            const SizedBox(height: 12),
-            detailsWidget,
-          ],
-          const SizedBox(height: 22),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text('Cancel'),
-              ),
-              const SizedBox(width: 8),
-              ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: effectiveBtnColor,
-                  foregroundColor: isDestructive
-                      ? theme.colorScheme.onError
-                      : theme.colorScheme.onPrimary,
-                  elevation: 0,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 11,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
-                icon: Icon(icon, size: 16),
-                label: Text(
-                  confirmLabel,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 13,
-                  ),
-                ),
-                onPressed: () => Navigator.pop(context, true),
-              ),
-            ],
-          ),
-        ],
+      child: _ActionConfirmationDialogContent(
+        title: title,
+        message: message,
+        confirmLabel: confirmLabel,
+        icon: icon,
+        effectiveIconColor: effectiveIconColor,
+        effectiveBtnColor: effectiveBtnColor,
+        detailsWidget: detailsWidget,
+        isDestructive: isDestructive,
+        countdownSeconds: countdownSeconds,
       ),
     );
     return result ?? false;
@@ -2527,6 +2453,7 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
           'It will be hidden from your active classroom views.',
       confirmLabel: 'Archive Subject',
       icon: LucideIcons.archive,
+      countdownSeconds: 5,
       detailsWidget: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
@@ -2640,6 +2567,7 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
       confirmLabel: 'Delete Permanently',
       icon: LucideIcons.trash2,
       isDestructive: true,
+      countdownSeconds: 5,
       detailsWidget: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
@@ -2731,6 +2659,7 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
       confirmLabel: 'Delete Permanently',
       icon: LucideIcons.trash2,
       isDestructive: true,
+      countdownSeconds: 5,
       detailsWidget: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
@@ -3829,6 +3758,162 @@ class _SingleSpaceInputFormatter extends TextInputFormatter {
         isDirectional: newValue.selection.isDirectional,
       ),
       composing: TextRange.empty,
+    );
+  }
+}
+
+
+/// Action confirmation dialog with safety countdown
+class _ActionConfirmationDialogContent extends StatefulWidget {
+  final String title;
+  final String message;
+  final String confirmLabel;
+  final IconData icon;
+  final Color effectiveIconColor;
+  final Color effectiveBtnColor;
+  final Widget? detailsWidget;
+  final bool isDestructive;
+  final int countdownSeconds;
+
+  const _ActionConfirmationDialogContent({
+    required this.title,
+    required this.message,
+    required this.confirmLabel,
+    required this.icon,
+    required this.effectiveIconColor,
+    required this.effectiveBtnColor,
+    this.detailsWidget,
+    required this.isDestructive,
+    this.countdownSeconds = 0,
+  });
+
+  @override
+  State<_ActionConfirmationDialogContent> createState() =>
+      _ActionConfirmationDialogContentState();
+}
+
+class _ActionConfirmationDialogContentState
+    extends State<_ActionConfirmationDialogContent> {
+  late int _secondsRemaining;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _secondsRemaining = widget.countdownSeconds;
+    if (_secondsRemaining > 0) {
+      _timer = Timer.periodic(const Duration(seconds: 1), (t) {
+        if (!mounted) {
+          t.cancel();
+          return;
+        }
+        setState(() {
+          if (_secondsRemaining > 1) {
+            _secondsRemaining--;
+          } else {
+            _secondsRemaining = 0;
+            t.cancel();
+          }
+        });
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isCountingDown = _secondsRemaining > 0;
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: widget.effectiveIconColor.withValues(alpha: 0.12),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(widget.icon, size: 22, color: widget.effectiveIconColor),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Text(
+                widget.title,
+                style: const TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        Text(
+          widget.message,
+          style: TextStyle(
+            fontSize: 13,
+            height: 1.45,
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.85),
+          ),
+        ),
+        if (widget.detailsWidget != null) ...[
+          const SizedBox(height: 12),
+          widget.detailsWidget!,
+        ],
+        const SizedBox(height: 22),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            const SizedBox(width: 8),
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: isCountingDown
+                    ? theme.colorScheme.onSurface.withValues(alpha: 0.12)
+                    : widget.effectiveBtnColor,
+                foregroundColor: isCountingDown
+                    ? theme.colorScheme.onSurface.withValues(alpha: 0.4)
+                    : (widget.isDestructive
+                        ? theme.colorScheme.onError
+                        : theme.colorScheme.onPrimary),
+                elevation: 0,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 11,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              icon: Icon(widget.icon, size: 16),
+              label: Text(
+                isCountingDown
+                    ? '${widget.confirmLabel} (${_secondsRemaining}s)'
+                    : widget.confirmLabel,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                ),
+              ),
+              onPressed: isCountingDown
+                  ? null
+                  : () => Navigator.pop(context, true),
+            ),
+          ],
+        ),
+      ],
     );
   }
 }
