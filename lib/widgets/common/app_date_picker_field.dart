@@ -39,15 +39,19 @@ class AppDatePickerField extends FormField<DateTime> {
                Row(
                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                  children: [
-                   Text(
-                     label,
-                     style: TextStyle(
-                       fontSize: 13,
-                       fontWeight: FontWeight.w600,
-                       color: theme.colorScheme.onSurface,
+                   Flexible(
+                     child: Text(
+                       label,
+                       overflow: TextOverflow.ellipsis,
+                       style: TextStyle(
+                         fontSize: 13,
+                         fontWeight: FontWeight.w600,
+                         color: theme.colorScheme.onSurface,
+                       ),
                      ),
                    ),
-                   if (hasDate && showAgeHeader)
+                   if (hasDate && showAgeHeader) ...[
+                     const SizedBox(width: 6),
                      Text(
                        'Age: $age yrs old',
                        style: TextStyle(
@@ -56,6 +60,7 @@ class AppDatePickerField extends FormField<DateTime> {
                          color: theme.colorScheme.primary,
                        ),
                      ),
+                   ],
                  ],
                ),
                const SizedBox(height: 6),

@@ -234,7 +234,8 @@ class _AdminEditTeacherDialogState extends State<AdminEditTeacherDialog> {
                         child: AppTextField(
                           label: 'Middle Initial',
                           controller: _middleNameCtrl,
-                          validator: AppValidators.validateMiddleInitial,
+                          textCapitalization: TextCapitalization.characters,
+                          inputFormatters: AppValidators.middleInitialFormatters,
                         ),
                       ),
                       const SizedBox(width: 10),

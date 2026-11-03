@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lottie/lottie.dart';
@@ -12,7 +13,26 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 enum TeacherCreationStep { details, otpVerification, success }
 
 class AdminAddTeacherDialog extends StatefulWidget {
-  const AdminAddTeacherDialog({super.key});
+  final Future<Map<String, dynamic>> Function({
+    required String email,
+    required String firstName,
+    String? middleName,
+    required String lastName,
+    required String gender,
+    required DateTime birthday,
+    required bool isResend,
+  })? onSendVerification;
+
+  final Future<Map<String, dynamic>> Function({
+    required String email,
+    required String code,
+  })? onVerifyOtp;
+
+  const AdminAddTeacherDialog({
+    super.key,
+    this.onSendVerification,
+    this.onVerifyOtp,
+  });
 
   @override
   State<AdminAddTeacherDialog> createState() => _AdminAddTeacherDialogState();
@@ -33,9 +53,9 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog>
 
   AnimationController get _effectiveCursorBlinkController {
     _cursorBlinkController ??= AnimationController(
-        vsync: this,
-        duration: const Duration(milliseconds: 500),
-      )..repeat(reverse: true);
+      vsync: this,
+      duration: const Duration(milliseconds: 500),
+    )..repeat(reverse: true);
     return _cursorBlinkController!;
   }
 
@@ -82,18 +102,24 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog>
           return KeyEventResult.handled;
         } else if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
           setState(() {
-            _selectedIndex =
-                (_selectedIndex - 1).clamp(0, _otpController.text.length);
-            _otpController.selection =
-                TextSelection.collapsed(offset: _selectedIndex);
+            _selectedIndex = (_selectedIndex - 1).clamp(
+              0,
+              _otpController.text.length,
+            );
+            _otpController.selection = TextSelection.collapsed(
+              offset: _selectedIndex,
+            );
           });
           return KeyEventResult.handled;
         } else if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
           setState(() {
-            _selectedIndex =
-                (_selectedIndex + 1).clamp(0, _otpController.text.length);
-            _otpController.selection =
-                TextSelection.collapsed(offset: _selectedIndex);
+            _selectedIndex = (_selectedIndex + 1).clamp(
+              0,
+              _otpController.text.length,
+            );
+            _otpController.selection = TextSelection.collapsed(
+              offset: _selectedIndex,
+            );
           });
           return KeyEventResult.handled;
         }
@@ -150,8 +176,7 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog>
       _otpSecondsRemaining = 0;
       _otpController.clear();
       _selectedIndex = 0;
-      _error =
-          'The verification code has expired (5 minutes passed). Please click Resend.';
+      _error = 'The verification code has expired (5 minutes passed). Please click Resend.';
     });
     _otpFocusNode.unfocus();
   }
@@ -172,6 +197,34 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog>
         setState(() => _resendSecondsRemaining--);
       }
     });
+  }
+
+  void _requestOtpKeyboard() {
+    if (!mounted ||
+        _step != TeacherCreationStep.otpVerification ||
+        _isLockedOut ||
+        _otpSecondsRemaining <= 0) {
+      return;
+    }
+    EditableTextState? editableState;
+    void visitor(Element element) {
+      if (editableState != null) return;
+      if (element is StatefulElement && element.state is EditableTextState) {
+        final state = element.state as EditableTextState;
+        if (state.widget.focusNode == _otpFocusNode) {
+          editableState = state;
+          return;
+        }
+      }
+      element.visitChildren(visitor);
+    }
+
+    context.visitChildElements(visitor);
+    if (editableState != null) {
+      editableState!.requestKeyboard();
+    } else {
+      _otpFocusNode.requestFocus();
+    }
   }
 
   Future<void> _sendOtpCode() async {
@@ -197,18 +250,22 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog>
           .clamp(0, 300);
       _startOtpExpiryTimer(remainingOtp);
       final remainingCooldown = _lastSentAt != null
-          ? (60 - DateTime.now().difference(_lastSentAt!).inSeconds).clamp(0, 60)
+          ? (60 - DateTime.now().difference(_lastSentAt!).inSeconds).clamp(
+              0,
+              60,
+            )
           : 0;
       _startResendTimer(remainingCooldown);
       setState(() {
         _step = TeacherCreationStep.otpVerification;
         _error = null;
         _selectedIndex = _otpController.text.length.clamp(0, 5);
-        _otpController.selection =
-            TextSelection.collapsed(offset: _otpController.text.length);
+        _otpController.selection = TextSelection.collapsed(
+          offset: _otpController.text.length,
+        );
       });
-      Future.delayed(const Duration(milliseconds: 150), () {
-        if (mounted) _otpFocusNode.requestFocus();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _requestOtpKeyboard();
       });
       return;
     }
@@ -219,23 +276,34 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog>
     });
 
     try {
-      final res = await AuthRepository.instance.sendAdminTeacherVerification(
-        email: email,
-        firstName: _firstNameController.text.trim(),
-        middleName: _middleNameController.text.trim(),
-        lastName: _lastNameController.text.trim(),
-        gender: _gender!,
-        birthday: _birthday!,
-        isResend: false,
-      );
+      final res = widget.onSendVerification != null
+          ? await widget.onSendVerification!(
+              email: email,
+              firstName: _firstNameController.text.trim(),
+              middleName: _middleNameController.text.trim(),
+              lastName: _lastNameController.text.trim(),
+              gender: _gender!,
+              birthday: _birthday!,
+              isResend: false,
+            )
+          : await AuthRepository.instance.sendAdminTeacherVerification(
+              email: email,
+              firstName: _firstNameController.text.trim(),
+              middleName: _middleNameController.text.trim(),
+              lastName: _lastNameController.text.trim(),
+              gender: _gender!,
+              birthday: _birthday!,
+              isResend: false,
+            );
 
       _activeChallengeEmail = email;
       final expiresAtStr = res['expiresAt']?.toString();
       if (expiresAtStr != null) {
         _activeChallengeExpiresAt = DateTime.tryParse(expiresAtStr);
       } else {
-        _activeChallengeExpiresAt =
-            DateTime.now().add(const Duration(minutes: 5));
+        _activeChallengeExpiresAt = DateTime.now().add(
+          const Duration(minutes: 5),
+        );
       }
 
       final remainingCooldown = res['reused'] == true
@@ -244,8 +312,7 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog>
       _lastSentAt = DateTime.now();
       _startResendTimer(remainingCooldown);
 
-      final remainingOtp =
-          (res['remainingOtpSeconds'] as num?)?.toInt() ?? 300;
+      final remainingOtp = (res['remainingOtpSeconds'] as num?)?.toInt() ?? 300;
       _startOtpExpiryTimer(remainingOtp);
 
       if (res['failedAttempts'] != null) {
@@ -254,23 +321,28 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog>
 
       if (mounted) {
         setState(() {
+          _isLoading = false;
           _step = TeacherCreationStep.otpVerification;
           _error = null;
           _selectedIndex = _otpController.text.length.clamp(0, 5);
-          _otpController.selection =
-              TextSelection.collapsed(offset: _otpController.text.length);
+          _otpController.selection = TextSelection.collapsed(
+            offset: _otpController.text.length,
+          );
         });
-        Future.delayed(const Duration(milliseconds: 150), () {
-          if (mounted) _otpFocusNode.requestFocus();
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _requestOtpKeyboard();
         });
       }
     } catch (error) {
       if (!mounted) return;
       _activeChallengeEmail = null;
       _activeChallengeExpiresAt = null;
-      setState(() => _error = _messageFor(error));
+      setState(() {
+        _isLoading = false;
+        _error = _messageFor(error);
+      });
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted && _isLoading) setState(() => _isLoading = false);
     }
   }
 
@@ -284,23 +356,34 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog>
 
     try {
       final email = _emailController.text.trim().toLowerCase();
-      final res = await AuthRepository.instance.sendAdminTeacherVerification(
-        email: email,
-        firstName: _firstNameController.text.trim(),
-        middleName: _middleNameController.text.trim(),
-        lastName: _lastNameController.text.trim(),
-        gender: _gender!,
-        birthday: _birthday!,
-        isResend: true,
-      );
+      final res = widget.onSendVerification != null
+          ? await widget.onSendVerification!(
+              email: email,
+              firstName: _firstNameController.text.trim(),
+              middleName: _middleNameController.text.trim(),
+              lastName: _lastNameController.text.trim(),
+              gender: _gender!,
+              birthday: _birthday!,
+              isResend: true,
+            )
+          : await AuthRepository.instance.sendAdminTeacherVerification(
+              email: email,
+              firstName: _firstNameController.text.trim(),
+              middleName: _middleNameController.text.trim(),
+              lastName: _lastNameController.text.trim(),
+              gender: _gender!,
+              birthday: _birthday!,
+              isResend: true,
+            );
       if (mounted) {
         _activeChallengeEmail = email;
         final expiresAtStr = res['expiresAt']?.toString();
         if (expiresAtStr != null) {
           _activeChallengeExpiresAt = DateTime.tryParse(expiresAtStr);
         } else {
-          _activeChallengeExpiresAt =
-              DateTime.now().add(const Duration(minutes: 5));
+          _activeChallengeExpiresAt = DateTime.now().add(
+            const Duration(minutes: 5),
+          );
         }
 
         _lastSentAt = DateTime.now();
@@ -310,27 +393,38 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog>
           _failedAttempts = (res['failedAttempts'] as num).toInt();
         }
         setState(() {
-          _otpController.clear();
+          _isResending = false;
+          _otpController.value = const TextEditingValue(
+            text: '',
+            selection: TextSelection.collapsed(offset: 0),
+          );
           _selectedIndex = 0;
           // Attempts are preserved across resends! Do not reset _failedAttempts to 0.
           _error = null;
         });
-        Future.delayed(const Duration(milliseconds: 150), () {
-          if (mounted) _otpFocusNode.requestFocus();
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _requestOtpKeyboard();
         });
       }
     } catch (error) {
       if (!mounted) return;
       if (error is AdminTeacherException && error.maxAttemptsExceeded) {
         setState(() {
+          _isResending = false;
           _failedAttempts = 5;
           _error = error.message;
         });
       } else {
-        setState(() => _error = _messageFor(error));
+        setState(() {
+          _isResending = false;
+          _error = _messageFor(error);
+        });
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _requestOtpKeyboard();
+        });
       }
     } finally {
-      if (mounted) setState(() => _isResending = false);
+      if (mounted && _isResending) setState(() => _isResending = false);
     }
   }
 
@@ -338,8 +432,9 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog>
     if (_isAnyBusy || _isLockedOut) return;
 
     if (_otpSecondsRemaining <= 0) {
-      setState(() => _error =
-          'The verification code has expired (5 minutes passed). Please click Resend.');
+      setState(
+        () => _error = 'The verification code has expired (5 minutes passed). Please click Resend.',
+      );
       return;
     }
 
@@ -355,43 +450,51 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog>
     });
 
     try {
-      final res = await AuthRepository.instance.verifyAdminTeacherAndCreate(
-        email: _emailController.text.trim(),
-        code: code,
-      );
+      final res = widget.onVerifyOtp != null
+          ? await widget.onVerifyOtp!(
+              email: _emailController.text.trim(),
+              code: code,
+            )
+          : await AuthRepository.instance.verifyAdminTeacherAndCreate(
+              email: _emailController.text.trim(),
+              code: code,
+            );
       _resendTimer?.cancel();
       _otpExpiryTimer?.cancel();
       if (mounted) {
         setState(() {
+          _isVerifying = false;
           _step = TeacherCreationStep.success;
-          _createdEmail = res['email']?.toString() ?? _emailController.text.trim();
+          _createdEmail =
+              res['email']?.toString() ?? _emailController.text.trim();
         });
       }
     } catch (error) {
       if (!mounted) return;
-      if (error is AdminTeacherException) {
-        if (error.failedAttempts != null) {
-          _failedAttempts = error.failedAttempts!;
-        }
-        setState(() {
-          _error = error.message;
-        });
-      } else {
-        setState(() {
-          _error = _messageFor(error);
-        });
+      if (error is AdminTeacherException && error.failedAttempts != null) {
+        _failedAttempts = error.failedAttempts!;
       }
+      final nextError = error is AdminTeacherException
+          ? error.message
+          : _messageFor(error);
+      setState(() {
+        _isVerifying = false;
+        _error = nextError;
+        if (!_isLockedOut) {
+          _selectedIndex = 0;
+          _otpController.value = const TextEditingValue(
+            text: '',
+            selection: TextSelection.collapsed(offset: 0),
+          );
+        }
+      });
       if (!_isLockedOut) {
-        _selectedIndex = 5;
-        _otpController.selection = TextSelection.collapsed(offset: 6);
-        Future.delayed(const Duration(milliseconds: 100), () {
-          if (mounted) {
-            FocusScope.of(context).requestFocus(_otpFocusNode);
-          }
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _requestOtpKeyboard();
         });
       }
     } finally {
-      if (mounted) setState(() => _isVerifying = false);
+      if (mounted && _isVerifying) setState(() => _isVerifying = false);
     }
   }
 
@@ -457,7 +560,6 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog>
 
   void _onDigitBoxTapped(int index) {
     if (_isLockedOut || _isAnyBusy || _otpSecondsRemaining <= 0) return;
-    _otpFocusNode.requestFocus();
     final text = _otpController.text;
     setState(() {
       _error = null;
@@ -469,11 +571,10 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog>
         );
       } else {
         _selectedIndex = text.length.clamp(0, 5);
-        _otpController.selection = TextSelection.collapsed(
-          offset: text.length,
-        );
+        _otpController.selection = TextSelection.collapsed(offset: text.length);
       }
     });
+    _requestOtpKeyboard();
   }
 
   Widget _buildOtpDigitBoxes(ThemeData theme, bool isDark) {
@@ -481,43 +582,52 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog>
     final currentLength = _otpController.text.length;
     final isFocused = _otpFocusNode.hasFocus;
 
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Stack(
-          alignment: Alignment.center,
-          children: [
-            // Invisible input field that catches keyboard text and system paste
-            Positioned.fill(
-              child: Opacity(
-                opacity: 0.0,
-                child: TextField(
-                  controller: _otpController,
-                  focusNode: _otpFocusNode,
-                  autofocus: true,
-                  enabled: !_isLockedOut &&
-                      !_isAnyBusy &&
-                      _otpSecondsRemaining > 0,
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [
-                    FilteringTextInputFormatter.digitsOnly,
-                    LengthLimitingTextInputFormatter(6),
-                  ],
-                  onChanged: (val) {
-                    setState(() {
-                      if (!_isLockedOut) _error = null;
-                      _selectedIndex = val.length.clamp(0, 5);
-                    });
-                    if (val.length == 6 &&
-                        !_isLockedOut &&
-                        !_isAnyBusy &&
-                        _otpSecondsRemaining > 0) {
-                      _verifyOtpAndCreate();
-                    }
-                  },
+    return TextFieldTapRegion(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Stack(
+            alignment: Alignment.center,
+            children: [
+              // Invisible input field that catches keyboard text and system paste
+              Positioned.fill(
+                child: Opacity(
+                  opacity: 0.0,
+                  child: TextField(
+                    controller: _otpController,
+                    focusNode: _otpFocusNode,
+                    autofocus: true,
+                    enabled: !_isLockedOut && _otpSecondsRemaining > 0,
+                    readOnly: _isLockedOut || _otpSecondsRemaining <= 0,
+                    onTapOutside: (_) {},
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [
+                      TextInputFormatter.withFunction(
+                        (oldValue, newValue) =>
+                            (_isAnyBusy ||
+                                _isLockedOut ||
+                                _otpSecondsRemaining <= 0)
+                            ? oldValue
+                            : newValue,
+                      ),
+                      FilteringTextInputFormatter.digitsOnly,
+                      LengthLimitingTextInputFormatter(6),
+                    ],
+                    onChanged: (val) {
+                      setState(() {
+                        if (!_isLockedOut) _error = null;
+                        _selectedIndex = val.length.clamp(0, 5);
+                      });
+                      if (val.length == 6 &&
+                          !_isLockedOut &&
+                          !_isAnyBusy &&
+                          _otpSecondsRemaining > 0) {
+                        _verifyOtpAndCreate();
+                      }
+                    },
+                  ),
                 ),
               ),
-            ),
 
             // Visual 6 separated digit boxes with proper focus, cursor & selection indicator
             Row(
@@ -527,10 +637,12 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog>
                 final digit = isFilled ? _otpController.text[index] : '';
 
                 final isSelected = isFocused && (_selectedIndex == index);
-                final isNextEmpty = isFocused &&
+                final isNextEmpty =
+                    isFocused &&
                     (index == currentLength && currentLength < 6) &&
                     (_selectedIndex >= currentLength);
-                final isActive = (isSelected || isNextEmpty) &&
+                final isActive =
+                    (isSelected || isNextEmpty) &&
                     !_isLockedOut &&
                     _otpSecondsRemaining > 0;
 
@@ -555,8 +667,9 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog>
                 } else if (isActive) {
                   borderColor = theme.colorScheme.primary;
                   borderWidth = 2.2;
-                  boxBg = theme.colorScheme.primary
-                      .withValues(alpha: isDark ? 0.14 : 0.06);
+                  boxBg = theme.colorScheme.primary.withValues(
+                    alpha: isDark ? 0.14 : 0.06,
+                  );
                   shadows = [
                     BoxShadow(
                       color: theme.colorScheme.primary.withValues(alpha: 0.25),
@@ -565,13 +678,15 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog>
                     ),
                   ];
                 } else if (isFilled) {
-                  borderColor =
-                      isDark ? Colors.white38 : const Color(0xFF94A3B8);
+                  borderColor = isDark
+                      ? Colors.white38
+                      : const Color(0xFF94A3B8);
                   borderWidth = 1.4;
                   boxBg = isDark ? const Color(0xFF1E293B) : Colors.white;
                 } else {
-                  borderColor =
-                      isDark ? Colors.white12 : const Color(0xFFCBD5E1);
+                  borderColor = isDark
+                      ? Colors.white12
+                      : const Color(0xFFCBD5E1);
                   borderWidth = 1.0;
                   boxBg = isDark
                       ? const Color(0xFF0F172A).withValues(alpha: 0.5)
@@ -667,11 +782,14 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog>
             child: TextButton.icon(
               onPressed: () {
                 setState(() {
-                  _otpController.clear();
+                  _otpController.value = const TextEditingValue(
+                    text: '',
+                    selection: TextSelection.collapsed(offset: 0),
+                  );
                   _selectedIndex = 0;
                   _error = null;
                 });
-                _otpFocusNode.requestFocus();
+                _requestOtpKeyboard();
               },
               icon: Icon(
                 LucideIcons.x,
@@ -688,12 +806,16 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog>
               ),
               style: TextButton.styleFrom(
                 visualDensity: VisualDensity.compact,
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
               ),
             ),
           ),
         ],
       ],
+      ),
     );
   }
 
@@ -745,10 +867,7 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog>
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(
-          color: theme.colorScheme.primary,
-          width: 1.5,
-        ),
+        borderSide: BorderSide(color: theme.colorScheme.primary, width: 1.5),
       ),
     );
   }
@@ -786,8 +905,13 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog>
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        _buildStepDot(1, 'Details', _step == TeacherCreationStep.details,
-            _step != TeacherCreationStep.details, theme),
+        _buildStepDot(
+          1,
+          'Details',
+          _step == TeacherCreationStep.details,
+          _step != TeacherCreationStep.details,
+          theme,
+        ),
         Container(
           width: 32,
           height: 2,
@@ -797,11 +921,12 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog>
               : theme.colorScheme.primary,
         ),
         _buildStepDot(
-            2,
-            'Verify OTP',
-            _step == TeacherCreationStep.otpVerification,
-            _step == TeacherCreationStep.success,
-            theme),
+          2,
+          'Verify OTP',
+          _step == TeacherCreationStep.otpVerification,
+          _step == TeacherCreationStep.success,
+          theme,
+        ),
         Container(
           width: 32,
           height: 2,
@@ -810,13 +935,24 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog>
               ? theme.colorScheme.primary
               : Colors.grey.shade300,
         ),
-        _buildStepDot(3, 'Ready', _step == TeacherCreationStep.success, false, theme),
+        _buildStepDot(
+          3,
+          'Ready',
+          _step == TeacherCreationStep.success,
+          false,
+          theme,
+        ),
       ],
     );
   }
 
   Widget _buildStepDot(
-      int number, String label, bool isActive, bool isPassed, ThemeData theme) {
+    int number,
+    String label,
+    bool isActive,
+    bool isPassed,
+    ThemeData theme,
+  ) {
     final color = isActive || isPassed
         ? theme.colorScheme.primary
         : Colors.grey.shade400;
@@ -866,82 +1002,82 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog>
       canPop: !_isAnyBusy,
       child: Dialog(
         backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
-      elevation: 8,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(24),
-        side: BorderSide(
-          color: isDark
-              ? Colors.white.withValues(alpha: 0.1)
-              : Colors.grey.shade200,
+        elevation: 8,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+          side: BorderSide(
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.1)
+                : Colors.grey.shade200,
+          ),
         ),
-      ),
-      child: ConstrainedBox(
-        constraints: BoxConstraints(
-          maxWidth: 620,
-          maxHeight: MediaQuery.of(context).size.height * 0.9,
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(28.0),
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // School Header
-                Center(
-                  child: Column(
-                    children: [
-                      Image.asset(
-                        AssetPaths.schoolLogo,
-                        height: 52,
-                        width: 52,
-                        errorBuilder: (_, _, _) => const Icon(
-                          LucideIcons.graduationCap,
-                          size: 40,
-                          color: Color(0xFF1A365D),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Eduardo Barretto Sr. Integrated School',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: theme.colorScheme.primary,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        _step == TeacherCreationStep.details
-                            ? 'Create Teacher Account'
-                            : _step == TeacherCreationStep.otpVerification
-                                ? 'Verify Email OTP'
-                                : 'Account Created Successfully',
-                        style: theme.textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.w800,
-                          fontSize: 20,
-                          color: theme.colorScheme.onSurface,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 14),
-
-                // Step Breadcrumb Indicator
-                _buildStepIndicator(theme),
-                const SizedBox(height: 18),
-
-                // --- STEP 1: TEACHER DETAILS ---
-                if (_step == TeacherCreationStep.details)
-                  Form(
-                    key: _formKey,
-                    autovalidateMode: _submitted
-                        ? AutovalidateMode.onUserInteraction
-                        : AutovalidateMode.disabled,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxWidth: 620,
+            maxHeight: MediaQuery.of(context).size.height * 0.9,
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(28.0),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // School Header
+                  Center(
                     child: Column(
+                      children: [
+                        Image.asset(
+                          AssetPaths.schoolLogo,
+                          height: 52,
+                          width: 52,
+                          errorBuilder: (_, _, _) => const Icon(
+                            LucideIcons.graduationCap,
+                            size: 40,
+                            color: Color(0xFF1A365D),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Eduardo Barretto Sr. Integrated School',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: theme.colorScheme.primary,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          _step == TeacherCreationStep.details
+                              ? 'Create Teacher Account'
+                              : _step == TeacherCreationStep.otpVerification
+                              ? 'Verify Email OTP'
+                              : 'Account Created Successfully',
+                          style: theme.textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 20,
+                            color: theme.colorScheme.onSurface,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+
+                  // Step Breadcrumb Indicator
+                  _buildStepIndicator(theme),
+                  const SizedBox(height: 18),
+
+                  // --- STEP 1: TEACHER DETAILS ---
+                  if (_step == TeacherCreationStep.details)
+                    Form(
+                      key: _formKey,
+                      autovalidateMode: _submitted
+                          ? AutovalidateMode.onUserInteraction
+                          : AutovalidateMode.disabled,
+                      child: Column(
                         mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
@@ -959,16 +1095,21 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog>
                                     _buildFieldLabel('First Name*', theme),
                                     TextFormField(
                                       controller: _firstNameController,
-                                      textCapitalization: TextCapitalization.words,
-                                      inputFormatters: AppValidators.nameFormatters,
+                                      textCapitalization:
+                                          TextCapitalization.words,
+                                      inputFormatters:
+                                          AppValidators.nameFormatters,
                                       textInputAction: TextInputAction.next,
                                       decoration: _inputDecoration(
                                         theme,
                                         hintText: 'e.g. Karen',
                                         isDark: isDark,
                                       ),
-                                      validator: (v) => AppValidators.validateName(
-                                          v, 'First name'),
+                                      validator: (v) =>
+                                          AppValidators.validateName(
+                                            v,
+                                            'First name',
+                                          ),
                                     ),
                                   ],
                                 ),
@@ -982,15 +1123,16 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog>
                                     _buildFieldLabel('Middle Initial', theme),
                                     TextFormField(
                                       controller: _middleNameController,
-                                      textCapitalization: TextCapitalization.characters,
+                                      textCapitalization:
+                                          TextCapitalization.characters,
+                                      inputFormatters:
+                                          AppValidators.middleInitialFormatters,
                                       textInputAction: TextInputAction.next,
                                       decoration: _inputDecoration(
                                         theme,
                                         hintText: 'e.g. H.',
                                         isDark: isDark,
                                       ),
-                                      validator:
-                                          AppValidators.validateMiddleInitial,
                                     ),
                                   ],
                                 ),
@@ -1004,16 +1146,21 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog>
                                     _buildFieldLabel('Last Name*', theme),
                                     TextFormField(
                                       controller: _lastNameController,
-                                      textCapitalization: TextCapitalization.words,
-                                      inputFormatters: AppValidators.nameFormatters,
+                                      textCapitalization:
+                                          TextCapitalization.words,
+                                      inputFormatters:
+                                          AppValidators.nameFormatters,
                                       textInputAction: TextInputAction.next,
                                       decoration: _inputDecoration(
                                         theme,
                                         hintText: 'e.g. Gonzaga',
                                         isDark: isDark,
                                       ),
-                                      validator: (v) => AppValidators.validateName(
-                                          v, 'Last name'),
+                                      validator: (v) =>
+                                          AppValidators.validateName(
+                                            v,
+                                            'Last name',
+                                          ),
                                     ),
                                   ],
                                 ),
@@ -1050,11 +1197,11 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog>
                                           child: Text('Female'),
                                         ),
                                       ],
-                                      onChanged: (v) => setState(() => _gender = v),
-                                      validator: (v) =>
-                                          (v == null || v.isEmpty)
-                                              ? 'Gender is required'
-                                              : null,
+                                      onChanged: (v) =>
+                                          setState(() => _gender = v),
+                                      validator: (v) => (v == null || v.isEmpty)
+                                          ? 'Gender is required'
+                                          : null,
                                     ),
                                   ],
                                 ),
@@ -1066,12 +1213,17 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog>
                                   label: 'Birthdate*',
                                   initialDate: _birthday,
                                   firstDate: BirthdayValidator.getMinDate(),
-                                  lastDate: BirthdayValidator.getMaxDate('teacher'),
+                                  lastDate: BirthdayValidator.getMaxDate(
+                                    'teacher',
+                                  ),
                                   onDateSelected: (date) {
                                     setState(() => _birthday = date);
                                   },
-                                  validator: (v) => BirthdayValidator.validateBirthday(
-                                      v, 'teacher'),
+                                  validator: (v) =>
+                                      BirthdayValidator.validateBirthday(
+                                        v,
+                                        'teacher',
+                                      ),
                                 ),
                               ),
                             ],
@@ -1106,408 +1258,320 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog>
                         ],
                       ),
                     )
-
-              // --- STEP 2: VERIFY OTP ---
-              else if (_step == TeacherCreationStep.otpVerification)
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    // 1. Verification code sent banner (without timer)
-                    Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.primaryContainer
-                            .withValues(alpha: 0.35),
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(
-                          color:
-                              theme.colorScheme.primary.withValues(alpha: 0.2),
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: theme.colorScheme.primary
-                                  .withValues(alpha: 0.15),
-                              shape: BoxShape.circle,
-                            ),
-                            child: Icon(
-                              LucideIcons.mailCheck,
-                              color: theme.colorScheme.primary,
-                              size: 20,
+                  // --- STEP 2: VERIFY OTP ---
+                  else if (_step == TeacherCreationStep.otpVerification)
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        // 1. Verification code sent banner (without timer)
+                        Container(
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.primaryContainer
+                                .withValues(alpha: 0.35),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(
+                              color: theme.colorScheme.primary.withValues(
+                                alpha: 0.2,
+                              ),
                             ),
                           ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Verification code sent',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 13,
-                                    color: theme.colorScheme.primary,
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: theme.colorScheme.primary.withValues(
+                                    alpha: 0.15,
                                   ),
+                                  shape: BoxShape.circle,
                                 ),
-                                const SizedBox(height: 3),
-                                Text(
-                                  'Check the 6-digit code sent to ${_emailController.text.trim()}. (Valid for 5 minutes)',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: theme.colorScheme.onSurface
-                                        .withValues(alpha: 0.85),
-                                  ),
+                                child: Icon(
+                                  LucideIcons.mailCheck,
+                                  color: theme.colorScheme.primary,
+                                  size: 20,
                                 ),
-                              ],
-                            ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Verification code sent',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 13,
+                                        color: theme.colorScheme.primary,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 3),
+                                    Text(
+                                      'Check the 6-digit code sent to ${_emailController.text.trim()}. (Valid for 5 minutes)',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: theme.colorScheme.onSurface
+                                            .withValues(alpha: 0.85),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
-                    ),
-
-                    const SizedBox(height: 18),
-
-                    // 2. Timer badge placed directly above the 6-digit input boxes
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: _otpSecondsRemaining <= 60
-                            ? Colors.red.withValues(alpha: isDark ? 0.15 : 0.08)
-                            : theme.colorScheme.primary
-                                .withValues(alpha: isDark ? 0.15 : 0.08),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: _otpSecondsRemaining <= 60
-                              ? Colors.red.shade400
-                              : theme.colorScheme.primary
-                                  .withValues(alpha: 0.25),
-                          width: 1.2,
                         ),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            LucideIcons.clock,
-                            size: 14,
+
+                        const SizedBox(height: 18),
+
+                        // 2. Timer badge placed directly above the 6-digit input boxes
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
                             color: _otpSecondsRemaining <= 60
-                                ? Colors.red.shade600
-                                : theme.colorScheme.primary,
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            _otpSecondsRemaining > 0
-                                ? 'Code expires in ${_formatOtpTimer(_otpSecondsRemaining)}'
-                                : 'Code expired (5 minutes passed)',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              fontFamily: 'monospace',
+                                ? Colors.red.withValues(
+                                    alpha: isDark ? 0.15 : 0.08,
+                                  )
+                                : theme.colorScheme.primary.withValues(
+                                    alpha: isDark ? 0.15 : 0.08,
+                                  ),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
                               color: _otpSecondsRemaining <= 60
-                                  ? (isDark
-                                      ? Colors.red.shade300
-                                      : Colors.red.shade700)
-                                  : theme.colorScheme.primary,
+                                  ? Colors.red.shade400
+                                  : theme.colorScheme.primary.withValues(
+                                      alpha: 0.25,
+                                    ),
+                              width: 1.2,
                             ),
                           ),
-                        ],
-                      ),
-                    ),
-
-                    const SizedBox(height: 16),
-
-                    // 3. 6-digit OTP input boxes with active cursor & selection indicators
-                    _buildOtpDigitBoxes(theme, isDark),
-
-                    if (_error != null) ...[
-                      const SizedBox(height: 14),
-                      Center(
-                        child: Text(
-                          _error!,
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
-                            color: Colors.red.shade600,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                LucideIcons.clock,
+                                size: 14,
+                                color: _otpSecondsRemaining <= 60
+                                    ? Colors.red.shade600
+                                    : theme.colorScheme.primary,
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                _otpSecondsRemaining > 0
+                                    ? 'Code expires in ${_formatOtpTimer(_otpSecondsRemaining)}'
+                                    : 'Code expired (5 minutes passed)',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  fontFamily: 'monospace',
+                                  color: _otpSecondsRemaining <= 60
+                                      ? (isDark
+                                            ? Colors.red.shade300
+                                            : Colors.red.shade700)
+                                      : theme.colorScheme.primary,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                      ),
-                    ],
-                  ],
-                )
 
-              // --- STEP 3: SUCCESS CONFIRMATION ---
-              else
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    const SizedBox(height: 12),
-                    SizedBox(
-                      width: 140,
-                      height: 140,
-                      child: TweenAnimationBuilder<double>(
-                        duration: const Duration(milliseconds: 600),
-                        curve: Curves.easeOutBack,
-                        tween: Tween<double>(begin: 0.0, end: 1.0),
-                        builder: (context, scale, child) {
-                          return Transform.scale(
-                            scale: scale,
-                            child: Lottie.asset(
-                              'assets/animations/success_check.json',
-                              repeat: false,
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Teacher Account Created Successfully!',
-                      textAlign: TextAlign.center,
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w800,
-                        fontSize: 20,
-                        color: theme.colorScheme.onSurface,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Text(
-                        'The new teacher account has been successfully created and registered. An automated welcome email has been sent to ${_createdEmail ?? _emailController.text.trim()}.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 14,
-                          height: 1.5,
-                          color: theme.colorScheme.onSurface
-                              .withValues(alpha: 0.75),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 18,
-                        vertical: 14,
-                      ),
-                      decoration: BoxDecoration(
-                        color: isDark
-                            ? Colors.white.withValues(alpha: 0.05)
-                            : const Color(0xFFF1F5F9),
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(
-                          color: isDark
-                              ? Colors.white12
-                              : const Color(0xFFE2E8F0),
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            LucideIcons.shieldCheck,
-                            size: 18,
-                            color: theme.colorScheme.primary,
-                          ),
-                          const SizedBox(width: 10),
-                          Flexible(
+                        const SizedBox(height: 16),
+
+                        // 3. 6-digit OTP input boxes with active cursor & selection indicators
+                        _buildOtpDigitBoxes(theme, isDark),
+
+                        if (_error != null) ...[
+                          const SizedBox(height: 14),
+                          Center(
                             child: Text(
-                              'Teacher will be prompted to set their new password upon first login.',
+                              _error!,
                               textAlign: TextAlign.center,
                               style: TextStyle(
                                 fontSize: 13,
                                 fontWeight: FontWeight.w500,
-                                color: theme.colorScheme.onSurface
-                                    .withValues(alpha: 0.8),
+                                color: Colors.red.shade600,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    )
+                  // --- STEP 3: SUCCESS CONFIRMATION ---
+                  else
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          width: 140,
+                          height: 140,
+                          child: TweenAnimationBuilder<double>(
+                            duration: const Duration(milliseconds: 600),
+                            curve: Curves.easeOutBack,
+                            tween: Tween<double>(begin: 0.0, end: 1.0),
+                            builder: (context, scale, child) {
+                              return Transform.scale(
+                                scale: scale,
+                                child: Lottie.asset(
+                                  'assets/animations/success_check.json',
+                                  repeat: false,
+                                  errorBuilder: (context, error, stackTrace) {
+                                    return Container(
+                                      width: 100,
+                                      height: 100,
+                                      decoration: BoxDecoration(
+                                        color: Colors.green.shade50,
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: Icon(
+                                        LucideIcons.checkCheck,
+                                        color: Colors.green.shade600,
+                                        size: 56,
+                                      ),
+                                    );
+                                  },
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Teacher Account Created Successfully!',
+                          textAlign: TextAlign.center,
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 20,
+                            color: theme.colorScheme.onSurface,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: Text(
+                            'The new teacher account has been successfully created and registered. An automated welcome email has been sent to ${_createdEmail ?? _emailController.text.trim()}.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 14,
+                              height: 1.5,
+                              color: theme.colorScheme.onSurface.withValues(
+                                alpha: 0.75,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 18,
+                            vertical: 14,
+                          ),
+                          decoration: BoxDecoration(
+                            color: isDark
+                                ? Colors.white.withValues(alpha: 0.05)
+                                : const Color(0xFFF1F5F9),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(
+                              color: isDark
+                                  ? Colors.white12
+                                  : const Color(0xFFE2E8F0),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                LucideIcons.shieldCheck,
+                                size: 18,
+                                color: theme.colorScheme.primary,
+                              ),
+                              const SizedBox(width: 10),
+                              Flexible(
+                                child: Text(
+                                  'Teacher will be prompted to set their new password upon first login.',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w500,
+                                    color: theme.colorScheme.onSurface
+                                        .withValues(alpha: 0.8),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+                    ),
+
+                  // Error banner if any (only on step 1 or step 3; step 2 displays it directly beneath the OTP boxes)
+                  if (_error != null &&
+                      _step != TeacherCreationStep.otpVerification) ...[
+                    const SizedBox(height: 14),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.errorContainer,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            LucideIcons.circleAlert,
+                            size: 18,
+                            color: theme.colorScheme.onErrorContainer,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              _error!,
+                              style: TextStyle(
+                                color: theme.colorScheme.onErrorContainer,
+                                fontSize: 13,
                               ),
                             ),
                           ),
                         ],
                       ),
                     ),
-                    const SizedBox(height: 12),
                   ],
-                ),
 
-              // Error banner if any (only on step 1 or step 3; step 2 displays it directly beneath the OTP boxes)
-              if (_error != null && _step != TeacherCreationStep.otpVerification) ...[
-                const SizedBox(height: 14),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.errorContainer,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        LucideIcons.circleAlert,
-                        size: 18,
-                        color: theme.colorScheme.onErrorContainer,
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          _error!,
-                          style: TextStyle(
-                            color: theme.colorScheme.onErrorContainer,
-                            fontSize: 13,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+                  const SizedBox(height: 24),
 
-              const SizedBox(height: 24),
-
-              // --- BUTTON ACTIONS ---
-              if (_step == TeacherCreationStep.details)
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    OutlinedButton(
-                      onPressed: _isAnyBusy ? null : () => Navigator.pop(context),
-                      style: OutlinedButton.styleFrom(
-                        backgroundColor: isDark
-                            ? Colors.white.withValues(alpha: 0.08)
-                            : Colors.black.withValues(alpha: 0.04),
-                        foregroundColor: theme.colorScheme.onSurface,
-                        side: BorderSide(
-                          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.6),
-                        ),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 20,
-                          vertical: 12,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      child: const Text('Cancel'),
-                    ),
-                    const SizedBox(width: 12),
-                    FilledButton(
-                      onPressed: _isAnyBusy ? null : _sendOtpCode,
-                      style: FilledButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 20,
-                          vertical: 12,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      child: _isLoading
-                          ? LoadingAnimationWidget.staggeredDotsWave(
-                              color: Colors.white,
-                              size: 20,
-                            )
-                          : const Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(LucideIcons.send, size: 16),
-                                SizedBox(width: 8),
-                                Text('Send OTP Code'),
-                              ],
-                            ),
-                    ),
-                  ],
-                )
-              else if (_step == TeacherCreationStep.otpVerification)
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    OutlinedButton.icon(
-                      onPressed: _isAnyBusy
-                          ? null
-                          : () {
-                              setState(() {
-                                _step = TeacherCreationStep.details;
-                                _error = null;
-                                                        });
-                            },
-                      icon: const Icon(LucideIcons.arrowLeft, size: 16),
-                      label: const Text('Back'),
-                      style: OutlinedButton.styleFrom(
-                        backgroundColor: isDark
-                            ? Colors.white.withValues(alpha: 0.08)
-                            : Colors.black.withValues(alpha: 0.04),
-                        foregroundColor: theme.colorScheme.onSurface,
-                        side: BorderSide(
-                          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.6),
-                        ),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 12,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                    ),
+                  // --- BUTTON ACTIONS ---
+                  if (_step == TeacherCreationStep.details)
                     Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
                       children: [
                         OutlinedButton(
-                          onPressed: (_isAnyBusy ||
-                                  _resendSecondsRemaining > 0 ||
-                                  _isLockedOut)
+                          onPressed: _isAnyBusy
                               ? null
-                              : _resendOtpCode,
+                              : () => Navigator.pop(context),
                           style: OutlinedButton.styleFrom(
                             backgroundColor: isDark
                                 ? Colors.white.withValues(alpha: 0.08)
                                 : Colors.black.withValues(alpha: 0.04),
                             foregroundColor: theme.colorScheme.onSurface,
-                            disabledForegroundColor: theme.colorScheme.onSurface
-                                .withValues(alpha: 0.38),
                             side: BorderSide(
                               color: theme.colorScheme.outlineVariant
                                   .withValues(alpha: 0.6),
                             ),
                             padding: const EdgeInsets.symmetric(
-                              horizontal: 14,
+                              horizontal: 20,
                               vertical: 12,
                             ),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
                             ),
                           ),
-                          child: _isResending
-                              ? Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    LoadingAnimationWidget.staggeredDotsWave(
-                                      color: theme.colorScheme.primary,
-                                      size: 14,
-                                    ),
-                                    const SizedBox(width: 8),
-                                    const Text('Resending...'),
-                                  ],
-                                )
-                              : Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const Icon(LucideIcons.refreshCw, size: 14),
-                                    const SizedBox(width: 6),
-                                    Text(_resendSecondsRemaining > 0
-                                        ? 'Resend (${_resendSecondsRemaining}s)'
-                                        : 'Resend'),
-                                  ],
-                                ),
+                          child: const Text('Cancel'),
                         ),
-                        const SizedBox(width: 8),
+                        const SizedBox(width: 12),
                         FilledButton(
-                          onPressed: (_isAnyBusy ||
-                                  _isLockedOut ||
-                                  _otpSecondsRemaining <= 0)
-                              ? null
-                              : _verifyOtpAndCreate,
+                          onPressed: _isAnyBusy ? null : _sendOtpCode,
                           style: FilledButton.styleFrom(
                             padding: const EdgeInsets.symmetric(
                               horizontal: 20,
@@ -1517,41 +1581,173 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog>
                               borderRadius: BorderRadius.circular(12),
                             ),
                           ),
-                          child: _isVerifying
+                          child: _isLoading
                               ? LoadingAnimationWidget.staggeredDotsWave(
                                   color: Colors.white,
                                   size: 20,
                                 )
-                              : const Text('Verify Account'),
+                              : const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(LucideIcons.send, size: 16),
+                                    SizedBox(width: 8),
+                                    Text('Send OTP Code'),
+                                  ],
+                                ),
                         ),
                       ],
-                    ),
-                  ],
-                )
-              else
-                // Step 3: Done Button
-                Center(
-                  child: SizedBox(
-                    width: 180,
-                    child: FilledButton.icon(
-                      onPressed: () => Navigator.pop(context, true),
-                      icon: const Icon(LucideIcons.check, size: 18),
-                      label: const Text('Done'),
-                      style: FilledButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+                    )
+                  else if (_step == TeacherCreationStep.otpVerification)
+                    SizedBox(
+                      width: double.infinity,
+                      child: Wrap(
+                        alignment: WrapAlignment.spaceBetween,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          OutlinedButton.icon(
+                            onPressed: _isAnyBusy
+                                ? null
+                                : () {
+                                    setState(() {
+                                      _step = TeacherCreationStep.details;
+                                      _error = null;
+                                    });
+                                  },
+                            icon: const Icon(LucideIcons.arrowLeft, size: 16),
+                            label: const Text('Back'),
+                            style: OutlinedButton.styleFrom(
+                              backgroundColor: isDark
+                                  ? Colors.white.withValues(alpha: 0.08)
+                                  : Colors.black.withValues(alpha: 0.04),
+                              foregroundColor: theme.colorScheme.onSurface,
+                              side: BorderSide(
+                                color: theme.colorScheme.outlineVariant
+                                    .withValues(alpha: 0.6),
+                              ),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 12,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                          ),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              OutlinedButton(
+                                onPressed:
+                                    (_isAnyBusy ||
+                                        _resendSecondsRemaining > 0 ||
+                                        _isLockedOut)
+                                    ? null
+                                    : _resendOtpCode,
+                                style: OutlinedButton.styleFrom(
+                                  backgroundColor: isDark
+                                      ? Colors.white.withValues(alpha: 0.08)
+                                      : Colors.black.withValues(alpha: 0.04),
+                                  foregroundColor: theme.colorScheme.onSurface,
+                                  disabledForegroundColor: theme
+                                      .colorScheme
+                                      .onSurface
+                                      .withValues(alpha: 0.38),
+                                  side: BorderSide(
+                                    color: theme.colorScheme.outlineVariant
+                                        .withValues(alpha: 0.6),
+                                  ),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 14,
+                                    vertical: 12,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                                child: _isResending
+                                    ? Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          LoadingAnimationWidget.staggeredDotsWave(
+                                            color: theme.colorScheme.primary,
+                                            size: 14,
+                                          ),
+                                          const SizedBox(width: 8),
+                                          const Text('Resending...'),
+                                        ],
+                                      )
+                                    : Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const Icon(
+                                            LucideIcons.refreshCw,
+                                            size: 14,
+                                          ),
+                                          const SizedBox(width: 6),
+                                          Text(
+                                            _resendSecondsRemaining > 0
+                                                ? 'Resend (${_resendSecondsRemaining}s)'
+                                                : 'Resend',
+                                          ),
+                                        ],
+                                      ),
+                              ),
+                              FilledButton(
+                                onPressed:
+                                    (_isAnyBusy ||
+                                        _isLockedOut ||
+                                        _otpSecondsRemaining <= 0)
+                                    ? null
+                                    : _verifyOtpAndCreate,
+                                style: FilledButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 20,
+                                    vertical: 12,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                                child: _isVerifying
+                                    ? LoadingAnimationWidget.staggeredDotsWave(
+                                        color: Colors.white,
+                                        size: 20,
+                                      )
+                                    : const Text('Verify Account'),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    )
+                  else
+                    // Step 3: Done Button
+                    Center(
+                      child: SizedBox(
+                        width: 180,
+                        child: FilledButton.icon(
+                          onPressed: () => Navigator.pop(context, true),
+                          icon: const Icon(LucideIcons.check, size: 18),
+                          label: const Text('Done'),
+                          style: FilledButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                ),
-            ],
+                ],
+              ),
+            ),
           ),
         ),
       ),
-    ),
-  ),
-);
+    );
   }
 }

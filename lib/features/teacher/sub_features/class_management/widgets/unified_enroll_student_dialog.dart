@@ -3381,10 +3381,7 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
                     label: 'Middle Initial',
                     controller: _middleNameCtrl,
                     textCapitalization: TextCapitalization.characters,
-                    inputFormatters: [
-                      ...AppValidators.nameFormatters,
-                      LengthLimitingTextInputFormatter(2),
-                    ],
+                    inputFormatters: AppValidators.middleInitialFormatters,
                   ),
                 ),
                 const SizedBox(width: 12),

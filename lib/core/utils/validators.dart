@@ -20,6 +20,13 @@ class AppValidators {
       'Use 1 letter and 1 period only (e.g., H.)';
   static final RegExp _middleInitialPattern = RegExp(r'^[a-zA-ZñÑ]\.$');
 
+  /// Reusable input formatters for middle initial fields (max 2 chars, letters & dot only, no numbers, no spaces)
+  static List<TextInputFormatter> get middleInitialFormatters => [
+    LengthLimitingTextInputFormatter(2),
+    FilteringTextInputFormatter.allow(RegExp(r"[a-zA-ZñÑ\.]")),
+    FilteringTextInputFormatter.deny(RegExp(r'\s')),
+  ];
+
   /// Reusable input formatters for name fields (max 30 chars, no consecutive spaces/periods, capitalize first letter)
   static List<TextInputFormatter> get nameFormatters => [
     LengthLimitingTextInputFormatter(30),
@@ -97,21 +104,20 @@ class AppValidators {
   }
 
   static String? validateMiddleInitial(String? value) {
-    if (value == null || value.isEmpty) return null;
+    if (value == null) return null;
     final trimmed = value.trim();
-    if (trimmed.isEmpty || !_middleInitialPattern.hasMatch(trimmed)) {
+    if (trimmed.isEmpty) return null;
+    if (trimmed.length > 2 || RegExp(r'[0-9]').hasMatch(trimmed)) {
       return invalidMiddleInitialMessage;
     }
     return null;
   }
 
   static String? normalizeMiddleInitial(String? value) {
-    final validationError = validateMiddleInitial(value);
-    if (validationError != null) {
-      throw FormatException(validationError);
-    }
-    if (value == null || value.isEmpty) return null;
-    return value.trim().toUpperCase();
+    if (value == null) return null;
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) return null;
+    return trimmed.toUpperCase();
   }
 
   static bool isMiddleInitialConstraintViolation(Object error) {
