@@ -260,10 +260,10 @@ class ActivityModel {
     final deadlineRaw = json['deadline'];
     final assignedRaw = json['assigned_at'] ?? json['date_assigned'];
     final parsedDeadline = deadlineRaw != null
-        ? DateTime.tryParse(deadlineRaw.toString()) ?? DateTime.now()
+        ? DateTime.tryParse(deadlineRaw.toString())?.toLocal() ?? DateTime.now()
         : DateTime.now();
     final parsedAssigned = assignedRaw != null
-        ? DateTime.tryParse(assignedRaw.toString()) ?? DateTime.now()
+        ? DateTime.tryParse(assignedRaw.toString())?.toLocal() ?? DateTime.now()
         : DateTime.now();
 
     final classworkType = json['classwork_type']?.toString();

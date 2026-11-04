@@ -541,28 +541,32 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
   void _decodeSheet(int term, Map<String, dynamic> sheet) {
     final rawHps = sheet['hps'] ?? sheet['hps_json'];
     final rawScores = sheet['scores'] ?? sheet['scores_json'];
-    if (rawHps is! Map || rawScores is! Map) {
+    if (rawHps is! Map && rawScores is! Map) {
       return;
     }
-    for (final category in const ['ww', 'pt', 'ex']) {
-      final values = rawHps[category];
-      if (values is! Map) continue;
-      _termHps[term]![category]!.addAll(
-        _decodeCategoryColumns(category, values),
-      );
-    }
-    for (final studentEntry in rawScores.entries) {
-      if (studentEntry.value is! Map) continue;
-      final studentScores = <String, Map<int, double?>>{};
-      for (final categoryEntry in (studentEntry.value as Map).entries) {
-        if (categoryEntry.value is! Map) continue;
-        final catKey = categoryEntry.key.toString();
-        studentScores[catKey] = _decodeCategoryColumns(
-          catKey,
-          categoryEntry.value as Map,
+    if (rawHps is Map) {
+      for (final category in const ['ww', 'pt', 'ex']) {
+        final values = rawHps[category];
+        if (values is! Map) continue;
+        _termHps[term]![category]!.addAll(
+          _decodeCategoryColumns(category, values),
         );
       }
-      _termScores[term]![studentEntry.key.toString()] = studentScores;
+    }
+    if (rawScores is Map) {
+      for (final studentEntry in rawScores.entries) {
+        if (studentEntry.value is! Map) continue;
+        final studentScores = <String, Map<int, double?>>{};
+        for (final categoryEntry in (studentEntry.value as Map).entries) {
+          if (categoryEntry.value is! Map) continue;
+          final catKey = categoryEntry.key.toString();
+          studentScores[catKey] = _decodeCategoryColumns(
+            catKey,
+            categoryEntry.value as Map,
+          );
+        }
+        _termScores[term]![studentEntry.key.toString()] = studentScores;
+      }
     }
     final wwHpsKeys = _termHps[term]!['ww']!.keys;
     final wwScoreKeys = _termScores[term]!.values.expand(

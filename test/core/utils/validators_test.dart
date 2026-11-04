@@ -147,4 +147,49 @@ void main() {
       expect(res.error, contains('valid email address'));
     });
   });
+
+  group('Classwork HPS & Student Score Validators', () {
+    test('validateClassworkHps strictly rejects 0 and values > 100, accepts 1..100', () {
+      expect(AppValidators.validateClassworkHps(null), 'Required.');
+      expect(AppValidators.validateClassworkHps(''), 'Required.');
+      expect(
+        AppValidators.validateClassworkHps('0'),
+        'HPS cannot be 0. Must be 1 to 100.',
+      );
+      expect(
+        AppValidators.validateClassworkHps('-5'),
+        'HPS cannot be 0. Must be 1 to 100.',
+      );
+      expect(
+        AppValidators.validateClassworkHps('101'),
+        'Must be 1 to 100.',
+      );
+      expect(AppValidators.validateClassworkHps('1'), isNull);
+      expect(AppValidators.validateClassworkHps('50'), isNull);
+      expect(AppValidators.validateClassworkHps('100'), isNull);
+    });
+
+    test('validateClassworkStudentScore allows 0 up to HPS and rejects negative or > HPS', () {
+      expect(
+        AppValidators.validateClassworkStudentScore('0', maxScore: 50),
+        isNull,
+      );
+      expect(
+        AppValidators.validateClassworkStudentScore('25', maxScore: 50),
+        isNull,
+      );
+      expect(
+        AppValidators.validateClassworkStudentScore('50', maxScore: 50),
+        isNull,
+      );
+      expect(
+        AppValidators.validateClassworkStudentScore('-1', maxScore: 50),
+        'Must be 0 to 50.',
+      );
+      expect(
+        AppValidators.validateClassworkStudentScore('51', maxScore: 50),
+        'Must be 0 to 50.',
+      );
+    });
+  });
 }

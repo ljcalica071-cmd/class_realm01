@@ -62,7 +62,7 @@ class AppDataCache {
       final persistedJson = LocalStorageService.getJson(key);
       if (persistedJson != null) {
         _memoryCache[key] = persistedJson;
-        _timestamps[key] ??= DateTime.now();
+        // Do NOT set _timestamps[key] = DateTime.now() because persisted data from disk is not fresh network data
         return fromJson(persistedJson);
       }
     } catch (e) {
@@ -213,8 +213,8 @@ class AppDataCache {
       _memoryCache.remove(k);
       _timestamps.remove(k);
       _payloadSignatures.remove(k);
-      unawaited(LocalStorageService.remove(k));
     }
+    unawaited(LocalStorageService.removePrefix(prefix));
   }
 
   /// Clears user-specific cache upon logout.

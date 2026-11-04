@@ -61,7 +61,11 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
       final dashboard = await StudentDashboardRepository.instance.loadDashboard(
         forceRefresh: forceRefresh,
       );
-      AuthRepository.instance.setCurrentUser(dashboard.student);
+      // Strictly guard against overwriting currentUser if session identity does not match
+      final currentAuth = AuthRepository.instance.currentUser;
+      if (currentAuth == null || currentAuth.id == dashboard.student.id) {
+        AuthRepository.instance.setCurrentUser(dashboard.student);
+      }
       if (mounted) {
         setState(() {
           _dashboard = dashboard;

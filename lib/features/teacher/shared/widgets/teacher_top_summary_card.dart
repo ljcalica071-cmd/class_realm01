@@ -66,14 +66,18 @@ class TeacherTopSummaryCard extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 16),
-              Text(
-                mainValue,
-                style: TextStyle(
-                  fontSize: 40,
-                  fontWeight: FontWeight.w900,
-                  color: theme.colorScheme.onSurface,
-                  height: 1.1,
-                  letterSpacing: -1,
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  mainValue,
+                  style: TextStyle(
+                    fontSize: 40,
+                    fontWeight: FontWeight.w900,
+                    color: theme.colorScheme.onSurface,
+                    height: 1.1,
+                    letterSpacing: -1,
+                  ),
                 ),
               ),
               const SizedBox(height: 12),

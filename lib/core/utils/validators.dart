@@ -47,18 +47,59 @@ class AppValidators {
   ];
 
   /// Classwork & Assessment limits (Performance Tasks & Activities)
+  static const int minClassworkTitleLength = 2;
   static const int maxClassworkTitleLength = 100;
   static const int maxClassworkInstructionsLength = 30000;
+  static const int minClassworkHps = 1;
+  static const int maxClassworkHps = 100;
   static const int maxClassworkFileSizeBytes =
       15 * 1024 * 1024; // 15 MB (15,728,640 bytes)
   static const List<String> allowedClassworkExtensions = ['pdf', 'doc', 'docx'];
 
-  /// Validates Performance Task / Activity titles (Max 100 characters)
+  /// Validates Performance Task / Activity titles (2 to 100 characters)
   static String? validateClassworkTitle(String? value) {
     final text = (value ?? '').trim();
     if (text.isEmpty) return 'Title is required.';
+    if (text.length < minClassworkTitleLength) {
+      return 'Title must be at least $minClassworkTitleLength characters.';
+    }
     if (text.length > maxClassworkTitleLength) {
       return 'Title must not exceed $maxClassworkTitleLength characters.';
+    }
+    return null;
+  }
+
+  /// Validates Highest Possible Score (HPS) — strictly 1 to 100 (0 and >100 are disallowed)
+  static String? validateClassworkHps(String? value) {
+    final text = (value ?? '').trim();
+    if (text.isEmpty) return 'Required.';
+    final score = int.tryParse(text);
+    if (score == null) {
+      return 'Must be 1 to 100.';
+    }
+    if (score == 0) {
+      return 'HPS cannot be 0. Must be 1 to 100.';
+    }
+    if (score < minClassworkHps || score > maxClassworkHps) {
+      return 'Must be 1 to 100.';
+    }
+    return null;
+  }
+
+  /// Validates Student Earned Score — 0 to HPS (0 is allowed; negative or >HPS is disallowed)
+  static String? validateClassworkStudentScore(
+    String? value, {
+    required double maxScore,
+    bool allowEmpty = true,
+  }) {
+    final text = (value ?? '').trim();
+    if (text.isEmpty) {
+      return allowEmpty ? null : 'Score is required.';
+    }
+    final score = double.tryParse(text);
+    final maxInt = maxScore.toInt();
+    if (score == null || score < 0 || score > maxScore) {
+      return 'Must be 0 to $maxInt.';
     }
     return null;
   }
@@ -104,20 +145,21 @@ class AppValidators {
   }
 
   static String? validateMiddleInitial(String? value) {
-    if (value == null) return null;
+    if (value == null || value.isEmpty) return null;
     final trimmed = value.trim();
-    if (trimmed.isEmpty) return null;
-    if (trimmed.length > 2 || RegExp(r'[0-9]').hasMatch(trimmed)) {
+    if (trimmed.isEmpty || !_middleInitialPattern.hasMatch(trimmed)) {
       return invalidMiddleInitialMessage;
     }
     return null;
   }
 
   static String? normalizeMiddleInitial(String? value) {
-    if (value == null) return null;
-    final trimmed = value.trim();
-    if (trimmed.isEmpty) return null;
-    return trimmed.toUpperCase();
+    final validationError = validateMiddleInitial(value);
+    if (validationError != null) {
+      throw FormatException(validationError);
+    }
+    if (value == null || value.isEmpty) return null;
+    return value.trim().toUpperCase();
   }
 
   static bool isMiddleInitialConstraintViolation(Object error) {

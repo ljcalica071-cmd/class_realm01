@@ -144,12 +144,12 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     }
   }
 
-  Future<void> _loadActivities() async {
+  Future<void> _loadActivities({bool forceRefresh = false}) async {
     try {
       final teacherId =
           widget.teacher?.id ?? AuthRepository.instance.currentUser?.id;
       final activitiesFuture = SupabaseTeacherClassworkRepository.instance
-          .getActivities(teacherId: teacherId);
+          .getActivities(teacherId: teacherId, forceRefresh: forceRefresh);
       final assessmentsFuture = SupabaseTeacherClassworkRepository.instance
           .getAssessments(teacherId: teacherId);
       final results = await Future.wait([activitiesFuture, assessmentsFuture]);
@@ -747,7 +747,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                 assessments: quizzesAndExams,
                 selectedClassSection: _selectedClassSection,
                 repository: SupabaseTeacherClassworkRepository.instance,
-                onRefresh: _loadActivities,
+                onRefresh: () => _loadActivities(forceRefresh: true),
                 onViewSubmissions: (act) =>
                     setState(() => _viewingSubmissionsFor = act),
               )

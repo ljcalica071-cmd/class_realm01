@@ -730,7 +730,7 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
         _inlineNotice = _WorkspaceInlineNotice(
           tone: _WorkspaceNoticeTone.warning,
           title: 'Invalid RFID Card Format',
-          message: 'The tapped card is not a valid RFID card format.',
+          message: 'Invalid RFID card format.',
           code: 'INVALID_UID',
         );
       });
@@ -820,7 +820,7 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
                 : 'RFID Scan Not Recorded',
             message: outcome.message.isNotEmpty
                 ? outcome.message
-                : 'This card could not be recorded for this class session.',
+                : 'Attendance record could not be processed.',
             code: outcome.code,
             scannedUid: scannedUid,
           );
@@ -894,9 +894,9 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
       setState(() {
         _inlineNotice = _WorkspaceInlineNotice(
           tone: _WorkspaceNoticeTone.warning,
-          title: 'Card Already Registered',
+          title: 'Card Already Assigned',
           message:
-              'This RFID card is already assigned to ${alreadyAssignedStudent.displayName}.',
+              'Card already assigned.',
           code: 'ALREADY_REGISTERED',
         );
       });
@@ -914,9 +914,9 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
         setState(() {
           _inlineNotice = _WorkspaceInlineNotice(
             tone: _WorkspaceNoticeTone.warning,
-            title: 'Card Already Registered',
+            title: 'Card Already Assigned',
             message:
-                'This RFID card is already assigned to ${conflict.existingStudentName ?? "another student"}.',
+                'Card already assigned.',
             code: 'ALREADY_REGISTERED',
           );
         });

@@ -9,7 +9,6 @@ import 'package:class_realm/data/repositories/supabase_teacher_classwork_reposit
 import 'package:class_realm/models/academic_models.dart';
 import 'package:class_realm/models/subject_catalog_model.dart';
 import 'package:class_realm/core/utils/validators.dart';
-import 'package:class_realm/shared/widgets/modals/app_modals.dart';
 import 'package:class_realm/widgets/common/app_buttons.dart';
 import 'package:class_realm/widgets/common/app_text_field.dart';
 import 'package:class_realm/widgets/common/app_date_picker_field.dart';
@@ -382,13 +381,6 @@ class _CreateRequirementFlowDialogState
         setState(() {
           _fileError = fileValidationError;
         });
-        if (mounted) {
-          AppModals.showErrorDialog(
-            context: context,
-            title: 'Invalid Attachment',
-            message: fileValidationError,
-          );
-        }
         return;
       }
       final ext = (file.extension ?? '').toLowerCase();
@@ -649,6 +641,7 @@ class _CreateRequirementFlowDialogState
         catMap[_gradebookColumnIndex.toString()] = maxScore;
         hps[categoryKey] = catMap;
         termSheet['hps'] = hps;
+        termSheet['scores'] ??= <String, dynamic>{};
         await SubjectRepository.instance.saveGradebookTermSheet(
           _selectedOfferingId!,
           _termNumber,
@@ -1256,19 +1249,13 @@ class _CreateRequirementFlowDialogState
                               hint: '1 to 100',
                               controller: _maxScoreCtrl,
                               keyboardType: TextInputType.number,
+                              autovalidateMode:
+                                  AutovalidateMode.onUserInteraction,
                               inputFormatters: [
                                 FilteringTextInputFormatter.digitsOnly,
                                 LengthLimitingTextInputFormatter(3),
                               ],
-                              validator: (value) {
-                                final text = (value ?? '').trim();
-                                if (text.isEmpty) return 'Required.';
-                                final score = int.tryParse(text);
-                                if (score == null || score < 1 || score > 100) {
-                                  return 'Must be 1 to 100.';
-                                }
-                                return null;
-                              },
+                              validator: AppValidators.validateClassworkHps,
                             ),
                           ),
                         ],

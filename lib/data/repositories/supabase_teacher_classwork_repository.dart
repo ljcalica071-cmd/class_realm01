@@ -45,6 +45,7 @@ class SupabaseTeacherClassworkRepository implements TeacherClassworkRepository {
   Future<List<ActivityModel>> getActivities({
     String? subjectOfferingId,
     String? teacherId,
+    bool forceRefresh = false,
   }) async {
     final effectiveTeacherId =
         teacherId ?? AuthRepository.instance.currentUser?.id;
@@ -52,6 +53,7 @@ class SupabaseTeacherClassworkRepository implements TeacherClassworkRepository {
         'teacher_activities_${effectiveTeacherId ?? "all"}_${subjectOfferingId ?? "all"}';
     return AppDataCache.instance.fetchWithSvr<List<ActivityModel>>(
       cacheKey: cacheKey,
+      forceRefresh: forceRefresh,
       fetcher: () async {
         try {
           var query = _client
@@ -117,6 +119,13 @@ class SupabaseTeacherClassworkRepository implements TeacherClassworkRepository {
     String? mimeType,
     bool removeExistingAttachment = false,
   }) async {
+    final roundedHps = activity.maxScore.round();
+    if (roundedHps < 1 || roundedHps > 100) {
+      throw ArgumentError(
+        'Highest Possible Score (HPS) must be between 1 and 100 (received $roundedHps).',
+      );
+    }
+
     final isNew = activity.id.trim().isEmpty;
     String? storagePath;
 
@@ -155,7 +164,7 @@ class SupabaseTeacherClassworkRepository implements TeacherClassworkRepository {
         'title': activity.title,
         'instructions': activity.instructions,
         'max_score': activity.maxScore.round(),
-        'deadline': activity.deadline.toIso8601String(),
+        'deadline': activity.deadline.toUtc().toIso8601String(),
         'is_published': activity.isPublished,
         'is_archived': activity.isArchived,
         'term_number': activity.termNumber,
@@ -203,7 +212,7 @@ class SupabaseTeacherClassworkRepository implements TeacherClassworkRepository {
         'title': activity.title,
         'instructions': activity.instructions,
         'max_score': activity.maxScore.round(),
-        'deadline': activity.deadline.toIso8601String(),
+        'deadline': activity.deadline.toUtc().toIso8601String(),
         'term_number': activity.termNumber,
         'gradebook_column_index': activity.gradebookColumnIndex,
         'completion_mode': activity.completionMode,

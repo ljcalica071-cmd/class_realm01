@@ -50,13 +50,13 @@ class StudentClassworkCard extends StatelessWidget {
 
       if (!launched && context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Unable to open document.')),
+          const SnackBar(content: Text('Unable to open attachment.')),
         );
       }
     } catch (_) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Unable to open document.')),
+          const SnackBar(content: Text('Unable to open attachment.')),
         );
       }
     }

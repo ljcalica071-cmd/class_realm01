@@ -13,6 +13,7 @@ class FakeClassworkRepo implements TeacherClassworkRepository {
   Future<List<ActivityModel>> getActivities({
     String? subjectOfferingId,
     String? teacherId,
+    bool forceRefresh = false,
   }) async => [];
 
   @override
@@ -375,6 +376,50 @@ void main() {
       expect(repo.savedActivity!.isRequirement, isFalse);
       expect(repo.savedActivity!.gradebookColumnIndex, 1);
       expect(repo.savedActivity!.completionMode, 'in_person');
+    });
+
+    testWidgets('rejects HPS of 0 and > 100 with inline error message', (tester) async {
+      tester.view.physicalSize = const Size(1200, 1000);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final repo = FakeClassworkRepo();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: CreateRequirementFlowDialog(
+              onRequirementCreated: () {},
+              initialOfferings: singleTermOffering,
+              initialOfferingId: 'offering-1',
+              isPerformanceTask: true,
+              repository: repo,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final hpsField = find.descendant(
+        of: find.widgetWithText(AppTextField, 'Total Points (HPS) *'),
+        matching: find.byType(TextFormField),
+      );
+
+      // Enter 0 -> should show inline error
+      await tester.enterText(hpsField, '0');
+      await tester.pumpAndSettle();
+      expect(find.text('HPS cannot be 0. Must be 1 to 100.'), findsOneWidget);
+
+      // Enter 150 -> should show inline error
+      await tester.enterText(hpsField, '150');
+      await tester.pumpAndSettle();
+      expect(find.text('Must be 1 to 100.'), findsOneWidget);
+
+      // Enter 50 -> inline error clears
+      await tester.enterText(hpsField, '50');
+      await tester.pumpAndSettle();
+      expect(find.text('HPS cannot be 0. Must be 1 to 100.'), findsNothing);
+      expect(find.text('Must be 1 to 100.'), findsNothing);
     });
   });
 }

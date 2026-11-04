@@ -296,6 +296,17 @@ class LocalStorageService {
     await prefs.remove('$_cachePrefix$key');
   }
 
+  /// Removes all cached JSON entries starting with [prefix]
+  static Future<void> removePrefix(String prefix) async {
+    final prefs = await _prefs;
+    final fullPrefix = '$_cachePrefix$prefix';
+    final keys =
+        prefs.getKeys().where((k) => k.startsWith(fullPrefix)).toList();
+    for (final k in keys) {
+      await prefs.remove(k);
+    }
+  }
+
   /// Teacher Subjects cache
   static Future<void> saveTeacherSubjects(
     String teacherId,

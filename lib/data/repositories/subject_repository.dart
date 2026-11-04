@@ -529,12 +529,12 @@ class SubjectRepository {
           .eq('subject_offering_id', offeringId)
           .eq('term_number', termNumber)
           .maybeSingle();
-      if (row == null) return null;
 
       final payload = {
-        'hps': Map<String, dynamic>.from(row['hps_json'] as Map? ?? {}),
-        'scores': Map<String, dynamic>.from(row['scores_json'] as Map? ?? {}),
+        'hps': Map<String, dynamic>.from(row?['hps_json'] as Map? ?? {}),
+        'scores': Map<String, dynamic>.from(row?['scores_json'] as Map? ?? {}),
       };
+      await _mergeActiveAssessmentsIntoSheet(offeringId, termNumber, payload);
       await LocalStorageService.saveGradebookSheet(
         offeringId,
         termNumber,
@@ -621,6 +621,8 @@ class SubjectRepository {
                   submissionUpserts,
                   onConflict: 'classwork_id,student_id',
                 );
+            AppDataCache.instance.invalidatePrefix('student_dashboard_');
+            AppDataCache.instance.invalidatePrefix('teacher_activities_');
           }
         }
       } catch (subErr) {
@@ -672,15 +674,100 @@ class SubjectRepository {
           .eq('subject_offering_id', offeringId)
           .eq('term_number', termNumber)
           .maybeSingle();
-      if (row == null) return;
-      await LocalStorageService.saveGradebookSheet(offeringId, termNumber, {
-        'hps': Map<String, dynamic>.from(row['hps_json'] as Map),
-        'scores': Map<String, dynamic>.from(row['scores_json'] as Map),
-      });
+      final payload = {
+        'hps': Map<String, dynamic>.from(row?['hps_json'] as Map? ?? {}),
+        'scores': Map<String, dynamic>.from(row?['scores_json'] as Map? ?? {}),
+      };
+      await _mergeActiveAssessmentsIntoSheet(offeringId, termNumber, payload);
+      await LocalStorageService.saveGradebookSheet(offeringId, termNumber, payload);
     } catch (error) {
       debugPrint(
         'Gradebook background refresh failed for offering $offeringId, term $termNumber: $error',
       );
+    }
+  }
+
+  Future<void> _mergeActiveAssessmentsIntoSheet(
+    String offeringId,
+    int termNumber,
+    Map<String, dynamic> payload,
+  ) async {
+    try {
+      final classworkRows = await _client
+          .from('classwork_items')
+          .select(
+            'id, grading_category, classwork_type, gradebook_column_index, max_score',
+          )
+          .eq('subject_offering_id', offeringId)
+          .eq('term_number', termNumber)
+          .eq('is_archived', false);
+
+      final itemsList = classworkRows as List? ?? [];
+      if (itemsList.isEmpty) return;
+
+      final hps = Map<String, dynamic>.from(payload['hps'] as Map? ?? {});
+      final scores =
+          Map<String, dynamic>.from(payload['scores'] as Map? ?? {});
+
+      final classworkIds = <String>[];
+      final classworkMap = <String, Map<String, dynamic>>{};
+
+      for (final item in itemsList) {
+        final cwId = item['id']?.toString();
+        var cat = item['grading_category']?.toString();
+        if (cat == null || cat.isEmpty) {
+          final type = item['classwork_type']?.toString();
+          cat = type == 'performance_task' ? 'pt' : 'ww';
+        }
+        final col = item['gradebook_column_index']?.toString();
+        final maxPts = item['max_score'];
+        if (cwId == null || col == null || col.isEmpty) continue;
+
+        classworkIds.add(cwId);
+        classworkMap[cwId] = {
+          'id': cwId,
+          'category': cat,
+          'column': col,
+          'max_score': maxPts,
+        };
+
+        final catHps = Map<String, dynamic>.from(hps[cat] as Map? ?? {});
+        if (maxPts != null) {
+          catHps[col] ??= (maxPts as num).toInt();
+        }
+        hps[cat] = catHps;
+      }
+
+      if (classworkIds.isNotEmpty) {
+        final subRows = await _client
+            .from('student_classwork_submissions')
+            .select('classwork_id, student_id, score, status')
+            .inFilter('classwork_id', classworkIds);
+
+        for (final sub in (subRows as List? ?? [])) {
+          final cwId = sub['classwork_id']?.toString();
+          final stuId = sub['student_id']?.toString();
+          final scoreVal = sub['score'];
+          if (cwId == null || stuId == null || scoreVal == null) continue;
+          final cw = classworkMap[cwId];
+          if (cw == null) continue;
+          final cat = cw['category'] as String;
+          final col = cw['column'] as String;
+
+          final studentMap =
+              Map<String, dynamic>.from(scores[stuId] as Map? ?? {});
+          final catScores =
+              Map<String, dynamic>.from(studentMap[cat] as Map? ?? {});
+          catScores[col] ??= (scoreVal as num).toDouble();
+          studentMap[cat] = catScores;
+          scores[stuId] = studentMap;
+        }
+      }
+
+      payload['hps'] = hps;
+      payload['scores'] = scores;
+    } catch (e) {
+      debugPrint('Classwork to gradebook auto-sync notice: $e');
     }
   }
 

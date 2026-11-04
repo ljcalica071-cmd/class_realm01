@@ -17,6 +17,7 @@ import 'package:class_realm/core/services/firebase_auth_admin_service.dart';
 import 'package:class_realm/core/services/rate_limit_service.dart';
 import 'package:class_realm/core/services/app_data_cache.dart';
 import 'package:class_realm/core/utils/browser_url_helper.dart';
+import 'package:class_realm/data/repositories/student_dashboard_repository.dart';
 
 class FirstLoginOtpVerification {
   const FirstLoginOtpVerification({
@@ -413,12 +414,15 @@ class AuthRepository {
       } else if (role == 'student') {
         final results = await Future.wait<dynamic>(<Future<dynamic>>[
           _supabaseClient
-              .from('student_settings')
-              .select(
-                'student_id, status, student_profiles!inner(student_id, lrn, first_name, middle_name, last_name, birthday, gender)',
-              )
+              .from('student_profiles')
+              .select('student_id, lrn, first_name, middle_name, last_name, birthday, gender')
               .eq('student_id', uid)
-              .single(),
+              .maybeSingle(),
+          _supabaseClient
+              .from('student_settings')
+              .select('student_id, status')
+              .eq('student_id', uid)
+              .maybeSingle(),
           _supabaseClient
               .from('student_enrollments')
               .select('subject_offerings(sections(section_name, grade_level))')
@@ -427,14 +431,9 @@ class AuthRepository {
               .limit(1)
               .maybeSingle(),
         ]);
-        final infoResp = results[0] as Map<String, dynamic>?;
-        final profileRaw = infoResp?['student_profiles'];
-        final Map<String, dynamic> profile = profileRaw is List
-            ? (profileRaw.isNotEmpty
-                  ? Map<String, dynamic>.from(profileRaw.first as Map)
-                  : <String, dynamic>{})
-            : Map<String, dynamic>.from(profileRaw as Map? ?? {});
-        final enrollment = results[1] as Map<String, dynamic>?;
+        final profile = results[0] as Map<String, dynamic>? ?? <String, dynamic>{};
+        final infoResp = results[1] as Map<String, dynamic>?;
+        final enrollment = results[2] as Map<String, dynamic>?;
         final offeringRaw = enrollment?['subject_offerings'];
         final offering = offeringRaw is List
             ? (offeringRaw.isNotEmpty ? offeringRaw.first : null)
@@ -548,6 +547,7 @@ class AuthRepository {
       await LocalStorageService.clearAuth();
       clearWarmSession();
       AppDataCache.instance.clearAll();
+      StudentDashboardRepository.instance.clearCache();
       _isLoggingOut = false;
       // Attempt to sign out of Firebase
       try {

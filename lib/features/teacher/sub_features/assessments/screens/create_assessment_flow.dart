@@ -133,6 +133,7 @@ class _CreateAssessmentFlowDialogState
   String? _instructionsError;
   String? _dateError;
   String? _durationError;
+  String? _hpsPointsError;
   String? _distributionError;
 
   // Question distributions (3 types only, max 3 digits)
@@ -393,15 +394,17 @@ class _CreateAssessmentFlowDialogState
     }
 
     if (_completionMode == 'in_person') {
-      final hps = int.tryParse(_hpsPointsCtrl.text.trim());
+      final hpsText = _hpsPointsCtrl.text.trim();
+      final hps = int.tryParse(hpsText);
       if (hps == null || hps < 1 || hps > 100) {
-        AppModals.showErrorDialog(
-          context: context,
-          title: 'Invalid Points',
-          message: 'Total Points (HPS) must be a positive integer between 1 and 100.',
-        );
+        setState(() {
+          _hpsPointsError = hps == 0
+              ? 'HPS cannot be 0. Must be 1 to 100.'
+              : 'Total Points (HPS) must be between 1 and 100.';
+        });
         return;
       }
+      setState(() => _hpsPointsError = null);
       _publishInPersonExam(hps);
       return;
     }
@@ -1873,18 +1876,24 @@ class _CreateAssessmentFlowDialogState
                       TextField(
                         controller: _hpsPointsCtrl,
                         keyboardType: TextInputType.number,
+                        onChanged: (_) {
+                          if (_hpsPointsError != null) {
+                            setState(() => _hpsPointsError = null);
+                          }
+                        },
                         inputFormatters: [
                           FilteringTextInputFormatter.digitsOnly,
                           LengthLimitingTextInputFormatter(3),
                         ],
                         decoration: InputDecoration(
-                          hintText: '100',
+                          hintText: '1 to 100',
                           filled: true,
                           fillColor: theme.colorScheme.surface,
                           contentPadding: const EdgeInsets.symmetric(
                             horizontal: 14,
                             vertical: 12,
                           ),
+                          errorText: _hpsPointsError,
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(10),
                           ),
@@ -1895,6 +1904,19 @@ class _CreateAssessmentFlowDialogState
                                 alpha: 0.3,
                               ),
                             ),
+                          ),
+                          errorBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: const BorderSide(color: Color(0xFFDC2626), width: 1.5),
+                          ),
+                          focusedErrorBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: const BorderSide(color: Color(0xFFDC2626), width: 2.0),
+                          ),
+                          errorStyle: const TextStyle(
+                            color: Color(0xFFDC2626),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
                           ),
                         ),
                       ),

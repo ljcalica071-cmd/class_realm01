@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:class_realm/core/theme/app_theme.dart';
 import 'package:class_realm/core/services/app_data_cache.dart';
+import 'package:class_realm/core/utils/validators.dart';
 import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/models/academic_models.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
@@ -51,6 +52,7 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
   Map<String, Map<String, dynamic>> _submissionsByStudent = {};
   final Map<String, TextEditingController> _scoreControllers = {};
   final Map<String, bool> _isSavingStudent = {};
+  final Map<String, String?> _scoreErrors = {};
 
   final SupabaseClient _client = Supabase.instance.client;
 
@@ -276,29 +278,31 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
     }
   }
 
-  Future<void> _saveScore(
+  Future<bool> _saveScore(
     UserModel student,
     String scoreStr, {
     String? feedback,
   }) async {
     final cleanStr = scoreStr.trim();
-    double? newScore;
-    if (cleanStr.isNotEmpty) {
-      newScore = double.tryParse(cleanStr);
-      if (newScore == null || newScore < 0 || newScore > _activity.maxScore) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Invalid score for ${student.fullName}. Must be 0 to ${_activity.maxScore.toInt()}.',
-            ),
-            backgroundColor: const Color(0xFFDC2626),
-          ),
-        );
-        return;
+    final validationError = AppValidators.validateClassworkStudentScore(
+      cleanStr,
+      maxScore: _activity.maxScore,
+    );
+    if (validationError != null) {
+      if (mounted) {
+        setState(() => _scoreErrors[student.id] = validationError);
       }
+      return false;
     }
 
-    setState(() => _isSavingStudent[student.id] = true);
+    final double? newScore = cleanStr.isNotEmpty
+        ? double.tryParse(cleanStr)
+        : null;
+
+    setState(() {
+      _scoreErrors.remove(student.id);
+      _isSavingStudent[student.id] = true;
+    });
 
     try {
       final currentSub =
@@ -354,6 +358,16 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
           );
           final colKey = _activity.gradebookColumnIndex.toString();
 
+          final hps = Map<String, dynamic>.from(
+            termSheet['hps'] as Map? ?? {},
+          );
+          final catHps = Map<String, dynamic>.from(
+            hps[catKey] as Map? ?? {},
+          );
+          catHps[colKey] = _activity.maxScore.toInt();
+          hps[catKey] = catHps;
+          termSheet['hps'] = hps;
+
           if (newScore != null) {
             catScores[colKey] = newScore;
           } else {
@@ -373,6 +387,9 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
         }
       }
 
+      AppDataCache.instance.invalidatePrefix('student_dashboard_');
+      AppDataCache.instance.invalidatePrefix('teacher_activities_');
+
       // 3. Update local state
       setState(() {
         final updated = Map<String, dynamic>.from(currentSub);
@@ -388,7 +405,7 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
           SnackBar(
             content: Text(
               newScore != null
-                  ? 'Score saved for ${student.fullName}: ${newScore.toInt()} / ${_activity.maxScore.toInt()} pts'
+                  ? 'Score saved for ${student.fullName}: ${newScore == newScore.roundToDouble() ? newScore.toInt() : newScore} / ${_activity.maxScore.toInt()} pts'
                   : 'Score cleared for ${student.fullName}.',
             ),
             backgroundColor: const Color(0xFF0F8A48),
@@ -396,6 +413,7 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
           ),
         );
       }
+      return true;
     } catch (e) {
       if (mounted) {
         setState(() => _isSavingStudent[student.id] = false);
@@ -406,6 +424,7 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
           ),
         );
       }
+      return false;
     }
   }
 
@@ -443,8 +462,9 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
   }
 
   Future<void> _showUpdateDeadlineDialog() async {
-    DateTime selectedDate = _currentDeadline;
-    TimeOfDay selectedTime = TimeOfDay.fromDateTime(_currentDeadline);
+    final localDl = _currentDeadline.toLocal();
+    DateTime selectedDate = localDl;
+    TimeOfDay selectedTime = TimeOfDay.fromDateTime(localDl);
     bool isSavingDeadline = false;
 
     await showDialog(
@@ -668,13 +688,18 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
         ? DateTime.tryParse(submittedAtStr)
         : null;
 
+    String? dialogScoreError;
+    String? dialogFeedbackError;
+
     showDialog(
       context: context,
       builder: (dialogCtx) {
-        final theme = Theme.of(dialogCtx);
-        final isDark = theme.brightness == Brightness.dark;
+        return StatefulBuilder(
+          builder: (dialogCtx, setModalState) {
+            final theme = Theme.of(dialogCtx);
+            final isDark = theme.brightness == Brightness.dark;
 
-        return AlertDialog(
+            return AlertDialog(
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
           ),
@@ -917,13 +942,14 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
 
                   // Scoring Input
                   Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Score (Max ${_activity.maxScore.toInt()} pts) *',
+                              'Score (0 to ${_activity.maxScore.toInt()} pts) *',
                               style: const TextStyle(
                                 fontSize: 13,
                                 fontWeight: FontWeight.bold,
@@ -934,12 +960,17 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
                               controller: scoreCtrl,
                               keyboardType: TextInputType.number,
                               inputFormatters: [
-                                FilteringTextInputFormatter.allow(
-                                  RegExp(r'^\d*\.?\d*'),
-                                ),
+                                FilteringTextInputFormatter.digitsOnly,
+                                LengthLimitingTextInputFormatter(3),
                               ],
+                              onChanged: (_) {
+                                if (dialogScoreError != null) {
+                                  setModalState(() => dialogScoreError = null);
+                                }
+                              },
                               decoration: InputDecoration(
-                                hintText: 'Enter score',
+                                hintText: '0 - ${_activity.maxScore.toInt()}',
+                                errorText: dialogScoreError,
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(8),
                                 ),
@@ -952,17 +983,73 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
                           ],
                         ),
                       ),
-                      const SizedBox(width: 10),
+                      const SizedBox(width: 8),
                       Padding(
-                        padding: const EdgeInsets.only(top: 22),
-                        child: OutlinedButton(
-                          onPressed: () {
-                            scoreCtrl.text = _activity.maxScore
-                                .toInt()
-                                .toString();
-                          },
-                          child: Text(
-                            'Give Max (${_activity.maxScore.toInt()})',
+                        padding: const EdgeInsets.only(top: 25),
+                        child: SizedBox(
+                          height: 44,
+                          child: OutlinedButton(
+                            style: OutlinedButton.styleFrom(
+                              backgroundColor: theme.brightness == Brightness.dark
+                                  ? Colors.red.withValues(alpha: 0.15)
+                                  : const Color(0xFFFEF2F2),
+                              foregroundColor: const Color(0xFFDC2626),
+                              side: BorderSide(
+                                color: theme.brightness == Brightness.dark
+                                    ? Colors.red.withValues(alpha: 0.4)
+                                    : const Color(0xFFFCA5A5),
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              padding: const EdgeInsets.symmetric(horizontal: 14),
+                            ),
+                            onPressed: () {
+                              scoreCtrl.text = '0';
+                              if (dialogScoreError != null) {
+                                setModalState(() => dialogScoreError = null);
+                              }
+                            },
+                            child: const Text(
+                              'Give 0',
+                              style: TextStyle(fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Padding(
+                        padding: const EdgeInsets.only(top: 25),
+                        child: SizedBox(
+                          height: 44,
+                          child: OutlinedButton(
+                            style: OutlinedButton.styleFrom(
+                              backgroundColor: theme.brightness == Brightness.dark
+                                  ? Colors.green.withValues(alpha: 0.15)
+                                  : const Color(0xFFF0FDF4),
+                              foregroundColor: const Color(0xFF16A34A),
+                              side: BorderSide(
+                                color: theme.brightness == Brightness.dark
+                                    ? Colors.green.withValues(alpha: 0.4)
+                                    : const Color(0xFF86EFAC),
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              padding: const EdgeInsets.symmetric(horizontal: 14),
+                            ),
+                            onPressed: () {
+                              scoreCtrl.text = _activity.maxScore
+                                  .toInt()
+                                  .toString();
+                              if (dialogScoreError != null) {
+                                setModalState(() => dialogScoreError = null);
+                              }
+                            },
+                            child: Text(
+                              'Give Max (${_activity.maxScore.toInt()})',
+                              style: const TextStyle(fontWeight: FontWeight.w600),
+                            ),
                           ),
                         ),
                       ),
@@ -983,8 +1070,18 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
                   TextField(
                     controller: feedbackCtrl,
                     maxLines: 2,
+                    maxLength: 100,
+                    inputFormatters: [
+                      LengthLimitingTextInputFormatter(100),
+                    ],
+                    onChanged: (_) {
+                      if (dialogFeedbackError != null) {
+                        setModalState(() => dialogFeedbackError = null);
+                      }
+                    },
                     decoration: InputDecoration(
                       hintText: 'Add constructive feedback for the student...',
+                      errorText: dialogFeedbackError,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
                       ),
@@ -1002,15 +1099,40 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
             ),
             FilledButton.icon(
               onPressed: () async {
-                final text = scoreCtrl.text;
+                final text = scoreCtrl.text.trim();
+                final err = AppValidators.validateClassworkStudentScore(
+                  text,
+                  maxScore: _activity.maxScore,
+                  allowEmpty: false,
+                );
+                if (err != null) {
+                  setModalState(() => dialogScoreError = err);
+                  return;
+                }
+
+                final fbRaw = feedbackCtrl.text;
+                if (fbRaw.isNotEmpty && fbRaw.trim().isEmpty) {
+                  setModalState(
+                    () => dialogFeedbackError =
+                        'Feedback cannot consist of only spaces.',
+                  );
+                  return;
+                }
+
                 Navigator.pop(dialogCtx);
                 _scoreControllers[student.id]?.text = text;
-                await _saveScore(student, text, feedback: feedbackCtrl.text);
+                await _saveScore(
+                  student,
+                  text,
+                  feedback: fbRaw.trim().isNotEmpty ? fbRaw.trim() : null,
+                );
               },
               icon: const Icon(Icons.check, size: 16),
               label: const Text('Save Grade'),
             ),
           ],
+        );
+          },
         );
       },
     );
@@ -1883,82 +2005,128 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
           // FAST INLINE SCORE INPUT + REVIEW DETAILS BUTTON
           SizedBox(
             width: 170,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.end,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              mainAxisSize: MainAxisSize.min,
               children: [
-                // Review details modal button
-                IconButton(
-                  icon: const Icon(Icons.rate_review_outlined, size: 19),
-                  tooltip: 'Review Details & Feedback',
-                  onPressed: () =>
-                      _showSubmissionDetailDialog(student, submission),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    // Review details modal button
+                    IconButton(
+                      icon: const Icon(Icons.rate_review_outlined, size: 19),
+                      tooltip: 'Review Details & Feedback',
+                      onPressed: () =>
+                          _showSubmissionDetailDialog(student, submission),
+                    ),
+                    const SizedBox(width: 4),
+                    // Inline Numeric Input
+                    SizedBox(
+                      width: 76,
+                      height: 36,
+                      child: TextField(
+                        controller: controller,
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                          signed: false,
+                        ),
+                        inputFormatters: [
+                          FilteringTextInputFormatter.allow(
+                            RegExp(r'^\d*\.?\d*'),
+                          ),
+                        ],
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
+                        onChanged: (_) {
+                          if (_scoreErrors[student.id] != null) {
+                            setState(() => _scoreErrors.remove(student.id));
+                          }
+                        },
+                        decoration: InputDecoration(
+                          hintText: '/ ${_activity.maxScore.toInt()}',
+                          hintStyle: TextStyle(
+                            fontSize: 11,
+                            color: theme.colorScheme.onSurfaceVariant
+                                .withValues(alpha: 0.6),
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 4,
+                            vertical: 6,
+                          ),
+                          filled: true,
+                          fillColor: isDark
+                              ? Colors.white10
+                              : Colors.grey.shade50,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: BorderSide(
+                              color: _scoreErrors[student.id] != null
+                                  ? theme.colorScheme.error
+                                  : (isDark
+                                        ? Colors.white24
+                                        : Colors.grey.shade300),
+                            ),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: BorderSide(
+                              color: _scoreErrors[student.id] != null
+                                  ? theme.colorScheme.error
+                                  : (isDark
+                                        ? Colors.white24
+                                        : Colors.grey.shade300),
+                              width: _scoreErrors[student.id] != null ? 1.5 : 1,
+                            ),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: BorderSide(
+                              color: _scoreErrors[student.id] != null
+                                  ? theme.colorScheme.error
+                                  : theme.colorScheme.primary,
+                              width: 1.5,
+                            ),
+                          ),
+                        ),
+                        onSubmitted: (val) => _saveScore(student, val),
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    if (isSaving)
+                      const SizedBox(
+                        width: 28,
+                        height: 28,
+                        child: Padding(
+                          padding: EdgeInsets.all(5),
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      )
+                    else
+                      IconButton(
+                        icon: const Icon(
+                          Icons.check_circle_outline,
+                          color: Color(0xFF0F8A48),
+                          size: 20,
+                        ),
+                        tooltip: 'Save Score',
+                        onPressed: () => _saveScore(student, controller.text),
+                      ),
+                  ],
                 ),
-                const SizedBox(width: 4),
-                // Inline Numeric Input
-                SizedBox(
-                  width: 76,
-                  height: 36,
-                  child: TextField(
-                    controller: controller,
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [
-                      FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*')),
-                    ],
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
-                    ),
-                    decoration: InputDecoration(
-                      hintText: '/ ${_activity.maxScore.toInt()}',
-                      hintStyle: TextStyle(
-                        fontSize: 11,
-                        color: theme.colorScheme.onSurfaceVariant.withValues(
-                          alpha: 0.6,
-                        ),
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 4,
-                        vertical: 6,
-                      ),
-                      filled: true,
-                      fillColor: isDark ? Colors.white10 : Colors.grey.shade50,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide(
-                          color: isDark ? Colors.white24 : Colors.grey.shade300,
-                        ),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide(
-                          color: theme.colorScheme.primary,
-                          width: 1.5,
-                        ),
+                if (_scoreErrors[student.id] != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 3, right: 6),
+                    child: Text(
+                      _scoreErrors[student.id]!,
+                      style: TextStyle(
+                        color: theme.colorScheme.error,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
-                    onSubmitted: (val) => _saveScore(student, val),
-                  ),
-                ),
-                const SizedBox(width: 4),
-                if (isSaving)
-                  const SizedBox(
-                    width: 28,
-                    height: 28,
-                    child: Padding(
-                      padding: EdgeInsets.all(5),
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                  )
-                else
-                  IconButton(
-                    icon: const Icon(
-                      Icons.check_circle_outline,
-                      color: Color(0xFF0F8A48),
-                      size: 20,
-                    ),
-                    tooltip: 'Save Score',
-                    onPressed: () => _saveScore(student, controller.text),
                   ),
               ],
             ),

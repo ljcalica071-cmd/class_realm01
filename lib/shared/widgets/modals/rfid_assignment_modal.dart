@@ -218,7 +218,7 @@ class _RfidAssignmentModalState extends State<RfidAssignmentModal> {
     // E1: Invalid / Empty Format
     if (!_hexUidRegex.hasMatch(newUid)) {
       setState(() {
-        _uidError = 'Enter or scan a valid 8–14 character hexadecimal RFID UID (0–9, A–F).';
+        _uidError = 'Invalid RFID card format.';
       });
       return;
     }
@@ -226,23 +226,9 @@ class _RfidAssignmentModalState extends State<RfidAssignmentModal> {
     final currentUid = _normalizedCurrentUid;
     if (currentUid != null && currentUid == newUid) {
       setState(() {
-        _uidError =
-            'This RFID card is already linked to ${widget.studentName}.';
+        _uidError = 'Card already assigned to this student.';
       });
       return;
-    }
-
-    // E3: Student Already Has Card & Replacing
-    if (currentUid != null && currentUid != newUid) {
-      final replaceConfirmed = await AppModals.showConfirmDialog(
-        context: context,
-        title: 'Replace Linked RFID Card?',
-        message:
-            '${widget.studentName} currently has RFID card $currentUid linked. Replace it with $newUid?',
-        confirmLabel: 'Replace Card',
-        confirmColor: AppTheme.catOrange,
-      );
-      if (replaceConfirmed != true || !mounted) return;
     }
 
     setState(() {
@@ -251,7 +237,7 @@ class _RfidAssignmentModalState extends State<RfidAssignmentModal> {
     });
 
     try {
-      // E2: Card Already Linked to Another Student
+      // E2: Card Already Linked to Another Student (Strict Block)
       final conflict = await _repository.checkRfidUidConflict(
         rfidUid: newUid,
         excludeStudentId: widget.studentId,
@@ -259,14 +245,9 @@ class _RfidAssignmentModalState extends State<RfidAssignmentModal> {
       if (!mounted) return;
 
       if (conflict.isTaken) {
-        final ownerLabel =
-            (conflict.existingStudentName != null &&
-                conflict.existingStudentName!.trim().isNotEmpty)
-            ? conflict.existingStudentName!.trim()
-            : 'another student';
         setState(() {
           _isSubmitting = false;
-          _uidError = 'This RFID card is already assigned to $ownerLabel.';
+          _uidError = 'Card already assigned.';
         });
         return;
       }
