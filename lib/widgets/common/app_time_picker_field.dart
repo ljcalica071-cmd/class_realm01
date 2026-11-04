@@ -19,134 +19,145 @@ class AppTimePickerField extends FormField<TimeOfDay> {
     super.validator,
     super.autovalidateMode,
   }) : super(
-          initialValue: initialTime ?? const TimeOfDay(hour: 8, minute: 0),
-          builder: (FormFieldState<TimeOfDay> field) {
-            final theme = Theme.of(field.context);
-            final time = field.value;
-            final hasTime = time != null;
-            final hasError = field.hasError;
-            final formattedText = hasTime ? _formatTimeOfDay(time) : '';
+         initialValue: initialTime ?? const TimeOfDay(hour: 8, minute: 0),
+         builder: (FormFieldState<TimeOfDay> field) {
+           final theme = Theme.of(field.context);
+           final time = field.value;
+           final hasTime = time != null;
+           final hasError = field.hasError;
+           final formattedText = hasTime ? _formatTimeOfDay(time) : '';
 
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: theme.colorScheme.onSurface,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                InkWell(
-                  onTap: () async {
-                    final picked = await showAppTimePickerDialog(
-                      field.context,
-                      initialTime: field.value ?? const TimeOfDay(hour: 8, minute: 0),
-                      minTime: minTime,
-                      title: 'Select $label',
-                    );
-                    if (picked != null) {
-                      field.didChange(picked);
-                      field.validate();
-                      onTimeSelected?.call(picked);
-                    }
-                  },
-                  borderRadius: BorderRadius.circular(10),
-                  child: InputDecorator(
-                    decoration: InputDecoration(
-                      filled: true,
-                      fillColor: theme.colorScheme.surface,
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 12,
-                      ),
-                      errorText: hasError ? field.errorText : null,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: BorderSide(
-                          color: theme.colorScheme.outline.withValues(alpha: 0.4),
-                        ),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: BorderSide(
-                          color: hasError
-                              ? const Color(0xFFDC2626)
-                              : theme.colorScheme.outline.withValues(alpha: 0.3),
-                          width: hasError ? 1.5 : 1.0,
-                        ),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: BorderSide(
-                          color: hasError
-                              ? const Color(0xFFDC2626)
-                              : theme.colorScheme.primary,
-                          width: 1.5,
-                        ),
-                      ),
-                      errorBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: const BorderSide(
-                          color: Color(0xFFDC2626),
-                          width: 1.5,
-                        ),
-                      ),
-                      focusedErrorBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: const BorderSide(
-                          color: Color(0xFFDC2626),
-                          width: 2.0,
-                        ),
-                      ),
-                      errorStyle: const TextStyle(
-                        fontSize: 12,
-                        color: Color(0xFFDC2626),
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.schedule_outlined,
-                          size: 20,
-                          color: hasError
-                              ? const Color(0xFFDC2626)
-                              : (hasTime
-                                  ? theme.colorScheme.primary
-                                  : theme.colorScheme.onSurface.withValues(alpha: 0.6)),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            hasTime ? formattedText : hint ?? 'HH:MM AM/PM',
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: hasError && !hasTime
-                                  ? const Color(0xFFDC2626)
-                                  : (hasTime
-                                      ? theme.colorScheme.onSurface
-                                      : theme.colorScheme.onSurface.withValues(alpha: 0.4)),
-                              fontWeight: hasTime ? FontWeight.w500 : FontWeight.normal,
-                            ),
-                          ),
-                        ),
-                        Icon(
-                          Icons.arrow_drop_down,
-                          color: hasError
-                              ? const Color(0xFFDC2626)
-                              : theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            );
-          },
-        );
+           return Column(
+             crossAxisAlignment: CrossAxisAlignment.start,
+             children: [
+               Text(
+                 label,
+                 style: TextStyle(
+                   fontSize: 13,
+                   fontWeight: FontWeight.w600,
+                   color: theme.colorScheme.onSurface,
+                 ),
+               ),
+               const SizedBox(height: 6),
+               InkWell(
+                 onTap: () async {
+                   final picked = await showAppTimePickerDialog(
+                     field.context,
+                     initialTime:
+                         field.value ?? const TimeOfDay(hour: 8, minute: 0),
+                     minTime: minTime,
+                     title: 'Select $label',
+                   );
+                   if (picked != null) {
+                     field.didChange(picked);
+                     field.validate();
+                     onTimeSelected?.call(picked);
+                   }
+                 },
+                 borderRadius: BorderRadius.circular(10),
+                 child: InputDecorator(
+                   decoration: InputDecoration(
+                     filled: true,
+                     fillColor: theme.colorScheme.surface,
+                     contentPadding: const EdgeInsets.symmetric(
+                       horizontal: 14,
+                       vertical: 12,
+                     ),
+                     errorText: hasError ? field.errorText : null,
+                     border: OutlineInputBorder(
+                       borderRadius: BorderRadius.circular(10),
+                       borderSide: BorderSide(
+                         color: theme.colorScheme.outline.withValues(
+                           alpha: 0.4,
+                         ),
+                       ),
+                     ),
+                     enabledBorder: OutlineInputBorder(
+                       borderRadius: BorderRadius.circular(10),
+                       borderSide: BorderSide(
+                         color: hasError
+                             ? const Color(0xFFDC2626)
+                             : theme.colorScheme.outline.withValues(alpha: 0.3),
+                         width: hasError ? 1.5 : 1.0,
+                       ),
+                     ),
+                     focusedBorder: OutlineInputBorder(
+                       borderRadius: BorderRadius.circular(10),
+                       borderSide: BorderSide(
+                         color: hasError
+                             ? const Color(0xFFDC2626)
+                             : theme.colorScheme.primary,
+                         width: 1.5,
+                       ),
+                     ),
+                     errorBorder: OutlineInputBorder(
+                       borderRadius: BorderRadius.circular(10),
+                       borderSide: const BorderSide(
+                         color: Color(0xFFDC2626),
+                         width: 1.5,
+                       ),
+                     ),
+                     focusedErrorBorder: OutlineInputBorder(
+                       borderRadius: BorderRadius.circular(10),
+                       borderSide: const BorderSide(
+                         color: Color(0xFFDC2626),
+                         width: 2.0,
+                       ),
+                     ),
+                     errorStyle: const TextStyle(
+                       fontSize: 12,
+                       color: Color(0xFFDC2626),
+                       fontWeight: FontWeight.w500,
+                     ),
+                   ),
+                   child: Row(
+                     children: [
+                       Icon(
+                         Icons.schedule_outlined,
+                         size: 20,
+                         color: hasError
+                             ? const Color(0xFFDC2626)
+                             : (hasTime
+                                   ? theme.colorScheme.primary
+                                   : theme.colorScheme.onSurface.withValues(
+                                       alpha: 0.6,
+                                     )),
+                       ),
+                       const SizedBox(width: 12),
+                       Expanded(
+                         child: Text(
+                           hasTime ? formattedText : hint ?? 'HH:MM AM/PM',
+                           style: TextStyle(
+                             fontSize: 14,
+                             color: hasError && !hasTime
+                                 ? const Color(0xFFDC2626)
+                                 : (hasTime
+                                       ? theme.colorScheme.onSurface
+                                       : theme.colorScheme.onSurface.withValues(
+                                           alpha: 0.4,
+                                         )),
+                             fontWeight: hasTime
+                                 ? FontWeight.w500
+                                 : FontWeight.normal,
+                           ),
+                         ),
+                       ),
+                       Icon(
+                         Icons.arrow_drop_down,
+                         color: hasError
+                             ? const Color(0xFFDC2626)
+                             : theme.colorScheme.onSurface.withValues(
+                                 alpha: 0.6,
+                               ),
+                       ),
+                     ],
+                   ),
+                 ),
+               ),
+             ],
+           );
+         },
+       );
 
   static String format(TimeOfDay time) => _formatTimeOfDay(time);
 }
@@ -211,7 +222,9 @@ Future<TimeOfDay?> showAppTimePickerDialog(
           ];
 
           return Dialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
             backgroundColor: theme.colorScheme.surface,
             child: Container(
               constraints: const BoxConstraints(maxWidth: 380),
@@ -226,10 +239,16 @@ Future<TimeOfDay?> showAppTimePickerDialog(
                       Container(
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
-                          color: theme.colorScheme.primary.withValues(alpha: 0.1),
+                          color: theme.colorScheme.primary.withValues(
+                            alpha: 0.1,
+                          ),
                           shape: BoxShape.circle,
                         ),
-                        child: Icon(Icons.schedule, color: theme.colorScheme.primary, size: 22),
+                        child: Icon(
+                          Icons.schedule,
+                          color: theme.colorScheme.primary,
+                          size: 22,
+                        ),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
@@ -248,9 +267,13 @@ Future<TimeOfDay?> showAppTimePickerDialog(
 
                   // Digital Clock Cards + AM/PM Toggle
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 16,
+                    ),
                     decoration: BoxDecoration(
-                      color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+                      color: theme.colorScheme.surfaceContainerHighest
+                          .withValues(alpha: 0.3),
                       borderRadius: BorderRadius.circular(14),
                       border: Border.all(
                         color: isPastMinTime
@@ -282,7 +305,9 @@ Future<TimeOfDay?> showAppTimePickerDialog(
                             style: TextStyle(
                               fontSize: 32,
                               fontWeight: FontWeight.bold,
-                              color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                              color: theme.colorScheme.onSurface.withValues(
+                                alpha: 0.6,
+                              ),
                             ),
                           ),
                         ),
@@ -308,7 +333,9 @@ Future<TimeOfDay?> showAppTimePickerDialog(
                             color: theme.colorScheme.surface,
                             borderRadius: BorderRadius.circular(10),
                             border: Border.all(
-                              color: theme.colorScheme.outline.withValues(alpha: 0.2),
+                              color: theme.colorScheme.outline.withValues(
+                                alpha: 0.2,
+                              ),
                             ),
                           ),
                           child: Column(
@@ -322,7 +349,9 @@ Future<TimeOfDay?> showAppTimePickerDialog(
                               Container(
                                 width: 48,
                                 height: 1,
-                                color: theme.colorScheme.outline.withValues(alpha: 0.15),
+                                color: theme.colorScheme.outline.withValues(
+                                  alpha: 0.15,
+                                ),
                               ),
                               _buildPeriodChip(
                                 theme: theme,
@@ -341,7 +370,11 @@ Future<TimeOfDay?> showAppTimePickerDialog(
                     const SizedBox(height: 8),
                     Row(
                       children: const [
-                        Icon(Icons.error_outline, size: 14, color: Color(0xFFDC2626)),
+                        Icon(
+                          Icons.error_outline,
+                          size: 14,
+                          color: Color(0xFFDC2626),
+                        ),
                         SizedBox(width: 6),
                         Expanded(
                           child: Text(
@@ -376,9 +409,12 @@ Future<TimeOfDay?> showAppTimePickerDialog(
                       final p24 = p.hour;
                       final pMin = p.minute;
                       final pTot = p24 * 60 + pMin;
-                      final isDisabled = minTime != null && pTot < (minTime.hour * 60 + minTime.minute);
+                      final isDisabled =
+                          minTime != null &&
+                          pTot < (minTime.hour * 60 + minTime.minute);
 
-                      final isCurrent = (p.hourOfPeriod == 0 ? 12 : p.hourOfPeriod) == hour &&
+                      final isCurrent =
+                          (p.hourOfPeriod == 0 ? 12 : p.hourOfPeriod) == hour &&
                           p.minute == minute &&
                           (p.period == DayPeriod.pm) == isPm;
 
@@ -387,25 +423,39 @@ Future<TimeOfDay?> showAppTimePickerDialog(
                           _formatTimeOfDay(p),
                           style: TextStyle(
                             fontSize: 11,
-                            fontWeight: isCurrent ? FontWeight.bold : FontWeight.w500,
+                            fontWeight: isCurrent
+                                ? FontWeight.bold
+                                : FontWeight.w500,
                             color: isDisabled
-                                ? theme.colorScheme.onSurface.withValues(alpha: 0.3)
-                                : (isCurrent ? Colors.white : theme.colorScheme.onSurface),
+                                ? theme.colorScheme.onSurface.withValues(
+                                    alpha: 0.3,
+                                  )
+                                : (isCurrent
+                                      ? Colors.white
+                                      : theme.colorScheme.onSurface),
                           ),
                         ),
                         backgroundColor: isCurrent
                             ? theme.colorScheme.primary
-                            : theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
-                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                            : theme.colorScheme.surfaceContainerHighest
+                                  .withValues(alpha: 0.4),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 4,
+                          vertical: 2,
+                        ),
                         visualDensity: VisualDensity.compact,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
                         onPressed: isDisabled
                             ? null
                             : () => setDialogState(() {
-                                  hour = p.hourOfPeriod == 0 ? 12 : p.hourOfPeriod;
-                                  minute = p.minute;
-                                  isPm = p.period == DayPeriod.pm;
-                                }),
+                                hour = p.hourOfPeriod == 0
+                                    ? 12
+                                    : p.hourOfPeriod;
+                                minute = p.minute;
+                                isPm = p.period == DayPeriod.pm;
+                              }),
                       );
                     }).toList(),
                   ),
@@ -421,7 +471,9 @@ Future<TimeOfDay?> showAppTimePickerDialog(
                         child: Text(
                           'Cancel',
                           style: TextStyle(
-                            color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                            color: theme.colorScheme.onSurface.withValues(
+                              alpha: 0.6,
+                            ),
                             fontWeight: FontWeight.w600,
                           ),
                         ),
@@ -431,8 +483,13 @@ Future<TimeOfDay?> showAppTimePickerDialog(
                         style: ElevatedButton.styleFrom(
                           backgroundColor: theme.colorScheme.primary,
                           foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 18,
+                            vertical: 10,
+                          ),
                         ),
                         onPressed: isPastMinTime
                             ? null
@@ -443,7 +500,10 @@ Future<TimeOfDay?> showAppTimePickerDialog(
                                   TimeOfDay(hour: finalHour24, minute: minute),
                                 );
                               },
-                        child: const Text('Confirm Time', style: TextStyle(fontWeight: FontWeight.bold)),
+                        child: const Text(
+                          'Confirm Time',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
                       ),
                     ],
                   ),
@@ -472,7 +532,11 @@ Widget _buildDigitSpinBox({
         borderRadius: BorderRadius.circular(6),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-          child: Icon(Icons.keyboard_arrow_up, size: 20, color: theme.colorScheme.primary),
+          child: Icon(
+            Icons.keyboard_arrow_up,
+            size: 20,
+            color: theme.colorScheme.primary,
+          ),
         ),
       ),
       Container(
@@ -507,7 +571,11 @@ Widget _buildDigitSpinBox({
         borderRadius: BorderRadius.circular(6),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-          child: Icon(Icons.keyboard_arrow_down, size: 20, color: theme.colorScheme.primary),
+          child: Icon(
+            Icons.keyboard_arrow_down,
+            size: 20,
+            color: theme.colorScheme.primary,
+          ),
         ),
       ),
       Text(
@@ -545,7 +613,9 @@ Widget _buildPeriodChip({
         style: TextStyle(
           fontSize: 13,
           fontWeight: FontWeight.bold,
-          color: isSelected ? Colors.white : theme.colorScheme.onSurface.withValues(alpha: 0.6),
+          color: isSelected
+              ? Colors.white
+              : theme.colorScheme.onSurface.withValues(alpha: 0.6),
         ),
       ),
     ),

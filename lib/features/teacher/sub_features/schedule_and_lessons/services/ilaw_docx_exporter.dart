@@ -124,14 +124,38 @@ class IlawDocxExporter {
       </w:tblPr>''');
 
     // Metadata Grid Rows
-    sb.writeln(_meta2ColRow('School', 'EDUARDO BARRETTO SR. INTEGRATED SCHOOL', 'Grade Level', plan.gradeLevel.toUpperCase()));
-    sb.writeln(_meta2ColRow('Teacher', teacher, 'Learning Area', plan.subject.toUpperCase()));
-    sb.writeln(_meta2ColRow('Teaching Dates', 'DAY 1 - DAY ${plan.numberOfSessions} (TUESDAY - FRIDAY)', 'Term', '$termUpper (Instructional Block - Week 1)'));
+    sb.writeln(
+      _meta2ColRow(
+        'School',
+        'EDUARDO BARRETTO SR. INTEGRATED SCHOOL',
+        'Grade Level',
+        plan.gradeLevel.toUpperCase(),
+      ),
+    );
+    sb.writeln(
+      _meta2ColRow(
+        'Teacher',
+        teacher,
+        'Learning Area',
+        plan.subject.toUpperCase(),
+      ),
+    );
+    sb.writeln(
+      _meta2ColRow(
+        'Teaching Dates',
+        'DAY 1 - DAY ${plan.numberOfSessions} (TUESDAY - FRIDAY)',
+        'Term',
+        '$termUpper (Instructional Block - Week 1)',
+      ),
+    );
 
     // Overview Rows
     sb.writeln(_tableRow('Lesson Title', null, [plan.topic.toUpperCase()]));
 
-    final sessionsLabels = List.generate(plan.numberOfSessions, (i) => 'DAY ${i + 1}').join('        ');
+    final sessionsLabels = List.generate(
+      plan.numberOfSessions,
+      (i) => 'DAY ${i + 1}',
+    ).join('        ');
     sb.writeln(_tableRow('Number of Sessions', null, [sessionsLabels]));
 
     final referencesLines = [
@@ -142,20 +166,34 @@ class IlawDocxExporter {
       '• PPT Slides & Contextualized Worksheet Exercises.',
       '• Desmos Graphing Calculator/App, Scientific Calculators, Board/Markers.',
     ];
-    sb.writeln(_tableRow('References', '(books, websites, toolkits, etc.)', referencesLines));
+    sb.writeln(
+      _tableRow(
+        'References',
+        '(books, websites, toolkits, etc.)',
+        referencesLines,
+      ),
+    );
 
     final aiCitationLines = [
       'Generative AI was used to assist in organizing, wording, and aligning the ILAW lesson-plan components with the teacher-provided materials. The teacher reviewed, revised, and validated the competencies, examples, activities, assessments, and contextualized applications before use in class, consistent with responsible teacher oversight (DepEd Order No. 003, s. 2026 Annex A).',
     ];
-    sb.writeln(_tableRow('Declaration of AI use', 'Cite how AI was used in the formulation of the lesson plan. See DO 3 s.2026 Annex A.', aiCitationLines));
+    sb.writeln(
+      _tableRow(
+        'Declaration of AI use',
+        'Cite how AI was used in the formulation of the lesson plan. See DO 3 s.2026 Annex A.',
+        aiCitationLines,
+      ),
+    );
 
     // =============================================================
     // SECTION I: INTENTIONS
     // =============================================================
-    sb.writeln(_bannerRow(
-      'INTENTIONS',
-      'Meaningful learning experiences are anchored in how we frame them. Start by deciding what you want learners to master by the end of the lesson - keep it clear and simple. Remember: Understanding your learners\' evolving context and designing around it ensure that your lessons connect with and are relevant to them.',
-    ));
+    sb.writeln(
+      _bannerRow(
+        'INTENTIONS',
+        'Meaningful learning experiences are anchored in how we frame them. Start by deciding what you want learners to master by the end of the lesson - keep it clear and simple. Remember: Understanding your learners\' evolving context and designing around it ensure that your lessons connect with and are relevant to them.',
+      ),
+    );
 
     final compLines = [
       'Content Standard:',
@@ -172,35 +210,61 @@ class IlawDocxExporter {
         '• Solves practical mathematical and contextual problems with critical reasoning.',
       ],
     ];
-    sb.writeln(_tableRow('Learning Competency and Curriculum Standards', 'Write the competency/ies from the curriculum that we are targeting, and applicable standards.', compLines));
+    sb.writeln(
+      _tableRow(
+        'Learning Competency and Curriculum Standards',
+        'Write the competency/ies from the curriculum that we are targeting, and applicable standards.',
+        compLines,
+      ),
+    );
 
     final objectivesLines = [
       'By the end of the instructional sessions, learners should be able to:',
       plan.intendedOutcomes,
     ];
-    sb.writeln(_tableRow('Learning Objectives', 'Write the smaller knowledge, skills, or tasks from the competency that learners will work on.', objectivesLines));
+    sb.writeln(
+      _tableRow(
+        'Learning Objectives',
+        'Write the smaller knowledge, skills, or tasks from the competency that learners will work on.',
+        objectivesLines,
+      ),
+    );
 
     final learnersContextLines = [
       'Learners enter the lesson with prerequisite foundational knowledge. Instruction begins with recall and catch-up activities before formalizing abstract notations.',
       'Contextualized examples (real-life transactions, ride fares, digital data plans) make abstract conditions concrete. Guided scaffolding is provided for emerging learners.',
       'Target Diagnostic Level: ${plan.targetProficiency.label}.',
     ];
-    sb.writeln(_tableRow('Learners Context', 'Write observations of learners, how they respond, strengths, interests, and barriers to learning.', learnersContextLines));
+    sb.writeln(
+      _tableRow(
+        'Learners Context',
+        'Write observations of learners, how they respond, strengths, interests, and barriers to learning.',
+        learnersContextLines,
+      ),
+    );
 
     // =============================================================
     // SECTION II: LEARNING EXPERIENCE
     // =============================================================
-    sb.writeln(_bannerRow(
-      'LEARNING EXPERIENCE',
-      'A learning experience is like a thoughtfully designed journey. Each activity and interaction build towards meaningful understanding and growth. Identify activities and interactions to help learners gain knowledge, skills, or understanding in a purposeful way.',
-    ));
+    sb.writeln(
+      _bannerRow(
+        'LEARNING EXPERIENCE',
+        'A learning experience is like a thoughtfully designed journey. Each activity and interaction build towards meaningful understanding and growth. Identify activities and interactions to help learners gain knowledge, skills, or understanding in a purposeful way.',
+      ),
+    );
 
     final preLessonLines = [
       '• Begin with a brief check-in and communicate the session learning targets in learner-friendly language.',
       '• Activate prior knowledge through quick concept matching and real-world scenario classification.',
       '• Administer diagnostic catch-up check to identify prerequisites and misconceptions before starting new topics.',
     ];
-    sb.writeln(_tableRow('Pre-Lesson', 'Describe how you will help the learners get ready for the lesson.', preLessonLines));
+    sb.writeln(
+      _tableRow(
+        'Pre-Lesson',
+        'Describe how you will help the learners get ready for the lesson.',
+        preLessonLines,
+      ),
+    );
 
     final flowLines = <String>[];
     for (final s in plan.effectiveSessions) {
@@ -211,14 +275,26 @@ class IlawDocxExporter {
     if (flowLines.isEmpty) {
       flowLines.add(plan.workExperiences);
     }
-    sb.writeln(_tableRow('Flow', 'Describe the activities that you can implement in 1 or more sessions to meet the learning objectives.', flowLines));
+    sb.writeln(
+      _tableRow(
+        'Flow',
+        'Describe the activities that you can implement in 1 or more sessions to meet the learning objectives.',
+        flowLines,
+      ),
+    );
 
     final diffLines = [
       '• Use think-pair-share before whole-class sharing to give processing time to all learners.',
       '• Provide worked examples and interval cues for learners needing scaffolding.',
       '• Allow digital tools (Desmos/calculator) and visual diagram representations as acceptable evidence of understanding.',
     ];
-    sb.writeln(_tableRow('Differentiation / Inclusion', 'Ensure inclusion for learners\' varied abilities, learning styles, and contexts.', diffLines));
+    sb.writeln(
+      _tableRow(
+        'Differentiation / Inclusion',
+        'Ensure inclusion for learners\' varied abilities, learning styles, and contexts.',
+        diffLines,
+      ),
+    );
 
     final resLines = [
       '• PowerPoint: Lesson slides with interactive checks, worked models, and practice prompts.',
@@ -226,7 +302,13 @@ class IlawDocxExporter {
       '• Digital and Concrete Tools: Desmos graphing app, whiteboard/markers, graphing paper.',
       '• Offline Alternative: Printed coordinate grids, teacher tables, and board demonstrations.',
     ];
-    sb.writeln(_tableRow('Learning Resources', 'List down the learning resources that will help you reach your objectives.', resLines));
+    sb.writeln(
+      _tableRow(
+        'Learning Resources',
+        'List down the learning resources that will help you reach your objectives.',
+        resLines,
+      ),
+    );
 
     final integLines = [
       '• ICT / Digital Literacy: Responsible use of graphing tools to visualize and verify relationships.',
@@ -234,15 +316,23 @@ class IlawDocxExporter {
       '• Communication: Explaining why specific rules apply and justifying solutions in mathematical language.',
       '• Values / Life Skills: Reflecting on rule-based reasoning, fairness, and flexible problem-solving.',
     ];
-    sb.writeln(_tableRow('Opportunities for Integration', 'Write down possibilities to meaningfully connect to another learning area, special topic, or technology.', integLines));
+    sb.writeln(
+      _tableRow(
+        'Opportunities for Integration',
+        'Write down possibilities to meaningfully connect to another learning area, special topic, or technology.',
+        integLines,
+      ),
+    );
 
     // =============================================================
     // SECTION III: ASSESSMENT
     // =============================================================
-    sb.writeln(_bannerRow(
-      'ASSESSMENT',
-      'Assessments reveal what learners have gained and what they still need help with. These are helpful in providing you with information to guide your future instruction throughout the entire session.',
-    ));
+    sb.writeln(
+      _bannerRow(
+        'ASSESSMENT',
+        'Assessments reveal what learners have gained and what they still need help with. These are helpful in providing you with information to guide your future instruction throughout the entire session.',
+      ),
+    );
 
     final assessLines = <String>[];
     for (final s in plan.effectiveSessions) {
@@ -253,29 +343,49 @@ class IlawDocxExporter {
     if (assessLines.isEmpty) {
       assessLines.add(plan.assessment);
     }
-    sb.writeln(_tableRow('Formative Assessment', 'Create a task, activity or questions to evaluate learning and provide feedback every now and then.', assessLines));
+    sb.writeln(
+      _tableRow(
+        'Formative Assessment',
+        'Create a task, activity or questions to evaluate learning and provide feedback every now and then.',
+        assessLines,
+      ),
+    );
 
     // =============================================================
     // SECTION IV: WAYS FORWARD
     // =============================================================
-    sb.writeln(_bannerRow(
-      'WAYS FORWARD',
-      'Meaningful learning can also happen beyond the classroom - for both the learners and the teacher. Pause and reflect on what happened today.',
-    ));
+    sb.writeln(
+      _bannerRow(
+        'WAYS FORWARD',
+        'Meaningful learning can also happen beyond the classroom - for both the learners and the teacher. Pause and reflect on what happened today.',
+      ),
+    );
 
     final extLines = [
       '• Ask learners to identify one real-life service or pricing system at home or in the community that follows conditional rules.',
       '• Provide a short remediation set on prerequisite functions for learners needing additional reinforcement.',
       '• Challenge proficient learners with an enrichment task to model a multi-tier delivery or mobile data pricing scenario.',
     ];
-    sb.writeln(_tableRow('Extended Learning Opportunities', 'Suggest other learning experiences outside the classroom/class hours that learners may want to access.', extLines));
+    sb.writeln(
+      _tableRow(
+        'Extended Learning Opportunities',
+        'Suggest other learning experiences outside the classroom/class hours that learners may want to access.',
+        extLines,
+      ),
+    );
 
     final refLines = [
       '• Review which prerequisite ideas still caused difficulty (boundary points, condition interpretation, intervals).',
       '• Note which contexts generated the strongest participation and reuse familiar situations in future mathematical models.',
       '• Seek instructional coach feedback on multi-tier pacing and strengthening questioning techniques.',
     ];
-    sb.writeln(_tableRow('Reflections', 'Think about what you need to change for the next session based on what happened today.', refLines));
+    sb.writeln(
+      _tableRow(
+        'Reflections',
+        'Think about what you need to change for the next session based on what happened today.',
+        refLines,
+      ),
+    );
 
     sb.writeln('    </w:tbl>');
     sb.writeln(_spacerParagraph(160));
@@ -388,7 +498,14 @@ class IlawDocxExporter {
     }
 
     if (nonNullLines.isEmpty) {
-      rightSb.writeln(_paragraph('—', fontSizeHalfPts: 18, colorHex: '64748B', spaceAfterTwips: 0));
+      rightSb.writeln(
+        _paragraph(
+          '—',
+          fontSizeHalfPts: 18,
+          colorHex: '64748B',
+          spaceAfterTwips: 0,
+        ),
+      );
     } else {
       for (var i = 0; i < nonNullLines.length; i++) {
         final line = nonNullLines[i];
@@ -397,7 +514,8 @@ class IlawDocxExporter {
           rightSb.writeln(_spacerParagraph(50));
           continue;
         }
-        final isSubHeader = line.endsWith(':') ||
+        final isSubHeader =
+            line.endsWith(':') ||
             line.startsWith('Session ') ||
             line.startsWith('DAY ');
         rightSb.writeln(

@@ -47,7 +47,8 @@ class LocalSections extends Table {
   TextColumn get id => text()();
   TextColumn get sectionName => text()();
   IntColumn get gradeLevel => integer()();
-  TextColumn get schoolYear => text().withDefault(const Constant('2026-2027'))();
+  TextColumn get schoolYear =>
+      text().withDefault(const Constant('2026-2027'))();
   BoolColumn get isArchived => boolean().withDefault(const Constant(false))();
 
   @override
@@ -65,7 +66,8 @@ class LocalSubjectOfferings extends Table {
   RealColumn get wwWeight => real().withDefault(const Constant(20.0))();
   RealColumn get ptWeight => real().withDefault(const Constant(50.0))();
   RealColumn get exWeight => real().withDefault(const Constant(30.0))();
-  TextColumn get schoolYear => text().withDefault(const Constant('2026-2027'))();
+  TextColumn get schoolYear =>
+      text().withDefault(const Constant('2026-2027'))();
   BoolColumn get isArchived => boolean().withDefault(const Constant(false))();
 
   @override
@@ -106,7 +108,8 @@ class LocalParents extends Table {
   TextColumn get middleName => text().nullable()();
   TextColumn get lastName => text()();
   TextColumn get contactNumber => text().withDefault(const Constant(''))();
-  TextColumn get relationship => text().withDefault(const Constant('Guardian'))();
+  TextColumn get relationship =>
+      text().withDefault(const Constant('Guardian'))();
   TextColumn get email => text().nullable()();
 
   @override
@@ -117,7 +120,8 @@ class LocalParentStudentLinks extends Table {
   TextColumn get id => text()();
   TextColumn get parentId => text()();
   TextColumn get studentId => text()();
-  TextColumn get relationship => text().withDefault(const Constant('Guardian'))();
+  TextColumn get relationship =>
+      text().withDefault(const Constant('Guardian'))();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -140,7 +144,8 @@ class LocalAttendanceRecords extends Table {
   TextColumn get remarks => text().nullable()();
   TextColumn get source => text().withDefault(const Constant('manual'))();
   TextColumn get recordedBy => text().nullable()();
-  TextColumn get syncStatus => text().withDefault(const Constant('synced'))(); // synced, pending
+  TextColumn get syncStatus =>
+      text().withDefault(const Constant('synced'))(); // synced, pending
 
   @override
   Set<Column> get primaryKey => {id};
@@ -150,12 +155,9 @@ class LocalAttendanceCutoffs extends Table {
   TextColumn get subjectOfferingId => text()();
   IntColumn get presentStartMinsBefore =>
       integer().withDefault(const Constant(15))();
-  IntColumn get presentGraceMins =>
-      integer().withDefault(const Constant(15))();
-  IntColumn get lateCutoffMins =>
-      integer().withDefault(const Constant(45))();
-  IntColumn get absentCutoffMins =>
-      integer().withDefault(const Constant(60))();
+  IntColumn get presentGraceMins => integer().withDefault(const Constant(15))();
+  IntColumn get lateCutoffMins => integer().withDefault(const Constant(45))();
+  IntColumn get absentCutoffMins => integer().withDefault(const Constant(60))();
   DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
 
   @override
@@ -213,7 +215,9 @@ class OfflineSyncQueue extends Table {
   TextColumn get payloadJson => text()();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   IntColumn get retryCount => integer().withDefault(const Constant(0))();
-  TextColumn get status => text().withDefault(const Constant('pending'))(); // pending, syncing, failed
+  TextColumn get status => text().withDefault(
+    const Constant('pending'),
+  )(); // pending, syncing, failed
   TextColumn get errorMessage => text().nullable()();
 
   @override

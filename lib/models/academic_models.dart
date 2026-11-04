@@ -80,18 +80,25 @@ class AttendanceRecord {
 
     return AttendanceRecord(
       id: json['id']?.toString() ?? '',
-      studentId: json['student_id']?.toString() ?? json['studentId']?.toString() ?? '',
-      studentName: json['student_name']?.toString() ?? json['studentName']?.toString() ?? '',
+      studentId:
+          json['student_id']?.toString() ?? json['studentId']?.toString() ?? '',
+      studentName:
+          json['student_name']?.toString() ??
+          json['studentName']?.toString() ??
+          '',
       section: json['section']?.toString() ?? '',
       date: json['date'] != null
           ? DateTime.tryParse(json['date'].toString()) ?? DateTime.now()
           : (json['attendance_date'] != null
-              ? DateTime.tryParse(json['attendance_date'].toString()) ?? DateTime.now()
-              : DateTime.now()),
-      timeIn: json['time_in']?.toString() ?? json['timeIn']?.toString() ?? '--:--',
+                ? DateTime.tryParse(json['attendance_date'].toString()) ??
+                      DateTime.now()
+                : DateTime.now()),
+      timeIn:
+          json['time_in']?.toString() ?? json['timeIn']?.toString() ?? '--:--',
       remarks: json['remarks']?.toString(),
       status: parseStatus(json['status']),
-      method: json['method']?.toString() ?? json['source']?.toString() ?? 'Manual',
+      method:
+          json['method']?.toString() ?? json['source']?.toString() ?? 'Manual',
       isSynced: json['is_synced'] as bool? ?? json['isSynced'] as bool? ?? true,
     );
   }
@@ -135,7 +142,7 @@ class ActivityModel {
   final int submissionsCount;
   final int totalStudents;
   final Map<String, DateTime> sectionDeadlines;
-  
+
   // New Classwork Fields
   final int termNumber;
   final int? gradebookColumnIndex;
@@ -243,7 +250,8 @@ class ActivityModel {
       allowLateSubmission: allowLateSubmission ?? this.allowLateSubmission,
       batchGroupId: batchGroupId ?? this.batchGroupId,
       isArchived: isArchived ?? this.isArchived,
-      updatedInstructionsAt: updatedInstructionsAt ?? this.updatedInstructionsAt,
+      updatedInstructionsAt:
+          updatedInstructionsAt ?? this.updatedInstructionsAt,
       targetStudentIds: targetStudentIds ?? this.targetStudentIds,
     );
   }
@@ -260,7 +268,8 @@ class ActivityModel {
 
     final classworkType = json['classwork_type']?.toString();
     final gradingCat = json['grading_category']?.toString();
-    final isReq = classworkType == 'performance_task' ||
+    final isReq =
+        classworkType == 'performance_task' ||
         gradingCat == 'pt' ||
         json['is_requirement'] == true;
 
@@ -304,7 +313,9 @@ class ActivityModel {
 
     List<String>? parsedTargetStudentIds;
     if (json['target_student_ids'] != null) {
-      parsedTargetStudentIds = (json['target_student_ids'] as List).map((e) => e.toString()).toList();
+      parsedTargetStudentIds = (json['target_student_ids'] as List)
+          .map((e) => e.toString())
+          .toList();
     }
 
     return ActivityModel(
@@ -331,7 +342,9 @@ class ActivityModel {
       allowLateSubmission: json['allow_late_submission'] != false,
       batchGroupId: json['batch_group_id']?.toString(),
       isArchived: json['is_archived'] == true,
-      updatedInstructionsAt: json['updated_instructions_at'] != null ? DateTime.tryParse(json['updated_instructions_at'].toString()) : null,
+      updatedInstructionsAt: json['updated_instructions_at'] != null
+          ? DateTime.tryParse(json['updated_instructions_at'].toString())
+          : null,
       targetStudentIds: parsedTargetStudentIds,
     );
   }
@@ -935,7 +948,8 @@ class AppNotificationModel {
   final String message;
   final DateTime timestamp;
   final bool isRead;
-  final String type; // 'attendance', 'grade', 'activity', 'announcement', 'general'
+  final String
+  type; // 'attendance', 'grade', 'activity', 'announcement', 'general'
   final String targetAudience; // 'all', 'teachers', 'students_parents'
   final bool isArchived;
   final String? createdBy;
@@ -976,7 +990,10 @@ class AppNotificationModel {
     );
   }
 
-  factory AppNotificationModel.fromJson(Map<String, dynamic> json, {bool isRead = false}) {
+  factory AppNotificationModel.fromJson(
+    Map<String, dynamic> json, {
+    bool isRead = false,
+  }) {
     return AppNotificationModel(
       id: json['id']?.toString() ?? '',
       title: json['title']?.toString() ?? '',
@@ -1005,4 +1022,3 @@ class AppNotificationModel {
     };
   }
 }
-

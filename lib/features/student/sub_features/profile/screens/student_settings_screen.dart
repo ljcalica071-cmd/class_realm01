@@ -30,16 +30,21 @@ class _StudentSettingsScreenState extends State<StudentSettingsScreen> {
               decoration: BoxDecoration(
                 color: theme.colorScheme.surface,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: theme.colorScheme.onSurface.withValues(alpha: 0.12)),
+                border: Border.all(
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.12),
+                ),
               ),
               child: Column(
                 children: [
                   SwitchListTile(
                     title: const Text('Enable Notifications'),
-                    subtitle: const Text('Receive alerts for activities and grades'),
+                    subtitle: const Text(
+                      'Receive alerts for activities and grades',
+                    ),
                     value: _notificationsEnabled,
                     activeThumbColor: theme.colorScheme.primary,
-                    onChanged: (val) => setState(() => _notificationsEnabled = val),
+                    onChanged: (val) =>
+                        setState(() => _notificationsEnabled = val),
                   ),
                 ],
               ),
@@ -50,7 +55,9 @@ class _StudentSettingsScreenState extends State<StudentSettingsScreen> {
               decoration: BoxDecoration(
                 color: theme.colorScheme.surface,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: theme.colorScheme.onSurface.withValues(alpha: 0.12)),
+                border: Border.all(
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.12),
+                ),
               ),
               child: Column(
                 children: [
@@ -62,8 +69,7 @@ class _StudentSettingsScreenState extends State<StudentSettingsScreen> {
                       AppModals.showSuccessDialog(
                         context: context,
                         title: 'Feature Simulated',
-                        message:
-                            'The password change flow is available during the first-time login. This settings option is for demonstration only.',
+                        message: 'The password change flow is available during the first-time login. This settings option is for demonstration only.',
                       );
                     },
                   ),
@@ -76,7 +82,9 @@ class _StudentSettingsScreenState extends State<StudentSettingsScreen> {
               decoration: BoxDecoration(
                 color: theme.colorScheme.surface,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: theme.colorScheme.onSurface.withValues(alpha: 0.12)),
+                border: Border.all(
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.12),
+                ),
               ),
               child: Column(
                 children: const [

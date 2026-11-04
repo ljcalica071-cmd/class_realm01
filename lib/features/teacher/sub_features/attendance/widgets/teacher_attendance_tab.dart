@@ -8,7 +8,6 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:class_realm/core/services/local_storage_service.dart';
 import 'package:class_realm/core/services/phone_nfc_service.dart';
 
-
 import 'package:class_realm/core/theme/app_theme.dart';
 import 'package:class_realm/data/repositories/attendance_repository.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
@@ -126,22 +125,7 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
     _analyticsCustomEndDate = today;
     HardwareKeyboard.instance.addHandler(_handleGlobalHardwareKey);
 
-    PhoneNfcService.instance.startNfcCapture(
-      onCardScanned: (scannedUid) {
-        if (!mounted) return;
-        if (_inlineLinkingStudentId != null) {
-          final targetId = _inlineLinkingStudentId!;
-          setState(() => _inlineLinkingStudentId = null);
-          unawaited(_assignRfidDirectly(targetId, scannedUid));
-        } else if (_selectedAttendanceView == 'Take Attendance' &&
-            _selectedSubjectId != null) {
-          _processScannedRfid(scannedUid);
-        }
-      },
-      onError: (err) {
-        debugPrint('Phone NFC: $err');
-      },
-    );
+    _startAttendanceNfcCapture();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && !_hasEditableFocus()) {
@@ -735,7 +719,10 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
     return false;
   }
 
-  Future<void> _processScannedRfid(String scannedUid) async {
+  Future<void> _processScannedRfid(
+    String scannedUid, {
+    String deviceId = 'USB_SCANNER',
+  }) async {
     if (_selectedSubjectId == null || _isProcessingScan) return;
 
     if (!_hexUidRegex.hasMatch(scannedUid)) {
@@ -743,8 +730,7 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
         _inlineNotice = _WorkspaceInlineNotice(
           tone: _WorkspaceNoticeTone.warning,
           title: 'Invalid RFID Card Format',
-          message:
-              'Scanned code "$scannedUid" is not a valid 8–14 character hexadecimal RFID UID.',
+          message: 'The tapped card is not a valid RFID card format.',
           code: 'INVALID_UID',
         );
       });
@@ -771,7 +757,7 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
         rfidUid: scannedUid,
         subjectOfferingId: _selectedSubjectId!,
         scanTimestamp: DateTime.now(),
-        deviceId: 'USB_SCANNER',
+        deviceId: deviceId,
       );
       if (!mounted) return;
 
@@ -801,7 +787,7 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
             _initialAttendanceStates[targetId] = effectiveStatus;
             _tempAttendanceSources[targetId] = AttendanceSource.rfid;
             _tempAttendanceTimesIn[targetId] = effectiveTime;
-            _tempAttendanceDeviceIds[targetId] = 'USB_SCANNER';
+            _tempAttendanceDeviceIds[targetId] = deviceId;
           }
 
           final studentDisplay =
@@ -814,7 +800,7 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
                 ? 'RFID Scan Queued Offline'
                 : (outcome.code == 'PROMOTED_PRESENT'
                       ? 'RFID Scan Recorded — Status Promoted'
-                      : 'RFID Scan Recorded'),
+                      : 'RFID Scan Recorded (${deviceId == 'MOBILE_NFC' ? 'Phone NFC' : 'Scanner'})'),
             message: outcome.message.isNotEmpty
                 ? outcome.message
                 : '$studentDisplay marked ${effectiveStatus.name.toUpperCase()} at ${_formatClockFromAny(effectiveTime)}.',
@@ -830,11 +816,11 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
                 ? _WorkspaceNoticeTone.warning
                 : _WorkspaceNoticeTone.error,
             title: isUnregistered
-                ? 'Unregistered RFID Card ($scannedUid)'
+                ? 'Unregistered RFID Card'
                 : 'RFID Scan Not Recorded',
             message: outcome.message.isNotEmpty
                 ? outcome.message
-                : 'Card $scannedUid could not be recorded for this class session.',
+                : 'This card could not be recorded for this class session.',
             code: outcome.code,
             scannedUid: scannedUid,
           );
@@ -857,8 +843,42 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
   // ===========================================================================
   // RFID Card Linking & Unregistered Card Quick-Assign
   // ===========================================================================
+  void _startAttendanceNfcCapture() {
+    PhoneNfcService.instance.startNfcCapture(
+      onCardScanned: (scannedUid) {
+        if (!mounted) return;
+        if (_inlineLinkingStudentId != null) {
+          final targetId = _inlineLinkingStudentId!;
+          setState(() => _inlineLinkingStudentId = null);
+          unawaited(_assignRfidDirectly(targetId, scannedUid));
+        } else if (_selectedAttendanceView == 'Take Attendance' &&
+            _selectedSubjectId != null) {
+          _processScannedRfid(scannedUid, deviceId: 'MOBILE_NFC');
+        }
+      },
+      onError: (err) {
+        if (!mounted) return;
+        setState(() {
+          _inlineNotice = _WorkspaceInlineNotice(
+            tone: _WorkspaceNoticeTone.warning,
+            title: 'Phone NFC Notice',
+            message: err,
+            code: 'NFC_NOTICE',
+          );
+        });
+      },
+    );
+  }
+
+
 
   Future<void> _assignRfidDirectly(String studentId, String scannedUid) async {
+    final matched = _rosterStudents
+        .cast<AttendanceRosterStudent?>()
+        .firstWhere((s) => s?.studentId == studentId, orElse: () => null);
+    final studentName = matched?.displayName ?? studentId;
+
+    // Check conflict against loaded roster
     final alreadyAssignedStudent = _rosterStudents
         .cast<AttendanceRosterStudent?>()
         .firstWhere(
@@ -874,25 +894,42 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
       setState(() {
         _inlineNotice = _WorkspaceInlineNotice(
           tone: _WorkspaceNoticeTone.warning,
-          title: 'Already Registered',
+          title: 'Card Already Registered',
           message:
-              'Card $scannedUid is already linked to ${alreadyAssignedStudent.displayName}.',
+              'This RFID card is already assigned to ${alreadyAssignedStudent.displayName}.',
           code: 'ALREADY_REGISTERED',
-          scannedUid: scannedUid,
         );
       });
       return;
     }
+
+    // Check conflict across the entire school
+    try {
+      final conflict = await _repository.checkRfidUidConflict(
+        rfidUid: scannedUid,
+        excludeStudentId: studentId,
+      );
+      if (conflict.isTaken) {
+        if (!mounted) return;
+        setState(() {
+          _inlineNotice = _WorkspaceInlineNotice(
+            tone: _WorkspaceNoticeTone.warning,
+            title: 'Card Already Registered',
+            message:
+                'This RFID card is already assigned to ${conflict.existingStudentName ?? "another student"}.',
+            code: 'ALREADY_REGISTERED',
+          );
+        });
+        return;
+      }
+    } catch (_) {}
+
     try {
       await _repository.assignStudentRfid(
         studentId: studentId,
         rfidUid: scannedUid,
       );
       if (!mounted) return;
-      final matched = _rosterStudents
-          .cast<AttendanceRosterStudent?>()
-          .firstWhere((s) => s?.studentId == studentId, orElse: () => null);
-      final studentName = matched?.displayName ?? studentId;
       setState(() {
         _rosterStudents = _rosterStudents
             .map(
@@ -904,8 +941,7 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
         _inlineNotice = _WorkspaceInlineNotice(
           tone: _WorkspaceNoticeTone.success,
           title: 'RFID Card Linked',
-          message: 'Card $scannedUid has been linked to $studentName.',
-          scannedUid: scannedUid,
+          message: 'Linked to $studentName.',
         );
       });
     } catch (e) {
@@ -914,7 +950,7 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
         _inlineNotice = _WorkspaceInlineNotice(
           tone: _WorkspaceNoticeTone.error,
           title: 'Card Linking Failed',
-          message: 'Unable to link RFID card: $e',
+          message: AppModals.sanitizeErrorMessage(e),
         );
       });
     }
@@ -933,6 +969,7 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
       prefillRfidUid: prefillUid,
       repository: _repository,
     );
+    _startAttendanceNfcCapture();
 
     if (result == null || !mounted) return;
 
@@ -957,7 +994,7 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
         title: isUnlinked ? 'RFID Card Unlinked' : 'RFID Card Linked',
         message: isUnlinked
             ? 'Unlinked RFID card from ${student.displayName}.'
-            : 'RFID card $result is now linked to ${student.displayName}.',
+            : 'Linked to ${student.displayName}.',
       );
     });
   }
@@ -1299,7 +1336,20 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
   }
 
   static String _formatReadableDate(DateTime dt) {
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
     return '${months[dt.month - 1]} ${dt.day}, ${dt.year}';
   }
 
@@ -1999,9 +2049,17 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
                   title: 'Select Start Date',
                 );
                 if (picked != null) {
-                  final newStart = DateTime(picked.year, picked.month, picked.day);
-                  final currentEnd = DateTime(_analyticsCustomEndDate.year, _analyticsCustomEndDate.month, _analyticsCustomEndDate.day);
-                  
+                  final newStart = DateTime(
+                    picked.year,
+                    picked.month,
+                    picked.day,
+                  );
+                  final currentEnd = DateTime(
+                    _analyticsCustomEndDate.year,
+                    _analyticsCustomEndDate.month,
+                    _analyticsCustomEndDate.day,
+                  );
+
                   if (newStart.isAtSameMomentAs(currentEnd)) {
                     if (mounted) {
                       AppModals.showErrorDialog(
@@ -2088,9 +2146,17 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
                   title: 'Select End Date',
                 );
                 if (picked != null) {
-                  final newEnd = DateTime(picked.year, picked.month, picked.day);
-                  final currentStart = DateTime(_analyticsCustomStartDate.year, _analyticsCustomStartDate.month, _analyticsCustomStartDate.day);
-                  
+                  final newEnd = DateTime(
+                    picked.year,
+                    picked.month,
+                    picked.day,
+                  );
+                  final currentStart = DateTime(
+                    _analyticsCustomStartDate.year,
+                    _analyticsCustomStartDate.month,
+                    _analyticsCustomStartDate.day,
+                  );
+
                   if (newEnd.isAtSameMomentAs(currentStart)) {
                     if (mounted) {
                       AppModals.showErrorDialog(

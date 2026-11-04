@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:class_realm/core/theme/app_theme.dart';
+
 import '../models/student_live_proctor_state.dart';
 
 class StudentProctorCard extends StatelessWidget {
@@ -22,8 +23,8 @@ class StudentProctorCard extends StatelessWidget {
     final Color violationColor = state.violationCount == 0
         ? AppTheme.catGreen
         : state.violationCount < 3
-            ? AppTheme.catOrange
-            : AppTheme.catRed;
+        ? AppTheme.catOrange
+        : AppTheme.catRed;
 
     // Status badge color coding
     Color statusBg;
@@ -97,7 +98,10 @@ class StudentProctorCard extends StatelessWidget {
                     ),
                     const SizedBox(width: 8),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 2,
+                      ),
                       decoration: BoxDecoration(
                         color: statusBg,
                         borderRadius: BorderRadius.circular(6),

@@ -112,7 +112,9 @@ class StatusBadge extends StatelessWidget {
           ? const Color(0xFFFBBF24).withValues(alpha: 0.16)
           : const Color(0xFFFEF3C7);
       effectiveText = isDark
-          ? const Color(0xFFFACC15) // High-contrast radiant golden yellow for dark mode
+          ? const Color(
+              0xFFFACC15,
+            ) // High-contrast radiant golden yellow for dark mode
           : const Color(0xFFB45309); // Deep amber-gold for light mode
       effectiveBorder = Border.all(
         color: isDark
@@ -246,19 +248,21 @@ class AppTableHeader extends StatelessWidget {
             ),
             const SizedBox(width: 8),
           ],
-          ...columns.map((col) => Expanded(
-            flex: col.flex,
-            child: Text(
-              col.label.toUpperCase(),
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
-                letterSpacing: 0.8,
+          ...columns.map(
+            (col) => Expanded(
+              flex: col.flex,
+              child: Text(
+                col.label.toUpperCase(),
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
+                  letterSpacing: 0.8,
+                ),
+                overflow: TextOverflow.ellipsis,
               ),
-              overflow: TextOverflow.ellipsis,
             ),
-          )),
+          ),
         ],
       ),
     );

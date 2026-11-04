@@ -168,8 +168,7 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
             .toList(),
         emptyIcon: Icons.quiz_outlined,
         emptyTitle: 'No quizzes or exams yet',
-        emptyMessage:
-            'Quizzes and exams will appear here when your teacher publishes them.',
+        emptyMessage: 'Quizzes and exams will appear here when your teacher publishes them.',
       ),
       const StudentNotificationsTab(),
       _buildProfileTab(context, student),
@@ -336,7 +335,9 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
                   Text(
                     schoolInfo,
                     style: TextStyle(
-                      color: theme.colorScheme.onPrimary.withValues(alpha: 0.82),
+                      color: theme.colorScheme.onPrimary.withValues(
+                        alpha: 0.82,
+                      ),
                       fontSize: 12,
                     ),
                   ),
@@ -344,7 +345,9 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
                   Text(
                     'LRN: ${student.lrn}',
                     style: TextStyle(
-                      color: theme.colorScheme.onPrimary.withValues(alpha: 0.82),
+                      color: theme.colorScheme.onPrimary.withValues(
+                        alpha: 0.82,
+                      ),
                       fontSize: 12,
                     ),
                   ),
@@ -752,14 +755,16 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
               context,
               icon: Icons.task_alt_outlined,
               title: 'You are all caught up!',
-              message:
-                  'When your teacher posts an activity or assignment, it will appear here.',
+              message: 'When your teacher posts an activity or assignment, it will appear here.',
             )
           else
             ...todoItems.map(
               (item) => Padding(
                 padding: const EdgeInsets.only(bottom: 12),
-                child: StudentClassworkCard(classwork: item, onRefresh: () => _loadDashboard(forceRefresh: true)),
+                child: StudentClassworkCard(
+                  classwork: item,
+                  onRefresh: () => _loadDashboard(forceRefresh: true),
+                ),
               ),
             ),
         ],
@@ -1076,14 +1081,25 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
   }) {
     final theme = Theme.of(context);
     final totalAll = items.length;
-    final totalWw = items.where((i) => i.type != 'performance_task' && i.type != 'exam' && i.type != 'quiz').length;
+    final totalWw = items
+        .where(
+          (i) =>
+              i.type != 'performance_task' &&
+              i.type != 'exam' &&
+              i.type != 'quiz',
+        )
+        .length;
     final totalPt = items.where((i) => i.type == 'performance_task').length;
-    final totalEx = items.where((i) => i.type == 'exam' || i.type == 'quiz').length;
+    final totalEx = items
+        .where((i) => i.type == 'exam' || i.type == 'quiz')
+        .length;
 
     final filtered = showFilterChips
         ? items.where((item) {
             if (_classworkFilter == 'WW') {
-              return item.type != 'performance_task' && item.type != 'exam' && item.type != 'quiz';
+              return item.type != 'performance_task' &&
+                  item.type != 'exam' &&
+                  item.type != 'quiz';
             }
             if (_classworkFilter == 'PT') {
               return item.type == 'performance_task';
@@ -1099,30 +1115,28 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
     if (filtered.isEmpty) {
       final currentEmptyTitle = showFilterChips
           ? (_classworkFilter == 'PT'
-              ? 'No performance tasks yet'
-              : (_classworkFilter == 'WW'
-                  ? 'No written works or activities yet'
-                  : (_classworkFilter == 'EX'
-                      ? 'No periodical examinations yet'
-                      : emptyTitle)))
+                ? 'No performance tasks yet'
+                : (_classworkFilter == 'WW'
+                      ? 'No written works or activities yet'
+                      : (_classworkFilter == 'EX'
+                            ? 'No periodical examinations yet'
+                            : emptyTitle)))
           : emptyTitle;
 
       final currentEmptyMessage = showFilterChips
           ? (_classworkFilter == 'PT'
-              ? 'Performance tasks assigned by your teacher will appear here.'
-              : (_classworkFilter == 'WW'
-                  ? 'Activities and written works assigned by your teacher will appear here.'
-                  : (_classworkFilter == 'EX'
-                      ? 'Scheduled examinations posted by your teacher will appear here.'
-                      : emptyMessage)))
+                ? 'Performance tasks assigned by your teacher will appear here.'
+                : (_classworkFilter == 'WW'
+                      ? 'Activities and written works assigned by your teacher will appear here.'
+                      : (_classworkFilter == 'EX'
+                            ? 'Scheduled examinations posted by your teacher will appear here.'
+                            : emptyMessage)))
           : emptyMessage;
 
       final currentEmptyIcon = showFilterChips
           ? (_classworkFilter == 'PT'
-              ? Icons.workspace_premium_outlined
-              : (_classworkFilter == 'EX'
-                  ? Icons.quiz_outlined
-                  : emptyIcon))
+                ? Icons.workspace_premium_outlined
+                : (_classworkFilter == 'EX' ? Icons.quiz_outlined : emptyIcon))
           : emptyIcon;
 
       content = AppPullToRefresh.scrollableState(
@@ -1152,14 +1166,17 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
           ? Column(
               children: [
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 10,
+                  ),
                   decoration: BoxDecoration(
                     color: theme.colorScheme.surface,
                     border: Border(
                       bottom: BorderSide(
-                        color: theme.colorScheme.outlineVariant
-                            .withValues(alpha: 0.4),
+                        color: theme.colorScheme.outlineVariant.withValues(
+                          alpha: 0.4,
+                        ),
                       ),
                     ),
                   ),
@@ -1274,6 +1291,7 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
       ),
     );
   }
+
   Widget _buildEmptyCard(
     BuildContext context, {
     required IconData icon,

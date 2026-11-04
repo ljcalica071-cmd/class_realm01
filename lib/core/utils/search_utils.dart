@@ -16,7 +16,9 @@ class SearchUtils {
 
     int getTier(T item) {
       final name = nameExtractor(item).toLowerCase();
-      final secondary = secondaryExtractor != null ? secondaryExtractor(item).toLowerCase() : '';
+      final secondary = secondaryExtractor != null
+          ? secondaryExtractor(item).toLowerCase()
+          : '';
 
       // Tier 1: Starts exactly with query
       if (name.startsWith(q) || secondary.startsWith(q)) return 1;
@@ -46,7 +48,9 @@ class SearchUtils {
       }
 
       // Fallback: Alphabetical
-      return nameExtractor(a).toLowerCase().compareTo(nameExtractor(b).toLowerCase());
+      return nameExtractor(a)
+          .toLowerCase()
+          .compareTo(nameExtractor(b).toLowerCase());
     });
   }
 }

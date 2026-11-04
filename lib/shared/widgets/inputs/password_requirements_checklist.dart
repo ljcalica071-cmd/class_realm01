@@ -39,7 +39,9 @@ class PasswordRequirementsChecklist extends StatelessWidget {
       child: Row(
         children: [
           Icon(
-            isValid ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
+            isValid
+                ? Icons.check_circle_rounded
+                : Icons.radio_button_unchecked_rounded,
             size: 16,
             color: isValid ? const Color(0xFF16A34A) : const Color(0xFF94A3B8),
           ),
@@ -48,7 +50,9 @@ class PasswordRequirementsChecklist extends StatelessWidget {
             text,
             style: TextStyle(
               fontSize: 12,
-              color: isValid ? const Color(0xFF15803D) : const Color(0xFF475569),
+              color: isValid
+                  ? const Color(0xFF15803D)
+                  : const Color(0xFF475569),
               fontWeight: isValid ? FontWeight.w500 : FontWeight.normal,
             ),
           ),

@@ -8,7 +8,8 @@ class GenerateLessonPlanModal extends StatefulWidget {
     String topic,
     String gradeLevel,
     String duration,
-  ) onGenerate;
+  )
+  onGenerate;
 
   const GenerateLessonPlanModal({super.key, required this.onGenerate});
 
@@ -145,7 +146,9 @@ class _GenerateLessonPlanModalState extends State<GenerateLessonPlanModal> {
           SizedBox(
             width: double.infinity,
             child: AppButton.primary(
-              label: _isGenerating ? 'Generating...' : 'Generate with Gemini AI',
+              label: _isGenerating
+                  ? 'Generating...'
+                  : 'Generate with Gemini AI',
               icon: Icons.auto_awesome,
               isLoading: _isGenerating,
               onPressed: _isGenerating

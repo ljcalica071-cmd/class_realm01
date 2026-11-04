@@ -19,7 +19,9 @@ class TeacherGradingSystemTab extends StatelessWidget {
         decoration: BoxDecoration(
           color: theme.colorScheme.surface,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: theme.colorScheme.onSurface.withValues(alpha: 0.12)),
+          border: Border.all(
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.12),
+          ),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -32,7 +34,10 @@ class TeacherGradingSystemTab extends StatelessWidget {
             const SizedBox(height: 6),
             Text(
               'Configure your quarterly grading component percentages according to DepEd / school criteria.',
-              style: TextStyle(fontSize: 14, color: theme.colorScheme.onSurface.withValues(alpha: 0.6)),
+              style: TextStyle(
+                fontSize: 14,
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+              ),
             ),
             const SizedBox(height: 24),
             ...criteria.map(
@@ -69,8 +74,7 @@ class TeacherGradingSystemTab extends StatelessWidget {
                 AppModals.showSuccessDialog(
                   context: context,
                   title: 'Criteria Updated',
-                  message:
-                      'Grading percentages successfully updated for score calculations.',
+                  message: 'Grading percentages successfully updated for score calculations.',
                 );
               },
             ),

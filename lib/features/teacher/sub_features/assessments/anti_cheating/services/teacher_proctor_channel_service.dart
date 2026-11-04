@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import '../models/proctor_violation_log.dart';
 import '../models/student_live_proctor_state.dart';
 
@@ -52,8 +53,9 @@ class TeacherProctorChannelService {
   void recordViolation(ProctorViolationLog violation) {
     final current = _studentStates[violation.studentId];
     if (current != null) {
-      final updatedViolations = List<ProctorViolationLog>.from(current.violations)
-        ..add(violation);
+      final updatedViolations = List<ProctorViolationLog>.from(
+        current.violations,
+      )..add(violation);
       _studentStates[violation.studentId] = current.copyWith(
         violationCount: current.violationCount + 1,
         violations: updatedViolations,

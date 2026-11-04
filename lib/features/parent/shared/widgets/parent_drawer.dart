@@ -66,7 +66,8 @@ class ParentDrawer extends StatelessWidget {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (_) => ParentScheduleView(linkedStudent: linkedStudent),
+                  builder: (_) =>
+                      ParentScheduleView(linkedStudent: linkedStudent),
                 ),
               );
             },
@@ -95,7 +96,8 @@ class ParentDrawer extends StatelessWidget {
               AppModals.showConfirmationDialog(
                 context: context,
                 title: 'Confirm Logout',
-                message: 'Are you sure you want to log out of the parent portal?',
+                message:
+                    'Are you sure you want to log out of the parent portal?',
                 confirmLabel: 'Logout',
                 confirmColor: AppTheme.catRed,
                 onConfirm: () async {

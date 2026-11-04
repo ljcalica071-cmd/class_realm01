@@ -120,11 +120,7 @@ class DepEdCurriculumCatalog {
 
 class IlawLessonPlanValidator {
   static const List<String> allowedGrades = ['Grade 11', 'Grade 12'];
-  static const List<String> allowedTerms = [
-    'Term 1',
-    'Term 2',
-    'Term 3',
-  ];
+  static const List<String> allowedTerms = ['Term 1', 'Term 2', 'Term 3'];
   // Backward compatibility alias for legacy code:
   static List<String> get allowedQuarters => allowedTerms;
 
@@ -162,7 +158,12 @@ class IlawLessonPlanValidator {
       return 'Please select a term.';
     }
     if (!allowedTerms.contains(trimmed) &&
-        !['Quarter 1', 'Quarter 2', 'Quarter 3', 'Quarter 4'].contains(trimmed)) {
+        ![
+          'Quarter 1',
+          'Quarter 2',
+          'Quarter 3',
+          'Quarter 4',
+        ].contains(trimmed)) {
       return 'Term must be Term 1, Term 2, or Term 3.';
     }
     return null;

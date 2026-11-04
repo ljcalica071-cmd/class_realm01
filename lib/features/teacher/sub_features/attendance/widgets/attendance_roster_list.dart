@@ -1,4 +1,5 @@
 import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:class_realm/core/theme/app_theme.dart';
@@ -295,9 +296,11 @@ class _AttendanceRosterListState extends State<AttendanceRosterList> {
         .where((s) => s.gender.toLowerCase().trim() == 'female')
         .toList();
     final visibleUnspecified = visibleSlice
-        .where((s) =>
-            s.gender.toLowerCase().trim() != 'male' &&
-            s.gender.toLowerCase().trim() != 'female')
+        .where(
+          (s) =>
+              s.gender.toLowerCase().trim() != 'male' &&
+              s.gender.toLowerCase().trim() != 'female',
+        )
         .toList();
 
     final hasMore = query.isEmpty && effectiveVisibleCount < filtered.length;
@@ -375,14 +378,20 @@ class _AttendanceRosterListState extends State<AttendanceRosterList> {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(LucideIcons.checkCheck, size: 14, color: theme.colorScheme.primary),
+                  Icon(
+                    LucideIcons.checkCheck,
+                    size: 14,
+                    color: theme.colorScheme.primary,
+                  ),
                   const SizedBox(width: 6),
                   Text(
                     'All ${filtered.length} students loaded',
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
+                      color: theme.colorScheme.onSurface.withValues(
+                        alpha: 0.65,
+                      ),
                     ),
                   ),
                 ],
@@ -455,8 +464,11 @@ class _AttendanceRosterListState extends State<AttendanceRosterList> {
     required AttendanceStatus? currentStatus,
   }) {
     final theme = Theme.of(context);
-    final initials = (student.lastName.isNotEmpty ? student.lastName[0].toUpperCase() : '') +
-        (student.firstName.isNotEmpty ? student.firstName[0].toUpperCase() : '');
+    final initials =
+        (student.lastName.isNotEmpty ? student.lastName[0].toUpperCase() : '') +
+        (student.firstName.isNotEmpty
+            ? student.firstName[0].toUpperCase()
+            : '');
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -606,8 +618,9 @@ class _AttendanceRosterListState extends State<AttendanceRosterList> {
                 side: isActive
                     ? BorderSide.none
                     : BorderSide(
-                        color:
-                            theme.colorScheme.onSurface.withValues(alpha: 0.12),
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.12,
+                        ),
                       ),
               ),
             ),

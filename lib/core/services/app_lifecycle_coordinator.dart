@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -10,11 +11,11 @@ import 'package:class_realm/data/repositories/auth_repository.dart';
 
 /// Cross-Platform Android-style Activity Lifecycle States.
 enum AppActivityLifecycleState {
-  created,   // onCreate()
-  started,   // onStart()
-  resumed,   // onResume()
-  paused,    // onPause()
-  stopped,   // onStop()
+  created, // onCreate()
+  started, // onStart()
+  resumed, // onResume()
+  paused, // onPause()
+  stopped, // onStop()
   restarted, // onRestart()
   destroyed, // onDestroy()
 }
@@ -26,11 +27,14 @@ enum AppActivityLifecycleState {
 /// Activity Lifecycle states:
 /// onCreate -> onStart -> onResume -> onPause -> onStop -> onRestart -> onDestroy.
 class AppLifecycleCoordinator with WidgetsBindingObserver {
-  static final AppLifecycleCoordinator instance = AppLifecycleCoordinator._internal();
+  static final AppLifecycleCoordinator instance =
+      AppLifecycleCoordinator._internal();
   AppLifecycleCoordinator._internal();
 
   final ValueNotifier<AppActivityLifecycleState> stateNotifier =
-      ValueNotifier<AppActivityLifecycleState>(AppActivityLifecycleState.created);
+      ValueNotifier<AppActivityLifecycleState>(
+        AppActivityLifecycleState.created,
+      );
 
   /// Global notifier tracking background sync / session revalidation across warm refresh.
   final ValueNotifier<bool> isSyncingNotifier = ValueNotifier<bool>(false);
@@ -136,7 +140,9 @@ class AppLifecycleCoordinator with WidgetsBindingObserver {
     if (lastInteraction != null) {
       final inactiveDuration = now.difference(lastInteraction);
       if (inactiveDuration >= const Duration(minutes: 30)) {
-        debugPrint('[AppLifecycleCoordinator] Wall-clock inactivity >= 30m detected on resume.');
+        debugPrint(
+          '[AppLifecycleCoordinator] Wall-clock inactivity >= 30m detected on resume.',
+        );
         // Notify session expiration if authenticated
         final user = AuthRepository.instance.currentUser;
         if (user != null) {
@@ -198,7 +204,9 @@ class AppLifecycleCoordinator with WidgetsBindingObserver {
   /// Transitions through onStart() -> onResume().
   void onRestart() {
     stateNotifier.value = AppActivityLifecycleState.restarted;
-    debugPrint('[AppLifecycleCoordinator] onRestart() -> onStart() -> onResume()');
+    debugPrint(
+      '[AppLifecycleCoordinator] onRestart() -> onStart() -> onResume()',
+    );
     onStart();
     onResume();
   }
@@ -224,7 +232,8 @@ class AppLifecycleCoordinator with WidgetsBindingObserver {
 
     switch (state) {
       case AppLifecycleState.resumed:
-        if (prev == AppLifecycleState.paused || prev == AppLifecycleState.hidden) {
+        if (prev == AppLifecycleState.paused ||
+            prev == AppLifecycleState.hidden) {
           onRestart();
         } else {
           onResume();
@@ -245,7 +254,9 @@ class AppLifecycleCoordinator with WidgetsBindingObserver {
 
   void _startConnectivityHeartbeat() {
     _connectivityPollTimer?.cancel();
-    _connectivityPollTimer = Timer.periodic(const Duration(seconds: 15), (_) async {
+    _connectivityPollTimer = Timer.periodic(const Duration(seconds: 15), (
+      _,
+    ) async {
       await checkConnectivity();
     });
   }

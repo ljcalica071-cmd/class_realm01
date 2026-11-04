@@ -19,7 +19,8 @@ class FirstLoginScreen extends StatefulWidget {
   State<FirstLoginScreen> createState() => _FirstLoginScreenState();
 }
 
-class _FirstLoginScreenState extends State<FirstLoginScreen> with SingleTickerProviderStateMixin {
+class _FirstLoginScreenState extends State<FirstLoginScreen>
+    with SingleTickerProviderStateMixin {
   final _newPassCtrl = TextEditingController();
   final _confirmPassCtrl = TextEditingController();
   DateTime? _parentBirthday;
@@ -61,11 +62,15 @@ class _FirstLoginScreenState extends State<FirstLoginScreen> with SingleTickerPr
 
   void _validateMatch() {
     setState(() {
-      _passwordsMatch = AppValidators.passwordsMatch(_newPassCtrl.text, _confirmPassCtrl.text);
+      _passwordsMatch = AppValidators.passwordsMatch(
+        _newPassCtrl.text,
+        _confirmPassCtrl.text,
+      );
     });
   }
 
-  bool get _isValid => _hasMinLength && _hasUpper && _hasLower && _hasNumber && _passwordsMatch;
+  bool get _isValid =>
+      _hasMinLength && _hasUpper && _hasLower && _hasNumber && _passwordsMatch;
 
   @override
   void dispose() {
@@ -90,7 +95,8 @@ class _FirstLoginScreenState extends State<FirstLoginScreen> with SingleTickerPr
         context: context,
         title: 'Session Expired',
         message: 'No active session found. Please log in again.',
-        onConfirm: () => Navigator.pushReplacementNamed(context, AppRoutes.login),
+        onConfirm: () =>
+            Navigator.pushReplacementNamed(context, AppRoutes.login),
       );
       return;
     }
@@ -120,7 +126,8 @@ class _FirstLoginScreenState extends State<FirstLoginScreen> with SingleTickerPr
         return;
       }
 
-      final lastName = user.lastName ??
+      final lastName =
+          user.lastName ??
           (user.fullName.contains(' ')
               ? user.fullName.split(' ').last
               : user.fullName);
@@ -129,24 +136,24 @@ class _FirstLoginScreenState extends State<FirstLoginScreen> with SingleTickerPr
         user.birthday ?? DateTime.now(),
       );
 
-      if (_newPassCtrl.text.trim().toLowerCase() == tempPassword.toLowerCase()) {
+      if (_newPassCtrl.text.trim().toLowerCase() ==
+          tempPassword.toLowerCase()) {
         setState(() => _isLoading = false);
         TextInput.finishAutofillContext(shouldSave: false);
         AppModals.showErrorDialog(
           context: context,
           title: 'Password Rule Violation',
-          message:
-              'Your new password cannot be the same as your temporary password. Please choose a different, secure password.',
+          message: 'Your new password cannot be the same as your temporary password. Please choose a different, secure password.',
         );
         return;
       }
 
       final verified = await SupabaseParentRepository()
           .verifyParentIdentityForFirstLogin(
-        parentId: user.id,
-        birthday: _parentBirthday!,
-        childLrnLast4: lrn4,
-      );
+            parentId: user.id,
+            birthday: _parentBirthday!,
+            childLrnLast4: lrn4,
+          );
 
       if (!verified) {
         if (!mounted) return;
@@ -155,8 +162,7 @@ class _FirstLoginScreenState extends State<FirstLoginScreen> with SingleTickerPr
         AppModals.showErrorDialog(
           context: context,
           title: 'Identity Verification Failed',
-          message:
-              'Identity verification failed. Please enter the exact registered birthday and the last 4 digits of your child\'s LRN registered with the teacher.',
+          message: 'Identity verification failed. Please enter the exact registered birthday and the last 4 digits of your child\'s LRN registered with the teacher.',
         );
         return;
       }
@@ -169,7 +175,8 @@ class _FirstLoginScreenState extends State<FirstLoginScreen> with SingleTickerPr
         AppModals.showErrorDialog(
           context: context,
           title: 'Account Temporarily Locked',
-          message: 'Too many incorrect attempts. Please try again after $minutes minute(s).',
+          message:
+              'Too many incorrect attempts. Please try again after $minutes minute(s).',
         );
         return;
       }
@@ -202,10 +209,14 @@ class _FirstLoginScreenState extends State<FirstLoginScreen> with SingleTickerPr
           data: AppTheme.lightTheme,
           child: PasswordOtpDialog(
             email: user.email,
-            initialResendCooldown: (otpResponse['resendAfter'] as num?)?.toInt() ?? 60,
-            initialInputCountdown: (otpResponse['expiresIn'] as num?)?.toInt() ?? 300,
-            initialResendCount: (otpResponse['resendCount'] as num?)?.toInt() ?? 0,
-            onResend: () => AuthRepository.instance.sendFirstLoginOtp(isResend: true),
+            initialResendCooldown:
+                (otpResponse['resendAfter'] as num?)?.toInt() ?? 60,
+            initialInputCountdown:
+                (otpResponse['expiresIn'] as num?)?.toInt() ?? 300,
+            initialResendCount:
+                (otpResponse['resendCount'] as num?)?.toInt() ?? 0,
+            onResend: () =>
+                AuthRepository.instance.sendFirstLoginOtp(isResend: true),
           ),
         ),
       );
@@ -240,8 +251,13 @@ class _FirstLoginScreenState extends State<FirstLoginScreen> with SingleTickerPr
     TextInput.finishAutofillContext(shouldSave: false);
 
     if (!mounted) return;
-    final isUserDark = LocalStorageService.isUserDarkMode(user.id, email: user.email);
-    AppTheme.themeModeNotifier.value = isUserDark ? ThemeMode.dark : ThemeMode.light;
+    final isUserDark = LocalStorageService.isUserDarkMode(
+      user.id,
+      email: user.email,
+    );
+    AppTheme.themeModeNotifier.value = isUserDark
+        ? ThemeMode.dark
+        : ThemeMode.light;
     if (user.role == UserRole.teacher) {
       Navigator.pushReplacementNamed(context, AppRoutes.teacherDashboard);
     } else if (user.role == UserRole.parent) {
@@ -287,10 +303,7 @@ class _FirstLoginScreenState extends State<FirstLoginScreen> with SingleTickerPr
                     SizedBox(height: 2),
                     Text(
                       'Confirm your registered details to verify and activate your account.',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Color(0xFF475569),
-                      ),
+                      style: TextStyle(fontSize: 12, color: Color(0xFF475569)),
                     ),
                   ],
                 ),
@@ -319,7 +332,12 @@ class _FirstLoginScreenState extends State<FirstLoginScreen> with SingleTickerPr
               FilteringTextInputFormatter.digitsOnly,
               LengthLimitingTextInputFormatter(4),
             ],
-            buildCounter: (context, {required currentLength, required isFocused, maxLength}) => null,
+            buildCounter: (
+              context, {
+              required currentLength,
+              required isFocused,
+              maxLength,
+            }) => null,
             style: const TextStyle(color: Color(0xFF0F172A), fontSize: 14),
             decoration: AuthResponsiveScaffold.inputDecoration(
               labelText: 'Last 4 Digits of Child\'s LRN *',
@@ -342,8 +360,8 @@ class _FirstLoginScreenState extends State<FirstLoginScreen> with SingleTickerPr
     final displayName = user == null
         ? 'Faculty'
         : user.role == UserRole.teacher
-            ? 'Teacher ${user.lastName ?? user.fullName}'
-            : (user.firstName ?? user.fullName);
+        ? 'Teacher ${user.lastName ?? user.fullName}'
+        : (user.firstName ?? user.fullName);
 
     return PopScope(
       canPop: !_isLoading,
@@ -365,154 +383,195 @@ class _FirstLoginScreenState extends State<FirstLoginScreen> with SingleTickerPr
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
         children: [
-        if (user?.role == UserRole.parent) ...[
-          _buildParentIdentityVerificationSection(theme),
+          if (user?.role == UserRole.parent) ...[
+            _buildParentIdentityVerificationSection(theme),
+            const SizedBox(height: 20),
+          ],
+
+          // New Password
+          TextField(
+            controller: _newPassCtrl,
+            enabled: !_isLoading,
+            obscureText: _obscureNew,
+            enableSuggestions: false,
+            autocorrect: false,
+            maxLength: 50,
+            style: const TextStyle(
+              color: Color(0xFF0F172A),
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+            ),
+            inputFormatters: AppValidators.passwordFormatters,
+            buildCounter:
+                (
+                  context, {
+                  required currentLength,
+                  required isFocused,
+                  maxLength,
+                }) {
+                  return Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                      '$currentLength/${maxLength ?? 50}',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: currentLength >= (maxLength ?? 50)
+                            ? const Color(0xFFDC2626)
+                            : const Color(0xFF64748B),
+                      ),
+                    ),
+                  );
+                },
+            decoration: AuthResponsiveScaffold.inputDecoration(
+              labelText: 'New Password',
+              hintText: '--------',
+              prefixIcon: const Icon(
+                Icons.lock_outline,
+                size: 20,
+                color: Color(0xFF475569),
+              ),
+              suffixIcon: IconButton(
+                icon: Icon(
+                  _obscureNew
+                      ? Icons.visibility_outlined
+                      : Icons.visibility_off_outlined,
+                  size: 20,
+                  color: const Color(0xFF64748B),
+                ),
+                onPressed: () => setState(() => _obscureNew = !_obscureNew),
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 12),
+
+          // Real-time Validation Rules in Frosted Section
+          AuthResponsiveScaffold.frostedSection(
+            child: PasswordRequirementsChecklist(
+              hasMinLength: _hasMinLength,
+              hasUpper: _hasUpper,
+              hasLower: _hasLower,
+              hasNumber: _hasNumber,
+            ),
+          ),
+
           const SizedBox(height: 20),
+
+          // Confirm Password
+          TextField(
+            controller: _confirmPassCtrl,
+            enabled: !_isLoading,
+            obscureText: _obscureConfirm,
+            enableSuggestions: false,
+            autocorrect: false,
+            maxLength: 50,
+            style: const TextStyle(
+              color: Color(0xFF0F172A),
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+            ),
+            inputFormatters: AppValidators.passwordFormatters,
+            buildCounter:
+                (
+                  context, {
+                  required currentLength,
+                  required isFocused,
+                  maxLength,
+                }) {
+                  return Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                      '$currentLength/${maxLength ?? 50}',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: currentLength >= (maxLength ?? 50)
+                            ? const Color(0xFFDC2626)
+                            : const Color(0xFF64748B),
+                      ),
+                    ),
+                  );
+                },
+            decoration: AuthResponsiveScaffold.inputDecoration(
+              labelText: 'Confirm New Password',
+              hintText: '--------',
+              prefixIcon: const Icon(
+                Icons.lock_reset_outlined,
+                size: 20,
+                color: Color(0xFF475569),
+              ),
+              suffixIcon: IconButton(
+                icon: Icon(
+                  _obscureConfirm
+                      ? Icons.visibility_outlined
+                      : Icons.visibility_off_outlined,
+                  size: 20,
+                  color: const Color(0xFF64748B),
+                ),
+                onPressed: () =>
+                    setState(() => _obscureConfirm = !_obscureConfirm),
+              ),
+              focusedBorderColor: _confirmPassCtrl.text.isEmpty
+                  ? null
+                  : (_passwordsMatch
+                        ? const Color(0xFF16A34A)
+                        : const Color(0xFFDC2626)),
+              enabledBorderColor: _confirmPassCtrl.text.isEmpty
+                  ? null
+                  : (_passwordsMatch
+                        ? const Color(0xFF16A34A)
+                        : const Color(0xFFDC2626)),
+            ),
+          ),
+          if (_confirmPassCtrl.text.isNotEmpty && !_passwordsMatch)
+            const Padding(
+              padding: EdgeInsets.only(top: 8, left: 4),
+              child: Text(
+                'Passwords do not match',
+                style: TextStyle(color: Color(0xFFDC2626), fontSize: 12),
+              ),
+            ),
+
+          const SizedBox(height: 28),
+
+          // Submit Button
+          AuthResponsiveScaffold.primaryButton(
+            label: 'SET NEW PASSWORD',
+            isLoading: _isLoading,
+            onPressed: _isValid ? _submit : null,
+          ),
+          const SizedBox(height: 14),
+
+          // Back to Login Link
+          Center(
+            child: TextButton.icon(
+              onPressed: _isLoading
+                  ? null
+                  : () {
+                      AuthRepository.instance.logout();
+                      AppTheme.themeModeNotifier.value = ThemeMode.light;
+                      Navigator.pushReplacementNamed(context, AppRoutes.login);
+                    },
+              icon: Icon(
+                Icons.arrow_back,
+                size: 16,
+                color: _isLoading
+                    ? const Color(0xFF94A3B8)
+                    : const Color(0xFF487898),
+              ),
+              label: Text(
+                'Back to Login',
+                style: TextStyle(
+                  color: _isLoading
+                      ? const Color(0xFF94A3B8)
+                      : const Color(0xFF487898),
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
         ],
-
-        // New Password
-        TextField(
-          controller: _newPassCtrl,
-          enabled: !_isLoading,
-          obscureText: _obscureNew,
-          enableSuggestions: false,
-          autocorrect: false,
-          maxLength: 50,
-          style: const TextStyle(color: Color(0xFF0F172A), fontSize: 14, fontWeight: FontWeight.w600),
-          inputFormatters: AppValidators.passwordFormatters,
-          buildCounter: (context, {required currentLength, required isFocused, maxLength}) {
-            return Padding(
-              padding: const EdgeInsets.only(top: 4),
-              child: Text(
-                '$currentLength/${maxLength ?? 50}',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: currentLength >= (maxLength ?? 50)
-                      ? const Color(0xFFDC2626)
-                      : const Color(0xFF64748B),
-                ),
-              ),
-            );
-          },
-          decoration: AuthResponsiveScaffold.inputDecoration(
-            labelText: 'New Password',
-            hintText: '--------',
-            prefixIcon: const Icon(Icons.lock_outline, size: 20, color: Color(0xFF475569)),
-            suffixIcon: IconButton(
-              icon: Icon(
-                _obscureNew ? Icons.visibility_outlined : Icons.visibility_off_outlined,
-                size: 20,
-                color: const Color(0xFF64748B),
-              ),
-              onPressed: () => setState(() => _obscureNew = !_obscureNew),
-            ),
-          ),
-        ),
-
-        const SizedBox(height: 12),
-
-        // Real-time Validation Rules in Frosted Section
-        AuthResponsiveScaffold.frostedSection(
-          child: PasswordRequirementsChecklist(
-            hasMinLength: _hasMinLength,
-            hasUpper: _hasUpper,
-            hasLower: _hasLower,
-            hasNumber: _hasNumber,
-          ),
-        ),
-
-        const SizedBox(height: 20),
-
-        // Confirm Password
-        TextField(
-          controller: _confirmPassCtrl,
-          enabled: !_isLoading,
-          obscureText: _obscureConfirm,
-          enableSuggestions: false,
-          autocorrect: false,
-          maxLength: 50,
-          style: const TextStyle(color: Color(0xFF0F172A), fontSize: 14, fontWeight: FontWeight.w600),
-          inputFormatters: AppValidators.passwordFormatters,
-          buildCounter: (context, {required currentLength, required isFocused, maxLength}) {
-            return Padding(
-              padding: const EdgeInsets.only(top: 4),
-              child: Text(
-                '$currentLength/${maxLength ?? 50}',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: currentLength >= (maxLength ?? 50)
-                      ? const Color(0xFFDC2626)
-                      : const Color(0xFF64748B),
-                ),
-              ),
-            );
-          },
-          decoration: AuthResponsiveScaffold.inputDecoration(
-            labelText: 'Confirm New Password',
-            hintText: '--------',
-            prefixIcon: const Icon(Icons.lock_reset_outlined, size: 20, color: Color(0xFF475569)),
-            suffixIcon: IconButton(
-              icon: Icon(
-                _obscureConfirm ? Icons.visibility_outlined : Icons.visibility_off_outlined,
-                size: 20,
-                color: const Color(0xFF64748B),
-              ),
-              onPressed: () => setState(() => _obscureConfirm = !_obscureConfirm),
-            ),
-            focusedBorderColor: _confirmPassCtrl.text.isEmpty
-                ? null
-                : (_passwordsMatch ? const Color(0xFF16A34A) : const Color(0xFFDC2626)),
-            enabledBorderColor: _confirmPassCtrl.text.isEmpty
-                ? null
-                : (_passwordsMatch ? const Color(0xFF16A34A) : const Color(0xFFDC2626)),
-          ),
-        ),
-        if (_confirmPassCtrl.text.isNotEmpty && !_passwordsMatch)
-          const Padding(
-            padding: EdgeInsets.only(top: 8, left: 4),
-            child: Text(
-              'Passwords do not match',
-              style: TextStyle(color: Color(0xFFDC2626), fontSize: 12),
-            ),
-          ),
-
-        const SizedBox(height: 28),
-
-        // Submit Button
-        AuthResponsiveScaffold.primaryButton(
-          label: 'SET NEW PASSWORD',
-          isLoading: _isLoading,
-          onPressed: _isValid ? _submit : null,
-        ),
-        const SizedBox(height: 14),
-
-        // Back to Login Link
-        Center(
-          child: TextButton.icon(
-            onPressed: _isLoading
-                ? null
-                : () {
-                    AuthRepository.instance.logout();
-                    AppTheme.themeModeNotifier.value = ThemeMode.light;
-                    Navigator.pushReplacementNamed(context, AppRoutes.login);
-                  },
-            icon: Icon(
-              Icons.arrow_back,
-              size: 16,
-              color: _isLoading ? const Color(0xFF94A3B8) : const Color(0xFF487898),
-            ),
-            label: Text(
-              'Back to Login',
-              style: TextStyle(
-                color: _isLoading ? const Color(0xFF94A3B8) : const Color(0xFF487898),
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-        ),
-      ],
       ),
     );
   }

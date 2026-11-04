@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:class_realm/core/services/local_storage_service.dart';
 
@@ -114,7 +115,8 @@ class AppDataCache {
           debugPrint('AppDataCache onUpdate stale delivery error: $e');
         }
       }
-    } else if (_memoryCache.containsKey(effectiveKey) && _memoryCache[effectiveKey] is T) {
+    } else if (_memoryCache.containsKey(effectiveKey) &&
+        _memoryCache[effectiveKey] is T) {
       staleData = _memoryCache[effectiveKey] as T;
       if (staleData != null) {
         try {
@@ -128,7 +130,8 @@ class AppDataCache {
     // 2. Cooldown check: if fresh within TTL and not forceRefresh, return immediately
     if (!forceRefresh && isFresh(effectiveKey, ttl: ttl)) {
       if (staleData != null) return staleData;
-      if (_memoryCache.containsKey(effectiveKey) && _memoryCache[effectiveKey] is T) {
+      if (_memoryCache.containsKey(effectiveKey) &&
+          _memoryCache[effectiveKey] is T) {
         return _memoryCache[effectiveKey] as T;
       }
     }
@@ -154,7 +157,11 @@ class AppDataCache {
       dynamic encodable;
       if (toJson != null) {
         encodable = toJson(freshData);
-      } else if (freshData is List || freshData is Map || freshData is num || freshData is String || freshData is bool) {
+      } else if (freshData is List ||
+          freshData is Map ||
+          freshData is num ||
+          freshData is String ||
+          freshData is bool) {
         encodable = freshData;
       }
 
@@ -168,7 +175,10 @@ class AppDataCache {
         unawaited(setCache(effectiveKey, encodable));
 
         // Only invoke onUpdate if the data actually changed or if stale was absent
-        if (staleData == null || oldSig == null || newSig == null || oldSig != newSig) {
+        if (staleData == null ||
+            oldSig == null ||
+            newSig == null ||
+            oldSig != newSig) {
           if (newSig != null) _payloadSignatures[effectiveKey] = newSig;
           try {
             onUpdate?.call(freshData);
@@ -196,7 +206,9 @@ class AppDataCache {
 
   /// Invalidates all keys starting with [prefix] (e.g. 'teacher_students_').
   void invalidatePrefix(String prefix) {
-    final keysToRemove = _memoryCache.keys.where((k) => k.startsWith(prefix)).toList();
+    final keysToRemove = _memoryCache.keys
+        .where((k) => k.startsWith(prefix))
+        .toList();
     for (final k in keysToRemove) {
       _memoryCache.remove(k);
       _timestamps.remove(k);
@@ -207,7 +219,9 @@ class AppDataCache {
 
   /// Clears user-specific cache upon logout.
   void clearUserCache(String userId) {
-    final keysToRemove = _memoryCache.keys.where((k) => k.contains(userId)).toList();
+    final keysToRemove = _memoryCache.keys
+        .where((k) => k.contains(userId))
+        .toList();
     for (final k in keysToRemove) {
       _memoryCache.remove(k);
       _timestamps.remove(k);

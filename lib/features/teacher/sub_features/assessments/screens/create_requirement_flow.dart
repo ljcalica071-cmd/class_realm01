@@ -274,7 +274,7 @@ class _CreateRequirementFlowDialogState
       if (!mounted) return;
       setState(() {
         _offerings = subjects;
-          _initializeSelectedOffering();
+        _initializeSelectedOffering();
       });
       _loadOccupiedColumns();
     } catch (_) {
@@ -318,7 +318,8 @@ class _CreateRequirementFlowDialogState
 
       // Check Gradebook Term Sheet for any extra columns added (up to 10)
       try {
-        final termSheet = await SubjectRepository.instance.getGradebookTermSheet(offeringId, term);
+        final termSheet = await SubjectRepository.instance
+            .getGradebookTermSheet(offeringId, term);
         if (termSheet != null) {
           final catKey = widget.isPerformanceTask ? 'pt' : 'ww';
           final hps = termSheet['hps'] as Map? ?? {};
@@ -679,7 +680,7 @@ class _CreateRequirementFlowDialogState
 
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      backgroundColor: Colors.white,
+      backgroundColor: theme.colorScheme.surface,
       insetPadding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
       child: Container(
         width: 680,
@@ -1079,7 +1080,9 @@ class _CreateRequirementFlowDialogState
                                           ),
                                         ),
                                       ),
-                                      items: List.generate(_maxAvailableSlots, (i) {
+                                      items: List.generate(_maxAvailableSlots, (
+                                        i,
+                                      ) {
                                         final col = i + 1;
                                         final prefix = widget.isPerformanceTask
                                             ? 'PT'

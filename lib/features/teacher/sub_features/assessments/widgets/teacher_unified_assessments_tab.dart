@@ -1,4 +1,5 @@
 import 'dart:math';
+
 import 'package:flutter/material.dart';
 
 import 'package:class_realm/core/theme/app_theme.dart';
@@ -83,7 +84,8 @@ class _TeacherUnifiedAssessmentsTabState
     if (_teacherSubjects.isEmpty) return [];
     final set = <String>{};
     for (final s in _teacherSubjects) {
-      if (_selectedGrade == null || _parseGrade(s['grade_level']) == _selectedGrade) {
+      if (_selectedGrade == null ||
+          _parseGrade(s['grade_level']) == _selectedGrade) {
         final name = s['subject_name']?.toString().trim();
         if (name != null && name.isNotEmpty) {
           set.add(name);
@@ -98,8 +100,12 @@ class _TeacherUnifiedAssessmentsTabState
     if (_teacherSubjects.isEmpty) return [];
     final set = <String>{};
     for (final s in _teacherSubjects) {
-      final matchesGrade = _selectedGrade == null || _parseGrade(s['grade_level']) == _selectedGrade;
-      final matchesSubject = _selectedSubject == null || (s['subject_name']?.toString().trim() == _selectedSubject);
+      final matchesGrade =
+          _selectedGrade == null ||
+          _parseGrade(s['grade_level']) == _selectedGrade;
+      final matchesSubject =
+          _selectedSubject == null ||
+          (s['subject_name']?.toString().trim() == _selectedSubject);
       if (matchesGrade && matchesSubject) {
         final sec = s['section_name']?.toString().trim();
         if (sec != null && sec.isNotEmpty) {
@@ -115,11 +121,13 @@ class _TeacherUnifiedAssessmentsTabState
     try {
       final teacherId = AuthRepository.instance.currentUser?.id;
       if (teacherId == null) return;
-      final subjects = await SubjectRepository.instance.getTeacherSubjects(teacherId);
+      final subjects = await SubjectRepository.instance.getTeacherSubjects(
+        teacherId,
+      );
       if (!mounted) return;
       setState(() {
         _teacherSubjects = subjects;
-        
+
         final grades = _availableGrades;
         if (grades.isNotEmpty) {
           _selectedGrade ??= grades.first;
@@ -149,7 +157,8 @@ class _TeacherUnifiedAssessmentsTabState
     final match = _teacherSubjects.firstWhere(
       (s) =>
           (_selectedSubject == null || s['subject_name'] == _selectedSubject) &&
-          (_selectedClassSection == null || s['section_name'] == _selectedClassSection),
+          (_selectedClassSection == null ||
+              s['section_name'] == _selectedClassSection),
       orElse: () => _teacherSubjects.first,
     );
     final exWeight = (match['ex_weight'] as num?)?.toDouble() ?? 30.0;
@@ -182,15 +191,25 @@ class _TeacherUnifiedAssessmentsTabState
     return '$hour:$minute ${date.hour >= 12 ? 'PM' : 'AM'}';
   }
 
-  bool _matchesItem(String? itemSubject, String? itemSection, List<String> assignedSections) {
+  bool _matchesItem(
+    String? itemSubject,
+    String? itemSection,
+    List<String> assignedSections,
+  ) {
     // If user has chosen a section
     if (_selectedClassSection != null && _selectedClassSection!.isNotEmpty) {
       final targetSec = _selectedClassSection!.trim().toLowerCase();
       final sec = itemSection?.trim().toLowerCase();
-      final matchesSection = (sec != null && (sec == targetSec || sec.contains(targetSec) || targetSec.contains(sec))) ||
+      final matchesSection =
+          (sec != null &&
+              (sec == targetSec ||
+                  sec.contains(targetSec) ||
+                  targetSec.contains(sec))) ||
           assignedSections.any((s) {
             final clean = s.trim().toLowerCase();
-            return clean == targetSec || clean.contains(targetSec) || targetSec.contains(clean);
+            return clean == targetSec ||
+                clean.contains(targetSec) ||
+                targetSec.contains(clean);
           });
       if (!matchesSection) return false;
     }
@@ -198,7 +217,8 @@ class _TeacherUnifiedAssessmentsTabState
     if (_selectedSubject != null && _selectedSubject!.isNotEmpty) {
       final targetSub = _selectedSubject!.trim().toLowerCase();
       final sub = itemSubject?.trim().toLowerCase();
-      if (sub == null || (!sub.contains(targetSub) && !targetSub.contains(sub))) {
+      if (sub == null ||
+          (!sub.contains(targetSub) && !targetSub.contains(sub))) {
         return false;
       }
     }
@@ -274,7 +294,9 @@ class _TeacherUnifiedAssessmentsTabState
                         'Create activities, performance tasks, quizzes, and exams by subject and section.',
                         style: TextStyle(
                           fontSize: 13,
-                          color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                          color: theme.colorScheme.onSurface.withValues(
+                            alpha: 0.6,
+                          ),
                         ),
                       ),
                     ],
@@ -283,11 +305,18 @@ class _TeacherUnifiedAssessmentsTabState
                 const SizedBox(width: 16),
                 // Right-aligned Target Filter Card matching Learning Materials
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     color: theme.colorScheme.surface,
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: theme.colorScheme.onSurface.withValues(alpha: 0.12)),
+                    border: Border.all(
+                      color: theme.colorScheme.onSurface.withValues(
+                        alpha: 0.12,
+                      ),
+                    ),
                     boxShadow: [
                       BoxShadow(
                         color: Colors.black.withValues(alpha: 0.02),
@@ -302,11 +331,20 @@ class _TeacherUnifiedAssessmentsTabState
                       // Grade Dropdown
                       if (availableGrades.isNotEmpty) ...[
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 2,
+                          ),
                           decoration: BoxDecoration(
-                            color: theme.colorScheme.primary.withValues(alpha: 0.08),
+                            color: theme.colorScheme.primary.withValues(
+                              alpha: 0.08,
+                            ),
                             borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: theme.colorScheme.primary.withValues(alpha: 0.2)),
+                            border: Border.all(
+                              color: theme.colorScheme.primary.withValues(
+                                alpha: 0.2,
+                              ),
+                            ),
                           ),
                           child: DropdownButtonHideUnderline(
                             child: DropdownButton<int>(
@@ -319,16 +357,25 @@ class _TeacherUnifiedAssessmentsTabState
                                 color: theme.colorScheme.primary,
                               ),
                               items: availableGrades
-                                  .map((g) => DropdownMenuItem(value: g, child: Text('Grade $g')))
+                                  .map(
+                                    (g) => DropdownMenuItem(
+                                      value: g,
+                                      child: Text('Grade $g'),
+                                    ),
+                                  )
                                   .toList(),
                               onChanged: (val) {
                                 if (val != null) {
                                   setState(() {
                                     _selectedGrade = val;
                                     final subs = _availableSubjects;
-                                    _selectedSubject = subs.isNotEmpty ? subs.first : null;
+                                    _selectedSubject = subs.isNotEmpty
+                                        ? subs.first
+                                        : null;
                                     final secs = _availableSections;
-                                    _selectedClassSection = secs.isNotEmpty ? secs.first : null;
+                                    _selectedClassSection = secs.isNotEmpty
+                                        ? secs.first
+                                        : null;
                                   });
                                 }
                               },
@@ -341,15 +388,24 @@ class _TeacherUnifiedAssessmentsTabState
                       // Subject Dropdown (NO ALL SUBJECTS)
                       if (availableSubjects.isNotEmpty) ...[
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 2,
+                          ),
                           decoration: BoxDecoration(
-                            color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+                            color: theme.colorScheme.surfaceContainerHighest
+                                .withValues(alpha: 0.35),
                             borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: theme.colorScheme.onSurface.withValues(alpha: 0.12)),
+                            border: Border.all(
+                              color: theme.colorScheme.onSurface.withValues(
+                                alpha: 0.12,
+                              ),
+                            ),
                           ),
                           child: DropdownButtonHideUnderline(
                             child: DropdownButton<String>(
-                              value: availableSubjects.contains(_selectedSubject)
+                              value:
+                                  availableSubjects.contains(_selectedSubject)
                                   ? _selectedSubject
                                   : availableSubjects.first,
                               style: TextStyle(
@@ -358,17 +414,24 @@ class _TeacherUnifiedAssessmentsTabState
                                 color: theme.colorScheme.onSurface,
                               ),
                               items: availableSubjects
-                                  .map((sub) => DropdownMenuItem(
-                                        value: sub,
-                                        child: Text(sub, overflow: TextOverflow.ellipsis),
-                                      ))
+                                  .map(
+                                    (sub) => DropdownMenuItem(
+                                      value: sub,
+                                      child: Text(
+                                        sub,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  )
                                   .toList(),
                               onChanged: (val) {
                                 if (val != null) {
                                   setState(() {
                                     _selectedSubject = val;
                                     final secs = _availableSections;
-                                    _selectedClassSection = secs.isNotEmpty ? secs.first : null;
+                                    _selectedClassSection = secs.isNotEmpty
+                                        ? secs.first
+                                        : null;
                                   });
                                 }
                               },
@@ -381,15 +444,26 @@ class _TeacherUnifiedAssessmentsTabState
                       // Section Dropdown (NO ALL SECTIONS)
                       if (availableSections.isNotEmpty)
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 2,
+                          ),
                           decoration: BoxDecoration(
-                            color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.2),
+                            color: theme.colorScheme.surfaceContainerHighest
+                                .withValues(alpha: 0.2),
                             borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: theme.colorScheme.onSurface.withValues(alpha: 0.1)),
+                            border: Border.all(
+                              color: theme.colorScheme.onSurface.withValues(
+                                alpha: 0.1,
+                              ),
+                            ),
                           ),
                           child: DropdownButtonHideUnderline(
                             child: DropdownButton<String>(
-                              value: availableSections.contains(_selectedClassSection)
+                              value:
+                                  availableSections.contains(
+                                    _selectedClassSection,
+                                  )
                                   ? _selectedClassSection
                                   : availableSections.first,
                               style: TextStyle(
@@ -398,10 +472,15 @@ class _TeacherUnifiedAssessmentsTabState
                                 color: theme.colorScheme.onSurface,
                               ),
                               items: availableSections
-                                  .map((sec) => DropdownMenuItem(
-                                        value: sec,
-                                        child: Text(_formatSectionName(sec), overflow: TextOverflow.ellipsis),
-                                      ))
+                                  .map(
+                                    (sec) => DropdownMenuItem(
+                                      value: sec,
+                                      child: Text(
+                                        _formatSectionName(sec),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  )
                                   .toList(),
                               onChanged: (val) {
                                 if (val != null) {
@@ -421,12 +500,16 @@ class _TeacherUnifiedAssessmentsTabState
               decoration: BoxDecoration(
                 color: theme.colorScheme.surface,
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: theme.colorScheme.onSurface.withValues(alpha: 0.12)),
+                border: Border.all(
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.12),
+                ),
               ),
               child: TabBar(
                 dividerColor: Colors.transparent,
                 labelColor: theme.colorScheme.primary,
-                unselectedLabelColor: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                unselectedLabelColor: theme.colorScheme.onSurface.withValues(
+                  alpha: 0.6,
+                ),
                 indicatorColor: theme.colorScheme.primary,
                 indicatorWeight: 3,
                 tabs: const [
@@ -456,15 +539,21 @@ class _TeacherUnifiedAssessmentsTabState
                             final sectionParam = _selectedClassSection ?? '';
                             final offeringMatch = _teacherSubjects.firstWhere(
                               (s) =>
-                                  (_selectedSubject == null || s['subject_name'] == _selectedSubject) &&
-                                  (_selectedClassSection == null || s['section_name'] == _selectedClassSection),
-                              orElse: () => _teacherSubjects.isNotEmpty ? _teacherSubjects.first : <String, dynamic>{},
+                                  (_selectedSubject == null ||
+                                      s['subject_name'] == _selectedSubject) &&
+                                  (_selectedClassSection == null ||
+                                      s['section_name'] ==
+                                          _selectedClassSection),
+                              orElse: () => _teacherSubjects.isNotEmpty
+                                  ? _teacherSubjects.first
+                                  : <String, dynamic>{},
                             );
                             CreateRequirementFlowDialog.show(
                               context,
                               initialSection: sectionParam,
                               initialSubject: _selectedSubject,
-                              initialOfferingId: offeringMatch['id']?.toString(),
+                              initialOfferingId: offeringMatch['id']
+                                  ?.toString(),
                               initialOfferings: _teacherSubjects,
                               isPerformanceTask: false,
                               repository: widget.repository,
@@ -512,15 +601,21 @@ class _TeacherUnifiedAssessmentsTabState
                             final sectionParam = _selectedClassSection ?? '';
                             final offeringMatch = _teacherSubjects.firstWhere(
                               (s) =>
-                                  (_selectedSubject == null || s['subject_name'] == _selectedSubject) &&
-                                  (_selectedClassSection == null || s['section_name'] == _selectedClassSection),
-                              orElse: () => _teacherSubjects.isNotEmpty ? _teacherSubjects.first : <String, dynamic>{},
+                                  (_selectedSubject == null ||
+                                      s['subject_name'] == _selectedSubject) &&
+                                  (_selectedClassSection == null ||
+                                      s['section_name'] ==
+                                          _selectedClassSection),
+                              orElse: () => _teacherSubjects.isNotEmpty
+                                  ? _teacherSubjects.first
+                                  : <String, dynamic>{},
                             );
                             CreateRequirementFlowDialog.show(
                               context,
                               initialSection: sectionParam,
                               initialSubject: _selectedSubject,
-                              initialOfferingId: offeringMatch['id']?.toString(),
+                              initialOfferingId: offeringMatch['id']
+                                  ?.toString(),
                               initialOfferings: _teacherSubjects,
                               isPerformanceTask: true,
                               repository: widget.repository,
@@ -607,11 +702,17 @@ class _TeacherUnifiedAssessmentsTabState
             decoration: BoxDecoration(
               color: AppTheme.catPurple.withValues(alpha: 0.08),
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: AppTheme.catPurple.withValues(alpha: 0.25)),
+              border: Border.all(
+                color: AppTheme.catPurple.withValues(alpha: 0.25),
+              ),
             ),
             child: Row(
               children: [
-                const Icon(Icons.info_outline, color: AppTheme.catPurple, size: 24),
+                const Icon(
+                  Icons.info_outline,
+                  color: AppTheme.catPurple,
+                  size: 24,
+                ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
@@ -619,12 +720,21 @@ class _TeacherUnifiedAssessmentsTabState
                     children: [
                       const Text(
                         'DepEd Order No. 015, s. 2026 — Zero-Exam Subject',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppTheme.catPurple),
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                          color: AppTheme.catPurple,
+                        ),
                       ),
                       const SizedBox(height: 2),
                       Text(
                         'This subject has no Examination component. Initial Grades are computed 100% from Written Works and Performance Tasks.',
-                        style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurface.withValues(alpha: 0.75)),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: theme.colorScheme.onSurface.withValues(
+                            alpha: 0.75,
+                          ),
+                        ),
                       ),
                     ],
                   ),
@@ -663,7 +773,7 @@ class _TeacherUnifiedAssessmentsTabState
   Widget _buildUnifiedActivityCard(ActivityModel item, String category) {
     final dueDate = item.deadlineForSection(_selectedClassSection ?? '');
     final isOnline = item.completionMode == 'online';
-    
+
     return _buildUnifiedCard(
       title: item.title,
       description: item.isRequirement ? '' : item.description,
@@ -672,12 +782,12 @@ class _TeacherUnifiedAssessmentsTabState
           ? '${item.section} • Term ${item.termNumber} • ${item.maxScore.toInt()} pts${isOnline ? ' • Due ${_monthName(dueDate.month)} ${dueDate.day}, ${_formatTime(dueDate)}' : ' • In-Person'}'
           : '${item.section} • Term ${item.termNumber} • ${item.maxScore.toInt()} pts${isOnline ? ' • Due ${_monthName(dueDate.month)} ${dueDate.day}' : ' • In-Person'}',
       icon: Icons.assignment_outlined,
-      onPressed: isOnline 
+      onPressed: isOnline
           ? () {
               if (widget.onViewSubmissions != null) {
                 widget.onViewSubmissions!(item);
               }
-            } 
+            }
           : () {
               // In-Person -> Open Edit or Gradebook
               if (widget.onViewSubmissions != null) {
@@ -705,7 +815,9 @@ class _TeacherUnifiedAssessmentsTabState
         assessment: item,
         onAssessmentUpdated: () => setState(() {}),
       ),
-      onDelete: (item.isExam || category == 'EX') ? null : () => _confirmDeleteAssessment(item),
+      onDelete: (item.isExam || category == 'EX')
+          ? null
+          : () => _confirmDeleteAssessment(item),
       onReschedule: () => _showRescheduleAssessmentDialog(item),
       onProctor: () => LiveProctorMonitorModal.show(
         context: context,
@@ -750,7 +862,9 @@ class _TeacherUnifiedAssessmentsTabState
       decoration: BoxDecoration(
         color: theme.colorScheme.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: theme.colorScheme.onSurface.withValues(alpha: 0.12)),
+        border: Border.all(
+          color: theme.colorScheme.onSurface.withValues(alpha: 0.12),
+        ),
       ),
       child: Row(
         children: [
@@ -817,13 +931,19 @@ class _TeacherUnifiedAssessmentsTabState
               if (onProctor != null)
                 IconButton(
                   tooltip: 'Live Proctoring Monitor',
-                  icon: const Icon(Icons.shield_outlined, color: AppTheme.catPurple),
+                  icon: const Icon(
+                    Icons.shield_outlined,
+                    color: AppTheme.catPurple,
+                  ),
                   onPressed: onProctor,
                 ),
               if (onItemAnalysis != null)
                 IconButton(
                   tooltip: 'Item Analysis & DepEd Tiers',
-                  icon: const Icon(Icons.analytics_outlined, color: AppTheme.catTeal),
+                  icon: const Icon(
+                    Icons.analytics_outlined,
+                    color: AppTheme.catTeal,
+                  ),
                   onPressed: onItemAnalysis,
                 ),
               if (onReschedule != null)
@@ -835,7 +955,10 @@ class _TeacherUnifiedAssessmentsTabState
               if (onEdit != null)
                 IconButton(
                   tooltip: 'Edit',
-                  icon: Icon(Icons.edit_outlined, color: theme.colorScheme.onSurface.withValues(alpha: 0.6)),
+                  icon: Icon(
+                    Icons.edit_outlined,
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                  ),
                   onPressed: onEdit,
                 ),
               if (onDelete != null)
@@ -864,7 +987,9 @@ class _TeacherUnifiedAssessmentsTabState
           .eq('assessment_id', item.id)
           .order('position', ascending: true);
 
-      final questionRows = List<Map<String, dynamic>>.from(questionsResponse as List? ?? []);
+      final questionRows = List<Map<String, dynamic>>.from(
+        questionsResponse as List? ?? [],
+      );
 
       // Fetch real submitted attempts for this assessment
       final attemptsResponse = await client
@@ -872,7 +997,9 @@ class _TeacherUnifiedAssessmentsTabState
           .select('id, status')
           .eq('assessment_id', item.id)
           .eq('status', 'submitted');
-      final attemptList = List<Map<String, dynamic>>.from(attemptsResponse as List? ?? []);
+      final attemptList = List<Map<String, dynamic>>.from(
+        attemptsResponse as List? ?? [],
+      );
       final totalAttempts = attemptList.length;
 
       final stats = <ItemDifficultyStat>[];
@@ -881,22 +1008,29 @@ class _TeacherUnifiedAssessmentsTabState
         final qIds = questionRows.map((q) => q['id'].toString()).toList();
         final responsesData = totalAttempts > 0
             ? await client
-                .from('assessment_responses')
-                .select('question_id, is_correct')
-                .inFilter('question_id', qIds)
+                  .from('assessment_responses')
+                  .select('question_id, is_correct')
+                  .inFilter('question_id', qIds)
             : [];
-        final responseList = List<Map<String, dynamic>>.from(responsesData as List? ?? []);
+        final responseList = List<Map<String, dynamic>>.from(
+          responsesData as List? ?? [],
+        );
 
         for (int i = 0; i < questionRows.length; i++) {
           final q = questionRows[i];
           final qId = q['id'].toString();
-          final qResponses = responseList.where((r) => r['question_id']?.toString() == qId);
-          final correctCount = qResponses.where((r) => r['is_correct'] == true).length;
+          final qResponses = responseList.where(
+            (r) => r['question_id']?.toString() == qId,
+          );
+          final correctCount = qResponses
+              .where((r) => r['is_correct'] == true)
+              .length;
 
           stats.add(
             ItemDifficultyStat(
               itemNumber: (q['position'] as num?)?.toInt() ?? (i + 1),
-              questionText: q['question_text']?.toString() ?? 'Question ${i + 1}',
+              questionText:
+                  q['question_text']?.toString() ?? 'Question ${i + 1}',
               totalAttempts: totalAttempts,
               correctCount: correctCount,
             ),
@@ -925,9 +1059,10 @@ class _TeacherUnifiedAssessmentsTabState
         initialResultsReleased: item.resultsReleased,
         onToggleRelease: (released) async {
           try {
-            await client.from('digital_assessments').update({
-              'results_released': released,
-            }).eq('id', item.id);
+            await client
+                .from('digital_assessments')
+                .update({'results_released': released})
+                .eq('id', item.id);
           } catch (_) {}
         },
       );
@@ -937,12 +1072,18 @@ class _TeacherUnifiedAssessmentsTabState
         ItemAnalysisModal.show(
           context,
           assessmentTitle: item.title,
-          stats: item.questions.asMap().entries.map((e) => ItemDifficultyStat(
-            itemNumber: e.key + 1,
-            questionText: e.value.questionText,
-            totalAttempts: 0,
-            correctCount: 0,
-          )).toList(),
+          stats: item.questions
+              .asMap()
+              .entries
+              .map(
+                (e) => ItemDifficultyStat(
+                  itemNumber: e.key + 1,
+                  questionText: e.value.questionText,
+                  totalAttempts: 0,
+                  correctCount: 0,
+                ),
+              )
+              .toList(),
           initialResultsReleased: item.resultsReleased,
           onToggleRelease: (released) async {},
         );
@@ -1007,22 +1148,34 @@ class _TeacherUnifiedAssessmentsTabState
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (context, setModalState) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
           title: Row(
             children: [
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
+                  color: Theme.of(context).colorScheme.primary
+                      .withValues(alpha: 0.1),
                   shape: BoxShape.circle,
                 ),
-                child: Icon(Icons.schedule, color: Theme.of(context).colorScheme.primary, size: 20),
+                child: Icon(
+                  Icons.schedule,
+                  color: Theme.of(context).colorScheme.primary,
+                  size: 20,
+                ),
               ),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  isExam ? 'Reschedule Exam / Special Test' : 'Reschedule Quiz Window',
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  isExam
+                      ? 'Reschedule Exam / Special Test'
+                      : 'Reschedule Quiz Window',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
                 ),
               ),
             ],
@@ -1033,7 +1186,10 @@ class _TeacherUnifiedAssessmentsTabState
             children: [
               Text(
                 'Assessment: ${item.title}',
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                ),
               ),
               const SizedBox(height: 6),
               const Text(
@@ -1046,7 +1202,9 @@ class _TeacherUnifiedAssessmentsTabState
                   final pickedDate = await showDatePicker(
                     context: context,
                     initialDate: newDate,
-                    firstDate: DateTime.now().subtract(const Duration(days: 30)),
+                    firstDate: DateTime.now().subtract(
+                      const Duration(days: 30),
+                    ),
                     lastDate: DateTime.now().add(const Duration(days: 90)),
                   );
                   if (pickedDate != null) {
@@ -1069,17 +1227,26 @@ class _TeacherUnifiedAssessmentsTabState
                 },
                 borderRadius: BorderRadius.circular(10),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 12,
+                  ),
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.2)),
+                    border: Border.all(
+                      color: Theme.of(context).colorScheme.onSurface
+                          .withValues(alpha: 0.2),
+                    ),
                   ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
                         '${newDate.month}/${newDate.day}/${newDate.year} ${newDate.hour > 12 ? newDate.hour - 12 : newDate.hour}:${newDate.minute.toString().padLeft(2, '0')} ${newDate.hour >= 12 ? 'PM' : 'AM'}',
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
                       ),
                       const Icon(Icons.calendar_month, size: 18),
                     ],
@@ -1103,21 +1270,32 @@ class _TeacherUnifiedAssessmentsTabState
                 Navigator.pop(ctx);
                 try {
                   final client = SupabaseService().client;
-                  await client.from('digital_assessments').update({
-                    'available_from': newDate.toIso8601String(),
-                    'deadline': newDate.add(Duration(minutes: item.durationMinutes)).toIso8601String(),
-                  }).eq('id', item.id);
+                  await client
+                      .from('digital_assessments')
+                      .update({
+                        'available_from': newDate.toIso8601String(),
+                        'deadline': newDate
+                            .add(Duration(minutes: item.durationMinutes))
+                            .toIso8601String(),
+                      })
+                      .eq('id', item.id);
 
-                  await client.from('classwork_items').update({
-                    'deadline': newDate.add(Duration(minutes: item.durationMinutes)).toIso8601String(),
-                  }).eq('id', item.id);
+                  await client
+                      .from('classwork_items')
+                      .update({
+                        'deadline': newDate
+                            .add(Duration(minutes: item.durationMinutes))
+                            .toIso8601String(),
+                      })
+                      .eq('id', item.id);
                 } catch (_) {}
 
                 if (!mounted) return;
                 AppModals.showSuccessDialog(
                   context: context,
                   title: 'Schedule Updated',
-                  message: 'Schedule successfully updated for ${item.title}. Window opens at ${_formatTime(newDate)}.',
+                  message:
+                      'Schedule successfully updated for ${item.title}. Window opens at ${_formatTime(newDate)}.',
                 );
                 widget.onRefresh?.call();
                 setState(() {});
@@ -1322,7 +1500,9 @@ class _PaginatedUnifiedItemListState extends State<_PaginatedUnifiedItemList> {
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
+                      color: theme.colorScheme.onSurface.withValues(
+                        alpha: 0.65,
+                      ),
                     ),
                   ),
                 ],
@@ -1355,4 +1535,3 @@ class _KeepAliveTabWrapperState extends State<_KeepAliveTabWrapper>
     return widget.child;
   }
 }
-

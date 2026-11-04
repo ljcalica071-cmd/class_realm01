@@ -2,7 +2,8 @@ import 'dart:typed_data';
 
 /// Validator and utility for learning material files and uploads.
 class MaterialFileValidator {
-  static const int maxFileSizeBytes = 3145728; // Strict 3 MB limit (3 * 1024 * 1024)
+  static const int maxFileSizeBytes =
+      3145728; // Strict 3 MB limit (3 * 1024 * 1024)
   static const int maxFileNameLength = 100;
 
   // Allowed file extensions
@@ -100,7 +101,11 @@ class MaterialFileValidator {
   }
 
   /// Determines MIME type from extension or special indicators
-  static String getMimeType(String fileName, {bool isEmbed = false, bool isMarkdown = false}) {
+  static String getMimeType(
+    String fileName, {
+    bool isEmbed = false,
+    bool isMarkdown = false,
+  }) {
     if (isEmbed) return mimeUriList;
     if (isMarkdown) return mimeMarkdown;
 
@@ -151,7 +156,9 @@ class MaterialFileValidator {
   }) {
     final fingerprint = computeContentFingerprint(bytes);
     final dotIdx = originalFileName.lastIndexOf('.');
-    final ext = dotIdx != -1 ? originalFileName.substring(dotIdx + 1).toLowerCase() : 'bin';
+    final ext = dotIdx != -1
+        ? originalFileName.substring(dotIdx + 1).toLowerCase()
+        : 'bin';
     return 'offerings/shared/${fingerprint}_$ext';
   }
 
@@ -294,7 +301,8 @@ class ClassRealmMaterial {
     return 'FILE';
   }
 
-  bool get isPdf => fileExtension == 'PDF' || mimeType == MaterialFileValidator.mimePdf;
+  bool get isPdf =>
+      fileExtension == 'PDF' || mimeType == MaterialFileValidator.mimePdf;
   bool get isWord =>
       ['DOC', 'DOCX'].contains(fileExtension) ||
       mimeType == MaterialFileValidator.mimeDoc ||
@@ -405,7 +413,9 @@ abstract class LearningMaterialRepository {
 
   Future<void> restoreMaterial(String materialId);
 
-  Future<List<ClassRealmMaterial>> getArchivedMaterials(String subjectOfferingId);
+  Future<List<ClassRealmMaterial>> getArchivedMaterials(
+    String subjectOfferingId,
+  );
 
   Future<void> duplicateMaterialToOfferings({
     required ClassRealmMaterial material,
@@ -476,4 +486,3 @@ abstract class LearningMaterialRepository {
   /// Fetches Supabase server time in UTC to avoid trusting student device clocks.
   Future<DateTime> getServerUtcTime();
 }
-

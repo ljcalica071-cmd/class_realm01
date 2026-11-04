@@ -15,7 +15,13 @@ class AdminSidebar extends StatelessWidget {
     required this.onLogout,
   });
 
-  Widget _buildNavItem(BuildContext context, int index, String label, IconData icon, {int badgeCount = 0}) {
+  Widget _buildNavItem(
+    BuildContext context,
+    int index,
+    String label,
+    IconData icon, {
+    int badgeCount = 0,
+  }) {
     final theme = Theme.of(context);
     final isSelected = selectedIndex == index;
     return GestureDetector(
@@ -25,20 +31,32 @@ class AdminSidebar extends StatelessWidget {
         margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
-          color: isSelected ? theme.colorScheme.primary.withValues(alpha: 0.1) : Colors.transparent,
+          color: isSelected
+              ? theme.colorScheme.primary.withValues(alpha: 0.1)
+              : Colors.transparent,
           borderRadius: BorderRadius.circular(10),
         ),
         child: Row(
           children: [
-            Icon(icon, color: isSelected ? theme.colorScheme.primary : theme.colorScheme.onSurface.withValues(alpha: 0.6), size: 20),
+            Icon(
+              icon,
+              color: isSelected
+                  ? theme.colorScheme.primary
+                  : theme.colorScheme.onSurface.withValues(alpha: 0.6),
+              size: 20,
+            ),
             if (isExpanded) ...[
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
                   label,
                   style: TextStyle(
-                    color: isSelected ? theme.colorScheme.primary : theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                    color: isSelected
+                        ? theme.colorScheme.primary
+                        : theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                    fontWeight: isSelected
+                        ? FontWeight.w600
+                        : FontWeight.normal,
                     fontSize: 14,
                   ),
                 ),
@@ -110,9 +128,24 @@ class AdminSidebar extends StatelessWidget {
           // Nav Items
           _buildNavItem(context, 0, 'Dashboard', Icons.grid_view_rounded),
           _buildNavItem(context, 1, 'Broadcasts', Icons.campaign_rounded),
-          _buildNavItem(context, 2, 'Teacher Management', Icons.people_outline_rounded),
-          _buildNavItem(context, 3, 'Activity Analytics', Icons.analytics_outlined),
-          _buildNavItem(context, 4, 'Admin Profile', Icons.person_outline_rounded),
+          _buildNavItem(
+            context,
+            2,
+            'Teacher Management',
+            Icons.people_outline_rounded,
+          ),
+          _buildNavItem(
+            context,
+            3,
+            'Activity Analytics',
+            Icons.analytics_outlined,
+          ),
+          _buildNavItem(
+            context,
+            4,
+            'Admin Profile',
+            Icons.person_outline_rounded,
+          ),
 
           const Spacer(),
           const Divider(color: Colors.white12, height: 1),
@@ -128,8 +161,11 @@ class AdminSidebar extends StatelessWidget {
                   const Icon(Icons.logout, color: AppTheme.catRed, size: 24),
                   if (isExpanded) ...[
                     const SizedBox(width: 16),
-                    const Text('Logout', style: TextStyle(color: AppTheme.catRed, fontSize: 16)),
-                  ]
+                    const Text(
+                      'Logout',
+                      style: TextStyle(color: AppTheme.catRed, fontSize: 16),
+                    ),
+                  ],
                 ],
               ),
             ),

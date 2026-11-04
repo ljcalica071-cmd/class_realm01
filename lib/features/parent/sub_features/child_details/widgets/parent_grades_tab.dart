@@ -159,7 +159,8 @@ class _ParentGradesTabState extends State<ParentGradesTab> {
           child: AppEmptyState(
             icon: Icons.person_off_outlined,
             title: 'No Student Selected',
-            message: 'Please select a child to view their academic report card.',
+            message:
+                'Please select a child to view their academic report card.',
           ),
         ),
       );
@@ -285,8 +286,8 @@ class _ParentGradesTabState extends State<ParentGradesTab> {
                   decoration: BoxDecoration(
                     color: generalAverage != null
                         ? (generalAverage >= 75
-                            ? AppTheme.catGreen.withValues(alpha: 0.15)
-                            : AppTheme.catRed.withValues(alpha: 0.15))
+                              ? AppTheme.catGreen.withValues(alpha: 0.15)
+                              : AppTheme.catRed.withValues(alpha: 0.15))
                         : theme.colorScheme.primary.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(14),
                   ),
@@ -298,8 +299,8 @@ class _ParentGradesTabState extends State<ParentGradesTab> {
                         fontWeight: FontWeight.bold,
                         color: generalAverage != null
                             ? (generalAverage >= 75
-                                ? AppTheme.catGreen
-                                : AppTheme.catRed)
+                                  ? AppTheme.catGreen
+                                  : AppTheme.catRed)
                             : theme.colorScheme.primary,
                       ),
                     ),
@@ -344,18 +345,21 @@ class _ParentGradesTabState extends State<ParentGradesTab> {
             final subjectName =
                 subjectsMap['subject_name']?.toString() ?? 'Subject';
             final subjectCode = subjectsMap['subject_code']?.toString() ?? '';
-            final termsTaught = (offering['terms_taught'] as num?)?.toInt() ?? 3;
+            final termsTaught =
+                (offering['terms_taught'] as num?)?.toInt() ?? 3;
             final termBlock = offering['term_block']?.toString();
 
             final teacherMap = _asMap(offering['teacher_profiles']);
             final teacherFirstName = teacherMap['first_name']?.toString() ?? '';
             final teacherLastName = teacherMap['last_name']?.toString() ?? '';
             final teacherGender = teacherMap['gender']?.toString() ?? '';
-            final teacherName = [teacherFirstName, teacherLastName]
-                .where((s) => s.isNotEmpty)
-                .join(' ');
-            final teacherTitle =
-                teacherGender.toLowerCase() == 'female' ? 'Ms.' : 'Mr.';
+            final teacherName = [
+              teacherFirstName,
+              teacherLastName,
+            ].where((s) => s.isNotEmpty).join(' ');
+            final teacherTitle = teacherGender.toLowerCase() == 'female'
+                ? 'Ms.'
+                : 'Mr.';
             final teacherDisplayName = teacherName.isNotEmpty
                 ? '$teacherTitle $teacherName'
                 : 'Assigned Teacher';
@@ -498,8 +502,8 @@ class _ParentGradesTabState extends State<ParentGradesTab> {
     final Color badgeColor = !hasGrade
         ? theme.colorScheme.onSurface.withValues(alpha: 0.45)
         : (isPassing
-            ? (isDark ? const Color(0xFF2DD4BF) : AppTheme.catTeal)
-            : AppTheme.catRed);
+              ? (isDark ? const Color(0xFF2DD4BF) : AppTheme.catTeal)
+              : AppTheme.catRed);
 
     return Expanded(
       child: Container(

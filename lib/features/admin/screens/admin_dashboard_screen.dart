@@ -9,6 +9,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:class_realm/core/services/session_activity_tracker.dart';
 
 import 'dart:async';
+
 import 'package:class_realm/routes/app_routes.dart';
 import 'package:class_realm/core/utils/browser_url_helper.dart';
 import 'package:class_realm/core/services/app_data_cache.dart';
@@ -143,10 +144,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           _teachers = allTeachers;
           _isLoading = false;
         });
-        unawaited(AppDataCache.instance.setCache(
-          'admin_teachers_list',
-          allTeachers.map((t) => t.toJson()).toList(),
-        ));
+        unawaited(
+          AppDataCache.instance.setCache(
+            'admin_teachers_list',
+            allTeachers.map((t) => t.toJson()).toList(),
+          ),
+        );
       }
     } catch (_) {
       if (mounted) setState(() => _isLoading = false);
@@ -185,14 +188,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           onNavigateToBroadcasts: () => _navigateToTab(1),
         ),
         const AdminBroadcastsTab(),
-        AdminTeacherManagementTab(
-          teachers: teachers,
-          onDataChanged: _loadData,
-        ),
+        AdminTeacherManagementTab(teachers: teachers, onDataChanged: _loadData),
         const AdminActivityAnalyticsTab(),
-        AdminProfileTab(
-          adminUser: AuthRepository.instance.currentUser,
-        ),
+        AdminProfileTab(adminUser: AuthRepository.instance.currentUser),
       ],
     );
   }
@@ -213,57 +211,52 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
     final sidebar = AdminSidebar(
       selectedIndex: _selectedIndex,
-            isExpanded: isMobile ? true : _isSidebarExpanded,
-            onSelect: (index) {
-              if (isMobile && Scaffold.of(context).isDrawerOpen) {
-                Navigator.pop(context);
-              }
-              _navigateToTab(index);
-            },
-            onLogout: () {
-              AppModals.showConfirmationDialog(
-                context: context,
-                title: 'Confirm Logout',
-                message:
-                    'Are you sure you want to log out of the admin portal?',
-                confirmLabel: 'Logout',
-                confirmColor: AppTheme.catRed,
-                onConfirm: () async {
-                  await LogoutHelper.logout(context);
-                },
-              );
-            },
-          );
+      isExpanded: isMobile ? true : _isSidebarExpanded,
+      onSelect: (index) {
+        if (isMobile && Scaffold.of(context).isDrawerOpen) {
+          Navigator.pop(context);
+        }
+        _navigateToTab(index);
+      },
+      onLogout: () {
+        AppModals.showConfirmationDialog(
+          context: context,
+          title: 'Confirm Logout',
+          message: 'Are you sure you want to log out of the admin portal?',
+          confirmLabel: 'Logout',
+          confirmColor: AppTheme.catRed,
+          onConfirm: () async {
+            await LogoutHelper.logout(context);
+          },
+        );
+      },
+    );
 
     final mainContent = Column(
       children: [
         // Top Navbar
         AdminTopbar(
-                  isSidebarExpanded: _isSidebarExpanded,
-                  onToggleSidebar: () =>
-                      setState(() => _isSidebarExpanded = !_isSidebarExpanded),
-                  title: _getTitle(_selectedIndex),
-                  adminUser: AuthRepository.instance.currentUser,
-                ),
+          isSidebarExpanded: _isSidebarExpanded,
+          onToggleSidebar: () =>
+              setState(() => _isSidebarExpanded = !_isSidebarExpanded),
+          title: _getTitle(_selectedIndex),
+          adminUser: AuthRepository.instance.currentUser,
+        ),
         if (_isLoading) const LinearProgressIndicator(minHeight: 3),
 
-                // Body content switch
-                Expanded(
-                  child: Container(
-                    color: Theme.of(context).scaffoldBackgroundColor,
-                    child: StaggeredEntrance(
-                      key: ValueKey(_selectedIndex),
-                      index: 0,
-                      child: _buildBodyContent(
-                        teachers,
-                        students,
-                        parents,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            );
+        // Body content switch
+        Expanded(
+          child: Container(
+            color: Theme.of(context).scaffoldBackgroundColor,
+            child: StaggeredEntrance(
+              key: ValueKey(_selectedIndex),
+              index: 0,
+              child: _buildBodyContent(teachers, students, parents),
+            ),
+          ),
+        ),
+      ],
+    );
 
     return PopScope(
       canPop: false,

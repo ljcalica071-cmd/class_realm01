@@ -205,10 +205,7 @@ class _AppPullToRefreshState extends State<AppPullToRefresh> {
                                 ),
                               ),
                             )
-                          : _PullWavePreviewDots(
-                              progress: progress,
-                              color: fg,
-                            ),
+                          : _PullWavePreviewDots(progress: progress, color: fg),
                     ),
                   ),
                 ),
@@ -226,10 +223,7 @@ class _PullWavePreviewDots extends StatelessWidget {
   final double progress;
   final Color color;
 
-  const _PullWavePreviewDots({
-    required this.progress,
-    required this.color,
-  });
+  const _PullWavePreviewDots({required this.progress, required this.color});
 
   @override
   Widget build(BuildContext context) {

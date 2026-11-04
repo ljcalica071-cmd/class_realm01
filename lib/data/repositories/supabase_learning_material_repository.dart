@@ -1,12 +1,13 @@
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
 import 'learning_material_repository.dart';
 
 class SupabaseLearningMaterialRepository implements LearningMaterialRepository {
   final SupabaseClient _client;
 
   SupabaseLearningMaterialRepository({SupabaseClient? client})
-      : _client = client ?? Supabase.instance.client;
+    : _client = client ?? Supabase.instance.client;
 
   static final SupabaseLearningMaterialRepository instance =
       SupabaseLearningMaterialRepository();
@@ -21,7 +22,8 @@ class SupabaseLearningMaterialRepository implements LearningMaterialRepository {
           .select('id, folder_name')
           .eq('subject_offering_id', subjectOfferingId);
 
-      final existingNames = (existing as List?)
+      final existingNames =
+          (existing as List?)
               ?.map((e) => e['folder_name']?.toString())
               .whereType<String>()
               .toSet() ??
@@ -153,14 +155,19 @@ class SupabaseLearningMaterialRepository implements LearningMaterialRepository {
   Future<void> deleteFolder(String folderId) async {
     try {
       // 1. Delete all learning_materials in this folder from Supabase DB
-      await _client.from('learning_materials').delete().eq('folder_id', folderId);
+      await _client
+          .from('learning_materials')
+          .delete()
+          .eq('folder_id', folderId);
 
       // 2. Delete all sub-folders from Supabase DB
       await _client.from('folders').delete().eq('parent_folder_id', folderId);
 
       // 3. Delete the folder itself from Supabase DB
       await _client.from('folders').delete().eq('id', folderId);
-      debugPrint('Folder $folderId and child contents hard-deleted from Supabase.');
+      debugPrint(
+        'Folder $folderId and child contents hard-deleted from Supabase.',
+      );
     } catch (e) {
       debugPrint('Error hard-deleting folder $folderId: $e');
       rethrow;
@@ -170,43 +177,45 @@ class SupabaseLearningMaterialRepository implements LearningMaterialRepository {
   @override
   Future<void> archiveFolder(String folderId) async {
     final nowIso = DateTime.now().toIso8601String();
-    await _client.from('folders').update({
-      'is_archived': true,
-      'updated_at': nowIso,
-    }).eq('id', folderId);
+    await _client
+        .from('folders')
+        .update({'is_archived': true, 'updated_at': nowIso})
+        .eq('id', folderId);
 
-    await _client.from('learning_materials').update({
-      'is_archived': true,
-      'updated_at': nowIso,
-    }).eq('folder_id', folderId);
+    await _client
+        .from('learning_materials')
+        .update({'is_archived': true, 'updated_at': nowIso})
+        .eq('folder_id', folderId);
 
-    await _client.from('folders').update({
-      'is_archived': true,
-      'updated_at': nowIso,
-    }).eq('parent_folder_id', folderId);
+    await _client
+        .from('folders')
+        .update({'is_archived': true, 'updated_at': nowIso})
+        .eq('parent_folder_id', folderId);
   }
 
   @override
   Future<void> restoreFolder(String folderId) async {
     final nowIso = DateTime.now().toIso8601String();
-    await _client.from('folders').update({
-      'is_archived': false,
-      'updated_at': nowIso,
-    }).eq('id', folderId);
+    await _client
+        .from('folders')
+        .update({'is_archived': false, 'updated_at': nowIso})
+        .eq('id', folderId);
 
-    await _client.from('learning_materials').update({
-      'is_archived': false,
-      'updated_at': nowIso,
-    }).eq('folder_id', folderId);
+    await _client
+        .from('learning_materials')
+        .update({'is_archived': false, 'updated_at': nowIso})
+        .eq('folder_id', folderId);
 
-    await _client.from('folders').update({
-      'is_archived': false,
-      'updated_at': nowIso,
-    }).eq('parent_folder_id', folderId);
+    await _client
+        .from('folders')
+        .update({'is_archived': false, 'updated_at': nowIso})
+        .eq('parent_folder_id', folderId);
   }
 
   @override
-  Future<List<ClassRealmFolder>> getArchivedFolders(String subjectOfferingId) async {
+  Future<List<ClassRealmFolder>> getArchivedFolders(
+    String subjectOfferingId,
+  ) async {
     try {
       final response = await _client
           .from('folders')
@@ -227,10 +236,7 @@ class SupabaseLearningMaterialRepository implements LearningMaterialRepository {
 
       return (response as List).map<ClassRealmFolder>((row) {
         final materials = (row['learning_materials'] as List?) ?? [];
-        return ClassRealmFolder.fromMap(
-          row,
-          count: materials.length,
-        );
+        return ClassRealmFolder.fromMap(row, count: materials.length);
       }).toList();
     } catch (e) {
       debugPrint('Error getting archived folders: $e');
@@ -307,8 +313,8 @@ class SupabaseLearningMaterialRepository implements LearningMaterialRepository {
     required String targetFolderName,
   }) async {
     final sanitizedFileName = MaterialFileValidator.sanitizeFileName(fileName);
-    final effectiveMimeType = mimeType ??
-        MaterialFileValidator.getMimeType(sanitizedFileName);
+    final effectiveMimeType =
+        mimeType ?? MaterialFileValidator.getMimeType(sanitizedFileName);
 
     String storageUrl;
 
@@ -325,7 +331,9 @@ class SupabaseLearningMaterialRepository implements LearningMaterialRepository {
       );
 
       // Atomic upload: if this throws, caller catches it, zero broken DB rows!
-      await _client.storage.from(_bucket).uploadBinary(
+      await _client.storage
+          .from(_bucket)
+          .uploadBinary(
             storagePath,
             fileBytes,
             fileOptions: FileOptions(
@@ -409,7 +417,9 @@ class SupabaseLearningMaterialRepository implements LearningMaterialRepository {
 
         createdMaterials.add(ClassRealmMaterial.fromMap(sharedRow));
       } catch (e) {
-        debugPrint('Error linking material to additional offering $otherOfferingId: $e');
+        debugPrint(
+          'Error linking material to additional offering $otherOfferingId: $e',
+        );
       }
     }
 
@@ -421,10 +431,13 @@ class SupabaseLearningMaterialRepository implements LearningMaterialRepository {
     required String materialId,
     required bool isVisible,
   }) async {
-    await _client.from('learning_materials').update({
-      'is_visible_to_students': isVisible,
-      'updated_at': DateTime.now().toIso8601String(),
-    }).eq('id', materialId);
+    await _client
+        .from('learning_materials')
+        .update({
+          'is_visible_to_students': isVisible,
+          'updated_at': DateTime.now().toIso8601String(),
+        })
+        .eq('id', materialId);
   }
 
   @override
@@ -465,7 +478,9 @@ class SupabaseLearningMaterialRepository implements LearningMaterialRepository {
         final relativePath = _extractStorageRelativePath(storagePathUrl);
         if (relativePath != null && relativePath.isNotEmpty) {
           await _client.storage.from(_bucket).remove([relativePath]);
-          debugPrint('Physical storage file purged from Supabase: $relativePath');
+          debugPrint(
+            'Physical storage file purged from Supabase: $relativePath',
+          );
         }
       } else {
         debugPrint(
@@ -479,29 +494,39 @@ class SupabaseLearningMaterialRepository implements LearningMaterialRepository {
 
   @override
   Future<void> archiveMaterial(String materialId) async {
-    await _client.from('learning_materials').update({
-      'is_archived': true,
-      'updated_at': DateTime.now().toIso8601String(),
-    }).eq('id', materialId);
+    await _client
+        .from('learning_materials')
+        .update({
+          'is_archived': true,
+          'updated_at': DateTime.now().toIso8601String(),
+        })
+        .eq('id', materialId);
   }
 
   @override
   Future<void> restoreMaterial(String materialId) async {
-    await _client.from('learning_materials').update({
-      'is_archived': false,
-      'updated_at': DateTime.now().toIso8601String(),
-    }).eq('id', materialId);
+    await _client
+        .from('learning_materials')
+        .update({
+          'is_archived': false,
+          'updated_at': DateTime.now().toIso8601String(),
+        })
+        .eq('id', materialId);
   }
 
   @override
-  Future<List<ClassRealmMaterial>> getArchivedMaterials(String subjectOfferingId) async {
+  Future<List<ClassRealmMaterial>> getArchivedMaterials(
+    String subjectOfferingId,
+  ) async {
     try {
       final foldersRes = await _client
           .from('folders')
           .select('id')
           .eq('subject_offering_id', subjectOfferingId);
 
-      final folderIds = (foldersRes as List).map((f) => f['id'].toString()).toList();
+      final folderIds = (foldersRes as List)
+          .map((f) => f['id'].toString())
+          .toList();
       if (folderIds.isEmpty) return [];
 
       final response = await _client
@@ -530,7 +555,9 @@ class SupabaseLearningMaterialRepository implements LearningMaterialRepository {
     required String mimeType,
     required bool updateAllSharedSections,
   }) async {
-    final sanitizedFileName = MaterialFileValidator.sanitizeFileName(newFileName);
+    final sanitizedFileName = MaterialFileValidator.sanitizeFileName(
+      newFileName,
+    );
     final effectiveMimeType = mimeType.isNotEmpty
         ? mimeType
         : MaterialFileValidator.getMimeType(sanitizedFileName);
@@ -541,7 +568,9 @@ class SupabaseLearningMaterialRepository implements LearningMaterialRepository {
       originalFileName: sanitizedFileName,
     );
 
-    await _client.storage.from(_bucket).uploadBinary(
+    await _client.storage
+        .from(_bucket)
+        .uploadBinary(
           newStoragePath,
           newFileBytes,
           fileOptions: FileOptions(
@@ -550,23 +579,31 @@ class SupabaseLearningMaterialRepository implements LearningMaterialRepository {
           ),
         );
 
-    final newPublicUrl = _client.storage.from(_bucket).getPublicUrl(newStoragePath);
+    final newPublicUrl = _client.storage
+        .from(_bucket)
+        .getPublicUrl(newStoragePath);
     final nowIso = DateTime.now().toIso8601String();
 
     if (updateAllSharedSections) {
       // Update ALL active rows that shared the old URL
-      await _client.from('learning_materials').update({
-        'storage_path_url': newPublicUrl,
-        'file_name': sanitizedFileName,
-        'file_size_bytes': newFileSizeBytes,
-        'mime_type': effectiveMimeType,
-        'updated_at': nowIso,
-      }).eq('storage_path_url', currentStoragePathUrl).eq('is_archived', false);
+      await _client
+          .from('learning_materials')
+          .update({
+            'storage_path_url': newPublicUrl,
+            'file_name': sanitizedFileName,
+            'file_size_bytes': newFileSizeBytes,
+            'mime_type': effectiveMimeType,
+            'updated_at': nowIso,
+          })
+          .eq('storage_path_url', currentStoragePathUrl)
+          .eq('is_archived', false);
 
       // Clean up old storage object if URL changed
       if (currentStoragePathUrl != newPublicUrl &&
           currentStoragePathUrl.startsWith('http')) {
-        final oldRelativePath = _extractStorageRelativePath(currentStoragePathUrl);
+        final oldRelativePath = _extractStorageRelativePath(
+          currentStoragePathUrl,
+        );
         if (oldRelativePath != null) {
           try {
             await _client.storage.from(_bucket).remove([oldRelativePath]);
@@ -577,13 +614,16 @@ class SupabaseLearningMaterialRepository implements LearningMaterialRepository {
       }
     } else {
       // Update THIS section row only
-      await _client.from('learning_materials').update({
-        'storage_path_url': newPublicUrl,
-        'file_name': sanitizedFileName,
-        'file_size_bytes': newFileSizeBytes,
-        'mime_type': effectiveMimeType,
-        'updated_at': nowIso,
-      }).eq('id', materialId);
+      await _client
+          .from('learning_materials')
+          .update({
+            'storage_path_url': newPublicUrl,
+            'file_name': sanitizedFileName,
+            'file_size_bytes': newFileSizeBytes,
+            'mime_type': effectiveMimeType,
+            'updated_at': nowIso,
+          })
+          .eq('id', materialId);
 
       // Check if other sections still reference old URL; if not, clean it up
       if (currentStoragePathUrl != newPublicUrl &&
@@ -596,8 +636,9 @@ class SupabaseLearningMaterialRepository implements LearningMaterialRepository {
               .eq('is_archived', false);
 
           if ((otherRefs as List).isEmpty) {
-            final oldRelativePath =
-                _extractStorageRelativePath(currentStoragePathUrl);
+            final oldRelativePath = _extractStorageRelativePath(
+              currentStoragePathUrl,
+            );
             if (oldRelativePath != null) {
               await _client.storage.from(_bucket).remove([oldRelativePath]);
             }
@@ -656,7 +697,9 @@ class SupabaseLearningMaterialRepository implements LearningMaterialRepository {
     // 1. Fetch all folders for this offering to reconstruct complete hierarchy
     final allFoldersResp = await _client
         .from('folders')
-        .select('id, parent_folder_id, folder_name, is_visible_to_students, is_archived')
+        .select(
+          'id, parent_folder_id, folder_name, is_visible_to_students, is_archived',
+        )
         .eq('subject_offering_id', subjectOfferingId);
 
     final folderMap = <String, Map<String, dynamic>>{};
@@ -731,7 +774,9 @@ class SupabaseLearningMaterialRepository implements LearningMaterialRepository {
         }
       }
     } catch (e) {
-      debugPrint('Warning: get_server_time RPC call unfulfilled ($e). Falling back to client UTC clock.');
+      debugPrint(
+        'Warning: get_server_time RPC call unfulfilled ($e). Falling back to client UTC clock.',
+      );
     }
     return DateTime.now().toUtc();
   }

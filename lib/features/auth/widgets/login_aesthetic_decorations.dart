@@ -17,13 +17,55 @@ class LushCornerLeavesPainter extends CustomPainter {
     final scale = isDesktop ? 1.0 : 0.75;
 
     final leafConfigs = [
-      _Leaf(angle: -1.3, length: 140 * scale, width: 44 * scale, darkColor: const Color(0xFF1B4332), lightColor: const Color(0xFF40916C)),
-      _Leaf(angle: -1.05, length: 180 * scale, width: 52 * scale, darkColor: const Color(0xFF2D6A4F), lightColor: const Color(0xFF52B788)),
-      _Leaf(angle: -0.85, length: 160 * scale, width: 48 * scale, darkColor: const Color(0xFF1B4332), lightColor: const Color(0xFF74C69D)),
-      _Leaf(angle: -0.6, length: 195 * scale, width: 56 * scale, darkColor: const Color(0xFF2D6A4F), lightColor: const Color(0xFF52B788)),
-      _Leaf(angle: -0.38, length: 165 * scale, width: 50 * scale, darkColor: const Color(0xFF40916C), lightColor: const Color(0xFF95D5B2)),
-      _Leaf(angle: -0.15, length: 130 * scale, width: 40 * scale, darkColor: const Color(0xFF1B4332), lightColor: const Color(0xFF52B788)),
-      _Leaf(angle: -0.75, length: 110 * scale, width: 36 * scale, darkColor: const Color(0xFF2D6A4F), lightColor: const Color(0xFF74C69D)),
+      _Leaf(
+        angle: -1.3,
+        length: 140 * scale,
+        width: 44 * scale,
+        darkColor: const Color(0xFF1B4332),
+        lightColor: const Color(0xFF40916C),
+      ),
+      _Leaf(
+        angle: -1.05,
+        length: 180 * scale,
+        width: 52 * scale,
+        darkColor: const Color(0xFF2D6A4F),
+        lightColor: const Color(0xFF52B788),
+      ),
+      _Leaf(
+        angle: -0.85,
+        length: 160 * scale,
+        width: 48 * scale,
+        darkColor: const Color(0xFF1B4332),
+        lightColor: const Color(0xFF74C69D),
+      ),
+      _Leaf(
+        angle: -0.6,
+        length: 195 * scale,
+        width: 56 * scale,
+        darkColor: const Color(0xFF2D6A4F),
+        lightColor: const Color(0xFF52B788),
+      ),
+      _Leaf(
+        angle: -0.38,
+        length: 165 * scale,
+        width: 50 * scale,
+        darkColor: const Color(0xFF40916C),
+        lightColor: const Color(0xFF95D5B2),
+      ),
+      _Leaf(
+        angle: -0.15,
+        length: 130 * scale,
+        width: 40 * scale,
+        darkColor: const Color(0xFF1B4332),
+        lightColor: const Color(0xFF52B788),
+      ),
+      _Leaf(
+        angle: -0.75,
+        length: 110 * scale,
+        width: 36 * scale,
+        darkColor: const Color(0xFF2D6A4F),
+        lightColor: const Color(0xFF74C69D),
+      ),
     ];
 
     for (final leaf in leafConfigs) {
@@ -36,13 +78,55 @@ class LushCornerLeavesPainter extends CustomPainter {
     final scale = isDesktop ? 1.0 : 0.75;
 
     final leafConfigs = [
-      _Leaf(angle: -1.8, length: 140 * scale, width: 44 * scale, darkColor: const Color(0xFF1B4332), lightColor: const Color(0xFF40916C)),
-      _Leaf(angle: -2.1, length: 185 * scale, width: 54 * scale, darkColor: const Color(0xFF2D6A4F), lightColor: const Color(0xFF52B788)),
-      _Leaf(angle: -2.35, length: 160 * scale, width: 48 * scale, darkColor: const Color(0xFF1B4332), lightColor: const Color(0xFF74C69D)),
-      _Leaf(angle: -2.55, length: 195 * scale, width: 56 * scale, darkColor: const Color(0xFF2D6A4F), lightColor: const Color(0xFF52B788)),
-      _Leaf(angle: -2.8, length: 165 * scale, width: 50 * scale, darkColor: const Color(0xFF40916C), lightColor: const Color(0xFF95D5B2)),
-      _Leaf(angle: -3.0, length: 130 * scale, width: 40 * scale, darkColor: const Color(0xFF1B4332), lightColor: const Color(0xFF52B788)),
-      _Leaf(angle: -2.4, length: 115 * scale, width: 38 * scale, darkColor: const Color(0xFF2D6A4F), lightColor: const Color(0xFF74C69D)),
+      _Leaf(
+        angle: -1.8,
+        length: 140 * scale,
+        width: 44 * scale,
+        darkColor: const Color(0xFF1B4332),
+        lightColor: const Color(0xFF40916C),
+      ),
+      _Leaf(
+        angle: -2.1,
+        length: 185 * scale,
+        width: 54 * scale,
+        darkColor: const Color(0xFF2D6A4F),
+        lightColor: const Color(0xFF52B788),
+      ),
+      _Leaf(
+        angle: -2.35,
+        length: 160 * scale,
+        width: 48 * scale,
+        darkColor: const Color(0xFF1B4332),
+        lightColor: const Color(0xFF74C69D),
+      ),
+      _Leaf(
+        angle: -2.55,
+        length: 195 * scale,
+        width: 56 * scale,
+        darkColor: const Color(0xFF2D6A4F),
+        lightColor: const Color(0xFF52B788),
+      ),
+      _Leaf(
+        angle: -2.8,
+        length: 165 * scale,
+        width: 50 * scale,
+        darkColor: const Color(0xFF40916C),
+        lightColor: const Color(0xFF95D5B2),
+      ),
+      _Leaf(
+        angle: -3.0,
+        length: 130 * scale,
+        width: 40 * scale,
+        darkColor: const Color(0xFF1B4332),
+        lightColor: const Color(0xFF52B788),
+      ),
+      _Leaf(
+        angle: -2.4,
+        length: 115 * scale,
+        width: 38 * scale,
+        darkColor: const Color(0xFF2D6A4F),
+        lightColor: const Color(0xFF74C69D),
+      ),
     ];
 
     for (final leaf in leafConfigs) {
@@ -57,16 +141,24 @@ class LushCornerLeavesPainter extends CustomPainter {
 
     final path = Path();
     path.moveTo(0, 0);
-    path.quadraticBezierTo(leaf.width * 0.7, leaf.length * 0.45, 0, leaf.length);
+    path.quadraticBezierTo(
+      leaf.width * 0.7,
+      leaf.length * 0.45,
+      0,
+      leaf.length,
+    );
     path.quadraticBezierTo(-leaf.width * 0.7, leaf.length * 0.45, 0, 0);
     path.close();
 
     final paint = Paint()
-      ..shader = LinearGradient(
-        begin: Alignment.bottomCenter,
-        end: Alignment.topCenter,
-        colors: [leaf.darkColor, leaf.lightColor],
-      ).createShader(Rect.fromLTWH(-leaf.width, 0, leaf.width * 2, leaf.length));
+      ..shader =
+          LinearGradient(
+            begin: Alignment.bottomCenter,
+            end: Alignment.topCenter,
+            colors: [leaf.darkColor, leaf.lightColor],
+          ).createShader(
+            Rect.fromLTWH(-leaf.width, 0, leaf.width * 2, leaf.length),
+          );
 
     // Soft drop shadow under each leaf
     canvas.drawShadow(path, Colors.black.withValues(alpha: 0.25), 4.0, false);
@@ -81,7 +173,12 @@ class LushCornerLeavesPainter extends CustomPainter {
 
     final veinPath = Path();
     veinPath.moveTo(0, 4);
-    veinPath.quadraticBezierTo(leaf.width * 0.05, leaf.length * 0.5, 0, leaf.length * 0.92);
+    veinPath.quadraticBezierTo(
+      leaf.width * 0.05,
+      leaf.length * 0.5,
+      0,
+      leaf.length * 0.92,
+    );
     canvas.drawPath(veinPath, veinPaint);
 
     canvas.restore();
@@ -160,9 +257,19 @@ class _GraduationCapPainter extends CustomPainter {
     // 1. Skull cap (lower bowl of the hat)
     final skullPath = Path();
     skullPath.moveTo(center.dx - 32, center.dy + 8);
-    skullPath.quadraticBezierTo(center.dx, center.dy + 38, center.dx + 34, center.dy + 12);
+    skullPath.quadraticBezierTo(
+      center.dx,
+      center.dy + 38,
+      center.dx + 34,
+      center.dy + 12,
+    );
     skullPath.lineTo(center.dx + 28, center.dy + 4);
-    skullPath.quadraticBezierTo(center.dx, center.dy + 26, center.dx - 26, center.dy + 2);
+    skullPath.quadraticBezierTo(
+      center.dx,
+      center.dy + 26,
+      center.dx - 26,
+      center.dy + 2,
+    );
     skullPath.close();
 
     final skullPaint = Paint()
@@ -177,21 +284,17 @@ class _GraduationCapPainter extends CustomPainter {
 
     // 2. Diamond Mortarboard Top (Perspective tilted)
     final topPath = Path();
-    topPath.moveTo(center.dx - 58, center.dy - 6);  // Left
-    topPath.lineTo(center.dx + 6, center.dy - 32);  // Top
-    topPath.lineTo(center.dx + 66, center.dy - 4);  // Right
-    topPath.lineTo(center.dx + 2, center.dy + 22);  // Bottom
+    topPath.moveTo(center.dx - 58, center.dy - 6); // Left
+    topPath.lineTo(center.dx + 6, center.dy - 32); // Top
+    topPath.lineTo(center.dx + 66, center.dy - 4); // Right
+    topPath.lineTo(center.dx + 2, center.dy + 22); // Bottom
     topPath.close();
 
     final topPaint = Paint()
       ..shader = const LinearGradient(
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
-        colors: [
-          Color(0xFF2563EB),
-          Color(0xFF1E40AF),
-          Color(0xFF1E3A8A),
-        ],
+        colors: [Color(0xFF2563EB), Color(0xFF1E40AF), Color(0xFF1E3A8A)],
       ).createShader(Rect.fromLTWH(center.dx - 60, center.dy - 35, 130, 60));
 
     canvas.drawShadow(topPath, Colors.black54, 8, true);
@@ -215,8 +318,18 @@ class _GraduationCapPainter extends CustomPainter {
     // 4. Golden Tassel draping down to the right
     final tasselPath = Path();
     tasselPath.moveTo(buttonCenter.dx, buttonCenter.dy);
-    tasselPath.quadraticBezierTo(center.dx + 35, center.dy - 2, center.dx + 48, center.dy + 16);
-    tasselPath.quadraticBezierTo(center.dx + 52, center.dy + 32, center.dx + 50, center.dy + 48);
+    tasselPath.quadraticBezierTo(
+      center.dx + 35,
+      center.dy - 2,
+      center.dx + 48,
+      center.dy + 16,
+    );
+    tasselPath.quadraticBezierTo(
+      center.dx + 52,
+      center.dy + 32,
+      center.dx + 50,
+      center.dy + 48,
+    );
 
     final tasselLinePaint = Paint()
       ..color = const Color(0xFFF59E0B)
@@ -268,4 +381,3 @@ class ClosedBook3DWidget extends StatelessWidget {
     );
   }
 }
-

@@ -155,9 +155,7 @@ class _ParentStudentOverviewTabState extends State<ParentStudentOverviewTab> {
         _isLoadingSubjects = false;
       });
 
-      AppDataCache.instance.set(cacheKey, {
-        'offerings': offeringRows,
-      });
+      AppDataCache.instance.set(cacheKey, {'offerings': offeringRows});
     } catch (e) {
       debugPrint('Error loading parent student overview details: $e');
       if (mounted) setState(() => _isLoadingSubjects = false);
@@ -184,8 +182,7 @@ class _ParentStudentOverviewTabState extends State<ParentStudentOverviewTab> {
           child: const AppEmptyState(
             icon: Icons.family_restroom_outlined,
             title: 'No Linked Student Found',
-            message:
-                'Your account has not been connected to a student yet. Please coordinate with the teacher or school admin.',
+            message: 'Your account has not been connected to a student yet. Please coordinate with the teacher or school admin.',
           ),
         ),
       );
@@ -240,8 +237,9 @@ class _ParentStudentOverviewTabState extends State<ParentStudentOverviewTab> {
           r.date.day == today.day;
     }).toList();
 
-    AttendanceRecord? latestToday =
-        todayRecords.isNotEmpty ? todayRecords.first : null;
+    AttendanceRecord? latestToday = todayRecords.isNotEmpty
+        ? todayRecords.first
+        : null;
 
     return AppPullToRefresh(
       onRefresh: _handleRefresh,
@@ -403,7 +401,10 @@ class _ParentStudentOverviewTabState extends State<ParentStudentOverviewTab> {
                     const SizedBox(height: 8),
                     const Text(
                       'No Enrolled Subjects',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                      ),
                     ),
                     const SizedBox(height: 4),
                     Text(
@@ -437,10 +438,9 @@ class _ParentStudentOverviewTabState extends State<ParentStudentOverviewTab> {
     UserModel student,
     AttendanceRecord? latestToday,
   ) {
-    final gradeSection =
-        student.departmentOrSection?.isNotEmpty == true
-            ? student.departmentOrSection!
-            : 'Senior High School';
+    final gradeSection = student.departmentOrSection?.isNotEmpty == true
+        ? student.departmentOrSection!
+        : 'Senior High School';
 
     final lrnDisplay = student.lrn?.isNotEmpty == true
         ? student.lrn!
@@ -540,8 +540,8 @@ class _ParentStudentOverviewTabState extends State<ParentStudentOverviewTab> {
                           student.firstName?.isNotEmpty == true
                               ? student.firstName![0].toUpperCase()
                               : (student.fullName.isNotEmpty
-                                  ? student.fullName[0].toUpperCase()
-                                  : 'S'),
+                                    ? student.fullName[0].toUpperCase()
+                                    : 'S'),
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 21,
@@ -619,11 +619,7 @@ class _ParentStudentOverviewTabState extends State<ParentStudentOverviewTab> {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(
-                        todayStatusIcon,
-                        size: 15,
-                        color: todayStatusColor,
-                      ),
+                      Icon(todayStatusIcon, size: 15, color: todayStatusColor),
                       const SizedBox(width: 8),
                       Text(
                         todayStatusText,
@@ -658,11 +654,13 @@ class _ParentStudentOverviewTabState extends State<ParentStudentOverviewTab> {
     final teacherFirstName = teacherMap['first_name']?.toString() ?? '';
     final teacherLastName = teacherMap['last_name']?.toString() ?? '';
     final teacherGender = teacherMap['gender']?.toString() ?? '';
-    final teacherFullName = [teacherFirstName, teacherLastName]
-        .where((s) => s.isNotEmpty)
-        .join(' ');
-    final teacherTitle =
-        teacherGender.toLowerCase() == 'female' ? 'Ms.' : 'Mr.';
+    final teacherFullName = [
+      teacherFirstName,
+      teacherLastName,
+    ].where((s) => s.isNotEmpty).join(' ');
+    final teacherTitle = teacherGender.toLowerCase() == 'female'
+        ? 'Ms.'
+        : 'Mr.';
     final teacherDisplayName = teacherFullName.isNotEmpty
         ? '$teacherTitle $teacherFullName'
         : 'Assigned Teacher';
@@ -674,7 +672,8 @@ class _ParentStudentOverviewTabState extends State<ParentStudentOverviewTab> {
     ScheduleModel? matchingSchedule;
     for (final s in _schedules) {
       final sSub = s.subject.toLowerCase();
-      if ((subjectCode.isNotEmpty && sSub.contains(subjectCode.toLowerCase())) ||
+      if ((subjectCode.isNotEmpty &&
+              sSub.contains(subjectCode.toLowerCase())) ||
           sSub.contains(subjectName.toLowerCase()) ||
           subjectName.toLowerCase().contains(sSub)) {
         matchingSchedule = s;

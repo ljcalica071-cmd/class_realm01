@@ -132,8 +132,11 @@ class StudentLiveProctorState {
         json['status']?.toString() ?? '',
       ),
       violationCount: (json['violation_count'] as num?)?.toInt() ?? 0,
-      violations: (json['violations'] as List<dynamic>?)
-              ?.map((v) => ProctorViolationLog.fromJson(v as Map<String, dynamic>))
+      violations:
+          (json['violations'] as List<dynamic>?)
+              ?.map(
+                (v) => ProctorViolationLog.fromJson(v as Map<String, dynamic>),
+              )
               .toList() ??
           const [],
       lastActiveAt: json['last_active_at'] != null

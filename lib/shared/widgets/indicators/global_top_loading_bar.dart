@@ -10,10 +10,7 @@ import 'package:class_realm/core/services/app_lifecycle_coordinator.dart';
 class GlobalTopLoadingBar extends StatefulWidget {
   final double height;
 
-  const GlobalTopLoadingBar({
-    super.key,
-    this.height = 3.5,
-  });
+  const GlobalTopLoadingBar({super.key, this.height = 3.5});
 
   @override
   State<GlobalTopLoadingBar> createState() => _GlobalTopLoadingBarState();
@@ -56,13 +53,15 @@ class _GlobalTopLoadingBarState extends State<GlobalTopLoadingBar>
                 boxShadow: isSyncing
                     ? [
                         BoxShadow(
-                          color: const Color(0xFF38BDF8).withValues(alpha: 0.65),
+                          color: const Color(0xFF38BDF8)
+                              .withValues(alpha: 0.65),
                           blurRadius: 8,
                           spreadRadius: 1,
                           offset: const Offset(0, 1.5),
                         ),
                         BoxShadow(
-                          color: const Color(0xFFF59E0B).withValues(alpha: 0.35),
+                          color: const Color(0xFFF59E0B)
+                              .withValues(alpha: 0.35),
                           blurRadius: 12,
                           spreadRadius: 0.5,
                         ),

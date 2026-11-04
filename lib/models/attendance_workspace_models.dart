@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+
 import 'academic_models.dart';
 
 export 'academic_models.dart' show AttendanceStatus;
@@ -133,20 +134,20 @@ class AttendanceWorkspaceRecord {
   }
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'student_id': studentId,
-        'subject_offering_id': subjectOfferingId,
-        'attendance_date': _formatDate(attendanceDate),
-        'status': status.name,
-        'recording_method': source.toDbString(),
-        'source': source.name,
-        'remarks': remarks,
-        'recorded_by': recordedBy,
-        'time_in': timeIn,
-        'device_id': deviceId,
-        'created_at': createdAt?.toUtc().toIso8601String(),
-        'modified_by': modifiedBy,
-      };
+    'id': id,
+    'student_id': studentId,
+    'subject_offering_id': subjectOfferingId,
+    'attendance_date': _formatDate(attendanceDate),
+    'status': status.name,
+    'recording_method': source.toDbString(),
+    'source': source.name,
+    'remarks': remarks,
+    'recorded_by': recordedBy,
+    'time_in': timeIn,
+    'device_id': deviceId,
+    'created_at': createdAt?.toUtc().toIso8601String(),
+    'modified_by': modifiedBy,
+  };
 }
 
 class AttendanceDateRange {
@@ -154,17 +155,17 @@ class AttendanceDateRange {
   final DateTime endDate;
 
   AttendanceDateRange({required DateTime startDate, required DateTime endDate})
-      : startDate = _dateOnly(startDate),
-        endDate = _dateOnly(endDate) {
+    : startDate = _dateOnly(startDate),
+      endDate = _dateOnly(endDate) {
     if (this.startDate.isAfter(this.endDate)) {
       throw ArgumentError('The start date must not be after the end date.');
     }
   }
 
   Map<String, String> toJson() => {
-        'start_date': _formatDate(startDate),
-        'end_date': _formatDate(endDate),
-      };
+    'start_date': _formatDate(startDate),
+    'end_date': _formatDate(endDate),
+  };
 }
 
 class AttendanceHistoryFilter {
@@ -178,9 +179,9 @@ class AttendanceHistoryFilter {
     required this.dateRange,
     this.offset = 0,
     this.pageSize = 20,
-  })  : assert(subjectOfferingId != ''),
-        assert(offset >= 0),
-        assert(pageSize > 0);
+  }) : assert(subjectOfferingId != ''),
+       assert(offset >= 0),
+       assert(pageSize > 0);
 }
 
 class AttendancePage<T> {
@@ -315,14 +316,14 @@ class AttendanceStudentSummary {
   }
 
   Map<String, dynamic> toJson() => {
-        'student_id': studentId,
-        'present_count': presentCount,
-        'late_count': lateCount,
-        'absent_count': absentCount,
-        'excused_count': excusedCount,
-        'total_days': totalDays,
-        'presence_rate': presenceRate,
-      };
+    'student_id': studentId,
+    'present_count': presentCount,
+    'late_count': lateCount,
+    'absent_count': absentCount,
+    'excused_count': excusedCount,
+    'total_days': totalDays,
+    'presence_rate': presenceRate,
+  };
 }
 
 @immutable
@@ -359,11 +360,7 @@ class AttendanceRosterStudent {
     final fn = firstName.trim();
     final mi = middleInitial;
 
-    final parts = [
-      if (ln.isNotEmpty) '$ln,',
-      if (fn.isNotEmpty) fn,
-      ?mi,
-    ];
+    final parts = [if (ln.isNotEmpty) '$ln,', if (fn.isNotEmpty) fn, ?mi];
     if (parts.isEmpty) return studentId;
     return parts.join(' ');
   }
@@ -402,24 +399,21 @@ class AttendanceRosterStudent {
   }
 
   Map<String, dynamic> toJson() => {
-        'student_id': studentId,
-        'lrn': lrn,
-        'rfid_uid': rfidUid,
-        'first_name': firstName,
-        'middle_name': middleName,
-        'last_name': lastName,
-        'gender': gender,
-      };
+    'student_id': studentId,
+    'lrn': lrn,
+    'rfid_uid': rfidUid,
+    'first_name': firstName,
+    'middle_name': middleName,
+    'last_name': lastName,
+    'gender': gender,
+  };
 }
 
 class AttendanceRosterResult {
   final List<AttendanceRosterStudent> students;
   final List<AttendanceWorkspaceRecord> records;
 
-  const AttendanceRosterResult({
-    required this.students,
-    required this.records,
-  });
+  const AttendanceRosterResult({required this.students, required this.records});
 }
 
 @immutable
@@ -450,12 +444,12 @@ class AttendanceCutoffConfig {
   }
 
   Map<String, dynamic> toJson() => {
-        'subject_offering_id': subjectOfferingId,
-        'present_start_mins_before': presentStartMinsBefore,
-        'present_grace_mins': presentGraceMins,
-        'late_cutoff_mins': lateCutoffMins,
-        'absent_cutoff_mins': absentCutoffMins,
-      };
+    'subject_offering_id': subjectOfferingId,
+    'present_start_mins_before': presentStartMinsBefore,
+    'present_grace_mins': presentGraceMins,
+    'late_cutoff_mins': lateCutoffMins,
+    'absent_cutoff_mins': absentCutoffMins,
+  };
 
   AttendanceCutoffConfig copyWith({
     String? subjectOfferingId,

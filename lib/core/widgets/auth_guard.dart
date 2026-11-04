@@ -7,11 +7,7 @@ class AuthGuard extends StatefulWidget {
   final Widget child;
   final List<UserRole> allowedRoles;
 
-  const AuthGuard({
-    super.key,
-    required this.child,
-    required this.allowedRoles,
-  });
+  const AuthGuard({super.key, required this.child, required this.allowedRoles});
 
   @override
   State<AuthGuard> createState() => _AuthGuardState();
@@ -34,10 +30,12 @@ class _AuthGuardState extends State<AuthGuard> {
     final user = AuthRepository.instance.currentUser;
     if (user == null) return false;
     if (!widget.allowedRoles.contains(user.role)) return false;
-    if (user.status == AccountStatus.deactivated || user.status == AccountStatus.rejected) {
+    if (user.status == AccountStatus.deactivated ||
+        user.status == AccountStatus.rejected) {
       return false;
     }
-    if ((user.status == AccountStatus.pendingFirstLogin || user.status == AccountStatus.pending) &&
+    if ((user.status == AccountStatus.pendingFirstLogin ||
+            user.status == AccountStatus.pending) &&
         widget.child.runtimeType.toString() != 'FirstLoginScreen') {
       return false;
     }
@@ -48,7 +46,7 @@ class _AuthGuardState extends State<AuthGuard> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final user = AuthRepository.instance.currentUser;
-      
+
       // 1. Not logged in
       if (user == null) {
         _redirect(AppRoutes.login);
@@ -63,13 +61,19 @@ class _AuthGuardState extends State<AuthGuard> {
       }
 
       // 3. Status checks
-      if ((user.status == AccountStatus.pendingFirstLogin || user.status == AccountStatus.pending) &&
+      if ((user.status == AccountStatus.pendingFirstLogin ||
+              user.status == AccountStatus.pending) &&
           widget.child.runtimeType.toString() != 'FirstLoginScreen') {
-        _redirect(user.role == UserRole.teacher ? AppRoutes.teacherFirstLogin : AppRoutes.studentFirstLogin);
+        _redirect(
+          user.role == UserRole.teacher
+              ? AppRoutes.teacherFirstLogin
+              : AppRoutes.studentFirstLogin,
+        );
         return;
       }
-      
-      if (user.status == AccountStatus.deactivated || user.status == AccountStatus.rejected) {
+
+      if (user.status == AccountStatus.deactivated ||
+          user.status == AccountStatus.rejected) {
         AuthRepository.instance.logout();
         _redirect(AppRoutes.login);
         return;

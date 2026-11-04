@@ -230,8 +230,7 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
                     child: const AppEmptyState(
                       icon: Icons.fact_check_outlined,
                       title: 'No Attendance Records Yet',
-                      message:
-                          'Your class attendance logs will appear here once recorded.',
+                      message: 'Your class attendance logs will appear here once recorded.',
                     ),
                   )
                 : ListView.separated(
@@ -588,24 +587,21 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
       textColor = isDark ? const Color(0xFFFCA5A5) : const Color(0xFF991B1B);
       icon = Icons.error_rounded;
       title = 'Critical Notice: $absentCount Recorded Absences (SARDO Risk)';
-      subtitle =
-          'You have reached 10 absences, placing you at critical risk of drop-out status under DepEd policy. Please schedule an urgent conference with your adviser.';
+      subtitle = 'You have reached 10 absences, placing you at critical risk of drop-out status under DepEd policy. Please schedule an urgent conference with your adviser.';
     } else if (absentCount >= 5) {
       bannerColor = isDark ? const Color(0xFF431407) : const Color(0xFFFFF7ED);
       borderColor = const Color(0xFFEA580C);
       textColor = isDark ? const Color(0xFFFDBA74) : const Color(0xFF9A3412);
       icon = Icons.warning_amber_rounded;
       title = 'Attendance Alert: $absentCount Recorded Absences';
-      subtitle =
-          'Attendance intervention required. Please coordinate with your subject teacher or class adviser to submit excuse letters or make-up work.';
+      subtitle = 'Attendance intervention required. Please coordinate with your subject teacher or class adviser to submit excuse letters or make-up work.';
     } else {
       bannerColor = isDark ? const Color(0xFF422006) : const Color(0xFFFEFCE8);
       borderColor = const Color(0xFFCA8A04);
       textColor = isDark ? const Color(0xFFFDE047) : const Color(0xFF854D0E);
       icon = Icons.info_outline_rounded;
       title = 'Early Warning: $absentCount Recorded Absences';
-      subtitle =
-          'You have accumulated 3 absences. Please coordinate with your subject teacher regarding missed sessions.';
+      subtitle = 'You have accumulated 3 absences. Please coordinate with your subject teacher regarding missed sessions.';
     }
 
     return Container(

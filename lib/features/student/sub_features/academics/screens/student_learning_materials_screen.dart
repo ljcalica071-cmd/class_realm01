@@ -1,4 +1,5 @@
 import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:loading_animation_widget/loading_animation_widget.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -273,8 +274,7 @@ class _StudentLearningMaterialsScreenState
       if (material.isRichTextLesson) {
         _showStudentAlert(
           title: 'Lesson Module Ready',
-          message:
-              'This lesson module is built directly into the app and is always accessible offline inside the reader.',
+          message: 'This lesson module is built directly into the app and is always accessible offline inside the reader.',
         );
         return;
       }
@@ -282,8 +282,7 @@ class _StudentLearningMaterialsScreenState
       if (material.isEmbedUrl) {
         _showStudentAlert(
           title: 'Cloud Document Link',
-          message:
-              'This is an online cloud document / presentation. You can open and view it anytime with an internet connection.',
+          message: 'This is an online cloud document / presentation. You can open and view it anytime with an internet connection.',
         );
         return;
       }
@@ -306,15 +305,13 @@ class _StudentLearningMaterialsScreenState
       // Edge Case #26: Storage full / Disk error
       _showStudentAlert(
         title: 'Storage Full',
-        message:
-            'Unable to save offline copy. Please check if your device has enough free storage space.',
+        message: 'Unable to save offline copy. Please check if your device has enough free storage space.',
       );
     } catch (e) {
       // Edge Case #1 & #20: Graceful fallback
       _showStudentAlert(
         title: 'Document Notice',
-        message:
-            'The cloud storage server is temporarily unreachable. Your study notes and chapter content remain fully readable in the viewer.',
+        message: 'The cloud storage server is temporarily unreachable. Your study notes and chapter content remain fully readable in the viewer.',
       );
     } finally {
       if (mounted) {
@@ -664,7 +661,11 @@ class _StudentLearningMaterialsScreenState
         ),
       ),
       child: ListTile(
-        leading: const Icon(Icons.folder_rounded, color: Colors.amber, size: 30),
+        leading: const Icon(
+          Icons.folder_rounded,
+          color: Colors.amber,
+          size: 30,
+        ),
         title: Text(
           folder.folderName,
           style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),

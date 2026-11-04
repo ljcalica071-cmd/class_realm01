@@ -19,16 +19,13 @@ class TeacherTopSummaryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    
+
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         color: theme.colorScheme.surface,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: baseColor.withValues(alpha: 0.2),
-          width: 1,
-        ),
+        border: Border.all(color: baseColor.withValues(alpha: 0.2), width: 1),
       ),
       child: Stack(
         clipBehavior: Clip.none,
@@ -81,13 +78,14 @@ class TeacherTopSummaryCard extends StatelessWidget {
               ),
               const SizedBox(height: 12),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: baseColor.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: baseColor.withValues(alpha: 0.2),
-                  ),
+                  border: Border.all(color: baseColor.withValues(alpha: 0.2)),
                 ),
                 child: Text(
                   subText,

@@ -53,8 +53,9 @@ class _LoginScreenState extends State<LoginScreen> {
         final text = _passwordController.text;
         if (!_passwordController.selection.isValid ||
             _passwordController.selection.start == -1) {
-          _passwordController.selection =
-              TextSelection.collapsed(offset: text.length);
+          _passwordController.selection = TextSelection.collapsed(
+            offset: text.length,
+          );
         }
       }
     });
@@ -92,7 +93,9 @@ class _LoginScreenState extends State<LoginScreen> {
             maxAttempts: 5,
           );
           if (accStatus.isLocked && mounted) {
-            _beginLockoutCountdown(Duration(seconds: accStatus.remainingSeconds));
+            _beginLockoutCountdown(
+              Duration(seconds: accStatus.remainingSeconds),
+            );
             AppModals.showErrorDialog(
               context: context,
               title: 'Account Locked',
@@ -205,19 +208,16 @@ class _LoginScreenState extends State<LoginScreen> {
       if (user != null) {
         final email = _emailController.text.trim();
         TextInput.finishAutofillContext(shouldSave: true);
-        await LocalStorageService.saveRememberMe(
-          _rememberMe,
-          email,
-        );
+        await LocalStorageService.saveRememberMe(_rememberMe, email);
         if (!mounted) return;
       }
 
       if (user == null) {
         setState(() => _isLoading = false);
         TextInput.finishAutofillContext(shouldSave: false);
-        
+
         if (_isRateLimited) return;
-        
+
         AppModals.showErrorDialog(
           context: context,
           title: 'Authentication Failed',
@@ -225,9 +225,11 @@ class _LoginScreenState extends State<LoginScreen> {
           onConfirm: () {
             // Focus back to password without clearing it (User Friendly)
             final len = _passwordController.text.length;
-            _passwordController.selection = TextSelection.collapsed(offset: len);
+            _passwordController.selection = TextSelection.collapsed(
+              offset: len,
+            );
             _passwordFocusNode.requestFocus();
-          }
+          },
         );
         return;
       }
@@ -248,7 +250,7 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!mounted) return;
       setState(() => _isLoading = false);
       TextInput.finishAutofillContext(shouldSave: false);
-      
+
       if (e is LoginAttemptException) {
         if (e.providerRateLimited) {
           final seconds = e.retryAfterSeconds ?? 300;
@@ -268,9 +270,11 @@ class _LoginScreenState extends State<LoginScreen> {
             message: e.message,
             onConfirm: () {
               final len = _passwordController.text.length;
-              _passwordController.selection = TextSelection.collapsed(offset: len);
+              _passwordController.selection = TextSelection.collapsed(
+                offset: len,
+              );
               _passwordFocusNode.requestFocus();
-            }
+            },
           );
           return;
         }
@@ -283,7 +287,7 @@ class _LoginScreenState extends State<LoginScreen> {
           final len = _passwordController.text.length;
           _passwordController.selection = TextSelection.collapsed(offset: len);
           _passwordFocusNode.requestFocus();
-        }
+        },
       );
     }
   }
@@ -298,7 +302,10 @@ class _LoginScreenState extends State<LoginScreen> {
           children: [
             Icon(Icons.build_circle_outlined, color: AppTheme.catRed, size: 28),
             SizedBox(width: 12),
-            Text('System Maintenance', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+            Text(
+              'System Maintenance',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+            ),
           ],
         ),
         content: const Text(
@@ -310,7 +317,9 @@ class _LoginScreenState extends State<LoginScreen> {
             style: ElevatedButton.styleFrom(
               backgroundColor: AppTheme.catRed,
               foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
             ),
             onPressed: () => Navigator.of(ctx).pop(),
             child: const Text('OK'),
@@ -375,8 +384,13 @@ class _LoginScreenState extends State<LoginScreen> {
     }
 
     // Now that the user enters their authenticated dashboard, apply their theme preference
-    final isUserDark = LocalStorageService.isUserDarkMode(user.id, email: user.email);
-    AppTheme.themeModeNotifier.value = isUserDark ? ThemeMode.dark : ThemeMode.light;
+    final isUserDark = LocalStorageService.isUserDarkMode(
+      user.id,
+      email: user.email,
+    );
+    AppTheme.themeModeNotifier.value = isUserDark
+        ? ThemeMode.dark
+        : ThemeMode.light;
 
     // Mark session warm and persist UserModel snapshot for instant zero-logout F5 reload
     markWarmSession();
@@ -456,10 +470,15 @@ class _LoginScreenState extends State<LoginScreen> {
                   TextFormField(
                     controller: _emailController,
                     focusNode: _emailFocusNode,
-                    autofillHints: const [AutofillHints.username, AutofillHints.email],
+                    autofillHints: const [
+                      AutofillHints.username,
+                      AutofillHints.email,
+                    ],
                     inputFormatters: AppValidators.emailFormatters,
                     textInputAction: TextInputAction.next,
-                    autovalidateMode: _hasSubmitted ? AutovalidateMode.onUserInteraction : AutovalidateMode.disabled,
+                    autovalidateMode: _hasSubmitted
+                        ? AutovalidateMode.onUserInteraction
+                        : AutovalidateMode.disabled,
                     onFieldSubmitted: (_) {
                       FocusScope.of(context).requestFocus(_passwordFocusNode);
                     },
@@ -490,8 +509,9 @@ class _LoginScreenState extends State<LoginScreen> {
                       final text = _passwordController.text;
                       if (!_passwordController.selection.isValid ||
                           _passwordController.selection.start == -1) {
-                        _passwordController.selection =
-                            TextSelection.collapsed(offset: text.length);
+                        _passwordController.selection = TextSelection.collapsed(
+                          offset: text.length,
+                        );
                       }
                     },
                     onFieldSubmitted: (_) {
@@ -507,7 +527,8 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     inputFormatters: AppValidators.passwordFormatters,
                     validator: (v) {
-                      if (v == null || v.trim().isEmpty) return 'Password is required';
+                      if (v == null || v.trim().isEmpty)
+                        return 'Password is required';
                       return null;
                     },
                     decoration: AuthResponsiveScaffold.inputDecoration(
@@ -585,7 +606,10 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                       TextButton(
                         onPressed: () {
-                          Navigator.pushNamed(context, AppRoutes.forgotPassword);
+                          Navigator.pushNamed(
+                            context,
+                            AppRoutes.forgotPassword,
+                          );
                         },
                         style: TextButton.styleFrom(
                           padding: EdgeInsets.zero,
@@ -608,7 +632,9 @@ class _LoginScreenState extends State<LoginScreen> {
                     label: _isRateLimited && _lockoutRemaining != null
                         ? 'TRY AGAIN IN ${_formatLockoutRemaining(_lockoutRemaining!)}'
                         : 'LOGIN',
-                    onPressed: _isLoading || _isRateLimited ? null : _handleLogin,
+                    onPressed: _isLoading || _isRateLimited
+                        ? null
+                        : _handleLogin,
                     isLoading: _isLoading,
                   ),
                 ],
@@ -624,10 +650,7 @@ class _LoginScreenState extends State<LoginScreen> {
               children: [
                 const Text(
                   'By logging in, you agree to our ',
-                  style: TextStyle(
-                    fontSize: 11.5,
-                    color: Color(0xFF475569),
-                  ),
+                  style: TextStyle(fontSize: 11.5, color: Color(0xFF475569)),
                 ),
                 InkWell(
                   onTap: _showTermsDialog,
@@ -642,10 +665,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 const Text(
                   ' and ',
-                  style: TextStyle(
-                    fontSize: 11.5,
-                    color: Color(0xFF475569),
-                  ),
+                  style: TextStyle(fontSize: 11.5, color: Color(0xFF475569)),
                 ),
                 InkWell(
                   onTap: _showPrivacyDialog,
@@ -660,10 +680,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 const Text(
                   '.',
-                  style: TextStyle(
-                    fontSize: 11.5,
-                    color: Color(0xFF475569),
-                  ),
+                  style: TextStyle(fontSize: 11.5, color: Color(0xFF475569)),
                 ),
               ],
             ),
@@ -684,8 +701,8 @@ class _LoginScreenState extends State<LoginScreen> {
         _buildSubSection(
           '2. User Responsibilities',
           'â€¢ Teachers: Responsible for accurate input of grades, assessments, and securing their authentication credentials.\n'
-          'â€¢ Students: Must maintain academic integrity, provide accurate personal details, and ensure their RFID tags are only used by them.\n'
-          'â€¢ Parents: Granted access strictly for monitoring their child\'s academic progress and attendance.',
+              'â€¢ Students: Must maintain academic integrity, provide accurate personal details, and ensure their RFID tags are only used by them.\n'
+              'â€¢ Parents: Granted access strictly for monitoring their child\'s academic progress and attendance.',
         ),
         _buildSubSection(
           '3. Acceptable Use',
@@ -722,9 +739,9 @@ class _LoginScreenState extends State<LoginScreen> {
         _buildSubSection(
           '1. Information We Collect',
           'â€¢ Personal Information: Names, Student IDs (LRN), Emails, Contact Numbers, Birthdays, and Gender.\n'
-          'â€¢ Academic Data: Submissions, quiz/exam scores, calculated grades, and attendance records.\n'
-          'â€¢ RFID & Hardware Data: Attendance scan records from RFID cards read by the ESP32 scanner.\n'
-          'â€¢ Technical Data: Suspicious session events during assessments.',
+              'â€¢ Academic Data: Submissions, quiz/exam scores, calculated grades, and attendance records.\n'
+              'â€¢ RFID & Hardware Data: Attendance scan records from RFID cards read by the ESP32 scanner.\n'
+              'â€¢ Technical Data: Suspicious session events during assessments.',
         ),
         _buildSubSection(
           '2. How We Use the Information',
@@ -822,7 +839,11 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                           ),
                           IconButton(
-                            icon: const Icon(LucideIcons.x, size: 20, color: Color(0xFF64748B)),
+                            icon: const Icon(
+                              LucideIcons.x,
+                              size: 20,
+                              color: Color(0xFF64748B),
+                            ),
                             onPressed: () => Navigator.of(dialogContext).pop(),
                             tooltip: 'Close',
                             style: IconButton.styleFrom(
@@ -856,7 +877,10 @@ class _LoginScreenState extends State<LoginScreen> {
                       color: Color(0xFFE2E8F0),
                     ),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 24,
+                        vertical: 14,
+                      ),
                       decoration: const BoxDecoration(
                         color: Color(0xFFF8FAFC),
                         borderRadius: BorderRadius.only(
@@ -930,7 +954,8 @@ class _LoginScreenState extends State<LoginScreen> {
             style: TextStyle(
               fontSize: 13,
               height: 1.55,
-              color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.85),
+              color: Theme.of(context).colorScheme.onSurface
+                  .withValues(alpha: 0.85),
             ),
           ),
         ],

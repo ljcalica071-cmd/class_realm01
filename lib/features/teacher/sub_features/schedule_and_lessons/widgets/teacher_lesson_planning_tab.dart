@@ -55,7 +55,7 @@ class _TeacherLessonPlanningTabState extends State<TeacherLessonPlanningTab> {
 
   UserModel? get _activeTeacher =>
       (widget.currentUserProvider ??
-          (() => AuthRepository.instance.currentUser))();
+      (() => AuthRepository.instance.currentUser))();
 
   @override
   void initState() {
@@ -429,10 +429,7 @@ class _TeacherLessonPlanningTabState extends State<TeacherLessonPlanningTab> {
             key: const Key('ilaw_search_field'),
             controller: _searchCtrl,
             onChanged: (_) => setState(() {}),
-            style: TextStyle(
-              fontSize: 13,
-              color: theme.colorScheme.onSurface,
-            ),
+            style: TextStyle(fontSize: 13, color: theme.colorScheme.onSurface),
             decoration: InputDecoration(
               hintText: 'Search topic or subject...',
               hintStyle: TextStyle(
@@ -888,10 +885,8 @@ class _TeacherLessonPlanningTabState extends State<TeacherLessonPlanningTab> {
                       isLoading: exportingDocx,
                       onPressed: (_activeExportTag != null)
                           ? null
-                          : () => _handleQuickExport(
-                              plan,
-                              IlawExportFormat.docx,
-                            ),
+                          : () =>
+                                _handleQuickExport(plan, IlawExportFormat.docx),
                     ),
                     AppButton.outline(
                       label: 'PDF',
@@ -900,10 +895,8 @@ class _TeacherLessonPlanningTabState extends State<TeacherLessonPlanningTab> {
                       isLoading: exportingPdf,
                       onPressed: (_activeExportTag != null)
                           ? null
-                          : () => _handleQuickExport(
-                              plan,
-                              IlawExportFormat.pdf,
-                            ),
+                          : () =>
+                                _handleQuickExport(plan, IlawExportFormat.pdf),
                     ),
                   ],
                   IconButton(

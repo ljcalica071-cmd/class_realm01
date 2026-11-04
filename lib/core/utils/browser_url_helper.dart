@@ -62,11 +62,7 @@ void downloadFileBytes({
   required String fileName,
   String mimeType = 'application/octet-stream',
 }) {
-  downloadFileBytesWeb(
-    bytes: bytes,
-    fileName: fileName,
-    mimeType: mimeType,
-  );
+  downloadFileBytesWeb(bytes: bytes, fileName: fileName, mimeType: mimeType);
 }
 
 /// Triggers a direct download of string content (CSV, text, JSON) in the browser.
@@ -84,7 +80,8 @@ void downloadFileString({
 
 /// Registers an OS-level file drag-and-drop listener on the browser window.
 void registerWebDrop({
-  required void Function(dynamic bytes, String fileName, int size) onFileDropped,
+  required void Function(dynamic bytes, String fileName, int size)
+  onFileDropped,
 }) {
   registerWebFileDropListener((bytes, fileName, size) {
     onFileDropped(bytes, fileName, size);

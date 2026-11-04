@@ -23,13 +23,17 @@ class AdminTopbar extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isMobile = MediaQuery.of(context).size.width < 900;
-    
+
     return Container(
       height: 70,
       padding: EdgeInsets.symmetric(horizontal: isMobile ? 16 : 24),
       decoration: BoxDecoration(
         color: theme.colorScheme.surface,
-        border: Border(bottom: BorderSide(color: theme.colorScheme.onSurface.withValues(alpha: 0.12))),
+        border: Border(
+          bottom: BorderSide(
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.12),
+          ),
+        ),
       ),
       child: Row(
         children: [
@@ -59,9 +63,11 @@ class AdminTopbar extends StatelessWidget {
           ),
           if (!isMobile) const Spacer(),
           IconButton(
-            icon: Icon(theme.brightness == Brightness.dark
-                ? Icons.light_mode
-                : Icons.dark_mode),
+            icon: Icon(
+              theme.brightness == Brightness.dark
+                  ? Icons.light_mode
+                  : Icons.dark_mode,
+            ),
             onPressed: () {
               final notifier = AppTheme.themeModeNotifier;
               final currentIsDark = theme.brightness == Brightness.dark;
@@ -69,7 +75,11 @@ class AdminTopbar extends StatelessWidget {
               notifier.value = newIsDark ? ThemeMode.dark : ThemeMode.light;
               final user = adminUser ?? AuthRepository.instance.currentUser;
               if (user != null) {
-                LocalStorageService.saveUserThemeMode(user.id, newIsDark, email: user.email);
+                LocalStorageService.saveUserThemeMode(
+                  user.id,
+                  newIsDark,
+                  email: user.email,
+                );
               } else {
                 LocalStorageService.saveThemeMode(newIsDark);
               }
@@ -106,11 +116,14 @@ class AdminTopbar extends StatelessWidget {
                 ),
                 Text(
                   'System Administrator',
-                  style: TextStyle(fontSize: 11, color: theme.colorScheme.onSurface.withValues(alpha: 0.6)),
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                  ),
                 ),
               ],
             ),
-          ]
+          ],
         ],
       ),
     );

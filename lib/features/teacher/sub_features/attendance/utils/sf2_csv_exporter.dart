@@ -1,5 +1,6 @@
 import 'package:csv/csv.dart';
 import 'package:class_realm/models/attendance_workspace_models.dart';
+
 import 'sf2_save_outcome.dart';
 import 'sf2_file_saver_stub.dart'
     if (dart.library.io) 'sf2_file_saver_io.dart'
@@ -72,11 +73,23 @@ class Sf2CsvExporter {
       ],
       [],
       ['--- EARLY WARNING AT-RISK LEARNERS (>= 3 ABSENCES) ---'],
-      ['Student ID', 'Learner Name', 'Section', 'Absences', 'Intervention Status'],
+      [
+        'Student ID',
+        'Learner Name',
+        'Section',
+        'Absences',
+        'Intervention Status',
+      ],
     ];
 
     if (summary.atRiskStudents.isEmpty) {
-      csvRows.add(['—', 'None (All learners in good standing)', '—', 0, 'Good Standing']);
+      csvRows.add([
+        '—',
+        'None (All learners in good standing)',
+        '—',
+        0,
+        'Good Standing',
+      ]);
     } else {
       for (final s in summary.atRiskStudents) {
         csvRows.add([
@@ -144,15 +157,7 @@ class Sf2CsvExporter {
       final sRate = accounted > 0
           ? '${(((p + l) / accounted) * 100.0).toStringAsFixed(1)}%'
           : '0.0%';
-      csvRows.add([
-        studentId,
-        ...dateCodes,
-        p,
-        l,
-        a,
-        e,
-        sRate,
-      ]);
+      csvRows.add([studentId, ...dateCodes, p, l, a, e, sRate]);
     }
 
     csvRows.add([]);
@@ -188,9 +193,6 @@ class Sf2CsvExporter {
     required String fileName,
     required String csvContent,
   }) {
-    return saveSf2CsvPlatform(
-      fileName: fileName,
-      csvContent: csvContent,
-    );
+    return saveSf2CsvPlatform(fileName: fileName, csvContent: csvContent);
   }
 }

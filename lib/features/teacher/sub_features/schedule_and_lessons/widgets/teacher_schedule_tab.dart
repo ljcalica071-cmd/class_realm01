@@ -38,15 +38,22 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
     final teacherId = AuthRepository.instance.currentUser?.id;
     if (teacherId == null || teacherId.isEmpty) return;
 
-    final cachedOfferings = SubjectRepository.instance.getCachedTeacherSubjects(teacherId);
-    final cachedSchedules = AppDataCache.instance.getCached<List<ScheduleModel>>(
-      'teacher_schedules_$teacherId',
-      (json) => (json as List)
-          .map((e) => ScheduleModel.fromMap(Map<String, dynamic>.from(e as Map)))
-          .toList(),
+    final cachedOfferings = SubjectRepository.instance.getCachedTeacherSubjects(
+      teacherId,
     );
+    final cachedSchedules = AppDataCache.instance
+        .getCached<List<ScheduleModel>>(
+          'teacher_schedules_$teacherId',
+          (json) => (json as List)
+              .map(
+                (e) =>
+                    ScheduleModel.fromMap(Map<String, dynamic>.from(e as Map)),
+              )
+              .toList(),
+        );
 
-    if ((cachedSchedules != null && cachedSchedules.isNotEmpty) || cachedOfferings.isNotEmpty) {
+    if ((cachedSchedules != null && cachedSchedules.isNotEmpty) ||
+        cachedOfferings.isNotEmpty) {
       _liveSchedules = cachedSchedules ?? [];
       _teacherOfferings = cachedOfferings;
       _isLoading = false;
@@ -293,9 +300,7 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
                 ),
               ),
               const SizedBox(width: 12),
-              if (_isLoading ||
-                  _loadError != null ||
-                  _teacherOfferings.isEmpty)
+              if (_isLoading || _loadError != null || _teacherOfferings.isEmpty)
                 Tooltip(
                   message: 'You must set up sections and subjects first.',
                   child: Opacity(
@@ -356,7 +361,9 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
                         color: theme.colorScheme.surface,
                         borderRadius: BorderRadius.circular(16),
                         border: Border.all(
-                          color: theme.colorScheme.onSurface.withValues(alpha: 0.1),
+                          color: theme.colorScheme.onSurface.withValues(
+                            alpha: 0.1,
+                          ),
                         ),
                       ),
                       padding: const EdgeInsets.all(16),
@@ -364,37 +371,81 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
                         children: [
                           Row(
                             children: const [
-                              ShimmerBox(width: 80, height: 32, borderRadius: 6),
+                              ShimmerBox(
+                                width: 80,
+                                height: 32,
+                                borderRadius: 6,
+                              ),
                               SizedBox(width: 12),
-                              Expanded(child: ShimmerBox(height: 32, borderRadius: 6)),
+                              Expanded(
+                                child: ShimmerBox(height: 32, borderRadius: 6),
+                              ),
                               SizedBox(width: 12),
-                              Expanded(child: ShimmerBox(height: 32, borderRadius: 6)),
+                              Expanded(
+                                child: ShimmerBox(height: 32, borderRadius: 6),
+                              ),
                               SizedBox(width: 12),
-                              Expanded(child: ShimmerBox(height: 32, borderRadius: 6)),
+                              Expanded(
+                                child: ShimmerBox(height: 32, borderRadius: 6),
+                              ),
                               SizedBox(width: 12),
-                              Expanded(child: ShimmerBox(height: 32, borderRadius: 6)),
+                              Expanded(
+                                child: ShimmerBox(height: 32, borderRadius: 6),
+                              ),
                               SizedBox(width: 12),
-                              Expanded(child: ShimmerBox(height: 32, borderRadius: 6)),
+                              Expanded(
+                                child: ShimmerBox(height: 32, borderRadius: 6),
+                              ),
                             ],
                           ),
                           const SizedBox(height: 16),
                           Expanded(
                             child: ListView.separated(
                               itemCount: 6,
-                              separatorBuilder: (_, _) => const SizedBox(height: 12),
+                              separatorBuilder: (_, _) =>
+                                  const SizedBox(height: 12),
                               itemBuilder: (_, _) => Row(
                                 children: const [
-                                  ShimmerBox(width: 80, height: 48, borderRadius: 8),
+                                  ShimmerBox(
+                                    width: 80,
+                                    height: 48,
+                                    borderRadius: 8,
+                                  ),
                                   SizedBox(width: 12),
-                                  Expanded(child: ShimmerBox(height: 48, borderRadius: 8)),
+                                  Expanded(
+                                    child: ShimmerBox(
+                                      height: 48,
+                                      borderRadius: 8,
+                                    ),
+                                  ),
                                   SizedBox(width: 12),
-                                  Expanded(child: ShimmerBox(height: 48, borderRadius: 8)),
+                                  Expanded(
+                                    child: ShimmerBox(
+                                      height: 48,
+                                      borderRadius: 8,
+                                    ),
+                                  ),
                                   SizedBox(width: 12),
-                                  Expanded(child: ShimmerBox(height: 48, borderRadius: 8)),
+                                  Expanded(
+                                    child: ShimmerBox(
+                                      height: 48,
+                                      borderRadius: 8,
+                                    ),
+                                  ),
                                   SizedBox(width: 12),
-                                  Expanded(child: ShimmerBox(height: 48, borderRadius: 8)),
+                                  Expanded(
+                                    child: ShimmerBox(
+                                      height: 48,
+                                      borderRadius: 8,
+                                    ),
+                                  ),
                                   SizedBox(width: 12),
-                                  Expanded(child: ShimmerBox(height: 48, borderRadius: 8)),
+                                  Expanded(
+                                    child: ShimmerBox(
+                                      height: 48,
+                                      borderRadius: 8,
+                                    ),
+                                  ),
                                 ],
                               ),
                             ),
@@ -411,7 +462,8 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
                         Container(
                           padding: const EdgeInsets.all(24),
                           decoration: BoxDecoration(
-                            color: theme.colorScheme.primaryContainer.withValues(alpha: 0.3),
+                            color: theme.colorScheme.primaryContainer
+                                .withValues(alpha: 0.3),
                             shape: BoxShape.circle,
                           ),
                           child: Icon(
@@ -435,27 +487,41 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             fontSize: 14,
-                            color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                            color: theme.colorScheme.onSurface.withValues(
+                              alpha: 0.6,
+                            ),
                             height: 1.5,
                           ),
                         ),
                         const SizedBox(height: 24),
                         if (_teacherOfferings.isEmpty)
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 12,
+                            ),
                             decoration: BoxDecoration(
                               color: Colors.amber.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: Colors.amber.withValues(alpha: 0.3)),
+                              border: Border.all(
+                                color: Colors.amber.withValues(alpha: 0.3),
+                              ),
                             ),
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                const Icon(Icons.info_outline, color: Colors.amber, size: 20),
+                                const Icon(
+                                  Icons.info_outline,
+                                  color: Colors.amber,
+                                  size: 20,
+                                ),
                                 const SizedBox(width: 10),
                                 Text(
                                   'You must set up Sections and Subjects in Classroom Setup first.',
-                                  style: TextStyle(color: Colors.amber.shade800, fontWeight: FontWeight.w600),
+                                  style: TextStyle(
+                                    color: Colors.amber.shade800,
+                                    fontWeight: FontWeight.w600,
+                                  ),
                                 ),
                               ],
                             ),
@@ -466,7 +532,10 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
                             icon: const Icon(LucideIcons.plus),
                             label: const Text('Create First Schedule'),
                             style: FilledButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 24,
+                                vertical: 12,
+                              ),
                             ),
                           ),
                       ],
@@ -506,7 +575,9 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
             Container(
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
-                color: theme.colorScheme.primaryContainer.withValues(alpha: 0.3),
+                color: theme.colorScheme.primaryContainer.withValues(
+                  alpha: 0.3,
+                ),
                 shape: BoxShape.circle,
               ),
               child: Icon(
@@ -537,20 +608,32 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
             const SizedBox(height: 24),
             if (_teacherOfferings.isEmpty)
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.amber.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.amber.withValues(alpha: 0.3)),
+                  border: Border.all(
+                    color: Colors.amber.withValues(alpha: 0.3),
+                  ),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.info_outline, color: Colors.amber, size: 20),
+                    const Icon(
+                      Icons.info_outline,
+                      color: Colors.amber,
+                      size: 20,
+                    ),
                     const SizedBox(width: 10),
                     Text(
                       'You must set up Sections and Subjects in Classroom Setup first.',
-                      style: TextStyle(color: Colors.amber.shade800, fontWeight: FontWeight.w600),
+                      style: TextStyle(
+                        color: Colors.amber.shade800,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ],
                 ),
@@ -561,7 +644,10 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
                 icon: const Icon(LucideIcons.plus),
                 label: const Text('Create First Schedule'),
                 style: FilledButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 12,
+                  ),
                 ),
               ),
           ],
@@ -711,7 +797,9 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
       showDialog(
         context: context,
         builder: (ctx) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
           title: Row(
             children: [
               Container(
@@ -720,10 +808,17 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
                   color: Colors.amber.withValues(alpha: 0.15),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(LucideIcons.alertTriangle, color: Colors.amber, size: 22),
+                child: const Icon(
+                  LucideIcons.alertTriangle,
+                  color: Colors.amber,
+                  size: 22,
+                ),
               ),
               const SizedBox(width: 10),
-              const Text('Classroom Setup Required', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              const Text(
+                'Classroom Setup Required',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
             ],
           ),
           content: const Text(
@@ -744,17 +839,22 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
 
     final isEditing = schedule != null;
 
-    final availableGrades = _teacherOfferings
-        .map((o) {
-          final g = o['grade_level'];
-          if (g is int) return g;
-          return int.tryParse(g?.toString().replaceAll(RegExp(r'\D'), '') ?? '') ?? 11;
-        })
-        .toSet()
-        .toList()
-      ..sort();
+    final availableGrades =
+        _teacherOfferings
+            .map((o) {
+              final g = o['grade_level'];
+              if (g is int) return g;
+              return int.tryParse(
+                    g?.toString().replaceAll(RegExp(r'\D'), '') ?? '',
+                  ) ??
+                  11;
+            })
+            .toSet()
+            .toList()
+          ..sort();
 
-    int selectedGrade = schedule?.gradeLevel ??
+    int selectedGrade =
+        schedule?.gradeLevel ??
         (availableGrades.contains(11) ? 11 : availableGrades.first);
 
     List<String> getSubjectsForGrade(int grade) {
@@ -762,7 +862,13 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
           .where((o) {
             final g = o['grade_level'] is int
                 ? o['grade_level']
-                : int.tryParse(o['grade_level']?.toString().replaceAll(RegExp(r'\D'), '') ?? '');
+                : int.tryParse(
+                    o['grade_level']?.toString().replaceAll(
+                          RegExp(r'\D'),
+                          '',
+                        ) ??
+                        '',
+                  );
             return g == grade;
           })
           .map((o) => o['subject_name']?.toString() ?? '')
@@ -772,37 +878,58 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
         ..sort();
     }
 
-    List<Map<String, dynamic>> getSectionsForSubject(int grade, String subName) {
+    List<Map<String, dynamic>> getSectionsForSubject(
+      int grade,
+      String subName,
+    ) {
       return _teacherOfferings.where((o) {
         final g = o['grade_level'] is int
             ? o['grade_level']
-            : int.tryParse(o['grade_level']?.toString().replaceAll(RegExp(r'\D'), '') ?? '');
+            : int.tryParse(
+                o['grade_level']?.toString().replaceAll(RegExp(r'\D'), '') ??
+                    '',
+              );
         final s = o['subject_name']?.toString() ?? '';
         return g == grade && s == subName;
       }).toList();
     }
 
     List<String> currentSubjects = getSubjectsForGrade(selectedGrade);
-    String selectedSubjectName = schedule?.subject ??
+    String selectedSubjectName =
+        schedule?.subject ??
         (currentSubjects.isNotEmpty ? currentSubjects.first : '');
 
-    List<Map<String, dynamic>> currentSections =
-        getSectionsForSubject(selectedGrade, selectedSubjectName);
+    List<Map<String, dynamic>> currentSections = getSectionsForSubject(
+      selectedGrade,
+      selectedSubjectName,
+    );
 
     Map<String, dynamic> selectedOffering = currentSections.firstWhere(
       (sec) =>
           (schedule?.subjectId != null && sec['id'] == schedule!.subjectId) ||
-          (schedule?.section != null && sec['section_name'] == schedule!.section),
-      orElse: () => currentSections.isNotEmpty ? currentSections.first : <String, dynamic>{},
+          (schedule?.section != null &&
+              sec['section_name'] == schedule!.section),
+      orElse: () => currentSections.isNotEmpty
+          ? currentSections.first
+          : <String, dynamic>{},
     );
 
     String selectedOfferingId = selectedOffering['id']?.toString() ?? '';
-    String selectedSectionId = selectedOffering['section_id']?.toString() ?? selectedOfferingId;
-    String selectedSectionName = selectedOffering['section_name']?.toString() ?? (schedule?.section ?? '');
+    String selectedSectionId =
+        selectedOffering['section_id']?.toString() ?? selectedOfferingId;
+    String selectedSectionName =
+        selectedOffering['section_name']?.toString() ??
+        (schedule?.section ?? '');
 
-    double wwWeight = (selectedOffering['ww_weight'] as num?)?.toDouble() ?? (schedule?.wwWeight ?? 0.0);
-    double ptWeight = (selectedOffering['pt_weight'] as num?)?.toDouble() ?? (schedule?.ptWeight ?? 0.0);
-    double exWeight = (selectedOffering['ex_weight'] as num?)?.toDouble() ?? (schedule?.exWeight ?? 0.0);
+    double wwWeight =
+        (selectedOffering['ww_weight'] as num?)?.toDouble() ??
+        (schedule?.wwWeight ?? 0.0);
+    double ptWeight =
+        (selectedOffering['pt_weight'] as num?)?.toDouble() ??
+        (schedule?.ptWeight ?? 0.0);
+    double exWeight =
+        (selectedOffering['ex_weight'] as num?)?.toDouble() ??
+        (schedule?.exWeight ?? 0.0);
 
     final roomCtrl = TextEditingController(text: schedule?.room ?? '');
     String selectedDay = schedule?.dayOfWeek ?? 'Monday';
@@ -913,7 +1040,10 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
                             items: availableGrades.map((g) {
                               return DropdownMenuItem(
                                 value: g,
-                                child: Text('Grade $g', overflow: TextOverflow.ellipsis),
+                                child: Text(
+                                  'Grade $g',
+                                  overflow: TextOverflow.ellipsis,
+                                ),
                               );
                             }).toList(),
                             onChanged: (val) {
@@ -921,15 +1051,38 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
                               setModalState(() {
                                 selectedGrade = val;
                                 currentSubjects = getSubjectsForGrade(val);
-                                selectedSubjectName = currentSubjects.isNotEmpty ? currentSubjects.first : '';
-                                currentSections = getSectionsForSubject(val, selectedSubjectName);
-                                selectedOffering = currentSections.isNotEmpty ? currentSections.first : {};
-                                selectedOfferingId = selectedOffering['id']?.toString() ?? '';
-                                selectedSectionId = selectedOffering['section_id']?.toString() ?? selectedOfferingId;
-                                selectedSectionName = selectedOffering['section_name']?.toString() ?? '';
-                                wwWeight = (selectedOffering['ww_weight'] as num?)?.toDouble() ?? 0.0;
-                                ptWeight = (selectedOffering['pt_weight'] as num?)?.toDouble() ?? 0.0;
-                                exWeight = (selectedOffering['ex_weight'] as num?)?.toDouble() ?? 0.0;
+                                selectedSubjectName = currentSubjects.isNotEmpty
+                                    ? currentSubjects.first
+                                    : '';
+                                currentSections = getSectionsForSubject(
+                                  val,
+                                  selectedSubjectName,
+                                );
+                                selectedOffering = currentSections.isNotEmpty
+                                    ? currentSections.first
+                                    : {};
+                                selectedOfferingId =
+                                    selectedOffering['id']?.toString() ?? '';
+                                selectedSectionId =
+                                    selectedOffering['section_id']
+                                        ?.toString() ??
+                                    selectedOfferingId;
+                                selectedSectionName =
+                                    selectedOffering['section_name']
+                                        ?.toString() ??
+                                    '';
+                                wwWeight =
+                                    (selectedOffering['ww_weight'] as num?)
+                                        ?.toDouble() ??
+                                    0.0;
+                                ptWeight =
+                                    (selectedOffering['pt_weight'] as num?)
+                                        ?.toDouble() ??
+                                    0.0;
+                                exWeight =
+                                    (selectedOffering['ex_weight'] as num?)
+                                        ?.toDouble() ??
+                                    0.0;
                                 clashErrorMessage = null;
                               });
                             },
@@ -941,7 +1094,9 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
                           child: DropdownButtonFormField<String>(
                             initialValue: selectedOfferingId.isNotEmpty
                                 ? selectedOfferingId
-                                : (currentSections.isNotEmpty ? currentSections.first['id'].toString() : null),
+                                : (currentSections.isNotEmpty
+                                      ? currentSections.first['id'].toString()
+                                      : null),
                             decoration: const InputDecoration(
                               labelText: 'SECTION',
                               border: OutlineInputBorder(),
@@ -949,10 +1104,14 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
                             isExpanded: true,
                             items: currentSections.map((sec) {
                               final id = sec['id'].toString();
-                              final name = sec['section_name']?.toString() ?? 'Section';
+                              final name =
+                                  sec['section_name']?.toString() ?? 'Section';
                               return DropdownMenuItem<String>(
                                 value: id,
-                                child: Text(name, overflow: TextOverflow.ellipsis),
+                                child: Text(
+                                  name,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
                               );
                             }).toList(),
                             onChanged: (val) {
@@ -963,11 +1122,26 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
                                   (sec) => sec['id'].toString() == val,
                                   orElse: () => <String, dynamic>{},
                                 );
-                                selectedSectionId = selectedOffering['section_id']?.toString() ?? val;
-                                selectedSectionName = selectedOffering['section_name']?.toString() ?? 'Section';
-                                wwWeight = (selectedOffering['ww_weight'] as num?)?.toDouble() ?? 0.0;
-                                ptWeight = (selectedOffering['pt_weight'] as num?)?.toDouble() ?? 0.0;
-                                exWeight = (selectedOffering['ex_weight'] as num?)?.toDouble() ?? 0.0;
+                                selectedSectionId =
+                                    selectedOffering['section_id']
+                                        ?.toString() ??
+                                    val;
+                                selectedSectionName =
+                                    selectedOffering['section_name']
+                                        ?.toString() ??
+                                    'Section';
+                                wwWeight =
+                                    (selectedOffering['ww_weight'] as num?)
+                                        ?.toDouble() ??
+                                    0.0;
+                                ptWeight =
+                                    (selectedOffering['pt_weight'] as num?)
+                                        ?.toDouble() ??
+                                    0.0;
+                                exWeight =
+                                    (selectedOffering['ex_weight'] as num?)
+                                        ?.toDouble() ??
+                                    0.0;
                                 clashErrorMessage = null;
                               });
                             },
@@ -981,7 +1155,9 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
                     DropdownButtonFormField<String>(
                       initialValue: selectedSubjectName.isNotEmpty
                           ? selectedSubjectName
-                          : (currentSubjects.isNotEmpty ? currentSubjects.first : null),
+                          : (currentSubjects.isNotEmpty
+                                ? currentSubjects.first
+                                : null),
                       decoration: const InputDecoration(
                         labelText: 'SUBJECT',
                         border: OutlineInputBorder(),
@@ -990,24 +1166,40 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
                       items: currentSubjects.map((subName) {
                         return DropdownMenuItem<String>(
                           value: subName,
-                          child: Text(
-                            subName,
-                            overflow: TextOverflow.ellipsis,
-                          ),
+                          child: Text(subName, overflow: TextOverflow.ellipsis),
                         );
                       }).toList(),
                       onChanged: (val) {
                         if (val == null) return;
                         setModalState(() {
                           selectedSubjectName = val;
-                          currentSections = getSectionsForSubject(selectedGrade, val);
-                          selectedOffering = currentSections.isNotEmpty ? currentSections.first : {};
-                          selectedOfferingId = selectedOffering['id']?.toString() ?? '';
-                          selectedSectionId = selectedOffering['section_id']?.toString() ?? selectedOfferingId;
-                          selectedSectionName = selectedOffering['section_name']?.toString() ?? '';
-                          wwWeight = (selectedOffering['ww_weight'] as num?)?.toDouble() ?? 20.0;
-                          ptWeight = (selectedOffering['pt_weight'] as num?)?.toDouble() ?? 50.0;
-                          exWeight = (selectedOffering['ex_weight'] as num?)?.toDouble() ?? 30.0;
+                          currentSections = getSectionsForSubject(
+                            selectedGrade,
+                            val,
+                          );
+                          selectedOffering = currentSections.isNotEmpty
+                              ? currentSections.first
+                              : {};
+                          selectedOfferingId =
+                              selectedOffering['id']?.toString() ?? '';
+                          selectedSectionId =
+                              selectedOffering['section_id']?.toString() ??
+                              selectedOfferingId;
+                          selectedSectionName =
+                              selectedOffering['section_name']?.toString() ??
+                              '';
+                          wwWeight =
+                              (selectedOffering['ww_weight'] as num?)
+                                  ?.toDouble() ??
+                              20.0;
+                          ptWeight =
+                              (selectedOffering['pt_weight'] as num?)
+                                  ?.toDouble() ??
+                              50.0;
+                          exWeight =
+                              (selectedOffering['ex_weight'] as num?)
+                                  ?.toDouble() ??
+                              30.0;
                           clashErrorMessage = null;
                         });
                       },
@@ -1112,7 +1304,10 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
             actions: [
               if (isEditing)
                 IconButton(
-                  icon: const Icon(Icons.delete_outline, color: AppTheme.catRed),
+                  icon: const Icon(
+                    Icons.delete_outline,
+                    color: AppTheme.catRed,
+                  ),
                   tooltip: 'Delete Schedule Entry',
                   onPressed: isSaving
                       ? null
@@ -1132,8 +1327,7 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
                               await _loadData();
                             } catch (_) {
                               setModalState(() {
-                                clashErrorMessage =
-                                    'Could not delete this schedule. Please try again.';
+                                clashErrorMessage = 'Could not delete this schedule. Please try again.';
                               });
                             }
                           }
@@ -1153,8 +1347,7 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
                         // 1. Validate Weights
                         if (wwWeight + ptWeight + exWeight != 100) {
                           setModalState(() {
-                            clashErrorMessage =
-                                'Total DepEd weights (WW + PT + EX) must be exactly 100%.';
+                            clashErrorMessage = 'Total DepEd weights (WW + PT + EX) must be exactly 100%.';
                           });
                           return;
                         }
@@ -1178,8 +1371,7 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
 
                         if (durationMins < 30) {
                           setModalState(() {
-                            clashErrorMessage =
-                                'Each schedule period must be at least 30 minutes.';
+                            clashErrorMessage = 'Each schedule period must be at least 30 minutes.';
                           });
                           return;
                         }
@@ -1187,8 +1379,7 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
                         // RULE 1: Max 3 hours (180 mins) single plot validation
                         if (durationMins > 180) {
                           setModalState(() {
-                            clashErrorMessage =
-                                'Error: A single continuous class session cannot exceed 3 hours (Maximum 3 hours / 180 mins).';
+                            clashErrorMessage = 'Error: A single continuous class session cannot exceed 3 hours (Maximum 3 hours / 180 mins).';
                           });
                           return;
                         }
@@ -1200,13 +1391,9 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
                                   s.dayOfWeek == selectedDay &&
                                   s.id != schedule?.id,
                             )
-                            .fold(
-                              0,
-                              (sum, s) => sum + s.durationMinutes,
-                            );
+                            .fold(0, (sum, s) => sum + s.durationMinutes);
 
-                        final totalDailyMins =
-                            existingDailyMins + durationMins;
+                        final totalDailyMins = existingDailyMins + durationMins;
                         final totalDailyHours = totalDailyMins / 60.0;
 
                         if (totalDailyMins > 480) {
@@ -1218,15 +1405,14 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
                         }
 
                         if (totalDailyMins > 360) {
-                          final confirmWarning =
-                              await AppModals.showConfirmDialog(
-                                context: ctx,
-                                title: 'High Workload Alert (> 6 Hours)',
-                                message:
-                                    'Warning: Total classes on $selectedDay will reach ${totalDailyHours.toStringAsFixed(1)} hours (exceeds the recommended 6 hours/day).\n\nDo you still want to proceed with saving this schedule?',
-                                confirmLabel: 'Proceed & Save',
-                                confirmColor: Colors.amber.shade800,
-                              );
+                          final confirmWarning = await AppModals.showConfirmDialog(
+                            context: ctx,
+                            title: 'High Workload Alert (> 6 Hours)',
+                            message:
+                                'Warning: Total classes on $selectedDay will reach ${totalDailyHours.toStringAsFixed(1)} hours (exceeds the recommended 6 hours/day).\n\nDo you still want to proceed with saving this schedule?',
+                            confirmLabel: 'Proceed & Save',
+                            confirmColor: Colors.amber.shade800,
+                          );
                           if (confirmWarning != true) return;
                         }
 
@@ -1290,8 +1476,7 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
                           await _loadData();
                         } catch (e) {
                           setModalState(() {
-                            clashErrorMessage =
-                                'Unable to validate or save this schedule. Please try again.';
+                            clashErrorMessage = 'Unable to validate or save this schedule. Please try again.';
                             isSaving = false;
                           });
                         }

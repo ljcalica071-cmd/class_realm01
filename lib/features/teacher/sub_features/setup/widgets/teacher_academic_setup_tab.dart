@@ -68,7 +68,9 @@ class _TeacherAcademicSetupTabState extends State<TeacherAcademicSetupTab> {
         cluster: _selectedCluster,
         gradeLevel: _gradeLevel,
       );
-      _selectedSubject = subjects.isNotEmpty ? subjects.first.name : 'General Mathematics';
+      _selectedSubject = subjects.isNotEmpty
+          ? subjects.first.name
+          : 'General Mathematics';
 
       if (!_customWeightOverride) {
         final weights = DepEdSubjectCatalog.getDefaultWeights(newCat);
@@ -115,7 +117,9 @@ class _TeacherAcademicSetupTabState extends State<TeacherAcademicSetupTab> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final availableClusters = DepEdSubjectCatalog.getClusters(_selectedCategory);
+    final availableClusters = DepEdSubjectCatalog.getClusters(
+      _selectedCategory,
+    );
     final availableSubjects = DepEdSubjectCatalog.getSubjects(
       category: _selectedCategory,
       cluster: _selectedCluster,
@@ -129,7 +133,9 @@ class _TeacherAcademicSetupTabState extends State<TeacherAcademicSetupTab> {
           constraints: const BoxConstraints(maxWidth: 800),
           child: Card(
             margin: EdgeInsets.zero,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
             child: Padding(
               padding: const EdgeInsets.all(32),
               child: Column(
@@ -162,8 +168,16 @@ class _TeacherAcademicSetupTabState extends State<TeacherAcademicSetupTab> {
                       ),
                       Chip(
                         avatar: const Icon(LucideIcons.calendar, size: 14),
-                        label: Text(_academicYear, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                        backgroundColor: theme.colorScheme.primary.withValues(alpha: 0.1),
+                        label: Text(
+                          _academicYear,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          ),
+                        ),
+                        backgroundColor: theme.colorScheme.primary.withValues(
+                          alpha: 0.1,
+                        ),
                         side: BorderSide.none,
                       ),
                     ],
@@ -171,7 +185,13 @@ class _TeacherAcademicSetupTabState extends State<TeacherAcademicSetupTab> {
                   const SizedBox(height: 24),
 
                   // Grade Level Selector
-                  Text('Grade Level', style: TextStyle(fontWeight: FontWeight.w700, color: theme.colorScheme.onSurface)),
+                  Text(
+                    'Grade Level',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      color: theme.colorScheme.onSurface,
+                    ),
+                  ),
                   const SizedBox(height: 8),
                   Row(
                     children: ['Grade 11', 'Grade 12'].map((g) {
@@ -181,10 +201,16 @@ class _TeacherAcademicSetupTabState extends State<TeacherAcademicSetupTab> {
                         child: ChoiceChip(
                           label: Text(g),
                           selected: isSelected,
-                          selectedColor: theme.colorScheme.primary.withValues(alpha: 0.15),
+                          selectedColor: theme.colorScheme.primary.withValues(
+                            alpha: 0.15,
+                          ),
                           labelStyle: TextStyle(
-                            color: isSelected ? theme.colorScheme.primary : theme.colorScheme.onSurface,
-                            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                            color: isSelected
+                                ? theme.colorScheme.primary
+                                : theme.colorScheme.onSurface,
+                            fontWeight: isSelected
+                                ? FontWeight.bold
+                                : FontWeight.normal,
                           ),
                           onSelected: (sel) {
                             if (sel) setState(() => _gradeLevel = g);
@@ -196,19 +222,31 @@ class _TeacherAcademicSetupTabState extends State<TeacherAcademicSetupTab> {
                   const SizedBox(height: 20),
 
                   // Category Dropdown
-                  Text('Subject Category', style: TextStyle(fontWeight: FontWeight.w700, color: theme.colorScheme.onSurface)),
+                  Text(
+                    'Subject Category',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      color: theme.colorScheme.onSurface,
+                    ),
+                  ),
                   const SizedBox(height: 8),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     decoration: BoxDecoration(
-                      border: Border.all(color: theme.colorScheme.outline.withValues(alpha: 0.3)),
+                      border: Border.all(
+                        color: theme.colorScheme.outline.withValues(alpha: 0.3),
+                      ),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: DropdownButtonHideUnderline(
                       child: DropdownButton<String>(
                         value: _selectedCategory,
                         isExpanded: true,
-                        items: DepEdSubjectCatalog.categories.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
+                        items: DepEdSubjectCatalog.categories
+                            .map(
+                              (c) => DropdownMenuItem(value: c, child: Text(c)),
+                            )
+                            .toList(),
                         onChanged: (v) {
                           if (v != null) _applyCategoryChange(v);
                         },
@@ -224,29 +262,58 @@ class _TeacherAcademicSetupTabState extends State<TeacherAcademicSetupTab> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('Cluster / Strand', style: TextStyle(fontWeight: FontWeight.w700, color: theme.colorScheme.onSurface)),
+                            Text(
+                              'Cluster / Strand',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                color: theme.colorScheme.onSurface,
+                              ),
+                            ),
                             const SizedBox(height: 8),
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 14),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                              ),
                               decoration: BoxDecoration(
-                                border: Border.all(color: theme.colorScheme.outline.withValues(alpha: 0.3)),
+                                border: Border.all(
+                                  color: theme.colorScheme.outline.withValues(
+                                    alpha: 0.3,
+                                  ),
+                                ),
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: DropdownButtonHideUnderline(
                                 child: DropdownButton<String>(
-                                  value: availableClusters.contains(_selectedCluster) ? _selectedCluster : availableClusters.first,
+                                  value:
+                                      availableClusters.contains(
+                                        _selectedCluster,
+                                      )
+                                      ? _selectedCluster
+                                      : availableClusters.first,
                                   isExpanded: true,
-                                  items: availableClusters.map((c) => DropdownMenuItem(value: c, child: Text(c, overflow: TextOverflow.ellipsis))).toList(),
+                                  items: availableClusters
+                                      .map(
+                                        (c) => DropdownMenuItem(
+                                          value: c,
+                                          child: Text(
+                                            c,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                      )
+                                      .toList(),
                                   onChanged: (v) {
                                     if (v != null) {
                                       setState(() {
                                         _selectedCluster = v;
-                                        final subjs = DepEdSubjectCatalog.getSubjects(
-                                          category: _selectedCategory,
-                                          cluster: _selectedCluster,
-                                          gradeLevel: _gradeLevel,
-                                        );
-                                        if (subjs.isNotEmpty) _selectedSubject = subjs.first.name;
+                                        final subjs =
+                                            DepEdSubjectCatalog.getSubjects(
+                                              category: _selectedCategory,
+                                              cluster: _selectedCluster,
+                                              gradeLevel: _gradeLevel,
+                                            );
+                                        if (subjs.isNotEmpty)
+                                          _selectedSubject = subjs.first.name;
                                       });
                                     }
                                   },
@@ -261,23 +328,51 @@ class _TeacherAcademicSetupTabState extends State<TeacherAcademicSetupTab> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('Primary Subject', style: TextStyle(fontWeight: FontWeight.w700, color: theme.colorScheme.onSurface)),
+                            Text(
+                              'Primary Subject',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                color: theme.colorScheme.onSurface,
+                              ),
+                            ),
                             const SizedBox(height: 8),
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 14),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                              ),
                               decoration: BoxDecoration(
-                                border: Border.all(color: theme.colorScheme.outline.withValues(alpha: 0.3)),
+                                border: Border.all(
+                                  color: theme.colorScheme.outline.withValues(
+                                    alpha: 0.3,
+                                  ),
+                                ),
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: DropdownButtonHideUnderline(
                                 child: DropdownButton<String>(
-                                  value: availableSubjects.any((s) => s.name == _selectedSubject)
+                                  value:
+                                      availableSubjects.any(
+                                        (s) => s.name == _selectedSubject,
+                                      )
                                       ? _selectedSubject
-                                      : (availableSubjects.isNotEmpty ? availableSubjects.first.name : _selectedSubject),
+                                      : (availableSubjects.isNotEmpty
+                                            ? availableSubjects.first.name
+                                            : _selectedSubject),
                                   isExpanded: true,
-                                  items: availableSubjects.map((s) => DropdownMenuItem(value: s.name, child: Text(s.name, overflow: TextOverflow.ellipsis))).toList(),
+                                  items: availableSubjects
+                                      .map(
+                                        (s) => DropdownMenuItem(
+                                          value: s.name,
+                                          child: Text(
+                                            s.name,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                      )
+                                      .toList(),
                                   onChanged: (v) {
-                                    if (v != null) setState(() => _selectedSubject = v);
+                                    if (v != null)
+                                      setState(() => _selectedSubject = v);
                                   },
                                 ),
                               ),
@@ -295,21 +390,41 @@ class _TeacherAcademicSetupTabState extends State<TeacherAcademicSetupTab> {
                     decoration: BoxDecoration(
                       color: theme.colorScheme.primary.withValues(alpha: 0.05),
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: theme.colorScheme.primary.withValues(alpha: 0.2)),
+                      border: Border.all(
+                        color: theme.colorScheme.primary.withValues(alpha: 0.2),
+                      ),
                     ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceAround,
                       children: [
-                        _buildMiniWeight('Written Works', '${_wwWeight.round()}%', AppTheme.catBlue),
-                        _buildMiniWeight('Performance Tasks', '${_ptWeight.round()}%', AppTheme.catGreen),
-                        _buildMiniWeight('Quarterly Exam', '${_exWeight.round()}%', AppTheme.catOrange),
+                        _buildMiniWeight(
+                          'Written Works',
+                          '${_wwWeight.round()}%',
+                          AppTheme.catBlue,
+                        ),
+                        _buildMiniWeight(
+                          'Performance Tasks',
+                          '${_ptWeight.round()}%',
+                          AppTheme.catGreen,
+                        ),
+                        _buildMiniWeight(
+                          'Quarterly Exam',
+                          '${_exWeight.round()}%',
+                          AppTheme.catOrange,
+                        ),
                       ],
                     ),
                   ),
                   const SizedBox(height: 24),
 
                   // Sections Management
-                  Text('Managed Sections', style: TextStyle(fontWeight: FontWeight.w700, color: theme.colorScheme.onSurface)),
+                  Text(
+                    'Managed Sections',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      color: theme.colorScheme.onSurface,
+                    ),
+                  ),
                   const SizedBox(height: 8),
                   Row(
                     children: [
@@ -319,7 +434,9 @@ class _TeacherAcademicSetupTabState extends State<TeacherAcademicSetupTab> {
                           decoration: InputDecoration(
                             hintText: 'e.g. $_gradeLevel - Darwin',
                             isDense: true,
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
                           ),
                           onSubmitted: (_) => _addSection(),
                         ),
@@ -337,10 +454,15 @@ class _TeacherAcademicSetupTabState extends State<TeacherAcademicSetupTab> {
                     runSpacing: 8,
                     children: _sections.map((sec) {
                       return Chip(
-                        label: Text(sec, style: const TextStyle(fontWeight: FontWeight.w600)),
+                        label: Text(
+                          sec,
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
                         deleteIcon: const Icon(Icons.close, size: 16),
                         onDeleted: () => _removeSection(sec),
-                        backgroundColor: AppTheme.catBlue.withValues(alpha: 0.12),
+                        backgroundColor: AppTheme.catBlue.withValues(
+                          alpha: 0.12,
+                        ),
                         side: BorderSide.none,
                         labelStyle: const TextStyle(color: AppTheme.catBlue),
                       );
@@ -369,9 +491,19 @@ class _TeacherAcademicSetupTabState extends State<TeacherAcademicSetupTab> {
   Widget _buildMiniWeight(String label, String value, Color color) {
     return Column(
       children: [
-        Text(value, style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: color)),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+            color: color,
+          ),
+        ),
         const SizedBox(height: 2),
-        Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
+        Text(
+          label,
+          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+        ),
       ],
     );
   }

@@ -40,11 +40,7 @@ class AppEmptyState extends StatelessWidget {
                   ),
                   shape: BoxShape.circle,
                 ),
-                child: Icon(
-                  icon,
-                  size: 30,
-                  color: theme.colorScheme.primary,
-                ),
+                child: Icon(icon, size: 30, color: theme.colorScheme.primary),
               ),
               const SizedBox(height: 16),
               Text(
@@ -81,4 +77,3 @@ class AppEmptyState extends StatelessWidget {
     );
   }
 }
-

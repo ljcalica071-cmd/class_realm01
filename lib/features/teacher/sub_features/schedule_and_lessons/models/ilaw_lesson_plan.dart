@@ -167,11 +167,7 @@ class IlawRubricItem {
     this.notes = '',
   });
 
-  IlawRubricItem copyWith({
-    String? criterion,
-    bool? isMet,
-    String? notes,
-  }) {
+  IlawRubricItem copyWith({String? criterion, bool? isMet, String? notes}) {
     return IlawRubricItem(
       criterion: criterion ?? this.criterion,
       isMet: isMet ?? this.isMet,
@@ -180,11 +176,7 @@ class IlawRubricItem {
   }
 
   Map<String, dynamic> toJson() {
-    return {
-      'criterion': criterion,
-      'is_met': isMet,
-      'notes': notes,
-    };
+    return {'criterion': criterion, 'is_met': isMet, 'notes': notes};
   }
 
   factory IlawRubricItem.fromJson(Map<String, dynamic> json) {
@@ -198,28 +190,23 @@ class IlawRubricItem {
   static List<IlawRubricItem> defaultRubrics() {
     return const [
       IlawRubricItem(
-        criterion:
-            'Intentions & Objectives: Clearly aligned with DepEd SHS curriculum competencies and measurable.',
+        criterion: 'Intentions & Objectives: Clearly aligned with DepEd SHS curriculum competencies and measurable.',
         isMet: true,
       ),
       IlawRubricItem(
-        criterion:
-            'Inclusive Learning Experiences: Activities are active, scaffolded, and differentiated by learner proficiency level.',
+        criterion: 'Inclusive Learning Experiences: Activities are active, scaffolded, and differentiated by learner proficiency level.',
         isMet: true,
       ),
       IlawRubricItem(
-        criterion:
-            'Formative Assessment: Aligned with session objectives with actionable feedback for learning gaps.',
+        criterion: 'Formative Assessment: Aligned with session objectives with actionable feedback for learning gaps.',
         isMet: true,
       ),
       IlawRubricItem(
-        criterion:
-            'Ways Forward: Clear parent guidance prompts and relevant real-world community context connections.',
+        criterion: 'Ways Forward: Clear parent guidance prompts and relevant real-world community context connections.',
         isMet: true,
       ),
       IlawRubricItem(
-        criterion:
-            'Teacher Reflection: Meaningful reflection questions included for ongoing instructional refinement.',
+        criterion: 'Teacher Reflection: Meaningful reflection questions included for ongoing instructional refinement.',
         isMet: true,
       ),
     ];
@@ -291,8 +278,7 @@ class IlawLessonPlan {
     this.targetProficiency = DepEdProficiencyLevel.developing,
     this.numberOfSessions = 4,
     this.language = 'English',
-    this.depedOrderCitation =
-        'DepEd Order No. 003, s. 2026 (Guidelines on the Responsible Use of AI in Basic Education)',
+    this.depedOrderCitation = 'DepEd Order No. 003, s. 2026 (Guidelines on the Responsible Use of AI in Basic Education)',
     this.sessions = const [],
     this.rubricItems = const [],
     this.status = IlawPlanStatus.draft,
@@ -462,7 +448,9 @@ class IlawLessonPlan {
       teacherId: (json['teacher_id'] ?? '').toString(),
       teacherName: (json['teacher_name'] ?? '').toString(),
       gradeLevel: (json['grade_level'] ?? 'Grade 11').toString(),
-      quarter: _normalizeTerm((json['term'] ?? json['quarter'] ?? 'Term 1').toString()),
+      quarter: _normalizeTerm(
+        (json['term'] ?? json['quarter'] ?? 'Term 1').toString(),
+      ),
       subject: (json['subject'] ?? '').toString(),
       topic: (json['topic'] ?? '').toString(),
       durationMinutes: (json['duration_minutes'] is int)
@@ -487,9 +475,10 @@ class IlawLessonPlan {
           ? json['number_of_sessions'] as int
           : (int.tryParse(json['number_of_sessions']?.toString() ?? '') ?? 4),
       language: (json['language'] ?? 'English').toString(),
-      depedOrderCitation: (json['deped_order_citation'] ??
-              'DepEd Order No. 003, s. 2026 (Guidelines on the Responsible Use of AI in Basic Education)')
-          .toString(),
+      depedOrderCitation:
+          (json['deped_order_citation'] ??
+                  'DepEd Order No. 003, s. 2026 (Guidelines on the Responsible Use of AI in Basic Education)')
+              .toString(),
       sessions: parsedSessions,
       rubricItems: parsedRubrics,
       status: parsedStatus,
@@ -503,7 +492,9 @@ class IlawLessonPlan {
     if (trimmed.isEmpty) return 'Term 1';
     if (trimmed == 'Quarter 1' || trimmed == 'Term 1') return 'Term 1';
     if (trimmed == 'Quarter 2' || trimmed == 'Term 2') return 'Term 2';
-    if (trimmed == 'Quarter 3' || trimmed == 'Quarter 4' || trimmed == 'Term 3') {
+    if (trimmed == 'Quarter 3' ||
+        trimmed == 'Quarter 4' ||
+        trimmed == 'Term 3') {
       return 'Term 3';
     }
     return trimmed;

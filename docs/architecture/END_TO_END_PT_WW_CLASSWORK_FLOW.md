@@ -184,3 +184,4 @@ flutter pub get
 # 4. Run the app
 flutter run
 ```
+

@@ -3,39 +3,48 @@ import 'package:google_fonts/google_fonts.dart';
 
 class AppTheme {
   // Global theme notifier — persists across navigation
-  static final ValueNotifier<ThemeMode> themeModeNotifier =
-      ValueNotifier(ThemeMode.light); // Default: Light Mode
+  static final ValueNotifier<ThemeMode> themeModeNotifier = ValueNotifier(
+    ThemeMode.light,
+  ); // Default: Light Mode
 
   // =============================================
   // 60-30-10 PALETTE (Based on 4th reference image)
   // =============================================
 
   // LIGHT MODE
-  static const Color _lightBg = Color(0xFFF5F5F5);       // 60% — warm off-white
-  static const Color _lightSurface = Color(0xFFE8EBE2);  // 30% — warm sage
-  static const Color _lightCard = Color(0xFFFFFFFF);      // Card surface
-  static const Color _lightAccent = Color(0xFF487898);    // 10% — steel blue
-  static const Color _lightText = Color(0xFF111827);      // Primary text — max contrast
+  static const Color _lightBg = Color(0xFFF5F5F5); // 60% — warm off-white
+  static const Color _lightSurface = Color(0xFFE8EBE2); // 30% — warm sage
+  static const Color _lightCard = Color(0xFFFFFFFF); // Card surface
+  static const Color _lightAccent = Color(0xFF487898); // 10% — steel blue
+  static const Color _lightText = Color(
+    0xFF111827,
+  ); // Primary text — max contrast
 
   // DARK MODE
-  static const Color _darkBg = Color(0xFF111827);         // 60%
-  static const Color _darkSurface = Color(0xFF1F2937);    // 30%
-  static const Color _darkCard = Color(0xFF263040);       // Card surface
-  static const Color _darkAccent = Color(0xFF60A5FA);     // 10%
-  static const Color _darkText = Color(0xFFF9FAFB);       // Primary text
+  static const Color _darkBg = Color(0xFF111827); // 60%
+  static const Color _darkSurface = Color(0xFF1F2937); // 30%
+  static const Color _darkCard = Color(0xFF263040); // Card surface
+  static const Color _darkAccent = Color(0xFF60A5FA); // 10%
+  static const Color _darkText = Color(0xFFF9FAFB); // Primary text
 
   // =============================================
   // CATEGORICAL / RAINBOW COLORS
   // Use these for section headers, badges, chips
   // =============================================
-  static const Color catBlue   = Color(0xFF2563EB); // Written Works, Classwork, Info
-  static const Color catGreen  = Color(0xFF16A34A); // Performance Task, Present, Success
+  static const Color catBlue = Color(
+    0xFF2563EB,
+  ); // Written Works, Classwork, Info
+  static const Color catGreen = Color(
+    0xFF16A34A,
+  ); // Performance Task, Present, Success
   static const Color catPurple = Color(0xFF7C3AED); // Summative Tests, Quizzes
-  static const Color catOrange = Color(0xFFD97706); // Quarterly Exam, Late, Warning
-  static const Color catRed    = Color(0xFFDC2626); // Absent, Error, Danger
-  static const Color catTeal   = Color(0xFF0D9488); // RFID, Attendance sync
-  static const Color catPink   = Color(0xFFDB2777); // Parent features
-  static const Color catSlate  = Color(0xFF475569); // Neutral, Excused, N/A
+  static const Color catOrange = Color(
+    0xFFD97706,
+  ); // Quarterly Exam, Late, Warning
+  static const Color catRed = Color(0xFFDC2626); // Absent, Error, Danger
+  static const Color catTeal = Color(0xFF0D9488); // RFID, Attendance sync
+  static const Color catPink = Color(0xFFDB2777); // Parent features
+  static const Color catSlate = Color(0xFF475569); // Neutral, Excused, N/A
 
   // --- LIGHT THEME ---
   static ThemeData get lightTheme {
@@ -98,7 +107,9 @@ class AppTheme {
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: _lightBg,
+        fillColor: const Color(0xFFF9FAFB),
+        labelStyle: const TextStyle(color: Color(0xFF374151)),
+        hintStyle: const TextStyle(color: Color(0xFF6B7280)),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
           borderSide: const BorderSide(color: Color(0xFFE4E7EC)),
@@ -111,7 +122,10 @@ class AppTheme {
           borderRadius: BorderRadius.circular(10),
           borderSide: const BorderSide(color: _lightAccent, width: 1.5),
         ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 14,
+        ),
       ),
       pageTransitionsTheme: const PageTransitionsTheme(
         builders: {
@@ -131,10 +145,8 @@ class AppTheme {
       brightness: Brightness.dark,
       primaryColor: _darkAccent,
       scaffoldBackgroundColor: _darkBg,
-      textTheme: GoogleFonts.interTextTheme(ThemeData.dark().textTheme).apply(
-        bodyColor: _darkText,
-        displayColor: _darkText,
-      ),
+      textTheme: GoogleFonts.interTextTheme(ThemeData.dark().textTheme)
+          .apply(bodyColor: _darkText, displayColor: _darkText),
       colorScheme: const ColorScheme.dark(
         primary: _darkAccent,
         secondary: _darkSurface,
@@ -148,7 +160,10 @@ class AppTheme {
         shadowColor: Colors.black.withValues(alpha: 0.3),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(14),
-          side: BorderSide(color: Colors.white.withValues(alpha: 0.06), width: 1),
+          side: BorderSide(
+            color: Colors.white.withValues(alpha: 0.15),
+            width: 1,
+          ),
         ),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
@@ -186,19 +201,23 @@ class AppTheme {
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: _darkSurface,
+        hintStyle: const TextStyle(color: Color(0xFF9CA3AF)),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+          borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+          borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
           borderSide: const BorderSide(color: _darkAccent, width: 1.5),
         ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 14,
+        ),
       ),
       pageTransitionsTheme: const PageTransitionsTheme(
         builders: {

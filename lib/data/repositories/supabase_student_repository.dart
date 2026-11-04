@@ -28,7 +28,7 @@ class SupabaseStudentRepository implements StudentRepository {
   final SupabaseClient _client;
 
   SupabaseStudentRepository({SupabaseClient? client})
-      : _client = client ?? Supabase.instance.client;
+    : _client = client ?? Supabase.instance.client;
 
   static Map<String, String> _readLocalRfidOverrides() {
     final raw = LocalStorageService.getJson('local_student_rfid_map');
@@ -133,8 +133,8 @@ class SupabaseStudentRepository implements StudentRepository {
               st.lastName,
             ].where((name) => name != null && name.trim().isNotEmpty).join(' ');
 
-            final resolvedRfid = (st.rfidUid != null &&
-                    st.rfidUid!.trim().isNotEmpty)
+            final resolvedRfid =
+                (st.rfidUid != null && st.rfidUid!.trim().isNotEmpty)
                 ? st.rfidUid!.trim().toUpperCase()
                 : localRfidMap[st.studentId];
 
@@ -238,8 +238,9 @@ class SupabaseStudentRepository implements StudentRepository {
         return [];
       }
 
-      final localRfidFallback =
-          cloudHasRfidColumn ? const <String, String>{} : _readLocalRfidOverrides();
+      final localRfidFallback = cloudHasRfidColumn
+          ? const <String, String>{}
+          : _readLocalRfidOverrides();
 
       // Collect student IDs to query student_settings for authoritative status
       final studentIds = response
@@ -278,13 +279,16 @@ class SupabaseStudentRepository implements StudentRepository {
         final sub = offering['subjects'] as Map<String, dynamic>? ?? {};
         final sec = offering['sections'] as Map<String, dynamic>? ?? {};
 
-        final fullName = [
-          profile['first_name'],
-          profile['middle_name'],
-          profile['last_name'],
-        ]
-            .where((name) => name != null && name.toString().trim().isNotEmpty)
-            .join(' ');
+        final fullName =
+            [
+                  profile['first_name'],
+                  profile['middle_name'],
+                  profile['last_name'],
+                ]
+                .where(
+                  (name) => name != null && name.toString().trim().isNotEmpty,
+                )
+                .join(' ');
 
         final usersData = profile['users'] as Map<String, dynamic>? ?? {};
         final studentId = profile['student_id']?.toString() ?? '';
@@ -319,11 +323,12 @@ class SupabaseStudentRepository implements StudentRepository {
         if (isArchived) {
           accountStatus = AccountStatus.archived;
         } else {
-          final rawStatus = (studentSettingsStatus[studentId] ??
-                  usersData['status']?.toString() ??
-                  'pending_first_login')
-              .toLowerCase()
-              .replaceAll(RegExp(r'[\s_-]'), '');
+          final rawStatus =
+              (studentSettingsStatus[studentId] ??
+                      usersData['status']?.toString() ??
+                      'pending_first_login')
+                  .toLowerCase()
+                  .replaceAll(RegExp(r'[\s_-]'), '');
           if (rawStatus == 'active') {
             accountStatus = AccountStatus.active;
           } else if (rawStatus == 'pending' ||
@@ -455,7 +460,8 @@ class SupabaseStudentRepository implements StudentRepository {
       return UserModel(
         id: profileRow['student_id'].toString(),
         studentId: profileRow['student_id'].toString(),
-        username: profileRow['lrn']?.toString() ??
+        username:
+            profileRow['lrn']?.toString() ??
             usersData['email']?.toString() ??
             '',
         fullName: [
@@ -515,9 +521,9 @@ class SupabaseStudentRepository implements StudentRepository {
     final bdayStr =
         '${birthday.year.toString().padLeft(4, '0')}-${birthday.month.toString().padLeft(2, '0')}-${birthday.day.toString().padLeft(2, '0')}';
     final cleanLastName = lastName.toLowerCase().replaceAll(
-          RegExp(r'[^a-z0-9]'),
-          '',
-        );
+      RegExp(r'[^a-z0-9]'),
+      '',
+    );
     final tempPassword =
         '$cleanLastName${birthday.year}${birthday.month.toString().padLeft(2, '0')}${birthday.day.toString().padLeft(2, '0')}';
     final studentFullName = [
@@ -780,9 +786,9 @@ class SupabaseStudentRepository implements StudentRepository {
 
     if (!kIsWeb) {
       try {
-        await (AppDatabase.instance.update(AppDatabase.instance.localStudents)
-              ..where((t) => t.studentId.equals(id)))
-            .write(
+        await (AppDatabase.instance.update(
+          AppDatabase.instance.localStudents,
+        )..where((t) => t.studentId.equals(id))).write(
           LocalStudentsCompanion(
             lrn: Value(studentId),
             firstName: Value(firstName),
@@ -827,7 +833,8 @@ class SupabaseStudentRepository implements StudentRepository {
               .eq('student_id', id)
               .maybeSingle();
           final currentStatus = cur?['status']?.toString();
-          final statusToSave = (currentStatus != null &&
+          final statusToSave =
+              (currentStatus != null &&
                   currentStatus.isNotEmpty &&
                   currentStatus != 'archived')
               ? currentStatus
@@ -878,8 +885,8 @@ class SupabaseStudentRepository implements StudentRepository {
         final prev = cur?['previous_status']?.toString();
         final targetStatus =
             (prev != null && prev.isNotEmpty && prev != 'archived')
-                ? prev
-                : 'active';
+            ? prev
+            : 'active';
 
         await _client
             .from('student_settings')

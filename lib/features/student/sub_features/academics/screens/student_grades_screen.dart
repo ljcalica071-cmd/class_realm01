@@ -216,9 +216,7 @@ class _StudentGradesScreenState extends State<StudentGradesScreen> {
         children: [
           CircleAvatar(
             radius: 24,
-            backgroundColor: theme.colorScheme.onPrimary.withValues(
-              alpha: 0.2,
-            ),
+            backgroundColor: theme.colorScheme.onPrimary.withValues(alpha: 0.2),
             child: Text(
               student.fullName.trim().isEmpty
                   ? 'S'
@@ -246,7 +244,9 @@ class _StudentGradesScreenState extends State<StudentGradesScreen> {
                   Text(
                     schoolInfo,
                     style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onPrimary.withValues(alpha: 0.82),
+                      color: theme.colorScheme.onPrimary.withValues(
+                        alpha: 0.82,
+                      ),
                     ),
                   ),
                 if (student.lrn?.isNotEmpty == true)
@@ -628,10 +628,8 @@ class _InfoBadge extends StatelessWidget {
         label,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
-        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-          color: foreground,
-          fontWeight: FontWeight.w700,
-        ),
+        style: Theme.of(context).textTheme.labelSmall
+            ?.copyWith(color: foreground, fontWeight: FontWeight.w700),
       ),
     );
   }

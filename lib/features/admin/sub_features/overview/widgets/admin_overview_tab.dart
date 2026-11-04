@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:class_realm/core/theme/app_theme.dart';
 import 'package:class_realm/models/user_model.dart';
@@ -51,10 +52,7 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
   }
 
   Future<void> _loadAllData() async {
-    await Future.wait([
-      _loadKpiMetrics(),
-      _loadSchoolYears(),
-    ]);
+    await Future.wait([_loadKpiMetrics(), _loadSchoolYears()]);
   }
 
   Future<void> _loadKpiMetrics() async {
@@ -74,7 +72,8 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
       setState(() {
         _allSchoolYears = list;
         _activeSchoolYear = current;
-        _selectedPreviewSchoolYearId = current?.id ?? (list.isNotEmpty ? list.first.id : null);
+        _selectedPreviewSchoolYearId =
+            current?.id ?? (list.isNotEmpty ? list.first.id : null);
         _isLoadingSchoolYears = false;
       });
     }
@@ -86,9 +85,7 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
       _selectedPreviewSchoolYear!.id != _activeSchoolYear!.id;
 
   Future<String?> _showSchoolYearSelectionModal() async {
-    final availableYears = [
-      for (int y = 2026; y <= 2049; y++) '$y-${y + 1}'
-    ];
+    final availableYears = [for (int y = 2026; y <= 2049; y++) '$y-${y + 1}'];
 
     final activeSy = _activeSchoolYear?.schoolYear;
     final archivedYears = _allSchoolYears
@@ -109,9 +106,14 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
 
             return AlertDialog(
               backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
               titlePadding: const EdgeInsets.fromLTRB(24, 24, 24, 12),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 24,
+                vertical: 8,
+              ),
               actionsPadding: const EdgeInsets.fromLTRB(24, 12, 24, 20),
               title: Row(
                 children: [
@@ -121,7 +123,11 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
                       color: theme.colorScheme.primary.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: Icon(Icons.calendar_month_rounded, color: theme.colorScheme.primary, size: 24),
+                    child: Icon(
+                      Icons.calendar_month_rounded,
+                      color: theme.colorScheme.primary,
+                      size: 24,
+                    ),
                   ),
                   const SizedBox(width: 14),
                   Expanded(
@@ -141,7 +147,9 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
                           'Select an academic year (2026-2027 to 2049-2050)',
                           style: TextStyle(
                             fontSize: 12.5,
-                            color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                            color: theme.colorScheme.onSurface.withValues(
+                              alpha: 0.6,
+                            ),
                           ),
                         ),
                       ],
@@ -157,11 +165,18 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
                   children: [
                     // Legend / Status Guidance
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 10,
+                      ),
                       decoration: BoxDecoration(
-                        color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.grey.shade100,
+                        color: isDark
+                            ? Colors.white.withValues(alpha: 0.05)
+                            : Colors.grey.shade100,
                         borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: isDark ? Colors.white10 : Colors.grey.shade300),
+                        border: Border.all(
+                          color: isDark ? Colors.white10 : Colors.grey.shade300,
+                        ),
                       ),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -177,7 +192,13 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
                                 ),
                               ),
                               const SizedBox(width: 6),
-                              const Text('Active', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                              const Text(
+                                'Active',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
                             ],
                           ),
                           Row(
@@ -191,7 +212,13 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
                                 ),
                               ),
                               const SizedBox(width: 6),
-                              const Text('Archived', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                              const Text(
+                                'Archived',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
                             ],
                           ),
                           Row(
@@ -200,12 +227,20 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
                                 width: 10,
                                 height: 10,
                                 decoration: BoxDecoration(
-                                  color: isDark ? Colors.grey.shade700 : Colors.grey.shade400,
+                                  color: isDark
+                                      ? Colors.grey.shade700
+                                      : Colors.grey.shade400,
                                   shape: BoxShape.circle,
                                 ),
                               ),
                               const SizedBox(width: 6),
-                              const Text('Future / Upcoming', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                              const Text(
+                                'Future / Upcoming',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
                             ],
                           ),
                         ],
@@ -218,7 +253,11 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
                       constraints: const BoxConstraints(maxHeight: 280),
                       child: Container(
                         decoration: BoxDecoration(
-                          border: Border.all(color: isDark ? Colors.white12 : Colors.grey.shade300),
+                          border: Border.all(
+                            color: isDark
+                                ? Colors.white12
+                                : Colors.grey.shade300,
+                          ),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: ClipRRect(
@@ -228,7 +267,9 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
                             itemCount: availableYears.length,
                             separatorBuilder: (_, _) => Divider(
                               height: 1,
-                              color: isDark ? Colors.white10 : Colors.grey.shade200,
+                              color: isDark
+                                  ? Colors.white10
+                                  : Colors.grey.shade200,
                             ),
                             itemBuilder: (ctx, index) {
                               final sy = availableYears[index];
@@ -239,12 +280,14 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
                               return InkWell(
                                 onTap: () {
                                   final now = DateTime.now();
-                                  final startYear = int.tryParse(sy.split('-').first) ?? 0;
+                                  final startYear =
+                                      int.tryParse(sy.split('-').first) ?? 0;
 
                                   if (isActive) {
                                     setModalState(() {
                                       selectedSy = null;
-                                      validationError = 'School Year $sy is already the currently active academic school year.';
+                                      validationError =
+                                          'School Year $sy is already the currently active academic school year.';
                                     });
                                     return;
                                   }
@@ -252,7 +295,8 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
                                   if (isArchived) {
                                     setModalState(() {
                                       selectedSy = null;
-                                      validationError = 'School Year $sy has already concluded and is archived. Archived school years cannot be re-activated.';
+                                      validationError =
+                                          'School Year $sy has already concluded and is archived. Archived school years cannot be re-activated.';
                                     });
                                     return;
                                   }
@@ -260,7 +304,8 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
                                   if (startYear > now.year) {
                                     setModalState(() {
                                       selectedSy = null;
-                                      validationError = 'Cannot select School Year $sy because the academic start year ($startYear) has not arrived yet. Current calendar year is ${now.year}. Academic school years can only be set or transitioned during or after their starting calendar year.';
+                                      validationError =
+                                          'Cannot select School Year $sy because the academic start year ($startYear) has not arrived yet. Current calendar year is ${now.year}. Academic school years can only be set or transitioned during or after their starting calendar year.';
                                     });
                                     return;
                                   }
@@ -272,12 +317,18 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
                                   });
                                 },
                                 child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 12,
+                                  ),
                                   color: isSelected
-                                      ? theme.colorScheme.primary.withValues(alpha: 0.12)
+                                      ? theme.colorScheme.primary.withValues(
+                                          alpha: 0.12,
+                                        )
                                       : (isActive
-                                          ? const Color(0xFF16A34A).withValues(alpha: 0.08)
-                                          : Colors.transparent),
+                                            ? const Color(0xFF16A34A)
+                                                  .withValues(alpha: 0.08)
+                                            : Colors.transparent),
                                   child: Row(
                                     children: [
                                       // Status Circle Indicator
@@ -288,8 +339,12 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
                                           color: isActive
                                               ? const Color(0xFF16A34A)
                                               : (isArchived
-                                                  ? const Color(0xFFEAB308)
-                                                  : (isDark ? Colors.grey.shade600 : Colors.grey.shade400)),
+                                                    ? const Color(0xFFEAB308)
+                                                    : (isDark
+                                                          ? Colors.grey.shade600
+                                                          : Colors
+                                                                .grey
+                                                                .shade400)),
                                           shape: BoxShape.circle,
                                         ),
                                       ),
@@ -299,7 +354,9 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
                                         sy,
                                         style: TextStyle(
                                           fontSize: 14,
-                                          fontWeight: isSelected || isActive ? FontWeight.bold : FontWeight.w500,
+                                          fontWeight: isSelected || isActive
+                                              ? FontWeight.bold
+                                              : FontWeight.w500,
                                           color: theme.colorScheme.onSurface,
                                         ),
                                       ),
@@ -307,11 +364,19 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
                                       // Badge
                                       if (isActive)
                                         Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 8,
+                                            vertical: 3,
+                                          ),
                                           decoration: BoxDecoration(
-                                            color: const Color(0xFF16A34A).withValues(alpha: 0.15),
-                                            borderRadius: BorderRadius.circular(6),
-                                            border: Border.all(color: const Color(0xFF16A34A)),
+                                            color: const Color(0xFF16A34A)
+                                                .withValues(alpha: 0.15),
+                                            borderRadius: BorderRadius.circular(
+                                              6,
+                                            ),
+                                            border: Border.all(
+                                              color: const Color(0xFF16A34A),
+                                            ),
                                           ),
                                           child: const Text(
                                             'ACTIVE',
@@ -324,11 +389,19 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
                                         )
                                       else if (isArchived)
                                         Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 8,
+                                            vertical: 3,
+                                          ),
                                           decoration: BoxDecoration(
-                                            color: const Color(0xFFEAB308).withValues(alpha: 0.15),
-                                            borderRadius: BorderRadius.circular(6),
-                                            border: Border.all(color: const Color(0xFFEAB308)),
+                                            color: const Color(0xFFEAB308)
+                                                .withValues(alpha: 0.15),
+                                            borderRadius: BorderRadius.circular(
+                                              6,
+                                            ),
+                                            border: Border.all(
+                                              color: const Color(0xFFEAB308),
+                                            ),
                                           ),
                                           child: const Text(
                                             'ARCHIVED',
@@ -341,23 +414,36 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
                                         )
                                       else
                                         Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 8,
+                                            vertical: 3,
+                                          ),
                                           decoration: BoxDecoration(
-                                            color: isDark ? Colors.white10 : Colors.grey.shade200,
-                                            borderRadius: BorderRadius.circular(6),
+                                            color: isDark
+                                                ? Colors.white10
+                                                : Colors.grey.shade200,
+                                            borderRadius: BorderRadius.circular(
+                                              6,
+                                            ),
                                           ),
                                           child: Text(
                                             'FUTURE',
                                             style: TextStyle(
                                               fontSize: 10,
                                               fontWeight: FontWeight.bold,
-                                              color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                                              color: isDark
+                                                  ? Colors.grey.shade400
+                                                  : Colors.grey.shade600,
                                             ),
                                           ),
                                         ),
                                       if (isSelected) ...[
                                         const SizedBox(width: 10),
-                                        Icon(Icons.check_circle_rounded, color: theme.colorScheme.primary, size: 18),
+                                        Icon(
+                                          Icons.check_circle_rounded,
+                                          color: theme.colorScheme.primary,
+                                          size: 18,
+                                        ),
                                       ],
                                     ],
                                   ),
@@ -377,12 +463,20 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
                         decoration: BoxDecoration(
                           color: const Color(0xFFDC2626).withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: const Color(0xFFDC2626).withValues(alpha: 0.5), width: 1.5),
+                          border: Border.all(
+                            color: const Color(0xFFDC2626)
+                                .withValues(alpha: 0.5),
+                            width: 1.5,
+                          ),
                         ),
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Icon(Icons.error_outline, size: 16, color: Color(0xFFDC2626)),
+                            const Icon(
+                              Icons.error_outline,
+                              size: 16,
+                              color: Color(0xFFDC2626),
+                            ),
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
@@ -406,7 +500,9 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
                 OutlinedButton(
                   onPressed: () => Navigator.of(ctx).pop(null),
                   style: OutlinedButton.styleFrom(
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
                   ),
                   child: const Text('Cancel'),
                 ),
@@ -414,12 +510,17 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: theme.colorScheme.primary,
                     foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
                   ),
                   onPressed: selectedSy != null
                       ? () => Navigator.of(ctx).pop(selectedSy)
                       : null,
-                  child: const Text('Proceed to Audit', style: TextStyle(fontWeight: FontWeight.bold)),
+                  child: const Text(
+                    'Proceed to Audit',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
                 ),
               ],
             );
@@ -431,14 +532,16 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
 
   Future<void> _handleNewSchoolYearDialog() async {
     // 30-second cooldown via RateLimitService
-    final cooldownRemaining = await RateLimitService.instance.checkAdminCooldown(
-      actionKey: 'admin_sy_switch',
-      cooldownSeconds: 30,
-    );
+    final cooldownRemaining = await RateLimitService.instance
+        .checkAdminCooldown(actionKey: 'admin_sy_switch', cooldownSeconds: 30);
     if (cooldownRemaining > 0) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Please wait $cooldownRemaining seconds before transitioning School Years again.')),
+          SnackBar(
+            content: Text(
+              'Please wait $cooldownRemaining seconds before transitioning School Years again.',
+            ),
+          ),
         );
       }
       return;
@@ -448,7 +551,9 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
     if (syInput == null) return;
 
     // Run Pre-Transition Audit Check (Edge Case #11)
-    final audit = await AdminRepository.instance.checkPreTransitionAudit(_activeSchoolYear?.id ?? '');
+    final audit = await AdminRepository.instance.checkPreTransitionAudit(
+      _activeSchoolYear?.id ?? '',
+    );
 
     if (!mounted) return;
 
@@ -461,8 +566,12 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
         title: Row(
           children: [
             Icon(
-              audit.hasPendingItems ? Icons.warning_amber_rounded : Icons.check_circle_outline_rounded,
-              color: audit.hasPendingItems ? AppTheme.catOrange : AppTheme.catGreen,
+              audit.hasPendingItems
+                  ? Icons.warning_amber_rounded
+                  : Icons.check_circle_outline_rounded,
+              color: audit.hasPendingItems
+                  ? AppTheme.catOrange
+                  : AppTheme.catGreen,
               size: 28,
             ),
             const SizedBox(width: 10),
@@ -481,10 +590,18 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: (audit.hasPendingItems ? AppTheme.catOrange : AppTheme.catGreen).withValues(alpha: 0.1),
+                color:
+                    (audit.hasPendingItems
+                            ? AppTheme.catOrange
+                            : AppTheme.catGreen)
+                        .withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(
-                  color: (audit.hasPendingItems ? AppTheme.catOrange : AppTheme.catGreen).withValues(alpha: 0.3),
+                  color:
+                      (audit.hasPendingItems
+                              ? AppTheme.catOrange
+                              : AppTheme.catGreen)
+                          .withValues(alpha: 0.3),
                 ),
               ),
               child: Column(
@@ -492,11 +609,18 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
                 children: [
                   Text(
                     'Audit Results for SY ${_activeSchoolYear?.schoolYear ?? "Current"}:',
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                    ),
                   ),
                   const SizedBox(height: 6),
-                  Text('• Unfinalized Term Grades: ${audit.unfinalizedGradesCount}'),
-                  Text('• Pending Classwork Submissions: ${audit.pendingSubmissionsCount}'),
+                  Text(
+                    '• Unfinalized Term Grades: ${audit.unfinalizedGradesCount}',
+                  ),
+                  Text(
+                    '• Pending Classwork Submissions: ${audit.pendingSubmissionsCount}',
+                  ),
                 ],
               ),
             ),
@@ -504,16 +628,25 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
               const SizedBox(height: 12),
               const Text(
                 'Warning: Some submissions or grades are not yet finalized. They will remain archived in read-only mode.',
-                style: TextStyle(fontSize: 12.5, color: AppTheme.catOrange, fontWeight: FontWeight.w600),
+                style: TextStyle(
+                  fontSize: 12.5,
+                  color: AppTheme.catOrange,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ],
           ],
         ),
         actions: [
-          OutlinedButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
+          OutlinedButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: audit.hasPendingItems ? AppTheme.catOrange : AppTheme.catGreen,
+              backgroundColor: audit.hasPendingItems
+                  ? AppTheme.catOrange
+                  : AppTheme.catGreen,
               foregroundColor: Colors.white,
             ),
             onPressed: () => Navigator.of(ctx).pop(true),
@@ -528,7 +661,10 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
     // Execute Transition
     try {
       final adminId = AuthRepository.instance.currentUser?.id ?? 'admin';
-      await AdminRepository.instance.transitionToNewSchoolYear(syInput, adminId);
+      await AdminRepository.instance.transitionToNewSchoolYear(
+        syInput,
+        adminId,
+      );
       await RateLimitService.instance.recordAdminCooldown(
         actionKey: 'admin_sy_switch',
         cooldownSeconds: 30,
@@ -539,14 +675,19 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             backgroundColor: AppTheme.catGreen,
-            content: Text('Successfully transitioned to School Year $syInput! Fresh slate initialized.'),
+            content: Text(
+              'Successfully transitioned to School Year $syInput! Fresh slate initialized.',
+            ),
           ),
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(backgroundColor: AppTheme.catRed, content: Text('Transition error: $e')),
+          SnackBar(
+            backgroundColor: AppTheme.catRed,
+            content: Text('Transition error: $e'),
+          ),
         );
       }
     }
@@ -557,10 +698,12 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    final totalTeachers = _kpiMetrics['totalTeachers'] ?? widget.teachers.length;
+    final totalTeachers =
+        _kpiMetrics['totalTeachers'] ?? widget.teachers.length;
     final activeTeachers = _kpiMetrics['activeTeachers'] ?? totalTeachers;
 
-    final totalStudents = _kpiMetrics['totalStudents'] ?? widget.students.length;
+    final totalStudents =
+        _kpiMetrics['totalStudents'] ?? widget.students.length;
     final activeStudents = _kpiMetrics['activeStudents'] ?? totalStudents;
 
     final totalParents = _kpiMetrics['totalParents'] ?? widget.parents.length;
@@ -594,7 +737,10 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
                   const SizedBox(height: 6),
                   Text(
                     'System statistics, institutional metrics, and academic year governance.',
-                    style: TextStyle(fontSize: 14, color: theme.colorScheme.onSurface.withValues(alpha: 0.6)),
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                    ),
                   ),
                 ],
               ),
@@ -604,12 +750,20 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
                     backgroundColor: theme.colorScheme.primary,
                     foregroundColor: Colors.white,
                     elevation: 0,
-                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 18,
+                      vertical: 12,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
                   ),
                   onPressed: widget.onNavigateToBroadcasts,
                   icon: const Icon(Icons.campaign_rounded, size: 18),
-                  label: const Text('Quick Broadcast', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                  label: const Text(
+                    'Quick Broadcast',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                  ),
                 ),
             ],
           ),
@@ -623,11 +777,17 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
               decoration: BoxDecoration(
                 color: theme.colorScheme.primary.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: theme.colorScheme.primary.withValues(alpha: 0.3)),
+                border: Border.all(
+                  color: theme.colorScheme.primary.withValues(alpha: 0.3),
+                ),
               ),
               child: Row(
                 children: [
-                  Icon(Icons.history_rounded, color: theme.colorScheme.primary, size: 24),
+                  Icon(
+                    Icons.history_rounded,
+                    color: theme.colorScheme.primary,
+                    size: 24,
+                  ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
@@ -641,9 +801,15 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
                   ),
                   TextButton(
                     onPressed: () {
-                      setState(() => _selectedPreviewSchoolYearId = _activeSchoolYear?.id);
+                      setState(
+                        () => _selectedPreviewSchoolYearId =
+                            _activeSchoolYear?.id,
+                      );
                     },
-                    child: const Text('Return to Active SY', style: TextStyle(fontWeight: FontWeight.bold)),
+                    child: const Text(
+                      'Return to Active SY',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
                   ),
                 ],
               ),
@@ -656,8 +822,8 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
                 final columns = constraints.maxWidth >= 1050
                     ? 4
                     : constraints.maxWidth >= 600
-                        ? 2
-                        : 1;
+                    ? 2
+                    : 1;
 
                 return GridView.count(
                   crossAxisCount: columns,
@@ -681,8 +847,8 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
                 final columns = constraints.maxWidth >= 1050
                     ? 4
                     : constraints.maxWidth >= 600
-                        ? 2
-                        : 1;
+                    ? 2
+                    : 1;
 
                 return GridView.count(
                   crossAxisCount: columns,
@@ -720,7 +886,8 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
                     _buildKpiCard(
                       title: 'Pending First Login',
                       value: '$pendingTotal',
-                      subtext: 'Tr: $pendingTr | St: $pendingSt | Pt: $pendingPt',
+                      subtext:
+                          'Tr: $pendingTr | St: $pendingSt | Pt: $pendingPt',
                       icon: Icons.lock_clock_outlined,
                       color: AppTheme.catOrange,
                     ),
@@ -735,172 +902,242 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
             const ShimmerAcademicCard()
           else
             Container(
-            padding: const EdgeInsets.all(22),
-            decoration: BoxDecoration(
-              color: isDark ? theme.colorScheme.surface : Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: isDark ? Colors.white12 : const Color(0xFFE2E8F0)),
-              boxShadow: isDark
-                  ? []
-                  : [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.03),
-                        blurRadius: 10,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: theme.colorScheme.primary.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Icon(Icons.school_rounded, color: theme.colorScheme.primary, size: 20),
-                        ),
-                        const SizedBox(width: 12),
-                        Text(
-                          'Academic School Year & Term Governance',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: theme.colorScheme.onSurface,
-                          ),
+              padding: const EdgeInsets.all(22),
+              decoration: BoxDecoration(
+                color: isDark ? theme.colorScheme.surface : Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: isDark ? Colors.white12 : const Color(0xFFE2E8F0),
+                ),
+                boxShadow: isDark
+                    ? []
+                    : [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.03),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
                         ),
                       ],
-                    ),
-                    ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: theme.colorScheme.primary,
-                        foregroundColor: Colors.white,
-                        elevation: 0,
-                        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      ),
-                      onPressed: _handleNewSchoolYearDialog,
-                      icon: const Icon(Icons.add_rounded, size: 18),
-                      label: const Text('Transition New SY', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 18),
-                Row(
-                  children: [
-                    // Active SY Badge
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF16A34A).withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: const Color(0xFF16A34A).withValues(alpha: 0.3)),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
                         children: [
-                          const Icon(Icons.check_circle_rounded, color: Color(0xFF16A34A), size: 16),
-                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: theme.colorScheme.primary.withValues(
+                                alpha: 0.1,
+                              ),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Icon(
+                              Icons.school_rounded,
+                              color: theme.colorScheme.primary,
+                              size: 20,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
                           Text(
-                            'Active SY: ${_activeSchoolYear?.schoolYear ?? "Loading..."}',
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF16A34A)),
+                            'Academic School Year & Term Governance',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: theme.colorScheme.onSurface,
+                            ),
                           ),
                         ],
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    // Fixed 3-Term Badge
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: isDark ? Colors.white.withValues(alpha: 0.05) : const Color(0xFFF1F5F9),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: isDark ? Colors.white10 : const Color(0xFFE2E8F0)),
-                      ),
-                      child: Text(
-                        'Structure: 3-Term Trimester (Fixed)',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 13,
-                          color: isDark ? Colors.grey.shade300 : const Color(0xFF475569),
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: theme.colorScheme.primary,
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 18,
+                            vertical: 12,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
                         ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 18),
-
-                // Historical Preview Selector Dropdown
-                Row(
-                  children: [
-                    Text(
-                      'Historical Snapshot Preview:',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: isDark ? Colors.grey.shade400 : const Color(0xFF64748B),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    if (_isLoadingSchoolYears)
-                      LoadingAnimationWidget.staggeredDotsWave(
-                        color: theme.colorScheme.primary,
-                        size: 16,
-                      )
-                    else if (_allSchoolYears.isEmpty)
-                      Text(
-                        'No school years configured',
-                        style: TextStyle(fontSize: 13, color: theme.colorScheme.onSurface.withValues(alpha: 0.6)),
-                      )
-                    else
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: isDark ? Colors.white.withValues(alpha: 0.05) : const Color(0xFFF8FAFC),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: isDark ? Colors.white12 : const Color(0xFFE2E8F0)),
-                        ),
-                        child: DropdownButtonHideUnderline(
-                          child: DropdownButton<String>(
-                            value: _allSchoolYears.any((sy) => sy.id == _selectedPreviewSchoolYearId)
-                                ? _selectedPreviewSchoolYearId
-                                : _allSchoolYears.first.id,
-                            icon: Icon(
-                              Icons.arrow_drop_down_rounded,
-                              color: isDark ? Colors.grey.shade400 : const Color(0xFF64748B),
-                            ),
-                            items: _allSchoolYears.map((sy) {
-                              return DropdownMenuItem<String>(
-                                value: sy.id,
-                                child: Text(
-                                  '${sy.schoolYear} ${sy.isCurrent ? "(ACTIVE)" : "(Archived)"}',
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: sy.isCurrent ? FontWeight.bold : FontWeight.w500,
-                                    color: theme.colorScheme.onSurface,
-                                  ),
-                                ),
-                              );
-                            }).toList(),
-                            onChanged: (id) {
-                              if (id != null) {
-                                setState(() => _selectedPreviewSchoolYearId = id);
-                              }
-                            },
+                        onPressed: _handleNewSchoolYearDialog,
+                        icon: const Icon(Icons.add_rounded, size: 18),
+                        label: const Text(
+                          'Transition New SY',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
                           ),
                         ),
                       ),
-                  ],
-                ),
-              ],
+                    ],
+                  ),
+                  const SizedBox(height: 18),
+                  Row(
+                    children: [
+                      // Active SY Badge
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF16A34A).withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: const Color(0xFF16A34A)
+                                .withValues(alpha: 0.3),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.check_circle_rounded,
+                              color: Color(0xFF16A34A),
+                              size: 16,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Active SY: ${_activeSchoolYear?.schoolYear ?? "Loading..."}',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                                color: Color(0xFF16A34A),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      // Fixed 3-Term Badge
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: isDark
+                              ? Colors.white.withValues(alpha: 0.05)
+                              : const Color(0xFFF1F5F9),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: isDark
+                                ? Colors.white10
+                                : const Color(0xFFE2E8F0),
+                          ),
+                        ),
+                        child: Text(
+                          'Structure: 3-Term Trimester (Fixed)',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                            color: isDark
+                                ? Colors.grey.shade300
+                                : const Color(0xFF475569),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 18),
+
+                  // Historical Preview Selector Dropdown
+                  Row(
+                    children: [
+                      Text(
+                        'Historical Snapshot Preview:',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: isDark
+                              ? Colors.grey.shade400
+                              : const Color(0xFF64748B),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      if (_isLoadingSchoolYears)
+                        LoadingAnimationWidget.staggeredDotsWave(
+                          color: theme.colorScheme.primary,
+                          size: 16,
+                        )
+                      else if (_allSchoolYears.isEmpty)
+                        Text(
+                          'No school years configured',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: theme.colorScheme.onSurface.withValues(
+                              alpha: 0.6,
+                            ),
+                          ),
+                        )
+                      else
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: isDark
+                                ? Colors.white.withValues(alpha: 0.05)
+                                : const Color(0xFFF8FAFC),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: isDark
+                                  ? Colors.white12
+                                  : const Color(0xFFE2E8F0),
+                            ),
+                          ),
+                          child: DropdownButtonHideUnderline(
+                            child: DropdownButton<String>(
+                              value:
+                                  _allSchoolYears.any(
+                                    (sy) =>
+                                        sy.id == _selectedPreviewSchoolYearId,
+                                  )
+                                  ? _selectedPreviewSchoolYearId
+                                  : _allSchoolYears.first.id,
+                              icon: Icon(
+                                Icons.arrow_drop_down_rounded,
+                                color: isDark
+                                    ? Colors.grey.shade400
+                                    : const Color(0xFF64748B),
+                              ),
+                              items: _allSchoolYears.map((sy) {
+                                return DropdownMenuItem<String>(
+                                  value: sy.id,
+                                  child: Text(
+                                    '${sy.schoolYear} ${sy.isCurrent ? "(ACTIVE)" : "(Archived)"}',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: sy.isCurrent
+                                          ? FontWeight.bold
+                                          : FontWeight.w500,
+                                      color: theme.colorScheme.onSurface,
+                                    ),
+                                  ),
+                                );
+                              }).toList(),
+                              onChanged: (id) {
+                                if (id != null) {
+                                  setState(
+                                    () => _selectedPreviewSchoolYearId = id,
+                                  );
+                                }
+                              },
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
+              ),
             ),
-          ),
         ],
       ),
     );
@@ -947,7 +1184,9 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
-                  color: isDark ? Colors.grey.shade400 : const Color(0xFF64748B),
+                  color: isDark
+                      ? Colors.grey.shade400
+                      : const Color(0xFF64748B),
                 ),
               ),
               Container(

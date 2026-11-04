@@ -1,4 +1,5 @@
 import 'package:flutter/widgets.dart';
+
 import '../models/proctor_violation_log.dart';
 
 /// Service responsible for tracking true tab-switches and window unfocus
@@ -48,7 +49,8 @@ class StudentLifecycleWatcher with WidgetsBindingObserver {
     if (_isDisposed) return;
 
     // If app becomes hidden or paused, learner left the assessment screen
-    if (state == AppLifecycleState.paused || state == AppLifecycleState.hidden) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden) {
       _recordUnfocusStart();
     } else if (state == AppLifecycleState.resumed) {
       _recordUnfocusEnd(ProctorViolationType.appBackgrounded);

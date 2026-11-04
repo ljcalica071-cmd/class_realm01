@@ -15,7 +15,7 @@ class SyncStatusBadge extends StatefulWidget {
 class _SyncStatusBadgeState extends State<SyncStatusBadge> {
   @override
   Widget build(BuildContext context) {
-        final isCompact = MediaQuery.sizeOf(context).width < 380;
+    final isCompact = MediaQuery.sizeOf(context).width < 380;
 
     return ValueListenableBuilder<bool>(
       valueListenable: AppLifecycleCoordinator.instance.isOnlineNotifier,
@@ -80,8 +80,8 @@ class _SyncStatusBadgeState extends State<SyncStatusBadge> {
               message: !isOnline
                   ? 'No internet connection detected. Offline Mode is active.'
                   : (isSyncing
-                      ? 'Syncing local and cloud data...'
-                      : 'Connected to cloud. Tap to verify connection.'),
+                        ? 'Syncing local and cloud data...'
+                        : 'Connected to cloud. Tap to verify connection.'),
               child: InkWell(
                 onTap: () async {
                   AppLifecycleCoordinator.instance.setSyncing(true);
@@ -97,8 +97,10 @@ class _SyncStatusBadgeState extends State<SyncStatusBadge> {
                 },
                 borderRadius: BorderRadius.circular(20),
                 child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     color: bg,
                     borderRadius: BorderRadius.circular(20),

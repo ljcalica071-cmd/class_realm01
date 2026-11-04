@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -20,11 +21,7 @@ class _ClassSection {
   final String name;
   int studentCount;
 
-  _ClassSection({
-    required this.id,
-    required this.name,
-    this.studentCount = 0,
-  });
+  _ClassSection({required this.id, required this.name, this.studentCount = 0});
 }
 
 /// Classroom Setup View Mode
@@ -305,11 +302,11 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
                       ),
                       if (!_isViewingArchived)
                         AppButton.primary(
-                          icon: _showAddForm
-                              ? LucideIcons.x
-                              : LucideIcons.plus,
+                          icon: _showAddForm ? LucideIcons.x : LucideIcons.plus,
                           label: _showAddForm
-                              ? (_editingSubject != null ? 'Close Edit' : 'Close Form')
+                              ? (_editingSubject != null
+                                    ? 'Close Edit'
+                                    : 'Close Form')
                               : 'Add Subject',
                           onPressed: _handleAddSubjectClick,
                         ),
@@ -350,8 +347,8 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
                     _viewMode == _ClassroomViewMode.active
                         ? LucideIcons.bookOpen
                         : (_viewMode == _ClassroomViewMode.archivedSubjects
-                            ? LucideIcons.archive
-                            : LucideIcons.layers),
+                              ? LucideIcons.archive
+                              : LucideIcons.layers),
                     size: 18,
                     color: theme.colorScheme.primary,
                   ),
@@ -360,8 +357,8 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
                     _viewMode == _ClassroomViewMode.active
                         ? 'ACTIVE SUBJECTS'
                         : (_viewMode == _ClassroomViewMode.archivedSubjects
-                            ? 'ARCHIVED SUBJECTS'
-                            : 'ARCHIVED SECTIONS'),
+                              ? 'ARCHIVED SUBJECTS'
+                              : 'ARCHIVED SECTIONS'),
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.bold,
@@ -401,7 +398,8 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
                         });
                       },
                     ),
-                  ] else if (_viewMode == _ClassroomViewMode.archivedSubjects) ...[
+                  ] else if (_viewMode ==
+                      _ClassroomViewMode.archivedSubjects) ...[
                     AppButton.outline(
                       icon: LucideIcons.bookOpen,
                       label: 'Active Subjects (${_subjects.length})',
@@ -1106,9 +1104,10 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
   }) async {
     final theme = Theme.of(context);
     final primaryColor = theme.colorScheme.primary;
-    final effectiveIconColor = iconColor ??
-        (isDestructive ? theme.colorScheme.error : primaryColor);
-    final effectiveBtnColor = confirmButtonColor ??
+    final effectiveIconColor =
+        iconColor ?? (isDestructive ? theme.colorScheme.error : primaryColor);
+    final effectiveBtnColor =
+        confirmButtonColor ??
         (isDestructive ? theme.colorScheme.error : primaryColor);
 
     final result = await _showConstrainedDialog<bool>(
@@ -1159,10 +1158,7 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
               const Expanded(
                 child: Text(
                   'Cannot Permanently Delete',
-                  style: TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
                 ),
               ),
             ],
@@ -1302,7 +1298,9 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           decoration: BoxDecoration(
-            color: isEditing ? theme.colorScheme.onSurface.withValues(alpha: 0.04) : null,
+            color: isEditing
+                ? theme.colorScheme.onSurface.withValues(alpha: 0.04)
+                : null,
             border: Border.all(
               color: theme.colorScheme.outline.withValues(alpha: 0.4),
             ),
@@ -1317,7 +1315,9 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     fontSize: 13,
-                    color: isEditing ? theme.colorScheme.onSurface.withValues(alpha: 0.6) : null,
+                    color: isEditing
+                        ? theme.colorScheme.onSurface.withValues(alpha: 0.6)
+                        : null,
                   ),
                 ),
               ),
@@ -1396,15 +1396,16 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
           }
           _subjectFocus.nextFocus();
         },
-        decoration: _boxDecoration(
-          hint: 'e.g. General Mathematics',
-          hasError: _subjectError != null,
-        ).copyWith(
-          filled: isTemplateLocked,
-          fillColor: isTemplateLocked
-              ? theme.colorScheme.onSurface.withValues(alpha: 0.05)
-              : null,
-        ),
+        decoration:
+            _boxDecoration(
+              hint: 'e.g. General Mathematics',
+              hasError: _subjectError != null,
+            ).copyWith(
+              filled: isTemplateLocked,
+              fillColor: isTemplateLocked
+                  ? theme.colorScheme.onSurface.withValues(alpha: 0.05)
+                  : null,
+            ),
       ),
     );
 
@@ -1713,14 +1714,19 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: (isEditing ? theme.colorScheme.primary : theme.colorScheme.secondary)
-                      .withValues(alpha: 0.12),
+                  color:
+                      (isEditing
+                              ? theme.colorScheme.primary
+                              : theme.colorScheme.secondary)
+                          .withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Icon(
                   isEditing ? LucideIcons.pencil : LucideIcons.plusCircle,
                   size: 20,
-                  color: isEditing ? theme.colorScheme.primary : theme.colorScheme.secondary,
+                  color: isEditing
+                      ? theme.colorScheme.primary
+                      : theme.colorScheme.secondary,
                 ),
               ),
               const SizedBox(width: 12),
@@ -1743,12 +1749,14 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
                     Text(
                       isEditing
                           ? (isTemplateLocked
-                              ? 'Template-backed: Grade level & sections are editable. Term block editable if 1-term.'
-                              : 'Custom subject: All fields and sections can be edited freely.')
+                                ? 'Template-backed: Grade level & sections are editable. Term block editable if 1-term.'
+                                : 'Custom subject: All fields and sections can be edited freely.')
                           : 'Configure subject details, grading weights, and create sections.',
                       style: TextStyle(
                         fontSize: 12,
-                        color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.6,
+                        ),
                       ),
                     ),
                   ],
@@ -2149,16 +2157,14 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
       final glInt = row['grade_level'];
       final gl = 'Grade $glInt';
       final secName = row['section_name'] ?? 'Section';
-      final studentCount = studentCounts?[id] ??
-          (row['student_count'] as num?)?.toInt() ??
-          0;
+      final studentCount =
+          studentCounts?[id] ?? (row['student_count'] as num?)?.toInt() ?? 0;
       final ww = (row['ww_weight'] as num?)?.toInt() ?? 20;
       final pt = (row['pt_weight'] as num?)?.toInt() ?? 50;
       final ex = (row['ex_weight'] as num?)?.toInt() ?? 30;
       final termsTaught = (row['terms_taught'] as num?)?.toInt() ?? 3;
       final termBlock = row['term_block']?.toString() ?? '1ST, 2ND, 3RD';
-      final unitsPerTerm =
-          (row['units_per_term'] as num?)?.toDouble() ?? 2.0;
+      final unitsPerTerm = (row['units_per_term'] as num?)?.toDouble() ?? 2.0;
       final st1Weight = (row['st1_weight'] as num?)?.toDouble() ?? 30.0;
       final st2Weight = (row['st2_weight'] as num?)?.toDouble() ?? 30.0;
       final teWeight = (row['te_weight'] as num?)?.toDouble() ?? 40.0;
@@ -2183,11 +2189,7 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
         );
       }
       grouped[key]!.sections.add(
-        _ClassSection(
-          id: id,
-          name: secName,
-          studentCount: studentCount,
-        ),
+        _ClassSection(id: id, name: secName, studentCount: studentCount),
       );
     }
     return grouped;
@@ -2198,7 +2200,9 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
     if (teacherId == null) return;
 
     // Instant Frame-1 hydration from cache
-    final cachedRows = SubjectRepository.instance.getCachedTeacherSubjects(teacherId);
+    final cachedRows = SubjectRepository.instance.getCachedTeacherSubjects(
+      teacherId,
+    );
     if (cachedRows.isNotEmpty && _subjects.isEmpty) {
       final cachedGrouped = _parseGrouped(cachedRows);
       _subjects.clear();
@@ -2350,12 +2354,12 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
         final friendlyMsg = e is PostgrestException
             ? 'Unable to save subject changes: ${e.message}'
             : 'Failed to save subject: ${e.toString()}';
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(
-          content: Text(friendlyMsg),
-          backgroundColor: Theme.of(context).colorScheme.error,
-        ));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(friendlyMsg),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -2530,7 +2534,9 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${subject.name} restored to active classroom.')),
+        SnackBar(
+          content: Text('${subject.name} restored to active classroom.'),
+        ),
       );
     }
   }
@@ -2543,10 +2549,8 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
     if (teacherId == null) return;
 
     // 1. Guard against academic records
-    final hasRecords = await SubjectRepository.instance.hasSubjectAcademicRecords(
-      teacherId,
-      subject.subjectId,
-    );
+    final hasRecords = await SubjectRepository.instance
+        .hasSubjectAcademicRecords(teacherId, subject.subjectId);
 
     if (hasRecords) {
       if (mounted) {
@@ -2641,8 +2645,9 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
     _SubjectClass parentSubject,
   ) async {
     // 1. Guard against academic records
-    final hasRecords =
-        await SubjectRepository.instance.hasAcademicRecords(sec.id);
+    final hasRecords = await SubjectRepository.instance.hasAcademicRecords(
+      sec.id,
+    );
     if (hasRecords) {
       if (mounted) {
         _showAcademicRecordsBlockedDialog(itemName: sec.name, isSection: true);
@@ -2797,8 +2802,9 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
 
     final cardAccentColor = SubjectPalette.getColorForSubject(
       subject.name,
-      teacherSubjectNames:
-          _archivedSectionsSubjects.map((s) => s.name).toList(),
+      teacherSubjectNames: _archivedSectionsSubjects
+          .map((s) => s.name)
+          .toList(),
       index: index,
     );
 
@@ -3038,10 +3044,7 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
               Expanded(
                 child: Text(
                   'Restore sections back to this subject anytime.',
-                  style: TextStyle(
-                    fontSize: 11.5,
-                    color: muted,
-                  ),
+                  style: TextStyle(fontSize: 11.5, color: muted),
                 ),
               ),
             ],
@@ -3143,7 +3146,9 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
                             'Standardized DepEd DO 15, s. 2026 grading weight & term presets',
                             style: TextStyle(
                               fontSize: 12,
-                              color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                              color: theme.colorScheme.onSurface.withValues(
+                                alpha: 0.6,
+                              ),
                             ),
                           ),
                         ],
@@ -3163,7 +3168,9 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
                   height: 42,
                   decoration: BoxDecoration(
                     color: isDark
-                        ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.4)
+                        ? theme.colorScheme.surfaceContainerHighest.withValues(
+                            alpha: 0.4,
+                          )
                         : const Color(0xFFF1F5F9),
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(
@@ -3223,15 +3230,15 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
                               color: isSelected
                                   ? theme.colorScheme.primary
                                   : (isDark
-                                      ? Colors.white.withValues(alpha: 0.05)
-                                      : const Color(0xFFF1F5F9)),
+                                        ? Colors.white.withValues(alpha: 0.05)
+                                        : const Color(0xFFF1F5F9)),
                               borderRadius: BorderRadius.circular(20),
                               border: Border.all(
                                 color: isSelected
                                     ? theme.colorScheme.primary
                                     : (isDark
-                                        ? Colors.white12
-                                        : const Color(0xFFE2E8F0)),
+                                          ? Colors.white12
+                                          : const Color(0xFFE2E8F0)),
                               ),
                             ),
                             child: Row(
@@ -3247,7 +3254,7 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
                                     color: isSelected
                                         ? Colors.white
                                         : theme.colorScheme.onSurface
-                                            .withValues(alpha: 0.75),
+                                              .withValues(alpha: 0.75),
                                   ),
                                 ),
                                 const SizedBox(width: 6),
@@ -3260,8 +3267,8 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
                                     color: isSelected
                                         ? Colors.white.withValues(alpha: 0.25)
                                         : (isDark
-                                            ? Colors.white10
-                                            : Colors.grey.shade300),
+                                              ? Colors.white10
+                                              : Colors.grey.shade300),
                                     borderRadius: BorderRadius.circular(10),
                                   ),
                                   child: Text(
@@ -3301,11 +3308,17 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
                           padding: const EdgeInsets.all(14),
                           decoration: BoxDecoration(
                             color: isDark
-                                ? theme.colorScheme.primary.withValues(alpha: 0.08)
-                                : theme.colorScheme.primary.withValues(alpha: 0.04),
+                                ? theme.colorScheme.primary.withValues(
+                                    alpha: 0.08,
+                                  )
+                                : theme.colorScheme.primary.withValues(
+                                    alpha: 0.04,
+                                  ),
                             borderRadius: BorderRadius.circular(12),
                             border: Border.all(
-                              color: theme.colorScheme.primary.withValues(alpha: 0.35),
+                              color: theme.colorScheme.primary.withValues(
+                                alpha: 0.35,
+                              ),
                               width: 1.2,
                             ),
                           ),
@@ -3315,7 +3328,9 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
                                 width: 38,
                                 height: 38,
                                 decoration: BoxDecoration(
-                                  color: theme.colorScheme.primary.withValues(alpha: 0.15),
+                                  color: theme.colorScheme.primary.withValues(
+                                    alpha: 0.15,
+                                  ),
                                   borderRadius: BorderRadius.circular(10),
                                 ),
                                 child: Icon(
@@ -3346,8 +3361,11 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
                                             vertical: 2,
                                           ),
                                           decoration: BoxDecoration(
-                                            color: AppTheme.catPurple.withValues(alpha: 0.12),
-                                            borderRadius: BorderRadius.circular(6),
+                                            color: AppTheme.catPurple
+                                                .withValues(alpha: 0.12),
+                                            borderRadius: BorderRadius.circular(
+                                              6,
+                                            ),
                                           ),
                                           child: const Text(
                                             'User Defined',
@@ -3365,7 +3383,8 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
                                       'Enter custom subject name, custom grading weights, and term configuration',
                                       style: TextStyle(
                                         fontSize: 11.5,
-                                        color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
+                                        color: theme.colorScheme.onSurface
+                                            .withValues(alpha: 0.65),
                                       ),
                                     ),
                                   ],
@@ -3385,7 +3404,10 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
                       // Empty Search State
                       if (filtered.isEmpty)
                         Container(
-                          padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 20),
+                          padding: const EdgeInsets.symmetric(
+                            vertical: 40,
+                            horizontal: 20,
+                          ),
                           alignment: Alignment.center,
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
@@ -3393,7 +3415,9 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
                               Icon(
                                 Icons.search_off_rounded,
                                 size: 44,
-                                color: isDark ? Colors.white24 : Colors.grey.shade400,
+                                color: isDark
+                                    ? Colors.white24
+                                    : Colors.grey.shade400,
                               ),
                               const SizedBox(height: 12),
                               Text(
@@ -3401,7 +3425,9 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
                                 style: TextStyle(
                                   fontSize: 13.5,
                                   fontWeight: FontWeight.w600,
-                                  color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                                  color: theme.colorScheme.onSurface.withValues(
+                                    alpha: 0.7,
+                                  ),
                                 ),
                               ),
                               const SizedBox(height: 4),
@@ -3409,7 +3435,9 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
                                 'You can create it as a custom subject with your own weights.',
                                 style: TextStyle(
                                   fontSize: 12,
-                                  color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                                  color: theme.colorScheme.onSurface.withValues(
+                                    alpha: 0.5,
+                                  ),
                                 ),
                               ),
                               if (searchQuery.isNotEmpty) ...[
@@ -3481,7 +3509,8 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
                                       '(${clusterEntry.value.length})',
                                       style: TextStyle(
                                         fontSize: 11,
-                                        color: theme.colorScheme.onSurface.withValues(alpha: 0.45),
+                                        color: theme.colorScheme.onSurface
+                                            .withValues(alpha: 0.45),
                                         fontWeight: FontWeight.w500,
                                       ),
                                     ),
@@ -3506,14 +3535,16 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
                                     ),
                                     child: ListTile(
                                       dense: true,
-                                      contentPadding: const EdgeInsets.symmetric(
-                                        horizontal: 14,
-                                        vertical: 4,
-                                      ),
+                                      contentPadding:
+                                          const EdgeInsets.symmetric(
+                                            horizontal: 14,
+                                            vertical: 4,
+                                          ),
                                       shape: RoundedRectangleBorder(
                                         borderRadius: BorderRadius.circular(10),
                                       ),
-                                      hoverColor: theme.colorScheme.primary.withValues(alpha: 0.05),
+                                      hoverColor: theme.colorScheme.primary
+                                          .withValues(alpha: 0.05),
                                       title: Text(
                                         template.name,
                                         style: TextStyle(
@@ -3530,41 +3561,50 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
                                           children: [
                                             // Weight badge (Unified Blue)
                                             Container(
-                                              padding: const EdgeInsets.symmetric(
-                                                horizontal: 7,
-                                                vertical: 2,
-                                              ),
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 7,
+                                                    vertical: 2,
+                                                  ),
                                               decoration: BoxDecoration(
-                                                color: theme.colorScheme.primary.withValues(alpha: 0.10),
-                                                borderRadius: BorderRadius.circular(5),
+                                                color: theme.colorScheme.primary
+                                                    .withValues(alpha: 0.10),
+                                                borderRadius:
+                                                    BorderRadius.circular(5),
                                               ),
                                               child: Text(
                                                 template.weightSummary,
                                                 style: TextStyle(
                                                   fontSize: 10.5,
                                                   fontWeight: FontWeight.bold,
-                                                  color: theme.colorScheme.primary,
+                                                  color:
+                                                      theme.colorScheme.primary,
                                                 ),
                                               ),
                                             ),
                                             // Term badge
                                             Container(
-                                              padding: const EdgeInsets.symmetric(
-                                                horizontal: 7,
-                                                vertical: 2,
-                                              ),
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 7,
+                                                    vertical: 2,
+                                                  ),
                                               decoration: BoxDecoration(
                                                 color: isDark
                                                     ? Colors.white10
                                                     : Colors.grey.shade200,
-                                                borderRadius: BorderRadius.circular(5),
+                                                borderRadius:
+                                                    BorderRadius.circular(5),
                                               ),
                                               child: Text(
                                                 template.termsSummary,
                                                 style: TextStyle(
                                                   fontSize: 10.5,
                                                   fontWeight: FontWeight.w600,
-                                                  color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                                                  color: theme
+                                                      .colorScheme
+                                                      .onSurface
+                                                      .withValues(alpha: 0.7),
                                                 ),
                                               ),
                                             ),
@@ -3600,16 +3640,23 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
                       '${filtered.length} of ${allTemplates.length} subjects available',
                       style: TextStyle(
                         fontSize: 11.5,
-                        color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.5,
+                        ),
                         fontWeight: FontWeight.w500,
                       ),
                     ),
                     TextButton(
                       style: TextButton.styleFrom(
-                        foregroundColor: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                        foregroundColor: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.7,
+                        ),
                       ),
                       onPressed: () => Navigator.pop(dialogCtx),
-                      child: const Text('Close', style: TextStyle(fontWeight: FontWeight.bold)),
+                      child: const Text(
+                        'Close',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
                     ),
                   ],
                 ),
@@ -3762,7 +3809,6 @@ class _SingleSpaceInputFormatter extends TextInputFormatter {
   }
 }
 
-
 /// Action confirmation dialog with safety countdown
 class _ActionConfirmationDialogContent extends StatefulWidget {
   final String title;
@@ -3842,7 +3888,11 @@ class _ActionConfirmationDialogContentState
                 color: widget.effectiveIconColor.withValues(alpha: 0.12),
                 shape: BoxShape.circle,
               ),
-              child: Icon(widget.icon, size: 22, color: widget.effectiveIconColor),
+              child: Icon(
+                widget.icon,
+                size: 22,
+                color: widget.effectiveIconColor,
+              ),
             ),
             const SizedBox(width: 14),
             Expanded(
@@ -3886,8 +3936,8 @@ class _ActionConfirmationDialogContentState
                 foregroundColor: isCountingDown
                     ? theme.colorScheme.onSurface.withValues(alpha: 0.4)
                     : (widget.isDestructive
-                        ? theme.colorScheme.onError
-                        : theme.colorScheme.onPrimary),
+                          ? theme.colorScheme.onError
+                          : theme.colorScheme.onPrimary),
                 elevation: 0,
                 padding: const EdgeInsets.symmetric(
                   horizontal: 16,

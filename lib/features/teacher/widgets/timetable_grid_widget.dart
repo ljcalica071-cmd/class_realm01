@@ -112,15 +112,16 @@ class TimetableGridWidget extends StatelessWidget {
           clipBehavior: Clip.antiAlias,
           child: Column(
             children: [
-              _buildHeader(dayWidth),
+              _buildHeader(context, dayWidth),
               Expanded(
                 child: SingleChildScrollView(
                   physics: const BouncingScrollPhysics(),
                   child: Stack(
                     children: [
-                      _buildGridBackground(dayWidth),
-                      ...schedules
-                          .map((s) => _buildScheduleBlock(s, dayWidth, context)),
+                      _buildGridBackground(context, dayWidth),
+                      ...schedules.map(
+                        (s) => _buildScheduleBlock(s, dayWidth, context),
+                      ),
                     ],
                   ),
                 ),
@@ -142,12 +143,20 @@ class TimetableGridWidget extends StatelessWidget {
     );
   }
 
-  Widget _buildHeader(double dayWidth) {
+  Widget _buildHeader(BuildContext context, double dayWidth) {
     return Container(
       height: 50,
-      decoration: const BoxDecoration(
-        color: Color(0xFFF1F5F9),
-        border: Border(bottom: BorderSide(color: Color(0xFFE2E8F0))),
+      decoration: BoxDecoration(
+        color: Theme.of(context).brightness == Brightness.dark
+            ? const Color(0xFF1F2937)
+            : const Color(0xFFF1F5F9),
+        border: Border(
+          bottom: BorderSide(
+            color: Theme.of(context).brightness == Brightness.dark
+                ? const Color(0xFF374151)
+                : const Color(0xFFE2E8F0),
+          ),
+        ),
       ),
       child: Row(
         children: [
@@ -156,15 +165,22 @@ class TimetableGridWidget extends StatelessWidget {
             (day) => Container(
               width: dayWidth,
               alignment: Alignment.center,
-              decoration: const BoxDecoration(
-                border: Border(left: BorderSide(color: Color(0xFFE2E8F0))),
+              decoration: BoxDecoration(
+                border: Border(
+                  left: BorderSide(
+                    color: Theme.of(context).brightness == Brightness.dark
+                        ? const Color(0xFF374151)
+                        : const Color(0xFFE2E8F0),
+                  ),
+                ),
               ),
               child: Text(
                 day.substring(0, 3).toUpperCase(),
-                style: const TextStyle(
+                style: TextStyle(
                   fontWeight: FontWeight.w900,
                   fontSize: 13,
-                  color: Color(0xFF475569),
+                  color: Theme.of(context).colorScheme.onSurface
+                      .withValues(alpha: 0.7),
                   letterSpacing: 1.2,
                 ),
               ),
@@ -175,7 +191,7 @@ class TimetableGridWidget extends StatelessWidget {
     );
   }
 
-  Widget _buildGridBackground(double dayWidth) {
+  Widget _buildGridBackground(BuildContext context, double dayWidth) {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: List.generate(totalSlots, (index) {
@@ -186,8 +202,12 @@ class TimetableGridWidget extends StatelessWidget {
             border: Border(
               bottom: BorderSide(
                 color: isHourStart
-                    ? const Color(0xFFE2E8F0)
-                    : const Color(0xFFF1F5F9),
+                    ? (Theme.of(context).brightness == Brightness.dark
+                          ? const Color(0xFF374151)
+                          : const Color(0xFFE2E8F0))
+                    : (Theme.of(context).brightness == Brightness.dark
+                          ? const Color(0xFF1F2937)
+                          : const Color(0xFFF1F5F9)),
                 width: 1.0,
               ),
             ),
@@ -203,8 +223,9 @@ class TimetableGridWidget extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 11,
                     color: isHourStart
-                        ? const Color(0xFF1E293B)
-                        : const Color(0xFF94A3B8),
+                        ? Theme.of(context).colorScheme.onSurface
+                        : Theme.of(context).colorScheme.onSurface
+                              .withValues(alpha: 0.5),
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -213,9 +234,14 @@ class TimetableGridWidget extends StatelessWidget {
                 days.length,
                 (d) => Container(
                   width: dayWidth,
-                  decoration: const BoxDecoration(
+                  decoration: BoxDecoration(
                     border: Border(
-                      left: BorderSide(color: Color(0xFFF1F5F9), width: 1),
+                      left: BorderSide(
+                        color: Theme.of(context).brightness == Brightness.dark
+                            ? const Color(0xFF1F2937)
+                            : const Color(0xFFF1F5F9),
+                        width: 1,
+                      ),
                     ),
                   ),
                 ),

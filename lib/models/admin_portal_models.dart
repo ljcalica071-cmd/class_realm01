@@ -18,7 +18,8 @@ class SystemSettingsModel {
     return SystemSettingsModel(
       isMaintenanceMode: json['is_maintenance_mode'] == true,
       maintenanceUpdatedAt: json['maintenance_updated_at'] != null
-          ? DateTime.tryParse(json['maintenance_updated_at'].toString()) ?? DateTime.now()
+          ? DateTime.tryParse(json['maintenance_updated_at'].toString()) ??
+                DateTime.now()
           : DateTime.now(),
       maintenanceUpdatedBy: json['maintenance_updated_by']?.toString(),
       schoolYearUpdatedAt: json['school_year_updated_at'] != null
@@ -94,10 +95,14 @@ class UserSessionLog {
     return loginAt.add(Duration(seconds: durationSeconds));
   }
 
-  factory UserSessionLog.fromJson(Map<String, dynamic> json, {String? teacherName}) {
+  factory UserSessionLog.fromJson(
+    Map<String, dynamic> json, {
+    String? teacherName,
+  }) {
     final rawActive = json['is_active'] == true;
     final lastActive = json['last_active_at'] != null
-        ? DateTime.tryParse(json['last_active_at'].toString())?.toLocal() ?? DateTime.now()
+        ? DateTime.tryParse(json['last_active_at'].toString())?.toLocal() ??
+              DateTime.now()
         : DateTime.now();
 
     // Heartbeat Staleness Guard:
@@ -116,14 +121,18 @@ class UserSessionLog {
       teacherName: teacherName ?? json['teacher_name']?.toString(),
       role: json['role']?.toString() ?? '',
       sessionDate: json['session_date'] != null
-          ? DateTime.tryParse(json['session_date'].toString())?.toLocal() ?? DateTime.now()
+          ? DateTime.tryParse(json['session_date'].toString())?.toLocal() ??
+                DateTime.now()
           : DateTime.now(),
       loginAt: json['login_at'] != null
-          ? DateTime.tryParse(json['login_at'].toString())?.toLocal() ?? DateTime.now()
+          ? DateTime.tryParse(json['login_at'].toString())?.toLocal() ??
+                DateTime.now()
           : DateTime.now(),
       lastActiveAt: lastActive,
       logoutAt: parsedLogout,
-      logoutReason: json['logout_reason']?.toString() ?? (!effectiveIsActive && rawActive ? 'terminated' : null),
+      logoutReason:
+          json['logout_reason']?.toString() ??
+          (!effectiveIsActive && rawActive ? 'terminated' : null),
       isActive: effectiveIsActive,
       durationSeconds: (json['duration_seconds'] as num?)?.toInt() ?? 0,
     );
@@ -219,12 +228,13 @@ class SchoolYearRecord {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is SchoolYearRecord && runtimeType == other.runtimeType && id == other.id;
+      other is SchoolYearRecord &&
+          runtimeType == other.runtimeType &&
+          id == other.id;
 
   @override
   int get hashCode => id.hashCode;
 }
-
 
 class PreTransitionAuditResult {
   final int unfinalizedGradesCount;
@@ -235,7 +245,8 @@ class PreTransitionAuditResult {
     required this.pendingSubmissionsCount,
   });
 
-  bool get hasPendingItems => unfinalizedGradesCount > 0 || pendingSubmissionsCount > 0;
+  bool get hasPendingItems =>
+      unfinalizedGradesCount > 0 || pendingSubmissionsCount > 0;
 }
 
 class TeacherWorkloadSummary {

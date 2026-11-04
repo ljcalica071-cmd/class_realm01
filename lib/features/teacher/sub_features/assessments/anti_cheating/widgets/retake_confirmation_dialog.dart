@@ -40,7 +40,11 @@ class RetakeConfirmationDialog extends StatelessWidget {
               color: AppTheme.catBlue.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(8),
             ),
-            child: const Icon(Icons.replay_rounded, color: AppTheme.catBlue, size: 24),
+            child: const Icon(
+              Icons.replay_rounded,
+              color: AppTheme.catBlue,
+              size: 24,
+            ),
           ),
           const SizedBox(width: 12),
           const Expanded(

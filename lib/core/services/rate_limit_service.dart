@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:class_realm/core/services/local_storage_service.dart';
@@ -160,10 +161,14 @@ class RateLimitService {
           if (lockedUntil != null && now.isBefore(lockedUntil)) {
             final remainingSec = lockedUntil.difference(now).inSeconds;
             final tier = (record['lockout_tier'] as num?)?.toInt() ?? 1;
-            final failed = (record['failed_attempts'] as num?)?.toInt() ?? maxAttempts;
+            final failed =
+                (record['failed_attempts'] as num?)?.toInt() ?? maxAttempts;
 
             // Cache locally
-            await LocalStorageService.setOtpLockout(scopeKey, Duration(seconds: remainingSec));
+            await LocalStorageService.setOtpLockout(
+              scopeKey,
+              Duration(seconds: remainingSec),
+            );
 
             return RateLimitStatus.locked(
               remainingSeconds: remainingSec,
@@ -176,11 +181,14 @@ class RateLimitService {
 
         // Check sliding window expiration
         final windowStartStr = record['window_started_at']?.toString();
-        final windowStart = windowStartStr != null ? DateTime.tryParse(windowStartStr)?.toUtc() : null;
+        final windowStart = windowStartStr != null
+            ? DateTime.tryParse(windowStartStr)?.toUtc()
+            : null;
         int currentFailed = (record['failed_attempts'] as num?)?.toInt() ?? 0;
         int currentResend = (record['resend_count'] as num?)?.toInt() ?? 0;
 
-        if (windowStart != null && now.difference(windowStart) > slidingWindowDuration) {
+        if (windowStart != null &&
+            now.difference(windowStart) > slidingWindowDuration) {
           currentFailed = 0;
         }
 
@@ -235,7 +243,9 @@ class RateLimitService {
     int failedAttempts = (existing?['failed_attempts'] as num?)?.toInt() ?? 0;
     int resendCount = (existing?['resend_count'] as num?)?.toInt() ?? 0;
     DateTime windowStartedAt = existing?['window_started_at'] != null
-        ? DateTime.tryParse(existing!['window_started_at'].toString())?.toUtc() ?? now
+        ? DateTime.tryParse(existing!['window_started_at'].toString())
+                  ?.toUtc() ??
+              now
         : now;
     DateTime? tierEscalatedAt = existing?['tier_escalated_at'] != null
         ? DateTime.tryParse(existing!['tier_escalated_at'].toString())?.toUtc()
@@ -255,7 +265,8 @@ class RateLimitService {
       // If previous escalation was within 1 hour, escalate tier (1 -> 2 -> 3 -> 4).
       // Else, decay back to Tier 1.
       int nextTier;
-      if (tierEscalatedAt != null && now.difference(tierEscalatedAt) <= tierDecayDuration) {
+      if (tierEscalatedAt != null &&
+          now.difference(tierEscalatedAt) <= tierDecayDuration) {
         nextTier = (currentTier + 1).clamp(1, 4);
       } else {
         nextTier = 1;
@@ -367,7 +378,8 @@ class RateLimitService {
 
     if (resendCount > maxResends) {
       int nextTier;
-      if (tierEscalatedAt != null && now.difference(tierEscalatedAt) <= tierDecayDuration) {
+      if (tierEscalatedAt != null &&
+          now.difference(tierEscalatedAt) <= tierDecayDuration) {
         nextTier = (currentTier + 1).clamp(1, 4);
       } else {
         nextTier = 1;
@@ -473,7 +485,9 @@ class RateLimitService {
     final now = DateTime.now().toUtc();
 
     // Check fast local storage
-    final localCooldown = LocalStorageService.getOtpLockoutRemaining('cd_$scopeKey');
+    final localCooldown = LocalStorageService.getOtpLockoutRemaining(
+      'cd_$scopeKey',
+    );
     if (localCooldown != null && localCooldown.inSeconds > 0) {
       return localCooldown.inSeconds;
     }
@@ -562,10 +576,13 @@ class RateLimitService {
         await _supabaseClient.from('audit_logs').insert({
           'user_id': resolvedUserId,
           'action_type': 'SECURITY_ALERT_TIER_4_LOCKOUT',
-          'description': 'Security Alert: Progressive lockout escalated to Tier 4 (1-hour lockout) on device $deviceId for feature: $feature.',
+          'description':
+              'Security Alert: Progressive lockout escalated to Tier 4 (1-hour lockout) on device $deviceId for feature: $feature.',
           'logged_at': DateTime.now().toUtc().toIso8601String(),
         });
-        debugPrint('[RateLimitService] Logged Tier 4 security alert in audit_logs for user $resolvedUserId');
+        debugPrint(
+          '[RateLimitService] Logged Tier 4 security alert in audit_logs for user $resolvedUserId',
+        );
       }
     } catch (e) {
       debugPrint('[RateLimitService] Audit log security alert notice: $e');

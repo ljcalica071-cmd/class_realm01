@@ -1,6 +1,13 @@
 enum UserRole { admin, teacher, student, parent }
 
-enum AccountStatus { active, pending, rejected, archived, pendingFirstLogin, deactivated }
+enum AccountStatus {
+  active,
+  pending,
+  rejected,
+  archived,
+  pendingFirstLogin,
+  deactivated,
+}
 
 class UserModel {
   final String id;

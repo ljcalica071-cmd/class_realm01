@@ -97,7 +97,9 @@ class ShimmerBox extends StatelessWidget {
       width: width,
       height: height,
       decoration: BoxDecoration(
-        color: isDark ? Colors.white.withValues(alpha: 0.12) : const Color(0xFFE2E8F0),
+        color: isDark
+            ? Colors.white.withValues(alpha: 0.12)
+            : const Color(0xFFE2E8F0),
         borderRadius: BorderRadius.circular(borderRadius),
       ),
     );
@@ -488,7 +490,10 @@ class ShimmerManagementTable extends StatelessWidget {
                 ],
               ),
             ),
-            Divider(height: 1, color: isDark ? Colors.white10 : const Color(0xFFE2E8F0)),
+            Divider(
+              height: 1,
+              color: isDark ? Colors.white10 : const Color(0xFFE2E8F0),
+            ),
             // Table Header Skeleton
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
@@ -506,7 +511,10 @@ class ShimmerManagementTable extends StatelessWidget {
                 ],
               ),
             ),
-            Divider(height: 1, color: isDark ? Colors.white10 : const Color(0xFFE2E8F0)),
+            Divider(
+              height: 1,
+              color: isDark ? Colors.white10 : const Color(0xFFE2E8F0),
+            ),
             // Table Rows Skeleton
             ListView.separated(
               shrinkWrap: true,
@@ -517,7 +525,10 @@ class ShimmerManagementTable extends StatelessWidget {
                 color: isDark ? Colors.white10 : const Color(0xFFE2E8F0),
               ),
               itemBuilder: (_, _) => Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 14,
+                ),
                 child: Row(
                   children: const [
                     ShimmerBox(width: 30, height: 14, borderRadius: 4),
@@ -559,7 +570,9 @@ class ShimmerAttendanceSkeleton extends StatelessWidget {
             decoration: BoxDecoration(
               color: isDark ? theme.colorScheme.surface : Colors.white,
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: isDark ? Colors.white10 : const Color(0xFFE2E8F0)),
+              border: Border.all(
+                color: isDark ? Colors.white10 : const Color(0xFFE2E8F0),
+              ),
             ),
             child: Row(
               children: const [
@@ -578,7 +591,9 @@ class ShimmerAttendanceSkeleton extends StatelessWidget {
             decoration: BoxDecoration(
               color: isDark ? theme.colorScheme.surface : Colors.white,
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: isDark ? Colors.white10 : const Color(0xFFE2E8F0)),
+              border: Border.all(
+                color: isDark ? Colors.white10 : const Color(0xFFE2E8F0),
+              ),
             ),
             child: Column(
               children: [
@@ -623,7 +638,9 @@ class ShimmerAttendanceSkeleton extends StatelessWidget {
             decoration: BoxDecoration(
               color: isDark ? theme.colorScheme.surface : Colors.white,
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: isDark ? Colors.white10 : const Color(0xFFE2E8F0)),
+              border: Border.all(
+                color: isDark ? Colors.white10 : const Color(0xFFE2E8F0),
+              ),
             ),
             child: Column(
               children: List.generate(
@@ -734,7 +751,9 @@ class ShimmerProfileSkeleton extends StatelessWidget {
                     height: 180,
                     decoration: BoxDecoration(
                       color: isDark ? Colors.white12 : const Color(0xFFE2E8F0),
-                      borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                      borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(16),
+                      ),
                     ),
                   ),
                   Padding(
@@ -744,15 +763,31 @@ class ShimmerProfileSkeleton extends StatelessWidget {
                         Transform.translate(
                           offset: const Offset(0, -50),
                           child: const Center(
-                            child: ShimmerBox(width: 100, height: 100, borderRadius: 50),
+                            child: ShimmerBox(
+                              width: 100,
+                              height: 100,
+                              borderRadius: 50,
+                            ),
                           ),
                         ),
                         const SizedBox(height: 4),
-                        const ShimmerBox(width: 220, height: 22, borderRadius: 6),
+                        const ShimmerBox(
+                          width: 220,
+                          height: 22,
+                          borderRadius: 6,
+                        ),
                         const SizedBox(height: 8),
-                        const ShimmerBox(width: 140, height: 14, borderRadius: 4),
+                        const ShimmerBox(
+                          width: 140,
+                          height: 14,
+                          borderRadius: 4,
+                        ),
                         const SizedBox(height: 8),
-                        const ShimmerBox(width: 180, height: 14, borderRadius: 4),
+                        const ShimmerBox(
+                          width: 180,
+                          height: 14,
+                          borderRadius: 4,
+                        ),
                         const SizedBox(height: 24),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.center,
@@ -779,10 +814,14 @@ class ShimmerProfileSkeleton extends StatelessWidget {
                     child: Container(
                       padding: const EdgeInsets.all(20),
                       decoration: BoxDecoration(
-                        color: isDark ? theme.colorScheme.surface : Colors.white,
+                        color: isDark
+                            ? theme.colorScheme.surface
+                            : Colors.white,
                         borderRadius: BorderRadius.circular(16),
                         border: Border.all(
-                          color: isDark ? Colors.white10 : const Color(0xFFE2E8F0),
+                          color: isDark
+                              ? Colors.white10
+                              : const Color(0xFFE2E8F0),
                         ),
                       ),
                       child: Column(
@@ -790,9 +829,17 @@ class ShimmerProfileSkeleton extends StatelessWidget {
                         children: const [
                           ShimmerBox(width: 100, height: 18, borderRadius: 4),
                           SizedBox(height: 16),
-                          ShimmerBox(width: double.infinity, height: 14, borderRadius: 4),
+                          ShimmerBox(
+                            width: double.infinity,
+                            height: 14,
+                            borderRadius: 4,
+                          ),
                           SizedBox(height: 10),
-                          ShimmerBox(width: double.infinity, height: 14, borderRadius: 4),
+                          ShimmerBox(
+                            width: double.infinity,
+                            height: 14,
+                            borderRadius: 4,
+                          ),
                           SizedBox(height: 10),
                           ShimmerBox(width: 180, height: 14, borderRadius: 4),
                         ],
@@ -805,10 +852,14 @@ class ShimmerProfileSkeleton extends StatelessWidget {
                     child: Container(
                       padding: const EdgeInsets.all(20),
                       decoration: BoxDecoration(
-                        color: isDark ? theme.colorScheme.surface : Colors.white,
+                        color: isDark
+                            ? theme.colorScheme.surface
+                            : Colors.white,
                         borderRadius: BorderRadius.circular(16),
                         border: Border.all(
-                          color: isDark ? Colors.white10 : const Color(0xFFE2E8F0),
+                          color: isDark
+                              ? Colors.white10
+                              : const Color(0xFFE2E8F0),
                         ),
                       ),
                       child: Column(
@@ -816,11 +867,23 @@ class ShimmerProfileSkeleton extends StatelessWidget {
                         children: const [
                           ShimmerBox(width: 140, height: 18, borderRadius: 4),
                           SizedBox(height: 16),
-                          ShimmerBox(width: double.infinity, height: 44, borderRadius: 8),
+                          ShimmerBox(
+                            width: double.infinity,
+                            height: 44,
+                            borderRadius: 8,
+                          ),
                           SizedBox(height: 12),
-                          ShimmerBox(width: double.infinity, height: 44, borderRadius: 8),
+                          ShimmerBox(
+                            width: double.infinity,
+                            height: 44,
+                            borderRadius: 8,
+                          ),
                           SizedBox(height: 12),
-                          ShimmerBox(width: double.infinity, height: 44, borderRadius: 8),
+                          ShimmerBox(
+                            width: double.infinity,
+                            height: 44,
+                            borderRadius: 8,
+                          ),
                         ],
                       ),
                     ),

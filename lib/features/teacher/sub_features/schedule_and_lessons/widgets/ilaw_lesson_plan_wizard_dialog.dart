@@ -122,8 +122,7 @@ class _IlawLessonPlanWizardDialogState
     _selectedSessions = existing?.numberOfSessions ?? 4;
     _selectedProficiency =
         existing?.targetProficiency ?? DepEdProficiencyLevel.developing;
-    _selectedTemplate =
-        existing?.templateType ?? IlawTemplateType.ilawModified;
+    _selectedTemplate = existing?.templateType ?? IlawTemplateType.ilawModified;
     _selectedSource =
         existing?.contentSource ?? IlawContentSource.curriculumBased;
 
@@ -147,22 +146,24 @@ class _IlawLessonPlanWizardDialogState
     _workCtrl = TextEditingController(text: existing?.workExperiences ?? '');
 
     _sessions = existing != null ? List.from(existing.effectiveSessions) : [];
-    _rubricItems =
-        existing != null
-            ? List.from(existing.effectiveRubrics)
-            : IlawRubricItem.defaultRubrics();
+    _rubricItems = existing != null
+        ? List.from(existing.effectiveRubrics)
+        : IlawRubricItem.defaultRubrics();
 
     _syncSessionControllers();
     _loadTeacherSubjects();
   }
 
   void _loadTeacherSubjects() async {
-    final teacherId = widget.currentTeacher?.id ?? AuthRepository.instance.currentUser?.id;
+    final teacherId =
+        widget.currentTeacher?.id ?? AuthRepository.instance.currentUser?.id;
     if (teacherId == null || teacherId.trim().isEmpty) return;
 
     // 1. Synchronously populate from cached subjects first
     try {
-      final cached = SubjectRepository.instance.getCachedTeacherSubjects(teacherId);
+      final cached = SubjectRepository.instance.getCachedTeacherSubjects(
+        teacherId,
+      );
       final cachedNames = cached
           .map((m) => (m['subject_name'] ?? m['name'])?.toString().trim() ?? '')
           .where((s) => s.isNotEmpty)
@@ -179,7 +180,9 @@ class _IlawLessonPlanWizardDialogState
 
     // 2. Refresh asynchronously from repository
     try {
-      final activeRows = await SubjectRepository.instance.getTeacherSubjects(teacherId);
+      final activeRows = await SubjectRepository.instance.getTeacherSubjects(
+        teacherId,
+      );
       final refreshedNames = activeRows
           .map((m) => (m['subject_name'] ?? m['name'])?.toString().trim() ?? '')
           .where((s) => s.isNotEmpty)
@@ -369,8 +372,7 @@ class _IlawLessonPlanWizardDialogState
         _isGenerating = false;
         _showMissingKeysPrompt = true;
         _inlineAlertIsError = true;
-        _inlineAlertMessage =
-            'No Gemini API key is configured in .env yet. You can inspect sample drafts or add your key to enable live generation.';
+        _inlineAlertMessage = 'No Gemini API key is configured in .env yet. You can inspect sample drafts or add your key to enable live generation.';
       });
       return;
     }
@@ -409,8 +411,7 @@ class _IlawLessonPlanWizardDialogState
         _isGenerating = false;
         _showMissingKeysPrompt = true;
         _inlineAlertIsError = true;
-        _inlineAlertMessage =
-            'No Gemini API key is configured in .env yet. You can inspect sample drafts or add your key to enable live generation.';
+        _inlineAlertMessage = 'No Gemini API key is configured in .env yet. You can inspect sample drafts or add your key to enable live generation.';
       });
       return;
     }
@@ -525,14 +526,12 @@ class _IlawLessonPlanWizardDialogState
 
   void _handleLoadTemplateDraft() {
     final durationMins = int.tryParse(_durationCtrl.text.trim()) ?? 60;
-    final sub =
-        _subjectCtrl.text.trim().isNotEmpty
-            ? _subjectCtrl.text.trim()
-            : 'General Mathematics';
-    final top =
-        _topicCtrl.text.trim().isNotEmpty
-            ? _topicCtrl.text.trim()
-            : 'Rational Functions & Models';
+    final sub = _subjectCtrl.text.trim().isNotEmpty
+        ? _subjectCtrl.text.trim()
+        : 'General Mathematics';
+    final top = _topicCtrl.text.trim().isNotEmpty
+        ? _topicCtrl.text.trim()
+        : 'Rational Functions & Models';
 
     final draft = IlawLessonPlan.buildTemplateSections(
       subject: sub,
@@ -736,16 +735,13 @@ class _IlawLessonPlanWizardDialogState
     switch (_step) {
       case IlawWizardStep.details:
         title = 'Generate SHS iLAW Lesson Plan';
-        subtitle =
-            'DepEd Strengthened Senior High School Curriculum • Private to your account';
+        subtitle = 'DepEd Strengthened Senior High School Curriculum • Private to your account';
       case IlawWizardStep.reviewEdit:
         title = 'Teacher Review & Edit';
-        subtitle =
-            'Refine multi-session matrices and self-check rubrics before finalizing.';
+        subtitle = 'Refine multi-session matrices and self-check rubrics before finalizing.';
       case IlawWizardStep.previewExport:
         title = 'Approved iLAW Format & Download';
-        subtitle =
-            'Official DepEd print-ready layout  •  Choose Word (.docx) or PDF (.pdf)';
+        subtitle = 'Official DepEd print-ready layout  •  Choose Word (.docx) or PDF (.pdf)';
     }
 
     return Container(
@@ -864,7 +860,9 @@ class _IlawLessonPlanWizardDialogState
     if (isActive) {
       bg = theme.colorScheme.primary.withValues(alpha: 0.12);
       fg = theme.colorScheme.primary;
-      border = Border.all(color: theme.colorScheme.primary.withValues(alpha: 0.4));
+      border = Border.all(
+        color: theme.colorScheme.primary.withValues(alpha: 0.4),
+      );
     } else if (isCompleted) {
       bg = AppTheme.catGreen.withValues(alpha: 0.12);
       fg = AppTheme.catGreen;
@@ -884,7 +882,9 @@ class _IlawLessonPlanWizardDialogState
         label,
         style: TextStyle(
           fontSize: 12,
-          fontWeight: isActive || isCompleted ? FontWeight.w600 : FontWeight.w500,
+          fontWeight: isActive || isCompleted
+              ? FontWeight.w600
+              : FontWeight.w500,
           color: fg,
         ),
       ),
@@ -1002,20 +1002,30 @@ class _IlawLessonPlanWizardDialogState
                 spacing: 6,
                 runSpacing: 6,
                 children: _teacherSubjectNames.map((sub) {
-                  final isSelected = _subjectCtrl.text.trim().toLowerCase() == sub.toLowerCase();
+                  final isSelected =
+                      _subjectCtrl.text.trim().toLowerCase() ==
+                      sub.toLowerCase();
                   return ActionChip(
                     avatar: isSelected
-                        ? Icon(Icons.check_circle_rounded, size: 14, color: theme.colorScheme.primary)
+                        ? Icon(
+                            Icons.check_circle_rounded,
+                            size: 14,
+                            color: theme.colorScheme.primary,
+                          )
                         : null,
                     label: Text(
                       sub,
                       style: TextStyle(
                         fontSize: 11,
-                        fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                        fontWeight: isSelected
+                            ? FontWeight.w600
+                            : FontWeight.normal,
                       ),
                     ),
                     visualDensity: VisualDensity.compact,
-                    backgroundColor: isSelected ? theme.colorScheme.primary.withValues(alpha: 0.1) : null,
+                    backgroundColor: isSelected
+                        ? theme.colorScheme.primary.withValues(alpha: 0.1)
+                        : null,
                     onPressed: () {
                       setState(() {
                         _subjectCtrl.text = sub;
@@ -1029,20 +1039,21 @@ class _IlawLessonPlanWizardDialogState
               Wrap(
                 spacing: 6,
                 runSpacing: 6,
-                children: DepEdCurriculumCatalog.getStandardSubjects(_selectedGrade)
-                    .take(6)
-                    .map((sub) {
-                  return ActionChip(
-                    label: Text(sub, style: const TextStyle(fontSize: 11)),
-                    visualDensity: VisualDensity.compact,
-                    onPressed: () {
-                      setState(() {
-                        _subjectCtrl.text = sub;
-                        _subjectError = null;
-                      });
-                    },
-                  );
-                }).toList(),
+                children:
+                    DepEdCurriculumCatalog.getStandardSubjects(
+                      _selectedGrade,
+                    ).take(6).map((sub) {
+                      return ActionChip(
+                        label: Text(sub, style: const TextStyle(fontSize: 11)),
+                        visualDensity: VisualDensity.compact,
+                        onPressed: () {
+                          setState(() {
+                            _subjectCtrl.text = sub;
+                            _subjectError = null;
+                          });
+                        },
+                      );
+                    }).toList(),
               ),
             ],
             const SizedBox(height: 16),
@@ -1082,8 +1093,7 @@ class _IlawLessonPlanWizardDialogState
               theme: theme,
               fieldKey: const Key('ilaw_competency_field'),
               label: 'Selected Competencies / Teacher Instructions (Optional)',
-              hint:
-                  'Checked competencies will appear here, or type custom notes.',
+              hint: 'Checked competencies will appear here, or type custom notes.',
               controller: _competencyCtrl,
               errorText: _competencyError,
               maxLines: 3,
@@ -1119,22 +1129,36 @@ class _IlawLessonPlanWizardDialogState
           runSpacing: 8,
           children: [
             ChoiceChip(
-              label: const Text('iLAW Modified (DepEd 2026)', style: TextStyle(fontSize: 11.5)),
+              label: const Text(
+                'iLAW Modified (DepEd 2026)',
+                style: TextStyle(fontSize: 11.5),
+              ),
               selected: _selectedTemplate == IlawTemplateType.ilawModified,
               visualDensity: VisualDensity.compact,
-              onSelected: (_) => setState(() => _selectedTemplate = IlawTemplateType.ilawModified),
+              onSelected: (_) => setState(
+                () => _selectedTemplate = IlawTemplateType.ilawModified,
+              ),
             ),
             ChoiceChip(
-              label: const Text('Curriculum Based', style: TextStyle(fontSize: 11.5)),
+              label: const Text(
+                'Curriculum Based',
+                style: TextStyle(fontSize: 11.5),
+              ),
               selected: _selectedSource == IlawContentSource.curriculumBased,
               visualDensity: VisualDensity.compact,
-              onSelected: (_) => setState(() => _selectedSource = IlawContentSource.curriculumBased),
+              onSelected: (_) => setState(
+                () => _selectedSource = IlawContentSource.curriculumBased,
+              ),
             ),
             ChoiceChip(
-              label: const Text('Manual Input', style: TextStyle(fontSize: 11.5)),
+              label: const Text(
+                'Manual Input',
+                style: TextStyle(fontSize: 11.5),
+              ),
               selected: _selectedSource == IlawContentSource.manual,
               visualDensity: VisualDensity.compact,
-              onSelected: (_) => setState(() => _selectedSource = IlawContentSource.manual),
+              onSelected: (_) =>
+                  setState(() => _selectedSource = IlawContentSource.manual),
             ),
           ],
         ),
@@ -1164,7 +1188,11 @@ class _IlawLessonPlanWizardDialogState
         children: [
           Row(
             children: [
-              Icon(Icons.checklist_rtl_outlined, size: 16, color: theme.colorScheme.primary),
+              Icon(
+                Icons.checklist_rtl_outlined,
+                size: 16,
+                color: theme.colorScheme.primary,
+              ),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -1185,7 +1213,9 @@ class _IlawLessonPlanWizardDialogState
               onTap: () {
                 setState(() {
                   if (_competencyCtrl.text.contains(comp)) {
-                    _competencyCtrl.text = _competencyCtrl.text.replaceAll(comp, '').trim();
+                    _competencyCtrl.text = _competencyCtrl.text
+                        .replaceAll(comp, '')
+                        .trim();
                   } else {
                     final curr = _competencyCtrl.text.trim();
                     _competencyCtrl.text = curr.isEmpty ? comp : '$curr\n$comp';
@@ -1213,7 +1243,9 @@ class _IlawLessonPlanWizardDialogState
                         comp,
                         style: TextStyle(
                           fontSize: 12,
-                          color: theme.colorScheme.onSurface.withValues(alpha: 0.85),
+                          color: theme.colorScheme.onSurface.withValues(
+                            alpha: 0.85,
+                          ),
                         ),
                       ),
                     ),
@@ -1308,8 +1340,15 @@ class _IlawLessonPlanWizardDialogState
   }
 
   Widget _buildSessionsDropdown(ThemeData theme) {
-    final items = ['1 Session', '2 Sessions', '3 Sessions', '4 Sessions', '5 Sessions'];
-    final currentLabel = '$_selectedSessions ${_selectedSessions == 1 ? "Session" : "Sessions"}';
+    final items = [
+      '1 Session',
+      '2 Sessions',
+      '3 Sessions',
+      '4 Sessions',
+      '5 Sessions',
+    ];
+    final currentLabel =
+        '$_selectedSessions ${_selectedSessions == 1 ? "Session" : "Sessions"}';
 
     return _buildDropdownField(
       theme: theme,
@@ -1514,7 +1553,10 @@ class _IlawLessonPlanWizardDialogState
         children: [
           Row(
             children: [
-              Icon(Icons.view_column_outlined, color: theme.colorScheme.primary),
+              Icon(
+                Icons.view_column_outlined,
+                color: theme.colorScheme.primary,
+              ),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -1742,14 +1784,18 @@ class _IlawLessonPlanWizardDialogState
                 spacing: 8,
                 children: [
                   AppButton.outline(
-                    label: _isExportingDocx ? 'Exporting...' : 'Download Word (.docx)',
+                    label: _isExportingDocx
+                        ? 'Exporting...'
+                        : 'Download Word (.docx)',
                     icon: Icons.description_outlined,
                     isSmall: true,
                     isLoading: _isExportingDocx,
                     onPressed: () => _handleExport(IlawExportFormat.docx),
                   ),
                   AppButton.primary(
-                    label: _isExportingPdf ? 'Exporting...' : 'Download PDF (.pdf)',
+                    label: _isExportingPdf
+                        ? 'Exporting...'
+                        : 'Download PDF (.pdf)',
                     icon: Icons.picture_as_pdf_outlined,
                     isSmall: true,
                     isLoading: _isExportingPdf,
@@ -1804,23 +1850,58 @@ class _IlawLessonPlanWizardDialogState
                 ),
                 child: Column(
                   children: [
-                    _buildMetaPair('Subject', plan.subject, 'Grade & Term', '${plan.gradeLevel} - ${plan.term}'),
+                    _buildMetaPair(
+                      'Subject',
+                      plan.subject,
+                      'Grade & Term',
+                      '${plan.gradeLevel} - ${plan.term}',
+                    ),
                     const SizedBox(height: 8),
-                    _buildMetaPair('Topic', plan.topic, 'Duration & Sessions', '${plan.durationMinutes}m • ${plan.numberOfSessions} Sessions'),
+                    _buildMetaPair(
+                      'Topic',
+                      plan.topic,
+                      'Duration & Sessions',
+                      '${plan.durationMinutes}m • ${plan.numberOfSessions} Sessions',
+                    ),
                     const SizedBox(height: 8),
-                    _buildMetaPair('Proficiency Target', plan.targetProficiency.label, 'Governance', plan.depedOrderCitation),
+                    _buildMetaPair(
+                      'Proficiency Target',
+                      plan.targetProficiency.label,
+                      'Governance',
+                      plan.depedOrderCitation,
+                    ),
                   ],
                 ),
               ),
               const SizedBox(height: 20),
 
-              _buildPreviewBlock(theme, 'I', 'Intended Learning Outcomes', plan.intendedOutcomes),
+              _buildPreviewBlock(
+                theme,
+                'I',
+                'Intended Learning Outcomes',
+                plan.intendedOutcomes,
+              ),
               const SizedBox(height: 14),
-              _buildPreviewBlock(theme, 'L', 'Learning Content & Resources', plan.learningContent),
+              _buildPreviewBlock(
+                theme,
+                'L',
+                'Learning Content & Resources',
+                plan.learningContent,
+              ),
               const SizedBox(height: 14),
-              _buildPreviewBlock(theme, 'A', 'Assessment & Activities', plan.assessment),
+              _buildPreviewBlock(
+                theme,
+                'A',
+                'Assessment & Activities',
+                plan.assessment,
+              ),
               const SizedBox(height: 14),
-              _buildPreviewBlock(theme, 'W', 'Work & Learning Experiences', plan.workExperiences),
+              _buildPreviewBlock(
+                theme,
+                'W',
+                'Work & Learning Experiences',
+                plan.workExperiences,
+              ),
             ],
           ),
         ),
@@ -1835,8 +1916,21 @@ class _IlawLessonPlanWizardDialogState
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(l1, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.grey)),
-              Text(v1, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600)),
+              Text(
+                l1,
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey,
+                ),
+              ),
+              Text(
+                v1,
+                style: const TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             ],
           ),
         ),
@@ -1845,8 +1939,21 @@ class _IlawLessonPlanWizardDialogState
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(l2, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.grey)),
-              Text(v2, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600)),
+              Text(
+                l2,
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey,
+                ),
+              ),
+              Text(
+                v2,
+                style: const TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             ],
           ),
         ),
@@ -1854,11 +1961,18 @@ class _IlawLessonPlanWizardDialogState
     );
   }
 
-  Widget _buildPreviewBlock(ThemeData theme, String code, String title, String body) {
+  Widget _buildPreviewBlock(
+    ThemeData theme,
+    String code,
+    String title,
+    String body,
+  ) {
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
-        border: Border(left: BorderSide(color: theme.colorScheme.primary, width: 3)),
+        border: Border(
+          left: BorderSide(color: theme.colorScheme.primary, width: 3),
+        ),
       ),
       padding: const EdgeInsets.only(left: 12),
       child: Column(
@@ -1875,7 +1989,11 @@ class _IlawLessonPlanWizardDialogState
           const SizedBox(height: 4),
           SelectableText(
             body,
-            style: TextStyle(fontSize: 13, height: 1.45, color: theme.colorScheme.onSurface),
+            style: TextStyle(
+              fontSize: 13,
+              height: 1.45,
+              color: theme.colorScheme.onSurface,
+            ),
           ),
         ],
       ),
@@ -1887,7 +2005,11 @@ class _IlawLessonPlanWizardDialogState
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
       decoration: BoxDecoration(
-        border: Border(top: BorderSide(color: theme.colorScheme.onSurface.withValues(alpha: 0.08))),
+        border: Border(
+          top: BorderSide(
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.08),
+          ),
+        ),
       ),
       child: _buildFooterActions(theme),
     );
@@ -1913,10 +2035,14 @@ class _IlawLessonPlanWizardDialogState
               children: [
                 AppButton.outline(
                   label: 'Cancel',
-                  onPressed: _isGenerating ? null : () => Navigator.of(context).pop(),
+                  onPressed: _isGenerating
+                      ? null
+                      : () => Navigator.of(context).pop(),
                 ),
                 AppButton.primary(
-                  label: _isGenerating ? 'Generating...' : 'Generate with Gemini AI',
+                  label: _isGenerating
+                      ? 'Generating...'
+                      : 'Generate with Gemini AI',
                   icon: Icons.auto_awesome_outlined,
                   isLoading: _isGenerating,
                   onPressed: _isGenerating ? null : _handleGenerateWithAi,
@@ -1966,7 +2092,8 @@ class _IlawLessonPlanWizardDialogState
             AppButton.outline(
               label: 'Edit Content',
               icon: Icons.edit_outlined,
-              onPressed: () => setState(() => _step = IlawWizardStep.reviewEdit),
+              onPressed: () =>
+                  setState(() => _step = IlawWizardStep.reviewEdit),
             ),
             AppButton.primary(
               label: 'Done',
@@ -2022,7 +2149,9 @@ class _IlawLessonPlanWizardDialogState
                         fontWeight: FontWeight.w500,
                         color: len >= maxLength
                             ? _errorRed
-                            : theme.colorScheme.onSurface.withValues(alpha: 0.48),
+                            : theme.colorScheme.onSurface.withValues(
+                                alpha: 0.48,
+                              ),
                       ),
                     );
                   },
@@ -2036,7 +2165,12 @@ class _IlawLessonPlanWizardDialogState
           controller: controller,
           maxLines: maxLines,
           maxLength: maxLength,
-          buildCounter: (_, {required currentLength, required isFocused, maxLength}) => null,
+          buildCounter: (
+            _, {
+            required currentLength,
+            required isFocused,
+            maxLength,
+          }) => null,
           keyboardType: keyboardType,
           inputFormatters: inputFormatters,
           onChanged: onChanged,
@@ -2051,7 +2185,10 @@ class _IlawLessonPlanWizardDialogState
               fontSize: 13,
               color: theme.colorScheme.onSurface.withValues(alpha: 0.38),
             ),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 14,
+              vertical: 12,
+            ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
               borderSide: BorderSide(
@@ -2122,18 +2259,30 @@ class _IlawLessonPlanWizardDialogState
             return MenuAnchor(
               alignmentOffset: const Offset(0, 4),
               style: MenuStyle(
-                backgroundColor: WidgetStatePropertyAll(theme.colorScheme.surface),
-                surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
+                backgroundColor: WidgetStatePropertyAll(
+                  theme.colorScheme.surface,
+                ),
+                surfaceTintColor: const WidgetStatePropertyAll(
+                  Colors.transparent,
+                ),
                 elevation: const WidgetStatePropertyAll(6),
-                shadowColor: WidgetStatePropertyAll(Colors.black.withValues(alpha: 0.16)),
-                padding: const WidgetStatePropertyAll(EdgeInsets.symmetric(vertical: 4)),
+                shadowColor: WidgetStatePropertyAll(
+                  Colors.black.withValues(alpha: 0.16),
+                ),
+                padding: const WidgetStatePropertyAll(
+                  EdgeInsets.symmetric(vertical: 4),
+                ),
                 minimumSize: WidgetStatePropertyAll(Size(menuWidth, 0)),
                 maximumSize: WidgetStatePropertyAll(Size(menuWidth, 240)),
                 side: WidgetStatePropertyAll(
-                  BorderSide(color: theme.colorScheme.onSurface.withValues(alpha: 0.12)),
+                  BorderSide(
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.12),
+                  ),
                 ),
                 shape: WidgetStatePropertyAll(
-                  RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
                 ),
               ),
               menuChildren: items.map((item) {
@@ -2146,24 +2295,36 @@ class _IlawLessonPlanWizardDialogState
                       padding: const WidgetStatePropertyAll(
                         EdgeInsets.symmetric(horizontal: 14, vertical: 11),
                       ),
-                      backgroundColor: WidgetStateProperty.resolveWith((states) {
+                      backgroundColor: WidgetStateProperty.resolveWith((
+                        states,
+                      ) {
                         if (isSelected) {
-                          return theme.colorScheme.primary.withValues(alpha: 0.10);
+                          return theme.colorScheme.primary.withValues(
+                            alpha: 0.10,
+                          );
                         }
                         if (states.contains(WidgetState.hovered)) {
-                          return theme.colorScheme.onSurface.withValues(alpha: 0.05);
+                          return theme.colorScheme.onSurface.withValues(
+                            alpha: 0.05,
+                          );
                         }
                         return Colors.transparent;
                       }),
                     ),
                     trailingIcon: isSelected
-                        ? Icon(Icons.check, size: 16, color: theme.colorScheme.primary)
+                        ? Icon(
+                            Icons.check,
+                            size: 16,
+                            color: theme.colorScheme.primary,
+                          )
                         : null,
                     child: Text(
                       item,
                       style: TextStyle(
                         fontSize: 13.5,
-                        fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                        fontWeight: isSelected
+                            ? FontWeight.w600
+                            : FontWeight.w400,
                         color: isSelected
                             ? theme.colorScheme.primary
                             : theme.colorScheme.onSurface,
@@ -2185,14 +2346,21 @@ class _IlawLessonPlanWizardDialogState
                   },
                   child: Container(
                     width: double.infinity,
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 12,
+                    ),
                     decoration: BoxDecoration(
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.02),
+                      color: theme.colorScheme.onSurface.withValues(
+                        alpha: 0.02,
+                      ),
                       borderRadius: BorderRadius.circular(10),
                       border: Border.all(
                         color: hasError
                             ? _errorRed
-                            : theme.colorScheme.onSurface.withValues(alpha: 0.16),
+                            : theme.colorScheme.onSurface.withValues(
+                                alpha: 0.16,
+                              ),
                         width: hasError ? 1.5 : 1.0,
                       ),
                     ),
@@ -2211,7 +2379,9 @@ class _IlawLessonPlanWizardDialogState
                         ),
                         Icon(
                           Icons.arrow_drop_down,
-                          color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                          color: theme.colorScheme.onSurface.withValues(
+                            alpha: 0.6,
+                          ),
                         ),
                       ],
                     ),
@@ -2282,10 +2452,7 @@ class _IlawLessonPlanWizardDialogState
                     fontWeight: isError ? FontWeight.w500 : FontWeight.w400,
                   ),
                 ),
-                if (action != null) ...[
-                  const SizedBox(height: 8),
-                  action,
-                ],
+                if (action != null) ...[const SizedBox(height: 8), action],
               ],
             ),
           ),

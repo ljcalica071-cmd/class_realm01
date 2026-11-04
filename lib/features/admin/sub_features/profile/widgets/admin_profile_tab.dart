@@ -45,7 +45,9 @@ class AdminProfileTab extends StatelessWidget {
     final displayName = user.fullName.trim().isEmpty
         ? 'Name not provided'
         : user.fullName.trim();
-    final email = user.email.trim().isEmpty ? 'Not provided' : user.email.trim();
+    final email = user.email.trim().isEmpty
+        ? 'Not provided'
+        : user.email.trim();
     final initial = displayName == 'Name not provided'
         ? '?'
         : displayName.characters.first.toUpperCase();
@@ -73,7 +75,10 @@ class AdminProfileTab extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Administrator Profile', style: theme.textTheme.headlineSmall),
+                  Text(
+                    'Administrator Profile',
+                    style: theme.textTheme.headlineSmall,
+                  ),
                   const SizedBox(height: 6),
                   Text(
                     'Your account details and access information.',
@@ -84,7 +89,9 @@ class AdminProfileTab extends StatelessWidget {
                   const SizedBox(height: 24),
                   Container(
                     width: double.infinity,
-                    padding: EdgeInsets.all(constraints.maxWidth < 600 ? 20 : 28),
+                    padding: EdgeInsets.all(
+                      constraints.maxWidth < 600 ? 20 : 28,
+                    ),
                     decoration: BoxDecoration(
                       color: theme.colorScheme.surface,
                       borderRadius: BorderRadius.circular(20),

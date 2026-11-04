@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -16,16 +17,20 @@ class AppModals {
     Color? confirmColor,
   }) {
     final theme = Theme.of(context);
-    final isDelete = confirmLabel.trim().toLowerCase().contains('delete') ||
+    final isDelete =
+        confirmLabel.trim().toLowerCase().contains('delete') ||
         title.trim().toLowerCase().contains('delete');
     final effectiveColor =
-        confirmColor ?? (isDelete ? AppTheme.catRed : theme.colorScheme.primary);
+        confirmColor ??
+        (isDelete ? AppTheme.catRed : theme.colorScheme.primary);
     return showDialog(
       context: context,
       builder: (ctx) => Theme(
         data: theme,
         child: Dialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
           elevation: 16,
           backgroundColor: theme.colorScheme.surface,
           child: Container(
@@ -43,7 +48,11 @@ class AppModals {
                         color: effectiveColor.withValues(alpha: 0.12),
                         shape: BoxShape.circle,
                       ),
-                      child: Icon(Icons.help_outline_rounded, color: effectiveColor, size: 24),
+                      child: Icon(
+                        Icons.help_outline_rounded,
+                        color: effectiveColor,
+                        size: 24,
+                      ),
                     ),
                     const SizedBox(width: 14),
                     Expanded(
@@ -74,10 +83,18 @@ class AppModals {
                     TextButton(
                       onPressed: () => Navigator.of(ctx).pop(),
                       style: TextButton.styleFrom(
-                        foregroundColor: theme.colorScheme.onSurface.withValues(alpha: 0.7),
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        foregroundColor: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.7,
+                        ),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
                       ),
-                      child: Text(cancelLabel, style: const TextStyle(fontWeight: FontWeight.w600)),
+                      child: Text(
+                        cancelLabel,
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
                     ),
                     const SizedBox(width: 8),
                     AppPrimaryButton(
@@ -98,6 +115,7 @@ class AppModals {
       ),
     );
   }
+
   /// Translates raw developer exceptions, database constraints, or runtime crashes
   /// into polite, human-readable, and actionable messages suitable for teachers and end-users.
   static String sanitizeErrorMessage(dynamic error) {
@@ -134,12 +152,14 @@ class AppModals {
     }
 
     // 3. Timeout failures
-    if (raw.contains('TimeoutException') || raw.toLowerCase().contains('timed out')) {
+    if (raw.contains('TimeoutException') ||
+        raw.toLowerCase().contains('timed out')) {
       return 'The operation took too long to complete. Please check your internet connection and try again.';
     }
 
     // 4. PostgreSQL / Supabase Unique Constraints (Code 23505)
-    if (raw.contains('23505') || raw.toLowerCase().contains('duplicate key value')) {
+    if (raw.contains('23505') ||
+        raw.toLowerCase().contains('duplicate key value')) {
       final lower = raw.toLowerCase();
       if (lower.contains('lrn')) {
         return 'A student with this LRN is already registered in the ClassRealm database.';
@@ -151,7 +171,8 @@ class AppModals {
     }
 
     // 5. Foreign Key Constraints (Code 23503)
-    if (raw.contains('23503') || raw.toLowerCase().contains('violates foreign key')) {
+    if (raw.contains('23503') ||
+        raw.toLowerCase().contains('violates foreign key')) {
       return 'The selected class section or subject offering could not be found. Please refresh and try again.';
     }
 
@@ -167,7 +188,9 @@ class AppModals {
       clean = clean.split(RegExp(r'#\d+')).first.trim();
     }
 
-    return clean.isNotEmpty ? clean : 'An error occurred while processing your request. Please try again.';
+    return clean.isNotEmpty
+        ? clean
+        : 'An error occurred while processing your request. Please try again.';
   }
 
   static Future<void> showErrorDialog({
@@ -184,7 +207,9 @@ class AppModals {
       builder: (ctx) => Theme(
         data: theme,
         child: Dialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
           elevation: 16,
           backgroundColor: theme.colorScheme.surface,
           child: Container(
@@ -202,7 +227,11 @@ class AppModals {
                         color: AppTheme.catRed.withValues(alpha: 0.12),
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(Icons.error_outline_rounded, color: AppTheme.catRed, size: 24),
+                      child: const Icon(
+                        Icons.error_outline_rounded,
+                        color: AppTheme.catRed,
+                        size: 24,
+                      ),
                     ),
                     const SizedBox(width: 14),
                     Expanded(
@@ -269,12 +298,17 @@ class AppModals {
           child: Opacity(
             opacity: anim.value.clamp(0.0, 1.0),
             child: Dialog(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(24),
+              ),
               elevation: 20,
               backgroundColor: theme.colorScheme.surface,
               child: Container(
                 constraints: const BoxConstraints(maxWidth: 440),
-                padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 32),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 28,
+                  vertical: 32,
+                ),
                 decoration: BoxDecoration(
                   color: theme.colorScheme.surface,
                   borderRadius: BorderRadius.circular(24),
@@ -290,47 +324,48 @@ class AppModals {
                         color: const Color(0xFF10B981).withValues(alpha: 0.12),
                         shape: BoxShape.circle,
                         border: Border.all(
-                          color: const Color(0xFF10B981).withValues(alpha: 0.25),
+                          color: const Color(0xFF10B981)
+                              .withValues(alpha: 0.25),
                           width: 2.5,
                         ),
                       ),
                       child: Center(
-                        child: Container(
-                          width: 64,
-                          height: 64,
-                          decoration: const BoxDecoration(
-                            shape: BoxShape.circle,
-                            gradient: LinearGradient(
-                              colors: [Color(0xFF10B981), Color(0xFF059669)],
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Color(0x4010B981),
-                                blurRadius: 16,
-                                offset: Offset(0, 6),
+                        child:
+                            Container(
+                              width: 64,
+                              height: 64,
+                              decoration: const BoxDecoration(
+                                shape: BoxShape.circle,
+                                gradient: LinearGradient(
+                                  colors: [
+                                    Color(0xFF10B981),
+                                    Color(0xFF059669),
+                                  ],
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Color(0x4010B981),
+                                    blurRadius: 16,
+                                    offset: Offset(0, 6),
+                                  ),
+                                ],
                               ),
-                            ],
-                          ),
-                          child: const Icon(
-                            Icons.check_rounded,
-                            color: Colors.white,
-                            size: 38,
-                          ),
-                        )
-                            .animate()
-                            .scale(
+                              child: const Icon(
+                                Icons.check_rounded,
+                                color: Colors.white,
+                                size: 38,
+                              ),
+                            ).animate().scale(
                               duration: 500.ms,
                               curve: Curves.elasticOut,
                             ),
                       ),
-                    )
-                        .animate()
-                        .scale(
-                          duration: 350.ms,
-                          curve: Curves.easeOutBack,
-                        ),
+                    ).animate().scale(
+                      duration: 350.ms,
+                      curve: Curves.easeOutBack,
+                    ),
                     const SizedBox(height: 24),
 
                     // Dialog Title
@@ -352,7 +387,9 @@ class AppModals {
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 14,
-                        color: theme.colorScheme.onSurface.withValues(alpha: 0.72),
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.72,
+                        ),
                         height: 1.5,
                       ),
                     ),
@@ -378,7 +415,10 @@ class AppModals {
                         icon: const Icon(Icons.arrow_forward_rounded, size: 18),
                         label: Text(
                           confirmLabel,
-                          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
                     ),
@@ -403,7 +443,9 @@ class AppModals {
       builder: (ctx) => Theme(
         data: theme,
         child: Dialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
           elevation: 16,
           backgroundColor: theme.colorScheme.surface,
           child: Container(
@@ -421,17 +463,21 @@ class AppModals {
                         color: AppTheme.catOrange.withValues(alpha: 0.12),
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(Icons.warning_amber_rounded,
-                          color: AppTheme.catOrange, size: 24),
+                      child: const Icon(
+                        Icons.warning_amber_rounded,
+                        color: AppTheme.catOrange,
+                        size: 24,
+                      ),
                     ),
                     const SizedBox(width: 14),
                     Expanded(
                       child: Text(
                         title,
                         style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: theme.colorScheme.onSurface),
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: theme.colorScheme.onSurface,
+                        ),
                       ),
                     ),
                   ],
@@ -440,9 +486,10 @@ class AppModals {
                 Text(
                   message,
                   style: TextStyle(
-                      fontSize: 14,
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.75),
-                      height: 1.5),
+                    fontSize: 14,
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.75),
+                    height: 1.5,
+                  ),
                 ),
                 const SizedBox(height: 24),
                 Align(
@@ -472,17 +519,21 @@ class AppModals {
     Color? confirmColor,
   }) {
     final theme = Theme.of(context);
-    final isDelete = confirmLabel.trim().toLowerCase().contains('delete') ||
+    final isDelete =
+        confirmLabel.trim().toLowerCase().contains('delete') ||
         title.trim().toLowerCase().contains('delete');
     final effectiveColor =
-        confirmColor ?? (isDelete ? AppTheme.catRed : theme.colorScheme.primary);
+        confirmColor ??
+        (isDelete ? AppTheme.catRed : theme.colorScheme.primary);
 
     return showDialog<bool>(
       context: context,
       builder: (ctx) => Theme(
         data: theme,
         child: Dialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
           elevation: 16,
           backgroundColor: theme.colorScheme.surface,
           child: Container(
@@ -495,17 +546,19 @@ class AppModals {
                 Text(
                   title,
                   style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: theme.colorScheme.onSurface),
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: theme.colorScheme.onSurface,
+                  ),
                 ),
                 const SizedBox(height: 14),
                 Text(
                   message,
                   style: TextStyle(
-                      fontSize: 14,
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.75),
-                      height: 1.5),
+                    fontSize: 14,
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.75),
+                    height: 1.5,
+                  ),
                 ),
                 const SizedBox(height: 24),
                 Row(
@@ -513,9 +566,14 @@ class AppModals {
                   children: [
                     TextButton(
                       onPressed: () => Navigator.of(ctx).pop(false),
-                      child: Text(cancelLabel,
-                          style: TextStyle(
-                              color: theme.colorScheme.onSurface.withValues(alpha: 0.7))),
+                      child: Text(
+                        cancelLabel,
+                        style: TextStyle(
+                          color: theme.colorScheme.onSurface.withValues(
+                            alpha: 0.7,
+                          ),
+                        ),
+                      ),
                     ),
                     const SizedBox(width: 8),
                     AppPrimaryButton(
@@ -719,9 +777,14 @@ class _ArchiveCooldownDialogState extends State<_ArchiveCooldownDialog> {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: widget.confirmColor,
                     foregroundColor: Colors.white,
-                    disabledBackgroundColor: widget.confirmColor.withValues(alpha: 0.35),
+                    disabledBackgroundColor: widget.confirmColor.withValues(
+                      alpha: 0.35,
+                    ),
                     disabledForegroundColor: Colors.white70,
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 12,
+                    ),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10),
                     ),
@@ -731,7 +794,10 @@ class _ArchiveCooldownDialogState extends State<_ArchiveCooldownDialog> {
                     isCoolingDown
                         ? '${widget.confirmLabel} (${_remainingSeconds}s)'
                         : widget.confirmLabel,
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
                   ),
                 ),
               ],
@@ -761,7 +827,8 @@ class _TypeToConfirmDeleteDialog extends StatefulWidget {
       _TypeToConfirmDeleteDialogState();
 }
 
-class _TypeToConfirmDeleteDialogState extends State<_TypeToConfirmDeleteDialog> {
+class _TypeToConfirmDeleteDialogState
+    extends State<_TypeToConfirmDeleteDialog> {
   final TextEditingController _controller = TextEditingController();
   final FocusNode _focusNode = FocusNode();
   String? _inlineError;
@@ -897,9 +964,7 @@ class _TypeToConfirmDeleteDialogState extends State<_TypeToConfirmDeleteDialog> 
               controller: _controller,
               focusNode: _focusNode,
               maxLength: 10,
-              inputFormatters: [
-                LengthLimitingTextInputFormatter(10),
-              ],
+              inputFormatters: [LengthLimitingTextInputFormatter(10)],
               onChanged: _onTextChanged,
               style: TextStyle(
                 fontSize: 15,
@@ -989,4 +1054,3 @@ class _TypeToConfirmDeleteDialogState extends State<_TypeToConfirmDeleteDialog> 
     );
   }
 }
-

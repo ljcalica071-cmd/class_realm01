@@ -9,7 +9,6 @@ import 'package:class_realm/widgets/common/app_modals.dart';
 import 'package:class_realm/widgets/common/app_text_field.dart';
 import 'package:class_realm/widgets/common/app_date_picker_field.dart';
 
-
 class AdminEditTeacherDialog extends StatefulWidget {
   final UserModel teacher;
   final VoidCallback onTeacherUpdated;
@@ -78,10 +77,14 @@ class _AdminEditTeacherDialogState extends State<AdminEditTeacherDialog> {
   bool get _isDirty {
     final t = widget.teacher;
     if (_firstNameCtrl.text.trim() != (t.firstName?.trim() ?? '')) return true;
-    if (_middleNameCtrl.text.trim() != (t.middleName?.trim() ?? '')) return true;
+    if (_middleNameCtrl.text.trim() != (t.middleName?.trim() ?? ''))
+      return true;
     if (_lastNameCtrl.text.trim() != (t.lastName?.trim() ?? '')) return true;
-    if (_emailCtrl.text.trim().toLowerCase() != t.email.trim().toLowerCase()) return true;
-    final origGender = (t.gender == 'Male' || t.gender == 'Female') ? t.gender : 'Male';
+    if (_emailCtrl.text.trim().toLowerCase() != t.email.trim().toLowerCase())
+      return true;
+    final origGender = (t.gender == 'Male' || t.gender == 'Female')
+        ? t.gender
+        : 'Male';
     if (_gender != origGender) return true;
     if (_birthday != t.birthday) return true;
 
@@ -162,7 +165,9 @@ class _AdminEditTeacherDialogState extends State<AdminEditTeacherDialog> {
                       Container(
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
-                          color: theme.colorScheme.primary.withValues(alpha: 0.1),
+                          color: theme.colorScheme.primary.withValues(
+                            alpha: 0.1,
+                          ),
                           shape: BoxShape.circle,
                         ),
                         child: Icon(
@@ -186,15 +191,18 @@ class _AdminEditTeacherDialogState extends State<AdminEditTeacherDialog> {
                             Text(
                               'Update personal information for this teacher.',
                               style: theme.textTheme.bodySmall?.copyWith(
-                                color: theme.colorScheme.onSurface
-                                    .withValues(alpha: 0.6),
+                                color: theme.colorScheme.onSurface.withValues(
+                                  alpha: 0.6,
+                                ),
                               ),
                             ),
                           ],
                         ),
                       ),
                       IconButton(
-                        onPressed: _isSaving ? null : () => Navigator.pop(context),
+                        onPressed: _isSaving
+                            ? null
+                            : () => Navigator.pop(context),
                         icon: const Icon(Icons.close, size: 20),
                         tooltip: 'Close',
                       ),
@@ -235,7 +243,8 @@ class _AdminEditTeacherDialogState extends State<AdminEditTeacherDialog> {
                           label: 'Middle Initial',
                           controller: _middleNameCtrl,
                           textCapitalization: TextCapitalization.characters,
-                          inputFormatters: AppValidators.middleInitialFormatters,
+                          inputFormatters:
+                              AppValidators.middleInitialFormatters,
                         ),
                       ),
                       const SizedBox(width: 10),
@@ -267,8 +276,9 @@ class _AdminEditTeacherDialogState extends State<AdminEditTeacherDialog> {
                               style: TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w600,
-                                color: theme.colorScheme.onSurface
-                                    .withValues(alpha: 0.8),
+                                color: theme.colorScheme.onSurface.withValues(
+                                  alpha: 0.8,
+                                ),
                               ),
                             ),
                             const SizedBox(height: 6),
@@ -286,8 +296,14 @@ class _AdminEditTeacherDialogState extends State<AdminEditTeacherDialog> {
                                 ),
                               ),
                               items: const [
-                                DropdownMenuItem(value: 'Male', child: Text('Male')),
-                                DropdownMenuItem(value: 'Female', child: Text('Female')),
+                                DropdownMenuItem(
+                                  value: 'Male',
+                                  child: Text('Male'),
+                                ),
+                                DropdownMenuItem(
+                                  value: 'Female',
+                                  child: Text('Female'),
+                                ),
                               ],
                               onChanged: (v) => setState(() => _gender = v),
                             ),
@@ -305,10 +321,8 @@ class _AdminEditTeacherDialogState extends State<AdminEditTeacherDialog> {
                           onDateSelected: (date) {
                             setState(() => _birthday = date);
                           },
-                          validator: (v) => BirthdayValidator.validateBirthday(
-                            v,
-                            'teacher',
-                          ),
+                          validator: (v) =>
+                              BirthdayValidator.validateBirthday(v, 'teacher'),
                         ),
                       ),
                     ],
@@ -321,7 +335,9 @@ class _AdminEditTeacherDialogState extends State<AdminEditTeacherDialog> {
                     children: [
                       AppButton.secondary(
                         label: 'Cancel',
-                        onPressed: _isSaving ? null : () => Navigator.pop(context),
+                        onPressed: _isSaving
+                            ? null
+                            : () => Navigator.pop(context),
                       ),
                       const SizedBox(width: 12),
                       AppButton.primary(

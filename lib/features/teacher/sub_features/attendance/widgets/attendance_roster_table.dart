@@ -1,7 +1,6 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:loading_animation_widget/loading_animation_widget.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import 'package:class_realm/core/theme/app_theme.dart';
@@ -69,16 +68,16 @@ class _AttendanceRosterTableState extends State<AttendanceRosterTable> {
   static const double _headerHeight = 44.0;
   static const double _rowHeight = 48.0;
 
-  static const double _colNumWidth = 38.0;
-  static const double _colNameWidth = 190.0;
-  static const double _pinnedWidth = _colNumWidth + _colNameWidth;
-
-  static const double _colRfidWidth = 165.0;
-  static const double _colStatusWidth = 210.0;
-  static const double _colTimeInWidth = 95.0;
-  static const double _colMethodWidth = 95.0;
-  static const double _colRemarksWidth = 160.0;
-  static const double _scrollableColsWidth =
+  static const double _colNumWidth = 36.0;
+  static const double _colNameWidth = 145.0;
+  static const double _colRfidWidth = 140.0;
+  static const double _colStatusWidth = 200.0;
+  static const double _colTimeInWidth = 85.0;
+  static const double _colMethodWidth = 80.0;
+  static const double _colRemarksWidth = 140.0;
+  static const double _totalTableWidth =
+      _colNumWidth +
+      _colNameWidth +
       _colRfidWidth +
       _colStatusWidth +
       _colTimeInWidth +
@@ -88,40 +87,13 @@ class _AttendanceRosterTableState extends State<AttendanceRosterTable> {
   RosterGenderFilter _genderFilter = RosterGenderFilter.all;
   int _visibleCount = 20;
   late final TextEditingController _searchController;
-  late final ScrollController _pinnedScrollController;
-  late final ScrollController _scrollableScrollController;
   late final ScrollController _horizontalScrollController;
-  bool _isSyncingScroll = false;
 
   @override
   void initState() {
     super.initState();
     _searchController = TextEditingController(text: widget.searchQuery);
-    _pinnedScrollController = ScrollController();
-    _scrollableScrollController = ScrollController();
     _horizontalScrollController = ScrollController();
-
-    _pinnedScrollController.addListener(() {
-      if (_isSyncingScroll) return;
-      _isSyncingScroll = true;
-      if (_scrollableScrollController.hasClients &&
-          _scrollableScrollController.offset !=
-              _pinnedScrollController.offset) {
-        _scrollableScrollController.jumpTo(_pinnedScrollController.offset);
-      }
-      _isSyncingScroll = false;
-    });
-
-    _scrollableScrollController.addListener(() {
-      if (_isSyncingScroll) return;
-      _isSyncingScroll = true;
-      if (_pinnedScrollController.hasClients &&
-          _pinnedScrollController.offset !=
-              _scrollableScrollController.offset) {
-        _pinnedScrollController.jumpTo(_scrollableScrollController.offset);
-      }
-      _isSyncingScroll = false;
-    });
   }
 
   @override
@@ -136,8 +108,6 @@ class _AttendanceRosterTableState extends State<AttendanceRosterTable> {
   @override
   void dispose() {
     _searchController.dispose();
-    _pinnedScrollController.dispose();
-    _scrollableScrollController.dispose();
     _horizontalScrollController.dispose();
     super.dispose();
   }
@@ -269,7 +239,10 @@ class _AttendanceRosterTableState extends State<AttendanceRosterTable> {
             color: theme.colorScheme.onSurface.withValues(alpha: 0.1),
           ),
         ),
-        child: const CircularProgressIndicator(),
+        child: LoadingAnimationWidget.staggeredDotsWave(
+          color: theme.colorScheme.primary,
+          size: 28,
+        ),
       );
     }
 
@@ -371,21 +344,12 @@ class _AttendanceRosterTableState extends State<AttendanceRosterTable> {
                     final visibleStudents = filteredStudents
                         .take(_visibleCount)
                         .toList();
-                    final isWideDesktop = constraints.maxWidth >= 900;
-                    if (isWideDesktop) {
-                      return _buildWideDesktopTable(
-                        theme: theme,
-                        isDark: isDark,
-                        students: visibleStudents,
-                      );
-                    } else {
-                      return _buildNarrowStickyTable(
-                        theme: theme,
-                        isDark: isDark,
-                        students: visibleStudents,
-                        maxHeight: constraints.maxHeight,
-                      );
-                    }
+                    return _buildUnifiedTable(
+                      theme: theme,
+                      isDark: isDark,
+                      students: visibleStudents,
+                      constraints: constraints,
+                    );
                   },
                 ),
                 if (_visibleCount < filteredStudents.length)
@@ -634,12 +598,13 @@ class _AttendanceRosterTableState extends State<AttendanceRosterTable> {
   }
 
   // ===========================================================================
-  // WIDE DESKTOP (>= 900px) — Full-width aligned columns
+  // UNIFIED ROSTER TABLE (No sticky split, compact student name, responsive horizontal scroll)
   // ===========================================================================
-  Widget _buildWideDesktopTable({
+  Widget _buildUnifiedTable({
     required ThemeData theme,
     required bool isDark,
     required List<AttendanceRosterStudent> students,
+    required BoxConstraints constraints,
   }) {
     final headerBg = isDark
         ? theme.colorScheme.primary.withValues(alpha: 0.14)
@@ -649,392 +614,283 @@ class _AttendanceRosterTableState extends State<AttendanceRosterTable> {
       alpha: isDark ? 0.1 : 0.07,
     );
 
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          height: _headerHeight,
-          decoration: BoxDecoration(
-            color: headerBg,
-            border: Border(bottom: BorderSide(color: headerBorder)),
-          ),
-          child: Row(
-            children: [
-              _buildHeaderCell(
-                theme: theme,
-                width: _colNumWidth,
-                alignment: Alignment.center,
-                label: '#',
-              ),
-              Expanded(
-                flex: 3,
-                child: _buildFlexHeaderCell(
-                  theme: theme,
-                  label: 'STUDENT NAME',
-                ),
-              ),
-              _buildHeaderCell(
-                theme: theme,
-                width: _colRfidWidth,
-                label: 'RFID CARD',
-              ),
-              _buildHeaderCell(
-                theme: theme,
-                width: _colStatusWidth,
-                alignment: Alignment.center,
-                label: 'ATTENDANCE STATUS',
-              ),
-              _buildHeaderCell(
-                theme: theme,
-                width: _colTimeInWidth,
-                alignment: Alignment.center,
-                label: 'TIME IN',
-              ),
-              _buildHeaderCell(
-                theme: theme,
-                width: _colMethodWidth,
-                alignment: Alignment.center,
-                label: 'METHOD',
-              ),
-              Expanded(
-                flex: 2,
-                child: _buildFlexHeaderCell(
-                  theme: theme,
-                  label: 'REMARKS',
-                  hasRightBorder: false,
-                ),
-              ),
-            ],
-          ),
-        ),
-        ListView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: students.length,
-          itemBuilder: (context, index) {
-            final student = students[index];
-            final rowBg = _rowBackground(theme, isDark, index);
-            return Container(
-              height: _rowHeight,
-              decoration: BoxDecoration(
-                color: rowBg,
-                border: Border(bottom: BorderSide(color: rowBorderColor)),
-              ),
-              child: Row(
-                children: [
-                  _buildFixedCell(
-                    theme: theme,
-                    width: _colNumWidth,
-                    alignment: Alignment.center,
-                    child: Text(
-                      '${index + 1}',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: theme.colorScheme.onSurface.withValues(
-                          alpha: 0.65,
-                        ),
-                      ),
-                    ),
-                  ),
-                  Expanded(
-                    flex: 3,
-                    child: _buildFlexCell(
-                      theme: theme,
-                      child: _buildStudentNameRichText(theme, student),
-                    ),
-                  ),
-                  _buildFixedCell(
-                    theme: theme,
-                    width: _colRfidWidth,
-                    child: _buildRfidChip(theme, isDark, student),
-                  ),
-                  _buildFixedCell(
-                    theme: theme,
-                    width: _colStatusWidth,
-                    alignment: Alignment.center,
-                    child: _buildStatusSegmentedPills(theme, isDark, student),
-                  ),
-                  _buildFixedCell(
-                    theme: theme,
-                    width: _colTimeInWidth,
-                    alignment: Alignment.center,
-                    child: _buildTimeInCell(theme, isDark, student),
-                  ),
-                  _buildFixedCell(
-                    theme: theme,
-                    width: _colMethodWidth,
-                    alignment: Alignment.center,
-                    child: _buildMethodCell(theme, isDark, student),
-                  ),
-                  Expanded(
-                    flex: 2,
-                    child: _buildFlexCell(
-                      theme: theme,
-                      hasRightBorder: false,
-                      child: _buildRemarkCell(theme, isDark, student),
-                    ),
-                  ),
-                ],
-              ),
-            );
-          },
-        ),
-      ],
-    );
-  }
+    final isWide = constraints.maxWidth >= _totalTableWidth;
 
-  // ===========================================================================
-  // NARROW VIEWPORT (< 900px) — Synced Two-Pane Sticky Left Column + Scrollbar
-  // ===========================================================================
-  Widget _buildNarrowStickyTable({
-    required ThemeData theme,
-    required bool isDark,
-    required List<AttendanceRosterStudent> students,
-    required double maxHeight,
-  }) {
-    final headerBg = isDark
-        ? theme.colorScheme.primary.withValues(alpha: 0.14)
-        : theme.colorScheme.primary.withValues(alpha: 0.08);
-    final headerBorder = theme.colorScheme.primary.withValues(alpha: 0.25);
-    final rowBorderColor = theme.colorScheme.onSurface.withValues(
-      alpha: isDark ? 0.1 : 0.07,
-    );
-    final stickyDividerColor = isDark
-        ? theme.colorScheme.onSurface.withValues(alpha: 0.18)
-        : const Color(0xFFCBD5E1);
-
-    final contentHeight = students.length * _rowHeight;
-    final double bodyHeight = maxHeight.isFinite
-        ? math.max(120.0, math.min(contentHeight, maxHeight - _headerHeight))
-        : math.min(contentHeight, 528.0);
-    final bool needsVerticalScroll = contentHeight > bodyHeight + 1.0;
-
-    return SizedBox(
-      height: _headerHeight + bodyHeight,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    if (isWide) {
+      return Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          // ── PINNED STICKY LEFT SECTION (# + STUDENT NAME) ──
           Container(
-            width: _pinnedWidth,
+            height: _headerHeight,
             decoration: BoxDecoration(
-              color: theme.colorScheme.surface,
-              border: Border(
-                right: BorderSide(color: stickyDividerColor, width: 1.5),
-              ),
+              color: headerBg,
+              border: Border(bottom: BorderSide(color: headerBorder)),
             ),
-            child: Column(
+            child: Row(
               children: [
-                Container(
-                  height: _headerHeight,
-                  decoration: BoxDecoration(
-                    color: headerBg,
-                    border: Border(bottom: BorderSide(color: headerBorder)),
-                  ),
-                  child: Row(
-                    children: [
-                      _buildHeaderCell(
-                        theme: theme,
-                        width: _colNumWidth,
-                        alignment: Alignment.center,
-                        label: '#',
-                      ),
-                      _buildHeaderCell(
-                        theme: theme,
-                        width: _colNameWidth - 1.5,
-                        hasRightBorder: false,
-                        label: 'STUDENT NAME',
-                      ),
-                    ],
-                  ),
+                _buildHeaderCell(
+                  theme: theme,
+                  width: _colNumWidth,
+                  alignment: Alignment.center,
+                  label: '#',
                 ),
                 Expanded(
-                  child: ListView.builder(
-                    controller: _pinnedScrollController,
-                    physics: needsVerticalScroll
-                        ? const ClampingScrollPhysics()
-                        : const NeverScrollableScrollPhysics(),
-                    itemCount: students.length,
-                    itemBuilder: (context, index) {
-                      final student = students[index];
-                      return Container(
-                        height: _rowHeight,
-                        decoration: BoxDecoration(
-                          color: _rowBackground(theme, isDark, index),
-                          border: Border(
-                            bottom: BorderSide(color: rowBorderColor),
-                          ),
-                        ),
-                        child: Row(
-                          children: [
-                            _buildFixedCell(
-                              theme: theme,
-                              width: _colNumWidth,
-                              alignment: Alignment.center,
-                              child: Text(
-                                '${index + 1}',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  color: theme.colorScheme.onSurface.withValues(
-                                    alpha: 0.65,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            _buildFixedCell(
-                              theme: theme,
-                              width: _colNameWidth - 1.5,
-                              hasRightBorder: false,
-                              child: _buildStudentNameRichText(theme, student),
-                            ),
-                          ],
-                        ),
-                      );
-                    },
+                  flex: 3,
+                  child: _buildFlexHeaderCell(
+                    theme: theme,
+                    label: 'STUDENT NAME',
+                  ),
+                ),
+                _buildHeaderCell(
+                  theme: theme,
+                  width: _colRfidWidth,
+                  label: 'RFID CARD',
+                ),
+                _buildHeaderCell(
+                  theme: theme,
+                  width: _colStatusWidth,
+                  alignment: Alignment.center,
+                  label: 'ATTENDANCE STATUS',
+                ),
+                _buildHeaderCell(
+                  theme: theme,
+                  width: _colTimeInWidth,
+                  alignment: Alignment.center,
+                  label: 'TIME IN',
+                ),
+                _buildHeaderCell(
+                  theme: theme,
+                  width: _colMethodWidth,
+                  alignment: Alignment.center,
+                  label: 'METHOD',
+                ),
+                Expanded(
+                  flex: 2,
+                  child: _buildFlexHeaderCell(
+                    theme: theme,
+                    label: 'REMARKS',
+                    hasRightBorder: false,
                   ),
                 ),
               ],
             ),
           ),
-
-          // ── SCROLLABLE RIGHT SECTION ──
-          Expanded(
-            child: Scrollbar(
-              controller: _horizontalScrollController,
-              thumbVisibility: true,
-              child: SingleChildScrollView(
-                controller: _horizontalScrollController,
-                scrollDirection: Axis.horizontal,
-                child: SizedBox(
-                  width: _scrollableColsWidth,
-                  height: _headerHeight + bodyHeight,
-                  child: Column(
-                    children: [
-                      Container(
-                        height: _headerHeight,
-                        decoration: BoxDecoration(
-                          color: headerBg,
-                          border: Border(
-                            bottom: BorderSide(color: headerBorder),
+          ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: students.length,
+            itemBuilder: (context, index) {
+              final student = students[index];
+              final rowBg = _rowBackground(theme, isDark, index);
+              return Container(
+                height: _rowHeight,
+                decoration: BoxDecoration(
+                  color: rowBg,
+                  border: Border(bottom: BorderSide(color: rowBorderColor)),
+                ),
+                child: Row(
+                  children: [
+                    _buildFixedCell(
+                      theme: theme,
+                      width: _colNumWidth,
+                      alignment: Alignment.center,
+                      child: Text(
+                        '${index + 1}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: theme.colorScheme.onSurface.withValues(
+                            alpha: 0.65,
                           ),
                         ),
-                        child: Row(
-                          children: [
-                            _buildHeaderCell(
-                              theme: theme,
-                              width: _colRfidWidth,
-                              label: 'RFID CARD',
-                            ),
-                            _buildHeaderCell(
-                              theme: theme,
-                              width: _colStatusWidth,
-                              alignment: Alignment.center,
-                              label: 'ATTENDANCE STATUS',
-                            ),
-                            _buildHeaderCell(
-                              theme: theme,
-                              width: _colTimeInWidth,
-                              alignment: Alignment.center,
-                              label: 'TIME IN',
-                            ),
-                            _buildHeaderCell(
-                              theme: theme,
-                              width: _colMethodWidth,
-                              alignment: Alignment.center,
-                              label: 'METHOD',
-                            ),
-                            _buildHeaderCell(
-                              theme: theme,
-                              width: _colRemarksWidth,
-                              hasRightBorder: false,
-                              label: 'REMARKS',
-                            ),
-                          ],
-                        ),
                       ),
-                      Expanded(
-                        child: ListView.builder(
-                          controller: _scrollableScrollController,
-                          physics: needsVerticalScroll
-                              ? const ClampingScrollPhysics()
-                              : const NeverScrollableScrollPhysics(),
-                          itemCount: students.length,
-                          itemBuilder: (context, index) {
-                            final student = students[index];
-                            return Container(
-                              height: _rowHeight,
-                              decoration: BoxDecoration(
-                                color: _rowBackground(theme, isDark, index),
-                                border: Border(
-                                  bottom: BorderSide(color: rowBorderColor),
-                                ),
-                              ),
-                              child: Row(
-                                children: [
-                                  _buildFixedCell(
-                                    theme: theme,
-                                    width: _colRfidWidth,
-                                    child: _buildRfidChip(
-                                      theme,
-                                      isDark,
-                                      student,
-                                    ),
-                                  ),
-                                  _buildFixedCell(
-                                    theme: theme,
-                                    width: _colStatusWidth,
-                                    alignment: Alignment.center,
-                                    child: _buildStatusSegmentedPills(
-                                      theme,
-                                      isDark,
-                                      student,
-                                    ),
-                                  ),
-                                  _buildFixedCell(
-                                    theme: theme,
-                                    width: _colTimeInWidth,
-                                    alignment: Alignment.center,
-                                    child: _buildTimeInCell(
-                                      theme,
-                                      isDark,
-                                      student,
-                                    ),
-                                  ),
-                                  _buildFixedCell(
-                                    theme: theme,
-                                    width: _colMethodWidth,
-                                    alignment: Alignment.center,
-                                    child: _buildMethodCell(
-                                      theme,
-                                      isDark,
-                                      student,
-                                    ),
-                                  ),
-                                  _buildFixedCell(
-                                    theme: theme,
-                                    width: _colRemarksWidth,
-                                    hasRightBorder: false,
-                                    child: _buildRemarkCell(
-                                      theme,
-                                      isDark,
-                                      student,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            );
-                          },
-                        ),
+                    ),
+                    Expanded(
+                      flex: 3,
+                      child: _buildFlexCell(
+                        theme: theme,
+                        child: _buildStudentNameRichText(theme, student),
                       ),
-                    ],
-                  ),
+                    ),
+                    _buildFixedCell(
+                      theme: theme,
+                      width: _colRfidWidth,
+                      child: _buildRfidChip(theme, isDark, student),
+                    ),
+                    _buildFixedCell(
+                      theme: theme,
+                      width: _colStatusWidth,
+                      alignment: Alignment.center,
+                      child: _buildStatusSegmentedPills(theme, isDark, student),
+                    ),
+                    _buildFixedCell(
+                      theme: theme,
+                      width: _colTimeInWidth,
+                      alignment: Alignment.center,
+                      child: _buildTimeInCell(theme, isDark, student),
+                    ),
+                    _buildFixedCell(
+                      theme: theme,
+                      width: _colMethodWidth,
+                      alignment: Alignment.center,
+                      child: _buildMethodCell(theme, isDark, student),
+                    ),
+                    Expanded(
+                      flex: 2,
+                      child: _buildFlexCell(
+                        theme: theme,
+                        hasRightBorder: false,
+                        child: _buildRemarkCell(theme, isDark, student),
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-            ),
+              );
+            },
           ),
         ],
+      );
+    }
+
+    // Narrow Viewport (< 826px): Single smooth horizontal scrollbar across ALL columns (no sticky split)
+    return Scrollbar(
+      controller: _horizontalScrollController,
+      thumbVisibility: true,
+      child: SingleChildScrollView(
+        controller: _horizontalScrollController,
+        scrollDirection: Axis.horizontal,
+        child: SizedBox(
+          width: _totalTableWidth,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                height: _headerHeight,
+                decoration: BoxDecoration(
+                  color: headerBg,
+                  border: Border(bottom: BorderSide(color: headerBorder)),
+                ),
+                child: Row(
+                  children: [
+                    _buildHeaderCell(
+                      theme: theme,
+                      width: _colNumWidth,
+                      alignment: Alignment.center,
+                      label: '#',
+                    ),
+                    _buildHeaderCell(
+                      theme: theme,
+                      width: _colNameWidth,
+                      label: 'STUDENT NAME',
+                    ),
+                    _buildHeaderCell(
+                      theme: theme,
+                      width: _colRfidWidth,
+                      label: 'RFID CARD',
+                    ),
+                    _buildHeaderCell(
+                      theme: theme,
+                      width: _colStatusWidth,
+                      alignment: Alignment.center,
+                      label: 'ATTENDANCE STATUS',
+                    ),
+                    _buildHeaderCell(
+                      theme: theme,
+                      width: _colTimeInWidth,
+                      alignment: Alignment.center,
+                      label: 'TIME IN',
+                    ),
+                    _buildHeaderCell(
+                      theme: theme,
+                      width: _colMethodWidth,
+                      alignment: Alignment.center,
+                      label: 'METHOD',
+                    ),
+                    _buildHeaderCell(
+                      theme: theme,
+                      width: _colRemarksWidth,
+                      hasRightBorder: false,
+                      label: 'REMARKS',
+                    ),
+                  ],
+                ),
+              ),
+              ListView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: students.length,
+                itemBuilder: (context, index) {
+                  final student = students[index];
+                  final rowBg = _rowBackground(theme, isDark, index);
+                  return Container(
+                    height: _rowHeight,
+                    decoration: BoxDecoration(
+                      color: rowBg,
+                      border: Border(bottom: BorderSide(color: rowBorderColor)),
+                    ),
+                    child: Row(
+                      children: [
+                        _buildFixedCell(
+                          theme: theme,
+                          width: _colNumWidth,
+                          alignment: Alignment.center,
+                          child: Text(
+                            '${index + 1}',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: theme.colorScheme.onSurface.withValues(
+                                alpha: 0.65,
+                              ),
+                            ),
+                          ),
+                        ),
+                        _buildFixedCell(
+                          theme: theme,
+                          width: _colNameWidth,
+                          child: _buildStudentNameRichText(theme, student),
+                        ),
+                        _buildFixedCell(
+                          theme: theme,
+                          width: _colRfidWidth,
+                          child: _buildRfidChip(theme, isDark, student),
+                        ),
+                        _buildFixedCell(
+                          theme: theme,
+                          width: _colStatusWidth,
+                          alignment: Alignment.center,
+                          child: _buildStatusSegmentedPills(
+                            theme,
+                            isDark,
+                            student,
+                          ),
+                        ),
+                        _buildFixedCell(
+                          theme: theme,
+                          width: _colTimeInWidth,
+                          alignment: Alignment.center,
+                          child: _buildTimeInCell(theme, isDark, student),
+                        ),
+                        _buildFixedCell(
+                          theme: theme,
+                          width: _colMethodWidth,
+                          alignment: Alignment.center,
+                          child: _buildMethodCell(theme, isDark, student),
+                        ),
+                        _buildFixedCell(
+                          theme: theme,
+                          width: _colRemarksWidth,
+                          hasRightBorder: false,
+                          child: _buildRemarkCell(theme, isDark, student),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -1220,13 +1076,9 @@ class _AttendanceRosterTableState extends State<AttendanceRosterTable> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const SizedBox(
-              width: 10,
-              height: 10,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: Color(0xFF2563EB),
-              ),
+            LoadingAnimationWidget.staggeredDotsWave(
+              color: const Color(0xFF2563EB),
+              size: 14,
             ),
             const SizedBox(width: 5),
             const Flexible(

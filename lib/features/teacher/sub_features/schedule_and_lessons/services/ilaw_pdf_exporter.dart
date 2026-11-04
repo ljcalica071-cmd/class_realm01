@@ -126,7 +126,8 @@ class IlawPdfExporter {
       double minHeight = 28.0,
     }) {
       final titleWrapped = _wrapMultiline(categoryTitle, maxChars: 22);
-      final promptWrapped = categoryPrompt != null && categoryPrompt.trim().isNotEmpty
+      final promptWrapped =
+          categoryPrompt != null && categoryPrompt.trim().isNotEmpty
           ? _wrapMultiline(categoryPrompt.trim(), maxChars: 24)
           : <String>[];
 
@@ -140,12 +141,18 @@ class IlawPdfExporter {
       }
 
       final leftTitleH = titleWrapped.length * 11.5;
-      final leftPromptH = promptWrapped.isNotEmpty ? (promptWrapped.length * 9.5) + 4.0 : 0.0;
+      final leftPromptH = promptWrapped.isNotEmpty
+          ? (promptWrapped.length * 9.5) + 4.0
+          : 0.0;
       final leftTotalH = leftTitleH + leftPromptH + 16.0;
 
       final rightTotalH = (allContentLines.length * 11.5) + 16.0;
 
-      final requiredH = [minHeight, leftTotalH, rightTotalH].reduce((a, b) => a > b ? a : b);
+      final requiredH = [
+        minHeight,
+        leftTotalH,
+        rightTotalH,
+      ].reduce((a, b) => a > b ? a : b);
 
       ensureSpace(requiredH);
 
@@ -235,7 +242,8 @@ class IlawPdfExporter {
           rightY -= 5.0;
           continue;
         }
-        final isSubHeader = cLine.endsWith(':') ||
+        final isSubHeader =
+            cLine.endsWith(':') ||
             cLine.startsWith('Session ') ||
             cLine.startsWith('DAY ');
         _drawText(
@@ -307,10 +315,19 @@ class IlawPdfExporter {
     cursorY = headerBottom;
 
     // Metadata Table Grid (School, Grade, Teacher, Learning Area, Dates, Term)
-    void drawTwoColMeta(String leftKey, String leftVal, String rightKey, String rightVal) {
+    void drawTwoColMeta(
+      String leftKey,
+      String leftVal,
+      String rightKey,
+      String rightVal,
+    ) {
       final leftValLines = _wrapMultiline(leftVal, maxChars: 28);
       final rightValLines = _wrapMultiline(rightVal, maxChars: 28);
-      final maxLines = [1, leftValLines.length, rightValLines.length].reduce((a, b) => a > b ? a : b);
+      final maxLines = [
+        1,
+        leftValLines.length,
+        rightValLines.length,
+      ].reduce((a, b) => a > b ? a : b);
       final rowH = (maxLines * 11.0) + 12.0;
 
       ensureSpace(rowH);
@@ -346,27 +363,82 @@ class IlawPdfExporter {
       );
 
       // Left Meta
-      _drawText(currentStream, text: '$leftKey:', x: _margin + 8, y: rTop - 13, fontSize: 8.0, bold: true, r: 0.055, g: 0.294, b: 0.333);
+      _drawText(
+        currentStream,
+        text: '$leftKey:',
+        x: _margin + 8,
+        y: rTop - 13,
+        fontSize: 8.0,
+        bold: true,
+        r: 0.055,
+        g: 0.294,
+        b: 0.333,
+      );
       var lValY = rTop - 13;
       for (final lv in leftValLines) {
-        _drawText(currentStream, text: lv, x: _margin + 75, y: lValY, fontSize: 7.8, bold: false, r: 0.08, g: 0.10, b: 0.14);
+        _drawText(
+          currentStream,
+          text: lv,
+          x: _margin + 75,
+          y: lValY,
+          fontSize: 7.8,
+          bold: false,
+          r: 0.08,
+          g: 0.10,
+          b: 0.14,
+        );
         lValY -= 10.5;
       }
 
       // Right Meta
-      _drawText(currentStream, text: '$rightKey:', x: midX + 8, y: rTop - 13, fontSize: 8.0, bold: true, r: 0.055, g: 0.294, b: 0.333);
+      _drawText(
+        currentStream,
+        text: '$rightKey:',
+        x: midX + 8,
+        y: rTop - 13,
+        fontSize: 8.0,
+        bold: true,
+        r: 0.055,
+        g: 0.294,
+        b: 0.333,
+      );
       var rValY = rTop - 13;
       for (final rv in rightValLines) {
-        _drawText(currentStream, text: rv, x: midX + 75, y: rValY, fontSize: 7.8, bold: false, r: 0.08, g: 0.10, b: 0.14);
+        _drawText(
+          currentStream,
+          text: rv,
+          x: midX + 75,
+          y: rValY,
+          fontSize: 7.8,
+          bold: false,
+          r: 0.08,
+          g: 0.10,
+          b: 0.14,
+        );
         rValY -= 10.5;
       }
 
       cursorY = rBottom;
     }
 
-    drawTwoColMeta('School', 'EDUARDO BARRETTO SR. INTEGRATED SCHOOL', 'Grade Level', plan.gradeLevel.toUpperCase());
-    drawTwoColMeta('Teacher', teacher.toUpperCase(), 'Learning Area', plan.subject.toUpperCase());
-    drawTwoColMeta('Teaching Dates', 'DAY 1 - DAY ${plan.numberOfSessions} (TUESDAY - FRIDAY)', 'Term', '$termUpper (Instructional Block - Week 1)');
+    drawTwoColMeta(
+      'School',
+      'EDUARDO BARRETTO SR. INTEGRATED SCHOOL',
+      'Grade Level',
+      plan.gradeLevel.toUpperCase(),
+    );
+    drawTwoColMeta(
+      'Teacher',
+      teacher.toUpperCase(),
+      'Learning Area',
+      plan.subject.toUpperCase(),
+    );
+    drawTwoColMeta(
+      'Teaching Dates',
+      'DAY 1 - DAY ${plan.numberOfSessions} (TUESDAY - FRIDAY)',
+      'Term',
+      '$termUpper (Instructional Block - Week 1)',
+    );
 
     // Lesson Title & Sessions Rows
     final titleLines = _wrapMultiline(plan.topic.toUpperCase(), maxChars: 72);
@@ -376,7 +448,10 @@ class IlawPdfExporter {
       minHeight: 24.0,
     );
 
-    final sessionsLabels = List.generate(plan.numberOfSessions, (i) => 'DAY ${i + 1}').join('        ');
+    final sessionsLabels = List.generate(
+      plan.numberOfSessions,
+      (i) => 'DAY ${i + 1}',
+    ).join('        ');
     drawTableRow(
       categoryTitle: 'Number of Sessions',
       contentLines: [sessionsLabels],
@@ -478,7 +553,8 @@ class IlawPdfExporter {
     ];
     drawTableRow(
       categoryTitle: 'Pre-Lesson',
-      categoryPrompt: 'Describe how you will help the learners get ready for the lesson.',
+      categoryPrompt:
+          'Describe how you will help the learners get ready for the lesson.',
       contentLines: preLessonLines,
     );
 
@@ -852,7 +928,9 @@ class IlawPdfExporter {
       final streamContent = pageStreams[i].toString();
       final streamBytes = ascii.encode(streamContent);
       offsets.add(bytes.length);
-      writeAscii('$objIndex 0 obj\n<< /Length ${streamBytes.length} >>\nstream\n');
+      writeAscii(
+        '$objIndex 0 obj\n<< /Length ${streamBytes.length} >>\nstream\n',
+      );
       bytes.add(streamBytes);
       writeAscii('\nendstream\nendobj\n');
       objIndex++;

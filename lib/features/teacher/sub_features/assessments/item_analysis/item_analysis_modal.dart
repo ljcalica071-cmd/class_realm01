@@ -68,7 +68,9 @@ class _ItemAnalysisModalState extends State<ItemAnalysisModal> {
 
     final totalItems = widget.stats.length;
     final avgP = totalItems > 0
-        ? (widget.stats.fold<double>(0.0, (sum, s) => sum + s.pIndex) / totalItems) * 100
+        ? (widget.stats.fold<double>(0.0, (sum, s) => sum + s.pIndex) /
+                  totalItems) *
+              100
         : 0.0;
 
     return AlertDialog(
@@ -81,15 +83,25 @@ class _ItemAnalysisModalState extends State<ItemAnalysisModal> {
               color: Colors.indigo.withValues(alpha: 0.1),
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.analytics_outlined, color: Colors.indigo, size: 22),
+            child: const Icon(
+              Icons.analytics_outlined,
+              color: Colors.indigo,
+              size: 22,
+            ),
           ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Item Analysis (DepEd Tiers)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
-                Text(widget.assessmentTitle, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                const Text(
+                  'Item Analysis (DepEd Tiers)',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
+                ),
+                Text(
+                  widget.assessmentTitle,
+                  style: const TextStyle(fontSize: 12, color: Colors.grey),
+                ),
               ],
             ),
           ),
@@ -105,9 +117,13 @@ class _ItemAnalysisModalState extends State<ItemAnalysisModal> {
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               margin: const EdgeInsets.only(bottom: 12),
               decoration: BoxDecoration(
-                color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+                color: theme.colorScheme.surfaceContainerHighest.withValues(
+                  alpha: 0.3,
+                ),
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: theme.colorScheme.outline.withValues(alpha: 0.15)),
+                border: Border.all(
+                  color: theme.colorScheme.outline.withValues(alpha: 0.15),
+                ),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -116,7 +132,11 @@ class _ItemAnalysisModalState extends State<ItemAnalysisModal> {
                     children: [
                       _buildMetricChip('Total Items', '$totalItems', theme),
                       const SizedBox(width: 8),
-                      _buildMetricChip('Mean Accuracy', '${avgP.toStringAsFixed(1)}%', theme),
+                      _buildMetricChip(
+                        'Mean Accuracy',
+                        '${avgP.toStringAsFixed(1)}%',
+                        theme,
+                      ),
                     ],
                   ),
                   Row(
@@ -126,7 +146,9 @@ class _ItemAnalysisModalState extends State<ItemAnalysisModal> {
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
-                          color: _resultsReleased ? const Color(0xFF0F8A48) : Colors.grey,
+                          color: _resultsReleased
+                              ? const Color(0xFF0F8A48)
+                              : Colors.grey,
                         ),
                       ),
                       const SizedBox(width: 6),
@@ -148,7 +170,10 @@ class _ItemAnalysisModalState extends State<ItemAnalysisModal> {
             Expanded(
               child: widget.stats.isEmpty
                   ? const Center(
-                      child: Text('No student responses available yet to compute item analysis.', style: TextStyle(fontSize: 13, color: Colors.grey)),
+                      child: Text(
+                        'No student responses available yet to compute item analysis.',
+                        style: TextStyle(fontSize: 13, color: Colors.grey),
+                      ),
                     )
                   : ListView.separated(
                       itemCount: widget.stats.length,
@@ -157,7 +182,10 @@ class _ItemAnalysisModalState extends State<ItemAnalysisModal> {
                         final item = widget.stats[i];
                         final color = _badgeColor(item.classification);
                         return Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+                          padding: const EdgeInsets.symmetric(
+                            vertical: 8,
+                            horizontal: 4,
+                          ),
                           child: Row(
                             crossAxisAlignment: CrossAxisAlignment.center,
                             children: [
@@ -166,12 +194,18 @@ class _ItemAnalysisModalState extends State<ItemAnalysisModal> {
                                 height: 32,
                                 alignment: Alignment.center,
                                 decoration: BoxDecoration(
-                                  color: theme.colorScheme.primary.withValues(alpha: 0.1),
+                                  color: theme.colorScheme.primary.withValues(
+                                    alpha: 0.1,
+                                  ),
                                   shape: BoxShape.circle,
                                 ),
                                 child: Text(
                                   'Q${item.itemNumber}',
-                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: theme.colorScheme.primary),
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 11,
+                                    color: theme.colorScheme.primary,
+                                  ),
                                 ),
                               ),
                               const SizedBox(width: 12),
@@ -181,29 +215,46 @@ class _ItemAnalysisModalState extends State<ItemAnalysisModal> {
                                   children: [
                                     Text(
                                       item.questionText,
-                                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                                      style: const TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w600,
+                                      ),
                                       maxLines: 2,
                                       overflow: TextOverflow.ellipsis,
                                     ),
                                     const SizedBox(height: 2),
                                     Text(
                                       '${item.correctCount} of ${item.totalAttempts} correct (${(item.pIndex * 100).toStringAsFixed(1)}% accuracy • P = ${item.pIndex.toStringAsFixed(2)})',
-                                      style: TextStyle(fontSize: 11, color: isDark ? Colors.grey[400] : Colors.grey[600]),
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: isDark
+                                            ? Colors.grey[400]
+                                            : Colors.grey[600],
+                                      ),
                                     ),
                                   ],
                                 ),
                               ),
                               const SizedBox(width: 10),
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 4,
+                                ),
                                 decoration: BoxDecoration(
                                   color: color.withValues(alpha: 0.12),
                                   borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(color: color.withValues(alpha: 0.3)),
+                                  border: Border.all(
+                                    color: color.withValues(alpha: 0.3),
+                                  ),
                                 ),
                                 child: Text(
                                   item.classification,
-                                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: color),
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    color: color,
+                                  ),
                                 ),
                               ),
                             ],
@@ -230,12 +281,20 @@ class _ItemAnalysisModalState extends State<ItemAnalysisModal> {
       decoration: BoxDecoration(
         color: theme.colorScheme.surface,
         borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: theme.colorScheme.outline.withValues(alpha: 0.15)),
+        border: Border.all(
+          color: theme.colorScheme.outline.withValues(alpha: 0.15),
+        ),
       ),
       child: Row(
         children: [
-          Text('$label: ', style: const TextStyle(fontSize: 11, color: Colors.grey)),
-          Text(value, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+          Text(
+            '$label: ',
+            style: const TextStyle(fontSize: 11, color: Colors.grey),
+          ),
+          Text(
+            value,
+            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+          ),
         ],
       ),
     );

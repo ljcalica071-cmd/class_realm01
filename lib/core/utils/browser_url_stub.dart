@@ -50,7 +50,9 @@ void downloadFileStringWeb({
   // No-op on non-web platforms.
 }
 
-void registerWebFileDropListener(void Function(Uint8List bytes, String fileName, int size) onFileDropped) {
+void registerWebFileDropListener(
+  void Function(Uint8List bytes, String fileName, int size) onFileDropped,
+) {
   // No-op on non-web platforms.
 }
 

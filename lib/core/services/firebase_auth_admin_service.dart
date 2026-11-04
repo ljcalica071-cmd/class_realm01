@@ -1,4 +1,5 @@
 import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:class_realm/core/config/env_config.dart';
@@ -19,7 +20,9 @@ class FirebaseAuthAdminService {
       if (token != null && token.isNotEmpty) {
         final projectId = EnvConfig.firebaseProjectId;
         final res = await http.post(
-          Uri.parse('https://identitytoolkit.googleapis.com/v1/projects/$projectId/accounts:batchDelete'),
+          Uri.parse(
+            'https://identitytoolkit.googleapis.com/v1/projects/$projectId/accounts:batchDelete',
+          ),
           headers: {
             'Authorization': 'Bearer $token',
             'Content-Type': 'application/json',
@@ -29,10 +32,14 @@ class FirebaseAuthAdminService {
           }),
         );
         if (res.statusCode == 200) {
-          debugPrint('FirebaseAuthAdminService: Successfully deleted user $uid via Service Account.');
+          debugPrint(
+            'FirebaseAuthAdminService: Successfully deleted user $uid via Service Account.',
+          );
           return true;
         } else {
-          debugPrint('FirebaseAuthAdminService: batchDelete returned ${res.statusCode}: ${res.body}');
+          debugPrint(
+            'FirebaseAuthAdminService: batchDelete returned ${res.statusCode}: ${res.body}',
+          );
         }
       }
 
@@ -40,7 +47,9 @@ class FirebaseAuthAdminService {
       if (email != null && tempPassword != null && tempPassword.isNotEmpty) {
         final apiKey = EnvConfig.firebaseWebApiKey;
         final signRes = await http.post(
-          Uri.parse('https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=$apiKey'),
+          Uri.parse(
+            'https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=$apiKey',
+          ),
           headers: {'Content-Type': 'application/json'},
           body: jsonEncode({
             'email': email.trim().toLowerCase(),
@@ -54,12 +63,16 @@ class FirebaseAuthAdminService {
           final idToken = data['idToken']?.toString();
           if (idToken != null) {
             final delRes = await http.post(
-              Uri.parse('https://identitytoolkit.googleapis.com/v1/accounts:delete?key=$apiKey'),
+              Uri.parse(
+                'https://identitytoolkit.googleapis.com/v1/accounts:delete?key=$apiKey',
+              ),
               headers: {'Content-Type': 'application/json'},
               body: jsonEncode({'idToken': idToken}),
             );
             if (delRes.statusCode == 200) {
-              debugPrint('FirebaseAuthAdminService: Successfully deleted user $uid via fallback temp password.');
+              debugPrint(
+                'FirebaseAuthAdminService: Successfully deleted user $uid via fallback temp password.',
+              );
               return true;
             }
           }
@@ -85,7 +98,9 @@ class FirebaseAuthAdminService {
       if (token != null && token.isNotEmpty) {
         final projectId = EnvConfig.firebaseProjectId;
         final res = await http.post(
-          Uri.parse('https://identitytoolkit.googleapis.com/v1/projects/$projectId/accounts'),
+          Uri.parse(
+            'https://identitytoolkit.googleapis.com/v1/projects/$projectId/accounts',
+          ),
           headers: {
             'Authorization': 'Bearer $token',
             'Content-Type': 'application/json',
@@ -93,7 +108,8 @@ class FirebaseAuthAdminService {
           body: jsonEncode({
             'email': cleanEmail,
             'password': password,
-            if (displayName != null && displayName.isNotEmpty) 'displayName': displayName,
+            if (displayName != null && displayName.isNotEmpty)
+              'displayName': displayName,
             'emailVerified': false,
             'disabled': false,
           }),
@@ -102,7 +118,9 @@ class FirebaseAuthAdminService {
           final data = jsonDecode(res.body);
           final uid = data['localId']?.toString();
           if (uid != null) {
-            debugPrint('FirebaseAuthAdminService: Successfully created user $uid ($cleanEmail) via Service Account.');
+            debugPrint(
+              'FirebaseAuthAdminService: Successfully created user $uid ($cleanEmail) via Service Account.',
+            );
             return uid;
           }
         } else {
@@ -111,7 +129,9 @@ class FirebaseAuthAdminService {
           if (errMsg == 'EMAIL_EXISTS') {
             // Retrieve existing user UID via lookup
             final lookupRes = await http.post(
-              Uri.parse('https://identitytoolkit.googleapis.com/v1/projects/$projectId/accounts:lookup'),
+              Uri.parse(
+                'https://identitytoolkit.googleapis.com/v1/projects/$projectId/accounts:lookup',
+              ),
               headers: {
                 'Authorization': 'Bearer $token',
                 'Content-Type': 'application/json',
@@ -128,7 +148,9 @@ class FirebaseAuthAdminService {
                 if (existingUid != null) {
                   // Update password so they can log in with new temp password
                   await http.post(
-                    Uri.parse('https://identitytoolkit.googleapis.com/v1/projects/$projectId/accounts:update'),
+                    Uri.parse(
+                      'https://identitytoolkit.googleapis.com/v1/projects/$projectId/accounts:update',
+                    ),
                     headers: {
                       'Authorization': 'Bearer $token',
                       'Content-Type': 'application/json',
@@ -136,7 +158,8 @@ class FirebaseAuthAdminService {
                     body: jsonEncode({
                       'localId': existingUid,
                       'password': password,
-                      if (displayName != null && displayName.isNotEmpty) 'displayName': displayName,
+                      if (displayName != null && displayName.isNotEmpty)
+                        'displayName': displayName,
                     }),
                   );
                   return existingUid;
@@ -144,7 +167,9 @@ class FirebaseAuthAdminService {
               }
             }
           }
-          debugPrint('FirebaseAuthAdminService createUser returned ${res.statusCode}: ${res.body}');
+          debugPrint(
+            'FirebaseAuthAdminService createUser returned ${res.statusCode}: ${res.body}',
+          );
         }
       }
 
@@ -152,7 +177,9 @@ class FirebaseAuthAdminService {
       final apiKey = EnvConfig.firebaseWebApiKey;
       if (apiKey.isNotEmpty) {
         final fbRes = await http.post(
-          Uri.parse('https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=$apiKey'),
+          Uri.parse(
+            'https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=$apiKey',
+          ),
           headers: {'Content-Type': 'application/json'},
           body: jsonEncode({
             'email': cleanEmail,
@@ -167,7 +194,9 @@ class FirebaseAuthAdminService {
           if (displayName != null && idToken != null) {
             try {
               await http.post(
-                Uri.parse('https://identitytoolkit.googleapis.com/v1/accounts:update?key=$apiKey'),
+                Uri.parse(
+                  'https://identitytoolkit.googleapis.com/v1/accounts:update?key=$apiKey',
+                ),
                 headers: {'Content-Type': 'application/json'},
                 body: jsonEncode({
                   'idToken': idToken,
@@ -195,15 +224,14 @@ class FirebaseAuthAdminService {
       if (token != null && token.isNotEmpty) {
         final projectId = EnvConfig.firebaseProjectId;
         final res = await http.post(
-          Uri.parse('https://identitytoolkit.googleapis.com/v1/projects/$projectId/accounts:update'),
+          Uri.parse(
+            'https://identitytoolkit.googleapis.com/v1/projects/$projectId/accounts:update',
+          ),
           headers: {
             'Authorization': 'Bearer $token',
             'Content-Type': 'application/json',
           },
-          body: jsonEncode({
-            'localId': uid,
-            'disableUser': disabled,
-          }),
+          body: jsonEncode({'localId': uid, 'disableUser': disabled}),
         );
         return res.statusCode == 200;
       }
@@ -226,7 +254,9 @@ class FirebaseAuthAdminService {
 
       if (token != null && token.isNotEmpty) {
         final res = await http.post(
-          Uri.parse('https://identitytoolkit.googleapis.com/v1/projects/$projectId/accounts:update'),
+          Uri.parse(
+            'https://identitytoolkit.googleapis.com/v1/projects/$projectId/accounts:update',
+          ),
           headers: {
             'Authorization': 'Bearer $token',
             'Content-Type': 'application/json',
@@ -238,10 +268,14 @@ class FirebaseAuthAdminService {
           }),
         );
         if (res.statusCode == 200) {
-          debugPrint('FirebaseAuthAdminService: Successfully updated email for UID $uid');
+          debugPrint(
+            'FirebaseAuthAdminService: Successfully updated email for UID $uid',
+          );
           return true;
         } else {
-          debugPrint('FirebaseAuthAdminService updateUserEmail returned ${res.statusCode}: ${res.body}');
+          debugPrint(
+            'FirebaseAuthAdminService updateUserEmail returned ${res.statusCode}: ${res.body}',
+          );
         }
       }
     } catch (e) {
@@ -264,21 +298,24 @@ class FirebaseAuthAdminService {
 
       if (token != null && token.isNotEmpty) {
         final res = await http.post(
-          Uri.parse('https://identitytoolkit.googleapis.com/v1/projects/$projectId/accounts:update'),
+          Uri.parse(
+            'https://identitytoolkit.googleapis.com/v1/projects/$projectId/accounts:update',
+          ),
           headers: {
             'Authorization': 'Bearer $token',
             'Content-Type': 'application/json',
           },
-          body: jsonEncode({
-            'localId': uid,
-            'password': newPassword,
-          }),
+          body: jsonEncode({'localId': uid, 'password': newPassword}),
         );
         if (res.statusCode == 200) {
-          debugPrint('FirebaseAuthAdminService: Successfully updated password for UID $uid via Service Account.');
+          debugPrint(
+            'FirebaseAuthAdminService: Successfully updated password for UID $uid via Service Account.',
+          );
           return true;
         } else {
-          debugPrint('FirebaseAuthAdminService updateUserPassword returned ${res.statusCode}: ${res.body}');
+          debugPrint(
+            'FirebaseAuthAdminService updateUserPassword returned ${res.statusCode}: ${res.body}',
+          );
         }
       }
     } catch (e) {
@@ -290,7 +327,9 @@ class FirebaseAuthAdminService {
   /// Obtains Google OAuth 2.0 Access Token from Service Account credentials
   static Future<String?> _getAccessToken() async {
     final now = DateTime.now();
-    if (_cachedAccessToken != null && _tokenExpiry != null && now.isBefore(_tokenExpiry!)) {
+    if (_cachedAccessToken != null &&
+        _tokenExpiry != null &&
+        now.isBefore(_tokenExpiry!)) {
       return _cachedAccessToken;
     }
 
@@ -320,7 +359,9 @@ class FirebaseAuthAdminService {
         _tokenExpiry = now.add(Duration(seconds: expiresIn - 120));
         return token;
       } else {
-        debugPrint('OAuth2 token exchange returned ${res.statusCode}: ${res.body}');
+        debugPrint(
+          'OAuth2 token exchange returned ${res.statusCode}: ${res.body}',
+        );
       }
     } catch (e) {
       debugPrint('Error generating Google OAuth2 token: $e');
@@ -329,7 +370,10 @@ class FirebaseAuthAdminService {
   }
 
   /// Creates signed JWT for Google OAuth2 using pure Dart RSA PKCS#1 v1.5
-  static String _createServiceAccountJwt(String clientEmail, String privateKeyPem) {
+  static String _createServiceAccountJwt(
+    String clientEmail,
+    String privateKeyPem,
+  ) {
     final nowSec = DateTime.now().toUtc().millisecondsSinceEpoch ~/ 1000;
     final expSec = nowSec + 3600;
 
@@ -367,14 +411,33 @@ class FirebaseAuthAdminService {
 
     // 2. PKCS#1 v1.5 DigestInfo for SHA-256
     const digestInfoPrefix = [
-      0x30, 0x31, 0x30, 0x0d, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x01, 0x05, 0x00, 0x04, 0x20
+      0x30,
+      0x31,
+      0x30,
+      0x0d,
+      0x06,
+      0x09,
+      0x60,
+      0x86,
+      0x48,
+      0x01,
+      0x65,
+      0x03,
+      0x04,
+      0x02,
+      0x01,
+      0x05,
+      0x00,
+      0x04,
+      0x20,
     ];
     final digestInfo = <int>[...digestInfoPrefix, ...hash];
 
     // 3. Construct PKCS#1 v1.5 padded block (256 bytes for 2048-bit key)
     final keyBytes = (n.bitLength + 7) ~/ 8;
     final padLen = keyBytes - 3 - digestInfo.length;
-    if (padLen < 8) throw Exception('RSA key too short for PKCS#1 v1.5 padding');
+    if (padLen < 8)
+      throw Exception('RSA key too short for PKCS#1 v1.5 padding');
 
     final em = Uint8List(keyBytes);
     em[0] = 0x00;
@@ -395,21 +458,79 @@ class FirebaseAuthAdminService {
   /// Pure Dart SHA-256 implementation (FIPS 180-4 standard)
   static Uint8List _sha256(Uint8List data) {
     final k = <int>[
-      0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
-      0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
-      0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
-      0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
-      0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
-      0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
-      0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
-      0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
+      0x428a2f98,
+      0x71374491,
+      0xb5c0fbcf,
+      0xe9b5dba5,
+      0x3956c25b,
+      0x59f111f1,
+      0x923f82a4,
+      0xab1c5ed5,
+      0xd807aa98,
+      0x12835b01,
+      0x243185be,
+      0x550c7dc3,
+      0x72be5d74,
+      0x80deb1fe,
+      0x9bdc06a7,
+      0xc19bf174,
+      0xe49b69c1,
+      0xefbe4786,
+      0x0fc19dc6,
+      0x240ca1cc,
+      0x2de92c6f,
+      0x4a7484aa,
+      0x5cb0a9dc,
+      0x76f988da,
+      0x983e5152,
+      0xa831c66d,
+      0xb00327c8,
+      0xbf597fc7,
+      0xc6e00bf3,
+      0xd5a79147,
+      0x06ca6351,
+      0x14292967,
+      0x27b70a85,
+      0x2e1b2138,
+      0x4d2c6dfc,
+      0x53380d13,
+      0x650a7354,
+      0x766a0abb,
+      0x81c2c92e,
+      0x92722c85,
+      0xa2bfe8a1,
+      0xa81a664b,
+      0xc24b8b70,
+      0xc76c51a3,
+      0xd192e819,
+      0xd6990624,
+      0xf40e3585,
+      0x106aa070,
+      0x19a4c116,
+      0x1e376c08,
+      0x2748774c,
+      0x34b0bcb5,
+      0x391c0cb3,
+      0x4ed8aa4a,
+      0x5b9cca4f,
+      0x682e6ff3,
+      0x748f82ee,
+      0x78a5636f,
+      0x84c87814,
+      0x8cc70208,
+      0x90befffa,
+      0xa4506ceb,
+      0xbef9a3f7,
+      0xc67178f2,
     ];
 
     int h0 = 0x6a09e667, h1 = 0xbb67ae85, h2 = 0x3c6ef372, h3 = 0xa54ff53a;
     int h4 = 0x510e527f, h5 = 0x9b05688c, h6 = 0x1f83d9ab, h7 = 0x5be0cd19;
 
     final bitLen = data.length * 8;
-    final padLen = (data.length + 9) % 64 == 0 ? 0 : 64 - ((data.length + 9) % 64);
+    final padLen = (data.length + 9) % 64 == 0
+        ? 0
+        : 64 - ((data.length + 9) % 64);
     final totalLen = data.length + 1 + padLen + 8;
     final padded = Uint8List(totalLen);
     padded.setRange(0, data.length, data);
@@ -424,11 +545,17 @@ class FirebaseAuthAdminService {
     for (int chunk = 0; chunk < totalLen; chunk += 64) {
       for (int i = 0; i < 16; i++) {
         final pos = chunk + i * 4;
-        w[i] = (padded[pos] << 24) | (padded[pos + 1] << 16) | (padded[pos + 2] << 8) | padded[pos + 3];
+        w[i] =
+            (padded[pos] << 24) |
+            (padded[pos + 1] << 16) |
+            (padded[pos + 2] << 8) |
+            padded[pos + 3];
       }
       for (int i = 16; i < 64; i++) {
-        final s0 = _rotr32(w[i - 15], 7) ^ _rotr32(w[i - 15], 18) ^ (w[i - 15] >>> 3);
-        final s1 = _rotr32(w[i - 2], 17) ^ _rotr32(w[i - 2], 19) ^ (w[i - 2] >>> 10);
+        final s0 =
+            _rotr32(w[i - 15], 7) ^ _rotr32(w[i - 15], 18) ^ (w[i - 15] >>> 3);
+        final s1 =
+            _rotr32(w[i - 2], 17) ^ _rotr32(w[i - 2], 19) ^ (w[i - 2] >>> 10);
         w[i] = (w[i - 16] + s0 + w[i - 7] + s1) & 0xFFFFFFFF;
       }
 
@@ -534,15 +661,18 @@ class FirebaseAuthAdminService {
       offset += algLen;
 
       // Octet string containing PKCS#1 RSAPrivateKey
-      if (der[offset++] != 0x04) throw Exception('Expected OCTET STRING in PKCS#8');
+      if (der[offset++] != 0x04)
+        throw Exception('Expected OCTET STRING in PKCS#8');
       readLength();
 
       // Inside PKCS#1: SEQUENCE
-      if (der[offset++] != 0x30) throw Exception('Expected SEQUENCE inside OCTET STRING');
+      if (der[offset++] != 0x30)
+        throw Exception('Expected SEQUENCE inside OCTET STRING');
       readLength();
 
       // Version inside PKCS#1
-      if (der[offset++] != 0x02) throw Exception('Expected version inside PKCS#1');
+      if (der[offset++] != 0x02)
+        throw Exception('Expected version inside PKCS#1');
       final v1Len = readLength();
       offset += v1Len;
     }
@@ -555,19 +685,18 @@ class FirebaseAuthAdminService {
     final modulus = _bytesToBigInt(modBytes);
 
     // Public exponent (e)
-    if (der[offset++] != 0x02) throw Exception('Expected INTEGER for public exponent');
+    if (der[offset++] != 0x02)
+      throw Exception('Expected INTEGER for public exponent');
     int pubLen = readLength();
     offset += pubLen;
 
     // Private exponent (d)
-    if (der[offset++] != 0x02) throw Exception('Expected INTEGER for private exponent');
+    if (der[offset++] != 0x02)
+      throw Exception('Expected INTEGER for private exponent');
     int privLen = readLength();
     final privBytes = der.sublist(offset, offset + privLen);
     final privateExponent = _bytesToBigInt(privBytes);
 
-    return {
-      'modulus': modulus,
-      'privateExponent': privateExponent,
-    };
+    return {'modulus': modulus, 'privateExponent': privateExponent};
   }
 }

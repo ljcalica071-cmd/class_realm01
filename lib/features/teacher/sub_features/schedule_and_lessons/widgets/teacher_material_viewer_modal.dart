@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
@@ -49,7 +50,8 @@ class TeacherMaterialViewerModal extends StatefulWidget {
       _TeacherMaterialViewerModalState();
 }
 
-class _TeacherMaterialViewerModalState extends State<TeacherMaterialViewerModal> {
+class _TeacherMaterialViewerModalState
+    extends State<TeacherMaterialViewerModal> {
   final _materialRepo = SupabaseLearningMaterialRepository.instance;
 
   late ClassRealmMaterial _currentMaterial;
@@ -70,8 +72,12 @@ class _TeacherMaterialViewerModalState extends State<TeacherMaterialViewerModal>
   void initState() {
     super.initState();
     _currentMaterial = widget.material;
-    _titleController = TextEditingController(text: _currentMaterial.displayName);
-    _descController = TextEditingController(text: _currentMaterial.description ?? '');
+    _titleController = TextEditingController(
+      text: _currentMaterial.displayName,
+    );
+    _descController = TextEditingController(
+      text: _currentMaterial.description ?? '',
+    );
     _isVisibleToStudents = _currentMaterial.isVisibleToStudents;
 
     _selectedFolder = widget.availableFolders.firstWhere(
@@ -163,7 +169,13 @@ class _TeacherMaterialViewerModalState extends State<TeacherMaterialViewerModal>
   String _sanitizeHtml(String input) {
     // Strip malicious script and event handler tags
     return input
-        .replaceAll(RegExp(r'<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>', caseSensitive: false), '')
+        .replaceAll(
+          RegExp(
+            r'<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>',
+            caseSensitive: false,
+          ),
+          '',
+        )
         .replaceAll(RegExp(r'javascript:', caseSensitive: false), '')
         .replaceAll(RegExp(r'onload\s*=', caseSensitive: false), '')
         .replaceAll(RegExp(r'onerror\s*=', caseSensitive: false), '');
@@ -276,12 +288,16 @@ class _TeacherMaterialViewerModalState extends State<TeacherMaterialViewerModal>
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+                      color: theme.colorScheme.surfaceContainerHighest
+                          .withValues(alpha: 0.3),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Row(
                       children: [
-                        Icon(Icons.attach_file, color: theme.colorScheme.primary),
+                        Icon(
+                          Icons.attach_file,
+                          color: theme.colorScheme.primary,
+                        ),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Column(
@@ -289,13 +305,19 @@ class _TeacherMaterialViewerModalState extends State<TeacherMaterialViewerModal>
                             children: [
                               Text(
                                 file.name,
-                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13,
+                                ),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                               ),
                               Text(
                                 'Size: ${(file.size / 1024).toStringAsFixed(1)} KB • ${ext.toUpperCase()}',
-                                style: const TextStyle(fontSize: 11, color: Colors.grey),
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.grey,
+                                ),
                               ),
                             ],
                           ),
@@ -312,26 +334,34 @@ class _TeacherMaterialViewerModalState extends State<TeacherMaterialViewerModal>
                   RadioListTile<bool>(
                     contentPadding: EdgeInsets.zero,
                     dense: true,
-                    title: const Text('Update for this section only', style: TextStyle(fontSize: 13)),
+                    title: const Text(
+                      'Update for this section only',
+                      style: TextStyle(fontSize: 13),
+                    ),
                     subtitle: const Text(
                       'Other sections will continue using their current copy.',
                       style: TextStyle(fontSize: 11),
                     ),
                     value: false,
                     groupValue: updateAll,
-                    onChanged: (val) => setDialogState(() => updateAll = val ?? false),
+                    onChanged: (val) =>
+                        setDialogState(() => updateAll = val ?? false),
                   ),
                   RadioListTile<bool>(
                     contentPadding: EdgeInsets.zero,
                     dense: true,
-                    title: const Text('Update across all shared sections', style: TextStyle(fontSize: 13)),
+                    title: const Text(
+                      'Update across all shared sections',
+                      style: TextStyle(fontSize: 13),
+                    ),
                     subtitle: const Text(
                       'Replaces the file simultaneously for all sections that share this document.',
                       style: TextStyle(fontSize: 11),
                     ),
                     value: true,
                     groupValue: updateAll,
-                    onChanged: (val) => setDialogState(() => updateAll = val ?? true),
+                    onChanged: (val) =>
+                        setDialogState(() => updateAll = val ?? true),
                   ),
                 ],
               ),
@@ -396,7 +426,9 @@ class _TeacherMaterialViewerModalState extends State<TeacherMaterialViewerModal>
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange.shade800),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.orange.shade800,
+            ),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Archive'),
           ),
@@ -501,10 +533,7 @@ class _TeacherMaterialViewerModalState extends State<TeacherMaterialViewerModal>
       backgroundColor: theme.colorScheme.surface,
       insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
       child: ConstrainedBox(
-        constraints: const BoxConstraints(
-          maxWidth: 960,
-          maxHeight: 740,
-        ),
+        constraints: const BoxConstraints(maxWidth: 960, maxHeight: 740),
         child: Padding(
           padding: const EdgeInsets.all(20),
           child: Column(
@@ -536,9 +565,7 @@ class _TeacherMaterialViewerModalState extends State<TeacherMaterialViewerModal>
                     const SizedBox(width: 20),
 
                     // Right Column: Direct Live Editor
-                    Expanded(
-                      child: _buildEditorArea(theme, isDark),
-                    ),
+                    Expanded(child: _buildEditorArea(theme, isDark)),
                   ],
                 ),
               ),
@@ -563,7 +590,11 @@ class _TeacherMaterialViewerModalState extends State<TeacherMaterialViewerModal>
             color: theme.colorScheme.primary.withValues(alpha: 0.12),
             borderRadius: BorderRadius.circular(8),
           ),
-          child: Icon(Icons.menu_book_rounded, color: theme.colorScheme.primary, size: 22),
+          child: Icon(
+            Icons.menu_book_rounded,
+            color: theme.colorScheme.primary,
+            size: 22,
+          ),
         ),
         const SizedBox(width: 12),
         Expanded(
@@ -576,7 +607,10 @@ class _TeacherMaterialViewerModalState extends State<TeacherMaterialViewerModal>
               ),
               Text(
                 'Manage document details, lesson content, and multi-section visibility.',
-                style: TextStyle(fontSize: 11, color: theme.colorScheme.onSurface.withValues(alpha: 0.6)),
+                style: TextStyle(
+                  fontSize: 11,
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                ),
               ),
             ],
           ),
@@ -609,7 +643,10 @@ class _TeacherMaterialViewerModalState extends State<TeacherMaterialViewerModal>
           ),
           TextButton(
             onPressed: _restoreDraft,
-            child: const Text('Restore Draft', style: TextStyle(fontWeight: FontWeight.bold)),
+            child: const Text(
+              'Restore Draft',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
           ),
           IconButton(
             icon: const Icon(Icons.close, size: 16),
@@ -630,7 +667,11 @@ class _TeacherMaterialViewerModalState extends State<TeacherMaterialViewerModal>
         children: [
           const Text(
             'DOCUMENT OVERVIEW',
-            style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 0.8),
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 0.8,
+            ),
           ),
           const SizedBox(height: 10),
 
@@ -641,7 +682,9 @@ class _TeacherMaterialViewerModalState extends State<TeacherMaterialViewerModal>
             decoration: BoxDecoration(
               color: isDark ? Colors.grey.shade900 : Colors.grey.shade100,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: theme.colorScheme.onSurface.withValues(alpha: 0.1)),
+              border: Border.all(
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.1),
+              ),
             ),
             child: Column(
               children: [
@@ -652,7 +695,11 @@ class _TeacherMaterialViewerModalState extends State<TeacherMaterialViewerModal>
                     color: _getFormatColor(ext).withValues(alpha: 0.12),
                     shape: BoxShape.circle,
                   ),
-                  child: Icon(_getFormatIcon(ext), color: _getFormatColor(ext), size: 44),
+                  child: Icon(
+                    _getFormatIcon(ext),
+                    color: _getFormatColor(ext),
+                    size: 44,
+                  ),
                 ),
                 const SizedBox(height: 12),
 
@@ -660,7 +707,10 @@ class _TeacherMaterialViewerModalState extends State<TeacherMaterialViewerModal>
                 Text(
                   _currentMaterial.displayName,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -670,7 +720,10 @@ class _TeacherMaterialViewerModalState extends State<TeacherMaterialViewerModal>
                 Text(
                   _currentMaterial.fileName,
                   textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 11, color: theme.colorScheme.onSurface.withValues(alpha: 0.6)),
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                  ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -683,10 +736,17 @@ class _TeacherMaterialViewerModalState extends State<TeacherMaterialViewerModal>
                   alignment: WrapAlignment.center,
                   children: [
                     _buildBadge(ext, _getFormatColor(ext)),
-                    _buildBadge(_currentMaterial.formattedSize, Colors.blueGrey),
                     _buildBadge(
-                      _isVisibleToStudents ? 'Live (Visible)' : 'Draft (Hidden)',
-                      _isVisibleToStudents ? Colors.green : Colors.amber.shade800,
+                      _currentMaterial.formattedSize,
+                      Colors.blueGrey,
+                    ),
+                    _buildBadge(
+                      _isVisibleToStudents
+                          ? 'Live (Visible)'
+                          : 'Draft (Hidden)',
+                      _isVisibleToStudents
+                          ? Colors.green
+                          : Colors.amber.shade800,
                     ),
                   ],
                 ),
@@ -733,7 +793,11 @@ class _TeacherMaterialViewerModalState extends State<TeacherMaterialViewerModal>
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : const Icon(Icons.file_upload_outlined, size: 18),
-              label: Text(_isReplacingFile ? 'Replacing File...' : 'Replace File / Upload New Version'),
+              label: Text(
+                _isReplacingFile
+                    ? 'Replacing File...'
+                    : 'Replace File / Upload New Version',
+              ),
               onPressed: _isReplacingFile ? null : _showReplaceFileDialog,
             ),
           ),
@@ -744,17 +808,26 @@ class _TeacherMaterialViewerModalState extends State<TeacherMaterialViewerModal>
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.2),
+              color: theme.colorScheme.surfaceContainerHighest.withValues(
+                alpha: 0.2,
+              ),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Row(
               children: [
-                Icon(Icons.security_update_good, size: 16, color: theme.colorScheme.primary),
+                Icon(
+                  Icons.security_update_good,
+                  size: 16,
+                  color: theme.colorScheme.primary,
+                ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     'Cloud Storage: Free-tier deduplicated. Verified ≤ 3MB.',
-                    style: TextStyle(fontSize: 10, color: theme.colorScheme.onSurface.withValues(alpha: 0.7)),
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                    ),
                   ),
                 ),
               ],
@@ -774,12 +847,20 @@ class _TeacherMaterialViewerModalState extends State<TeacherMaterialViewerModal>
           children: [
             const Text(
               'LESSON DETAILS & CONTENT',
-              style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 0.8),
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 0.8,
+              ),
             ),
             if (_lastAutoSavedAt != null)
               Text(
                 'Auto-saved locally at ${_formatTime(_lastAutoSavedAt!)}',
-                style: const TextStyle(fontSize: 10, color: Colors.green, fontWeight: FontWeight.bold),
+                style: const TextStyle(
+                  fontSize: 10,
+                  color: Colors.green,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
           ],
         ),
@@ -827,13 +908,18 @@ class _TeacherMaterialViewerModalState extends State<TeacherMaterialViewerModal>
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
-                border: Border.all(color: theme.colorScheme.onSurface.withValues(alpha: 0.15)),
+                border: Border.all(
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.15),
+                ),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Text('Visible to Students', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  const Text(
+                    'Visible to Students',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                  ),
                   const SizedBox(width: 6),
                   Switch(
                     value: _isVisibleToStudents,
@@ -864,7 +950,9 @@ class _TeacherMaterialViewerModalState extends State<TeacherMaterialViewerModal>
                     '${_descController.text.length} / $_maxDescriptionLength characters',
                     style: TextStyle(
                       fontSize: 10,
-                      color: _descController.text.length > _maxDescriptionLength * 0.95
+                      color:
+                          _descController.text.length >
+                              _maxDescriptionLength * 0.95
                           ? Colors.red
                           : theme.colorScheme.onSurface.withValues(alpha: 0.6),
                     ),
@@ -888,10 +976,14 @@ class _TeacherMaterialViewerModalState extends State<TeacherMaterialViewerModal>
                     counterText: '',
                     hintText: 'Enter comprehensive chapter notes, reading guides, formulas, or instructions...',
                     hintStyle: TextStyle(
-                      color: isDark ? Colors.grey.shade600 : Colors.grey.shade400,
+                      color: isDark
+                          ? Colors.grey.shade600
+                          : Colors.grey.shade400,
                     ),
                     filled: true,
-                    fillColor: isDark ? const Color(0xFF121212) : Colors.grey.shade50,
+                    fillColor: isDark
+                        ? const Color(0xFF121212)
+                        : Colors.grey.shade50,
                     border: const OutlineInputBorder(),
                   ),
                 ),
@@ -907,13 +999,21 @@ class _TeacherMaterialViewerModalState extends State<TeacherMaterialViewerModal>
     return Row(
       children: [
         IconButton.filledTonal(
-          icon: const Icon(Icons.archive_outlined, color: Colors.orange, size: 20),
+          icon: const Icon(
+            Icons.archive_outlined,
+            color: Colors.orange,
+            size: 20,
+          ),
           tooltip: 'Archive Material',
           onPressed: _confirmArchive,
         ),
         const SizedBox(width: 8),
         IconButton.filledTonal(
-          icon: const Icon(Icons.delete_forever, color: Colors.redAccent, size: 20),
+          icon: const Icon(
+            Icons.delete_forever,
+            color: Colors.redAccent,
+            size: 20,
+          ),
           tooltip: 'Permanently Delete Material',
           onPressed: _confirmDelete,
         ),
@@ -933,7 +1033,10 @@ class _TeacherMaterialViewerModalState extends State<TeacherMaterialViewerModal>
               ? const SizedBox(
                   width: 16,
                   height: 16,
-                  child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                  child: CircularProgressIndicator(
+                    color: Colors.white,
+                    strokeWidth: 2,
+                  ),
                 )
               : const Icon(Icons.check, size: 18),
           label: Text(_isSaving ? 'Saving...' : 'Save & Publish Changes'),
@@ -953,7 +1056,11 @@ class _TeacherMaterialViewerModalState extends State<TeacherMaterialViewerModal>
       ),
       child: Text(
         label,
-        style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.bold),
+        style: TextStyle(
+          color: color,
+          fontSize: 10,
+          fontWeight: FontWeight.bold,
+        ),
       ),
     );
   }

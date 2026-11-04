@@ -6,10 +6,7 @@ import 'package:class_realm/models/user_model.dart';
 class TeacherGradesTab extends StatefulWidget {
   final List<UserModel> students;
 
-  const TeacherGradesTab({
-    super.key,
-    required this.students,
-  });
+  const TeacherGradesTab({super.key, required this.students});
 
   @override
   State<TeacherGradesTab> createState() => _TeacherGradesTabState();
@@ -72,7 +69,8 @@ class _TeacherGradesTabState extends State<TeacherGradesTab> {
     }
 
     Color getGradeColor(double? grade, ThemeData theme) {
-      if (grade == null) return theme.colorScheme.onSurface.withValues(alpha: 0.45);
+      if (grade == null)
+        return theme.colorScheme.onSurface.withValues(alpha: 0.45);
       if (grade >= 90) return AppTheme.catGreen;
       if (grade >= 75) return const Color(0xFF1D4ED8);
       return AppTheme.catRed;
@@ -124,7 +122,10 @@ class _TeacherGradesTabState extends State<TeacherGradesTab> {
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.12)),
+                border: Border.all(
+                  color: Theme.of(context).colorScheme.onSurface
+                      .withValues(alpha: 0.12),
+                ),
               ),
               child: Column(
                 children: [
@@ -137,7 +138,10 @@ class _TeacherGradesTabState extends State<TeacherGradesTab> {
                     decoration: BoxDecoration(
                       color: Color(0xFFF8FAFC),
                       border: Border(
-                        bottom: BorderSide(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.12)),
+                        bottom: BorderSide(
+                          color: Theme.of(context).colorScheme.onSurface
+                              .withValues(alpha: 0.12),
+                        ),
                       ),
                     ),
                     child: const Row(
@@ -264,7 +268,9 @@ class _TeacherGradesTabState extends State<TeacherGradesTab> {
                                 flex: 1,
                                 child: Center(
                                   child: Text(
-                                    grade != null ? grade.toStringAsFixed(1) : '—',
+                                    grade != null
+                                        ? grade.toStringAsFixed(1)
+                                        : '—',
                                     style: TextStyle(
                                       fontSize: 14,
                                       fontWeight: FontWeight.bold,
@@ -342,13 +348,19 @@ class _TeacherGradesTabState extends State<TeacherGradesTab> {
           padding: const EdgeInsets.symmetric(horizontal: 10),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.12)),
+            border: Border.all(
+              color: Theme.of(context).colorScheme.onSurface
+                  .withValues(alpha: 0.12),
+            ),
           ),
           child: DropdownButtonHideUnderline(
             child: DropdownButton<String>(
               value: value,
               isDense: true,
-              style: TextStyle(fontSize: 13, color: Theme.of(context).colorScheme.primary),
+              style: TextStyle(
+                fontSize: 13,
+                color: Theme.of(context).colorScheme.primary,
+              ),
               items: items
                   .map((e) => DropdownMenuItem(value: e, child: Text(e)))
                   .toList(),

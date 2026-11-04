@@ -94,8 +94,7 @@ class _StudentRequirementsScreenState extends State<StudentRequirementsScreen> {
                         context,
                         icon: Icons.workspace_premium_outlined,
                         title: 'No performance tasks yet',
-                        message:
-                            'Performance tasks posted by your teachers will appear here.',
+                        message: 'Performance tasks posted by your teachers will appear here.',
                       ),
                     )
                   : ListView.separated(

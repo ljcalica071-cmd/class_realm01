@@ -12,7 +12,8 @@ class AcademicSetupWizardScreen extends StatefulWidget {
   const AcademicSetupWizardScreen({super.key});
 
   @override
-  State<AcademicSetupWizardScreen> createState() => _AcademicSetupWizardScreenState();
+  State<AcademicSetupWizardScreen> createState() =>
+      _AcademicSetupWizardScreenState();
 }
 
 class _AcademicSetupWizardScreenState extends State<AcademicSetupWizardScreen> {
@@ -78,7 +79,9 @@ class _AcademicSetupWizardScreenState extends State<AcademicSetupWizardScreen> {
         cluster: _selectedCluster,
         gradeLevel: _selectedGradeLevel,
       );
-      _selectedSubject = subjects.isNotEmpty ? subjects.first.name : 'General Mathematics';
+      _selectedSubject = subjects.isNotEmpty
+          ? subjects.first.name
+          : 'General Mathematics';
 
       if (!_customWeightOverride) {
         _applyPresetWeights();
@@ -95,7 +98,9 @@ class _AcademicSetupWizardScreenState extends State<AcademicSetupWizardScreen> {
         cluster: _selectedCluster,
         gradeLevel: _selectedGradeLevel,
       );
-      _selectedSubject = subjects.isNotEmpty ? subjects.first.name : 'General Mathematics';
+      _selectedSubject = subjects.isNotEmpty
+          ? subjects.first.name
+          : 'General Mathematics';
     });
   }
 
@@ -103,9 +108,9 @@ class _AcademicSetupWizardScreenState extends State<AcademicSetupWizardScreen> {
     final text = _sectionCtrl.text.trim();
     if (text.isEmpty) return;
     if (_sections.contains(text)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Section already exists.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Section already exists.')));
       return;
     }
     setState(() {
@@ -128,12 +133,12 @@ class _AcademicSetupWizardScreenState extends State<AcademicSetupWizardScreen> {
 
   void _handleFinalizeSetup() async {
     setState(() => _isSaving = true);
-    
+
     final current = AuthRepository.instance.currentUser;
     if (current != null) {
       await AuthRepository.instance.completeAcademicSetup(
-        uid: current.id, 
-        gradeLevel: _selectedGradeLevel, 
+        uid: current.id,
+        gradeLevel: _selectedGradeLevel,
         subjectName: _selectedSubject,
         sections: _sections,
         schoolYear: _schoolYear,
@@ -142,7 +147,7 @@ class _AcademicSetupWizardScreenState extends State<AcademicSetupWizardScreen> {
         exWeight: _exWeight,
       );
     }
-    
+
     if (!mounted) return;
     setState(() => _isSaving = false);
 
@@ -174,11 +179,7 @@ class _AcademicSetupWizardScreenState extends State<AcademicSetupWizardScreen> {
         elevation: 0,
         title: Row(
           children: [
-            Image.asset(
-              AssetPaths.schoolLogo,
-              width: 32,
-              height: 32,
-            ),
+            Image.asset(AssetPaths.schoolLogo, width: 32, height: 32),
             const SizedBox(width: 12),
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -207,10 +208,17 @@ class _AcademicSetupWizardScreenState extends State<AcademicSetupWizardScreen> {
           Padding(
             padding: const EdgeInsets.only(right: 20),
             child: Chip(
-              avatar: const Icon(LucideIcons.sparkles, size: 14, color: AppTheme.catPurple),
+              avatar: const Icon(
+                LucideIcons.sparkles,
+                size: 14,
+                color: AppTheme.catPurple,
+              ),
               label: Text(
                 'Step ${_currentStep + 1} of 4',
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                ),
               ),
               backgroundColor: AppTheme.catPurple.withValues(alpha: 0.1),
               side: BorderSide.none,
@@ -226,7 +234,9 @@ class _AcademicSetupWizardScreenState extends State<AcademicSetupWizardScreen> {
             decoration: BoxDecoration(
               color: theme.colorScheme.surface,
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: theme.colorScheme.onSurface.withValues(alpha: 0.1)),
+              border: Border.all(
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.1),
+              ),
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withValues(alpha: 0.05),
@@ -245,7 +255,8 @@ class _AcademicSetupWizardScreenState extends State<AcademicSetupWizardScreen> {
 
                 // Active Step Content
                 if (_currentStep == 0) _buildStep1SchoolYear(theme),
-                if (_currentStep == 1) _buildStep2SubjectAndWeights(theme, isDesktop),
+                if (_currentStep == 1)
+                  _buildStep2SubjectAndWeights(theme, isDesktop),
                 if (_currentStep == 2) _buildStep3Sections(theme),
                 if (_currentStep == 3) _buildStep4Review(theme, isDesktop),
 
@@ -263,8 +274,13 @@ class _AcademicSetupWizardScreenState extends State<AcademicSetupWizardScreen> {
                         icon: const Icon(Icons.arrow_back, size: 18),
                         label: const Text('Back'),
                         style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 24,
+                            vertical: 14,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
                         ),
                       )
                     else
@@ -277,8 +293,13 @@ class _AcademicSetupWizardScreenState extends State<AcademicSetupWizardScreen> {
                         style: ElevatedButton.styleFrom(
                           backgroundColor: theme.colorScheme.primary,
                           foregroundColor: theme.colorScheme.onPrimary,
-                          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 28,
+                            vertical: 14,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
                         ),
                       )
                     else
@@ -288,15 +309,27 @@ class _AcademicSetupWizardScreenState extends State<AcademicSetupWizardScreen> {
                             ? SizedBox(
                                 width: 18,
                                 height: 18,
-                                child: LoadingAnimationWidget.staggeredDotsWave(color: Colors.white, size: 18),
+                                child: LoadingAnimationWidget.staggeredDotsWave(
+                                  color: Colors.white,
+                                  size: 18,
+                                ),
                               )
                             : const Icon(LucideIcons.checkCheck, size: 18),
-                        label: Text(_isSaving ? 'Configuring System...' : 'Finalize & Launch Dashboard'),
+                        label: Text(
+                          _isSaving
+                              ? 'Configuring System...'
+                              : 'Finalize & Launch Dashboard',
+                        ),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppTheme.catGreen,
                           foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 15),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 32,
+                            vertical: 15,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
                         ),
                       ),
                   ],
@@ -311,7 +344,12 @@ class _AcademicSetupWizardScreenState extends State<AcademicSetupWizardScreen> {
 
   // --- STEPPER PROGRESS BAR ---
   Widget _buildStepper(ThemeData theme) {
-    final steps = ['School Year', 'Subject & Weights', 'Sections', 'Confirmation'];
+    final steps = [
+      'School Year',
+      'Subject & Weights',
+      'Sections',
+      'Confirmation',
+    ];
     return Row(
       children: List.generate(steps.length * 2 - 1, (index) {
         if (index.isOdd) {
@@ -320,7 +358,9 @@ class _AcademicSetupWizardScreenState extends State<AcademicSetupWizardScreen> {
           return Expanded(
             child: Container(
               height: 3,
-              color: isPassed ? theme.colorScheme.primary : theme.colorScheme.outline.withValues(alpha: 0.2),
+              color: isPassed
+                  ? theme.colorScheme.primary
+                  : theme.colorScheme.outline.withValues(alpha: 0.2),
             ),
           );
         }
@@ -336,7 +376,9 @@ class _AcademicSetupWizardScreenState extends State<AcademicSetupWizardScreen> {
               radius: 14,
               backgroundColor: isCompleted
                   ? AppTheme.catGreen
-                  : (isActive ? theme.colorScheme.primary : theme.colorScheme.outline.withValues(alpha: 0.2)),
+                  : (isActive
+                        ? theme.colorScheme.primary
+                        : theme.colorScheme.outline.withValues(alpha: 0.2)),
               child: isCompleted
                   ? const Icon(Icons.check, size: 14, color: Colors.white)
                   : Text(
@@ -344,7 +386,11 @@ class _AcademicSetupWizardScreenState extends State<AcademicSetupWizardScreen> {
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.bold,
-                        color: isActive ? theme.colorScheme.onPrimary : theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                        color: isActive
+                            ? theme.colorScheme.onPrimary
+                            : theme.colorScheme.onSurface.withValues(
+                                alpha: 0.6,
+                              ),
                       ),
                     ),
             ),
@@ -354,7 +400,9 @@ class _AcademicSetupWizardScreenState extends State<AcademicSetupWizardScreen> {
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: isActive ? FontWeight.bold : FontWeight.w500,
-                color: isActive ? theme.colorScheme.onSurface : theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                color: isActive
+                    ? theme.colorScheme.onSurface
+                    : theme.colorScheme.onSurface.withValues(alpha: 0.5),
               ),
             ),
           ],
@@ -370,22 +418,37 @@ class _AcademicSetupWizardScreenState extends State<AcademicSetupWizardScreen> {
       children: [
         Text(
           '1. School Year & Term Calendar',
-          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface),
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+            color: theme.colorScheme.onSurface,
+          ),
         ),
         const SizedBox(height: 6),
         Text(
           'Configure the active academic school year and three-term calendar for your classes.',
-          style: TextStyle(fontSize: 14, color: theme.colorScheme.onSurface.withValues(alpha: 0.6)),
+          style: TextStyle(
+            fontSize: 14,
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+          ),
         ),
         const SizedBox(height: 24),
 
         // School Year Dropdown
-        Text('Academic School Year', style: TextStyle(fontWeight: FontWeight.w600, color: theme.colorScheme.onSurface)),
+        Text(
+          'Academic School Year',
+          style: TextStyle(
+            fontWeight: FontWeight.w600,
+            color: theme.colorScheme.onSurface,
+          ),
+        ),
         const SizedBox(height: 8),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 16),
           decoration: BoxDecoration(
-            border: Border.all(color: theme.colorScheme.outline.withValues(alpha: 0.3)),
+            border: Border.all(
+              color: theme.colorScheme.outline.withValues(alpha: 0.3),
+            ),
             borderRadius: BorderRadius.circular(12),
           ),
           child: DropdownButtonHideUnderline(
@@ -393,8 +456,14 @@ class _AcademicSetupWizardScreenState extends State<AcademicSetupWizardScreen> {
               value: _schoolYear,
               isExpanded: true,
               items: const [
-                DropdownMenuItem(value: '2026-2027', child: Text('S.Y. 2026 - 2027 (Active DepEd SY)')),
-                DropdownMenuItem(value: '2027-2028', child: Text('S.Y. 2027 - 2028')),
+                DropdownMenuItem(
+                  value: '2026-2027',
+                  child: Text('S.Y. 2026 - 2027 (Active DepEd SY)'),
+                ),
+                DropdownMenuItem(
+                  value: '2027-2028',
+                  child: Text('S.Y. 2027 - 2028'),
+                ),
               ],
               onChanged: (v) => setState(() => _schoolYear = v ?? '2026-2027'),
             ),
@@ -408,7 +477,9 @@ class _AcademicSetupWizardScreenState extends State<AcademicSetupWizardScreen> {
           decoration: BoxDecoration(
             color: theme.colorScheme.primary.withValues(alpha: 0.08),
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: theme.colorScheme.primary.withValues(alpha: 0.2)),
+            border: Border.all(
+              color: theme.colorScheme.primary.withValues(alpha: 0.2),
+            ),
           ),
           child: Row(
             children: [
@@ -420,12 +491,20 @@ class _AcademicSetupWizardScreenState extends State<AcademicSetupWizardScreen> {
                   children: [
                     Text(
                       'Term Structure: $_termStructure',
-                      style: TextStyle(fontWeight: FontWeight.bold, color: theme.colorScheme.primary),
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: theme.colorScheme.primary,
+                      ),
                     ),
                     const SizedBox(height: 2),
                     Text(
                       'Under DO 15, s. 2026, the academic year consists of 3 continuous grading terms with equal weight in final grade determination.',
-                      style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurface.withValues(alpha: 0.7)),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.7,
+                        ),
+                      ),
                     ),
                   ],
                 ),
@@ -436,7 +515,13 @@ class _AcademicSetupWizardScreenState extends State<AcademicSetupWizardScreen> {
         const SizedBox(height: 24),
 
         // 3 Terms Calendar Preview
-        Text('Calendar Trimester Ranges', style: TextStyle(fontWeight: FontWeight.w600, color: theme.colorScheme.onSurface)),
+        Text(
+          'Calendar Trimester Ranges',
+          style: TextStyle(
+            fontWeight: FontWeight.w600,
+            color: theme.colorScheme.onSurface,
+          ),
+        ),
         const SizedBox(height: 12),
         _buildTermDateTile('Term 1', _term1Start, _term1End, theme),
         const SizedBox(height: 8),
@@ -447,13 +532,20 @@ class _AcademicSetupWizardScreenState extends State<AcademicSetupWizardScreen> {
     );
   }
 
-  Widget _buildTermDateTile(String label, DateTime start, DateTime end, ThemeData theme) {
+  Widget _buildTermDateTile(
+    String label,
+    DateTime start,
+    DateTime end,
+    ThemeData theme,
+  ) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
         color: theme.colorScheme.surface,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: theme.colorScheme.outline.withValues(alpha: 0.2)),
+        border: Border.all(
+          color: theme.colorScheme.outline.withValues(alpha: 0.2),
+        ),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -467,7 +559,10 @@ class _AcademicSetupWizardScreenState extends State<AcademicSetupWizardScreen> {
           ),
           Text(
             '${start.month}/${start.day}/${start.year}  —  ${end.month}/${end.day}/${end.year}',
-            style: TextStyle(fontSize: 13, color: theme.colorScheme.onSurface.withValues(alpha: 0.7)),
+            style: TextStyle(
+              fontSize: 13,
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+            ),
           ),
         ],
       ),
@@ -476,7 +571,9 @@ class _AcademicSetupWizardScreenState extends State<AcademicSetupWizardScreen> {
 
   // --- STEP 2: GRADE LEVEL, SUBJECT AREA & DO 15 WEIGHTS ---
   Widget _buildStep2SubjectAndWeights(ThemeData theme, bool isDesktop) {
-    final availableClusters = DepEdSubjectCatalog.getClusters(_selectedCategory);
+    final availableClusters = DepEdSubjectCatalog.getClusters(
+      _selectedCategory,
+    );
     final availableSubjects = DepEdSubjectCatalog.getSubjects(
       category: _selectedCategory,
       cluster: _selectedCluster,
@@ -488,17 +585,30 @@ class _AcademicSetupWizardScreenState extends State<AcademicSetupWizardScreen> {
       children: [
         Text(
           '2. Grade Level & Subject Assignment',
-          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface),
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+            color: theme.colorScheme.onSurface,
+          ),
         ),
         const SizedBox(height: 6),
         Text(
           'Select your grade level, subject category, and auto-load the DepEd Order 15, s. 2026 grading weights.',
-          style: TextStyle(fontSize: 14, color: theme.colorScheme.onSurface.withValues(alpha: 0.6)),
+          style: TextStyle(
+            fontSize: 14,
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+          ),
         ),
         const SizedBox(height: 24),
 
         // Grade Level Chips
-        Text('Target Grade Level', style: TextStyle(fontWeight: FontWeight.w600, color: theme.colorScheme.onSurface)),
+        Text(
+          'Target Grade Level',
+          style: TextStyle(
+            fontWeight: FontWeight.w600,
+            color: theme.colorScheme.onSurface,
+          ),
+        ),
         const SizedBox(height: 8),
         Row(
           children: ['Grade 11', 'Grade 12'].map((g) {
@@ -508,9 +618,13 @@ class _AcademicSetupWizardScreenState extends State<AcademicSetupWizardScreen> {
               child: ChoiceChip(
                 label: Text(g),
                 selected: isSelected,
-                selectedColor: theme.colorScheme.primary.withValues(alpha: 0.15),
+                selectedColor: theme.colorScheme.primary.withValues(
+                  alpha: 0.15,
+                ),
                 labelStyle: TextStyle(
-                  color: isSelected ? theme.colorScheme.primary : theme.colorScheme.onSurface,
+                  color: isSelected
+                      ? theme.colorScheme.primary
+                      : theme.colorScheme.onSurface,
                   fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                 ),
                 onSelected: (sel) {
@@ -535,19 +649,29 @@ class _AcademicSetupWizardScreenState extends State<AcademicSetupWizardScreen> {
         const SizedBox(height: 20),
 
         // Category Dropdown
-        Text('Subject Category (Curriculum Area)', style: TextStyle(fontWeight: FontWeight.w600, color: theme.colorScheme.onSurface)),
+        Text(
+          'Subject Category (Curriculum Area)',
+          style: TextStyle(
+            fontWeight: FontWeight.w600,
+            color: theme.colorScheme.onSurface,
+          ),
+        ),
         const SizedBox(height: 8),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 16),
           decoration: BoxDecoration(
-            border: Border.all(color: theme.colorScheme.outline.withValues(alpha: 0.3)),
+            border: Border.all(
+              color: theme.colorScheme.outline.withValues(alpha: 0.3),
+            ),
             borderRadius: BorderRadius.circular(12),
           ),
           child: DropdownButtonHideUnderline(
             child: DropdownButton<String>(
               value: _selectedCategory,
               isExpanded: true,
-              items: DepEdSubjectCatalog.categories.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
+              items: DepEdSubjectCatalog.categories
+                  .map((c) => DropdownMenuItem(value: c, child: Text(c)))
+                  .toList(),
               onChanged: _onCategoryChanged,
             ),
           ),
@@ -562,7 +686,13 @@ class _AcademicSetupWizardScreenState extends State<AcademicSetupWizardScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Cluster / Strand', style: TextStyle(fontWeight: FontWeight.w600, color: theme.colorScheme.onSurface)),
+                    Text(
+                      'Cluster / Strand',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: theme.colorScheme.onSurface,
+                      ),
+                    ),
                     const SizedBox(height: 8),
                     _buildClusterDropdown(availableClusters, theme),
                   ],
@@ -573,7 +703,13 @@ class _AcademicSetupWizardScreenState extends State<AcademicSetupWizardScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Subject Name', style: TextStyle(fontWeight: FontWeight.w600, color: theme.colorScheme.onSurface)),
+                    Text(
+                      'Subject Name',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: theme.colorScheme.onSurface,
+                      ),
+                    ),
                     const SizedBox(height: 8),
                     _buildSubjectDropdown(availableSubjects, theme),
                   ],
@@ -582,11 +718,23 @@ class _AcademicSetupWizardScreenState extends State<AcademicSetupWizardScreen> {
             ],
           )
         else ...[
-          Text('Cluster / Strand', style: TextStyle(fontWeight: FontWeight.w600, color: theme.colorScheme.onSurface)),
+          Text(
+            'Cluster / Strand',
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              color: theme.colorScheme.onSurface,
+            ),
+          ),
           const SizedBox(height: 8),
           _buildClusterDropdown(availableClusters, theme),
           const SizedBox(height: 16),
-          Text('Subject Name', style: TextStyle(fontWeight: FontWeight.w600, color: theme.colorScheme.onSurface)),
+          Text(
+            'Subject Name',
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              color: theme.colorScheme.onSurface,
+            ),
+          ),
           const SizedBox(height: 8),
           _buildSubjectDropdown(availableSubjects, theme),
         ],
@@ -599,7 +747,9 @@ class _AcademicSetupWizardScreenState extends State<AcademicSetupWizardScreen> {
           decoration: BoxDecoration(
             color: theme.colorScheme.surface,
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: theme.colorScheme.primary.withValues(alpha: 0.3)),
+            border: Border.all(
+              color: theme.colorScheme.primary.withValues(alpha: 0.3),
+            ),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -609,17 +759,33 @@ class _AcademicSetupWizardScreenState extends State<AcademicSetupWizardScreen> {
                 children: [
                   Row(
                     children: [
-                      const Icon(LucideIcons.scale, color: AppTheme.catPurple, size: 20),
+                      const Icon(
+                        LucideIcons.scale,
+                        color: AppTheme.catPurple,
+                        size: 20,
+                      ),
                       const SizedBox(width: 10),
                       Text(
                         'Grading Component Weights',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: theme.colorScheme.onSurface),
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                          color: theme.colorScheme.onSurface,
+                        ),
                       ),
                     ],
                   ),
                   Row(
                     children: [
-                      Text('Custom Override', style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurface.withValues(alpha: 0.7))),
+                      Text(
+                        'Custom Override',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: theme.colorScheme.onSurface.withValues(
+                            alpha: 0.7,
+                          ),
+                        ),
+                      ),
                       Switch(
                         value: _customWeightOverride,
                         onChanged: (val) {
@@ -638,17 +804,38 @@ class _AcademicSetupWizardScreenState extends State<AcademicSetupWizardScreen> {
               // Visual Weight Split
               Row(
                 children: [
-                  _buildWeightCard('Written Works (WW)', _wwWeight, AppTheme.catBlue, theme),
+                  _buildWeightCard(
+                    'Written Works (WW)',
+                    _wwWeight,
+                    AppTheme.catBlue,
+                    theme,
+                  ),
                   const SizedBox(width: 12),
-                  _buildWeightCard('Performance Tasks (PT)', _ptWeight, AppTheme.catGreen, theme),
+                  _buildWeightCard(
+                    'Performance Tasks (PT)',
+                    _ptWeight,
+                    AppTheme.catGreen,
+                    theme,
+                  ),
                   const SizedBox(width: 12),
-                  _buildWeightCard('Quarterly Exam (EX)', _exWeight, AppTheme.catOrange, theme),
+                  _buildWeightCard(
+                    'Quarterly Exam (EX)',
+                    _exWeight,
+                    AppTheme.catOrange,
+                    theme,
+                  ),
                 ],
               ),
 
               if (_customWeightOverride) ...[
                 const SizedBox(height: 20),
-                Text('Adjust Custom Weights (Must Total 100%):', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                Text(
+                  'Adjust Custom Weights (Must Total 100%):',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
                 Slider(
                   value: _wwWeight,
                   min: 0,
@@ -685,21 +872,35 @@ class _AcademicSetupWizardScreenState extends State<AcademicSetupWizardScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       decoration: BoxDecoration(
-        border: Border.all(color: theme.colorScheme.outline.withValues(alpha: 0.3)),
+        border: Border.all(
+          color: theme.colorScheme.outline.withValues(alpha: 0.3),
+        ),
         borderRadius: BorderRadius.circular(12),
       ),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<String>(
-          value: clusters.contains(_selectedCluster) ? _selectedCluster : (clusters.isNotEmpty ? clusters.first : null),
+          value: clusters.contains(_selectedCluster)
+              ? _selectedCluster
+              : (clusters.isNotEmpty ? clusters.first : null),
           isExpanded: true,
-          items: clusters.map((c) => DropdownMenuItem(value: c, child: Text(c, overflow: TextOverflow.ellipsis))).toList(),
+          items: clusters
+              .map(
+                (c) => DropdownMenuItem(
+                  value: c,
+                  child: Text(c, overflow: TextOverflow.ellipsis),
+                ),
+              )
+              .toList(),
           onChanged: _onClusterChanged,
         ),
       ),
     );
   }
 
-  Widget _buildSubjectDropdown(List<SubjectCatalogItem> subjects, ThemeData theme) {
+  Widget _buildSubjectDropdown(
+    List<SubjectCatalogItem> subjects,
+    ThemeData theme,
+  ) {
     final validSubject = subjects.any((s) => s.name == _selectedSubject)
         ? _selectedSubject
         : (subjects.isNotEmpty ? subjects.first.name : _selectedSubject);
@@ -707,14 +908,23 @@ class _AcademicSetupWizardScreenState extends State<AcademicSetupWizardScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       decoration: BoxDecoration(
-        border: Border.all(color: theme.colorScheme.outline.withValues(alpha: 0.3)),
+        border: Border.all(
+          color: theme.colorScheme.outline.withValues(alpha: 0.3),
+        ),
         borderRadius: BorderRadius.circular(12),
       ),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<String>(
           value: validSubject,
           isExpanded: true,
-          items: subjects.map((s) => DropdownMenuItem(value: s.name, child: Text(s.name, overflow: TextOverflow.ellipsis))).toList(),
+          items: subjects
+              .map(
+                (s) => DropdownMenuItem(
+                  value: s.name,
+                  child: Text(s.name, overflow: TextOverflow.ellipsis),
+                ),
+              )
+              .toList(),
           onChanged: (v) {
             if (v != null) setState(() => _selectedSubject = v);
           },
@@ -723,7 +933,12 @@ class _AcademicSetupWizardScreenState extends State<AcademicSetupWizardScreen> {
     );
   }
 
-  Widget _buildWeightCard(String title, double weight, Color color, ThemeData theme) {
+  Widget _buildWeightCard(
+    String title,
+    double weight,
+    Color color,
+    ThemeData theme,
+  ) {
     return Expanded(
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
@@ -736,13 +951,21 @@ class _AcademicSetupWizardScreenState extends State<AcademicSetupWizardScreen> {
           children: [
             Text(
               '${weight.toStringAsFixed(0)}%',
-              style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: color),
+              style: TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.w900,
+                color: color,
+              ),
             ),
             const SizedBox(height: 4),
             Text(
               title,
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: theme.colorScheme.onSurface.withValues(alpha: 0.8)),
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
+              ),
             ),
           ],
         ),
@@ -757,12 +980,19 @@ class _AcademicSetupWizardScreenState extends State<AcademicSetupWizardScreen> {
       children: [
         Text(
           '3. Section Management',
-          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface),
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+            color: theme.colorScheme.onSurface,
+          ),
         ),
         const SizedBox(height: 6),
         Text(
           'Define the classrooms and class sections you handle for $_selectedSubject.',
-          style: TextStyle(fontSize: 14, color: theme.colorScheme.onSurface.withValues(alpha: 0.6)),
+          style: TextStyle(
+            fontSize: 14,
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+          ),
         ),
         const SizedBox(height: 24),
 
@@ -775,7 +1005,9 @@ class _AcademicSetupWizardScreenState extends State<AcademicSetupWizardScreen> {
                   hintText: 'e.g. $_selectedGradeLevel - Archimedes',
                   labelText: 'New Section Name',
                   prefixIcon: const Icon(LucideIcons.school),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                 ),
                 onSubmitted: (_) => _addSection(),
               ),
@@ -788,8 +1020,13 @@ class _AcademicSetupWizardScreenState extends State<AcademicSetupWizardScreen> {
               style: ElevatedButton.styleFrom(
                 backgroundColor: theme.colorScheme.primary,
                 foregroundColor: theme.colorScheme.onPrimary,
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 16,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
             ),
           ],
@@ -798,7 +1035,10 @@ class _AcademicSetupWizardScreenState extends State<AcademicSetupWizardScreen> {
 
         Text(
           'Current Sections Assigned (${_sections.length}):',
-          style: TextStyle(fontWeight: FontWeight.w700, color: theme.colorScheme.onSurface),
+          style: TextStyle(
+            fontWeight: FontWeight.w700,
+            color: theme.colorScheme.onSurface,
+          ),
         ),
         const SizedBox(height: 12),
 
@@ -807,8 +1047,15 @@ class _AcademicSetupWizardScreenState extends State<AcademicSetupWizardScreen> {
           runSpacing: 10,
           children: _sections.map((sec) {
             return Chip(
-              avatar: const Icon(LucideIcons.users, size: 16, color: AppTheme.catBlue),
-              label: Text(sec, style: const TextStyle(fontWeight: FontWeight.w600)),
+              avatar: const Icon(
+                LucideIcons.users,
+                size: 16,
+                color: AppTheme.catBlue,
+              ),
+              label: Text(
+                sec,
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
               deleteIcon: const Icon(Icons.close, size: 16),
               onDeleted: () => _removeSection(sec),
               backgroundColor: AppTheme.catBlue.withValues(alpha: 0.1),
@@ -834,11 +1081,18 @@ class _AcademicSetupWizardScreenState extends State<AcademicSetupWizardScreen> {
               children: [
                 Text(
                   '4. Review Academic Configuration',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface),
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: theme.colorScheme.onSurface,
+                  ),
                 ),
                 Text(
                   'Please confirm your setup before launching the Teacher Portal.',
-                  style: TextStyle(fontSize: 13, color: theme.colorScheme.onSurface.withValues(alpha: 0.6)),
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                  ),
                 ),
               ],
             ),
@@ -851,23 +1105,53 @@ class _AcademicSetupWizardScreenState extends State<AcademicSetupWizardScreen> {
           decoration: BoxDecoration(
             color: theme.colorScheme.surface,
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: theme.colorScheme.outline.withValues(alpha: 0.2)),
+            border: Border.all(
+              color: theme.colorScheme.outline.withValues(alpha: 0.2),
+            ),
           ),
           child: Column(
             children: [
-              _buildReviewRow('Academic School Year', _schoolYear, LucideIcons.calendar),
+              _buildReviewRow(
+                'Academic School Year',
+                _schoolYear,
+                LucideIcons.calendar,
+              ),
               const Divider(height: 24),
-              _buildReviewRow('Grading Calendar', _termStructure, LucideIcons.clock),
+              _buildReviewRow(
+                'Grading Calendar',
+                _termStructure,
+                LucideIcons.clock,
+              ),
               const Divider(height: 24),
-              _buildReviewRow('Grade Level', _selectedGradeLevel, LucideIcons.graduationCap),
+              _buildReviewRow(
+                'Grade Level',
+                _selectedGradeLevel,
+                LucideIcons.graduationCap,
+              ),
               const Divider(height: 24),
-              _buildReviewRow('Subject Category', _selectedCategory, LucideIcons.layers),
+              _buildReviewRow(
+                'Subject Category',
+                _selectedCategory,
+                LucideIcons.layers,
+              ),
               const Divider(height: 24),
-              _buildReviewRow('Assigned Subject', _selectedSubject, LucideIcons.bookOpen),
+              _buildReviewRow(
+                'Assigned Subject',
+                _selectedSubject,
+                LucideIcons.bookOpen,
+              ),
               const Divider(height: 24),
-              _buildReviewRow('Grading Weights', selectedWeightFormula, LucideIcons.percent),
+              _buildReviewRow(
+                'Grading Weights',
+                selectedWeightFormula,
+                LucideIcons.percent,
+              ),
               const Divider(height: 24),
-              _buildReviewRow('Managed Sections', _sections.join(', '), LucideIcons.users),
+              _buildReviewRow(
+                'Managed Sections',
+                _sections.join(', '),
+                LucideIcons.users,
+              ),
             ],
           ),
         ),
@@ -883,7 +1167,10 @@ class _AcademicSetupWizardScreenState extends State<AcademicSetupWizardScreen> {
         const SizedBox(width: 12),
         SizedBox(
           width: 180,
-          child: Text(title, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+          child: Text(
+            title,
+            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+          ),
         ),
         Expanded(
           child: Text(

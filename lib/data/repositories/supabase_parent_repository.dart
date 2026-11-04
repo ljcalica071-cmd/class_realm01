@@ -9,7 +9,6 @@ import 'package:class_realm/data/repositories/supabase_learning_material_reposit
 import 'package:class_realm/core/services/firebase_auth_admin_service.dart';
 import 'package:class_realm/core/services/app_data_cache.dart';
 
-
 class SupabaseParentRepository {
   final SupabaseClient _client;
 
@@ -40,11 +39,16 @@ class SupabaseParentRepository {
     bool includeArchived = false,
     void Function(List<UserModel> fresh)? onFreshData,
   }) async {
-    final cacheKey = 'teacher_parents_${teacherId}_${subjectId ?? "all"}_$includeArchived';
+    final cacheKey =
+        'teacher_parents_${teacherId}_${subjectId ?? "all"}_$includeArchived';
     return AppDataCache.instance.fetchWithSvr<List<UserModel>>(
       cacheKey: cacheKey,
       ttl: const Duration(minutes: 5),
-      fetcher: () => _fetchParentsFromNetwork(teacherId, subjectId: subjectId, includeArchived: includeArchived),
+      fetcher: () => _fetchParentsFromNetwork(
+        teacherId,
+        subjectId: subjectId,
+        includeArchived: includeArchived,
+      ),
       onUpdate: onFreshData,
     );
   }
@@ -184,8 +188,7 @@ class SupabaseParentRepository {
           parentGroupMap[parentId] = {
             'id': parentId,
             'username': username,
-            'email':
-                userInfo['email'] ?? 'parent_$parentId@classrealm.com',
+            'email': userInfo['email'] ?? 'parent_$parentId@classrealm.com',
             'fullName': fullName.isEmpty ? 'Parent / Guardian' : fullName,
             'firstName': profile['first_name']?.toString() ?? '',
             'middleName': profile['middle_name']?.toString(),
@@ -245,9 +248,7 @@ class SupabaseParentRepository {
 
       return results;
     } catch (e) {
-      debugPrint(
-        'Error fetching parents for teacher: $e',
-      );
+      debugPrint('Error fetching parents for teacher: $e');
       return [];
     }
   }
@@ -262,12 +263,11 @@ class SupabaseParentRepository {
     String? email,
     String? tempPassword,
   }) async {
-    final cleanMiddleName =
-        AppValidators.normalizeMiddleInitial(middleName);
+    final cleanMiddleName = AppValidators.normalizeMiddleInitial(middleName);
     // 1. Sibling Auto-Linking: Check if the exact same parent already exists in public.parent_profiles
     final bdayStr =
         '${birthday.year.toString().padLeft(4, '0')}-${birthday.month.toString().padLeft(2, '0')}-${birthday.day.toString().padLeft(2, '0')}';
-        
+
     final existingParents = await _client
         .from('parent_profiles')
         .select('parent_id, first_name, last_name, birthday')
@@ -295,14 +295,11 @@ class SupabaseParentRepository {
           .eq('id', existingParentId)
           .maybeSingle();
 
-      final existingEmail = userRow?['email']?.toString() ??
+      final existingEmail =
+          userRow?['email']?.toString() ??
           ParentCredentialHelper.generateEmail(lastName);
 
-      final fullName = [
-        firstName,
-        ?cleanMiddleName,
-        lastName,
-      ].join(' ');
+      final fullName = [firstName, ?cleanMiddleName, lastName].join(' ');
 
       return UserModel(
         id: existingParentId,
@@ -338,19 +335,23 @@ class SupabaseParentRepository {
 
     int collisionIndex = 1;
     while (takenEmails.contains(
-      ParentCredentialHelper.generateEmail(baseLastName, collisionIndex: collisionIndex).toLowerCase(),
+      ParentCredentialHelper.generateEmail(
+        baseLastName,
+        collisionIndex: collisionIndex,
+      ).toLowerCase(),
     )) {
       collisionIndex++;
     }
 
-    String finalEmail = ParentCredentialHelper.generateEmail(baseLastName, collisionIndex: collisionIndex);
-    final finalTempPassword = tempPassword ?? ParentCredentialHelper.generateTempPassword(baseLastName, birthday);
+    String finalEmail = ParentCredentialHelper.generateEmail(
+      baseLastName,
+      collisionIndex: collisionIndex,
+    );
+    final finalTempPassword =
+        tempPassword ??
+        ParentCredentialHelper.generateTempPassword(baseLastName, birthday);
 
-    final parentFullName = [
-      firstName,
-      ?cleanMiddleName,
-      lastName,
-    ].join(' ');
+    final parentFullName = [firstName, ?cleanMiddleName, lastName].join(' ');
 
     String parentId = 'prnt_${DateTime.now().millisecondsSinceEpoch}';
 
@@ -364,7 +365,9 @@ class SupabaseParentRepository {
         final fbUid = await FirebaseAuthAdminService.createUser(
           email: candidateEmail,
           password: finalTempPassword,
-          displayName: parentFullName.isNotEmpty ? parentFullName : 'Parent/Guardian',
+          displayName: parentFullName.isNotEmpty
+              ? parentFullName
+              : 'Parent/Guardian',
         );
         if (fbUid != null && fbUid.isNotEmpty) {
           parentId = fbUid;
@@ -376,7 +379,9 @@ class SupabaseParentRepository {
         }
       }
       if (!created) {
-        throw Exception('Failed to provision parent account in Firebase Authentication.');
+        throw Exception(
+          'Failed to provision parent account in Firebase Authentication.',
+        );
       }
     } catch (e) {
       debugPrint('Firebase parent auth creation error: $e');
@@ -413,11 +418,7 @@ class SupabaseParentRepository {
       }, onConflict: 'parent_id,student_id');
     }
 
-    final fullName = [
-      firstName,
-      ?cleanMiddleName,
-      lastName,
-    ].join(' ');
+    final fullName = [firstName, ?cleanMiddleName, lastName].join(' ');
 
     AppDataCache.instance.invalidatePrefix('teacher_parents_');
     return UserModel(
@@ -504,7 +505,9 @@ class SupabaseParentRepository {
                 last_name
               )
             ''')
-            .or('student_profiles.first_name.ilike.%$cleanQuery%,student_profiles.last_name.ilike.%$cleanQuery%,student_profiles.lrn.ilike.%$cleanQuery%')
+            .or(
+              'student_profiles.first_name.ilike.%$cleanQuery%,student_profiles.last_name.ilike.%$cleanQuery%,student_profiles.lrn.ilike.%$cleanQuery%',
+            )
             .limit(15);
 
         final missingParentIds = <String>[];
@@ -535,11 +538,9 @@ class SupabaseParentRepository {
             final u = p['users'] as Map<String, dynamic>? ?? {};
             if (u['is_archived'] == true) continue;
 
-            final fullName = [
-              p['first_name'],
-              p['middle_name'],
-              p['last_name'],
-            ].where((n) => n != null && n.toString().trim().isNotEmpty).join(' ');
+            final fullName = [p['first_name'], p['middle_name'], p['last_name']]
+                .where((n) => n != null && n.toString().trim().isNotEmpty)
+                .join(' ');
 
             parentMap[pid] = {
               'parentId': pid,
@@ -629,7 +630,7 @@ class SupabaseParentRepository {
   }) async {
     try {
       final bdayIso =
-        '${birthday.year}-${birthday.month.toString().padLeft(2, '0')}-${birthday.day.toString().padLeft(2, '0')}';
+          '${birthday.year}-${birthday.month.toString().padLeft(2, '0')}-${birthday.day.toString().padLeft(2, '0')}';
       final cleanLrn4 = childLrnLast4.trim();
       if (cleanLrn4.isEmpty) return false;
 
@@ -670,7 +671,9 @@ class SupabaseParentRepository {
         } else if (st is List && st.isNotEmpty) {
           lrnStr = (st.first as Map)['lrn']?.toString().trim();
         }
-        if (lrnStr != null && lrnStr.length >= 4 && lrnStr.endsWith(cleanLrn4)) {
+        if (lrnStr != null &&
+            lrnStr.length >= 4 &&
+            lrnStr.endsWith(cleanLrn4)) {
           matchedLrn = true;
           break;
         }
@@ -692,7 +695,8 @@ class SupabaseParentRepository {
     );
 
     // 1. Use secondary FirebaseApp instance to test if signInWithEmailAndPassword works
-    final secondaryAppName = 'TestReset_${DateTime.now().millisecondsSinceEpoch}';
+    final secondaryAppName =
+        'TestReset_${DateTime.now().millisecondsSinceEpoch}';
     FirebaseApp? secondaryApp;
     bool tempPasswordWorked = false;
 
@@ -747,13 +751,19 @@ class SupabaseParentRepository {
 
       int collisionIndex = 1;
       while (takenEmails.contains(
-        ParentCredentialHelper.generateEmail(baseLastName, collisionIndex: collisionIndex).toLowerCase(),
+        ParentCredentialHelper.generateEmail(
+          baseLastName,
+          collisionIndex: collisionIndex,
+        ).toLowerCase(),
       )) {
         collisionIndex++;
       }
 
       String newUid = 'prnt_${DateTime.now().millisecondsSinceEpoch}';
-      String newEmail = ParentCredentialHelper.generateEmail(baseLastName, collisionIndex: collisionIndex);
+      String newEmail = ParentCredentialHelper.generateEmail(
+        baseLastName,
+        collisionIndex: collisionIndex,
+      );
 
       try {
         bool created = false;
@@ -765,7 +775,9 @@ class SupabaseParentRepository {
           final fbUid = await FirebaseAuthAdminService.createUser(
             email: candidate,
             password: tempPassword,
-            displayName: parent.fullName.isNotEmpty ? parent.fullName : 'Parent/Guardian',
+            displayName: parent.fullName.isNotEmpty
+                ? parent.fullName
+                : 'Parent/Guardian',
           );
           if (fbUid != null && fbUid.isNotEmpty) {
             newUid = fbUid;
@@ -777,7 +789,9 @@ class SupabaseParentRepository {
           }
         }
         if (!created) {
-          throw Exception('Failed to provision reset credentials in Firebase Authentication.');
+          throw Exception(
+            'Failed to provision reset credentials in Firebase Authentication.',
+          );
         }
       } catch (e) {
         debugPrint('Firebase resetParentCredentials error: $e');
@@ -824,15 +838,24 @@ class SupabaseParentRepository {
           await _client.from('parent_student_links').insert({
             'parent_id': newUid,
             'student_id': link['student_id'],
-            'relationship': link['relationship'] ?? parent.parentGuardianRelationship ?? 'Parent/Guardian',
+            'relationship':
+                link['relationship'] ??
+                parent.parentGuardianRelationship ??
+                'Parent/Guardian',
           });
         }
       }
 
       // Cleanup old rows safely
       try {
-        await _client.from('parent_student_links').delete().eq('parent_id', parent.id);
-        await _client.from('parent_profiles').delete().eq('parent_id', parent.id);
+        await _client
+            .from('parent_student_links')
+            .delete()
+            .eq('parent_id', parent.id);
+        await _client
+            .from('parent_profiles')
+            .delete()
+            .eq('parent_id', parent.id);
         await _client.from('users').delete().eq('id', parent.id);
       } catch (e) {
         debugPrint('Cleanup old parent error: $e');
@@ -946,8 +969,7 @@ class SupabaseParentRepository {
     required String relationship,
     String? studentId,
   }) async {
-    final cleanMiddleName =
-        AppValidators.normalizeMiddleInitial(middleName);
+    final cleanMiddleName = AppValidators.normalizeMiddleInitial(middleName);
     await _client
         .from('parent_profiles')
         .update({
@@ -968,7 +990,11 @@ class SupabaseParentRepository {
     AppDataCache.instance.invalidatePrefix('teacher_parents_');
   }
 
-  Future<void> setArchived(String parentId, bool archived, {String? currentStatusHint}) async {
+  Future<void> setArchived(
+    String parentId,
+    bool archived, {
+    String? currentStatusHint,
+  }) async {
     await _client
         .from('users')
         .update({'is_archived': archived})
@@ -982,7 +1008,8 @@ class SupabaseParentRepository {
             .eq('parent_id', parentId)
             .maybeSingle();
         final currentStatus = cur?['status']?.toString();
-        final statusToSave = (currentStatus != null &&
+        final statusToSave =
+            (currentStatus != null &&
                 currentStatus.isNotEmpty &&
                 currentStatus != 'archived')
             ? currentStatus
@@ -990,10 +1017,7 @@ class SupabaseParentRepository {
 
         await _client
             .from('parent_profiles')
-            .update({
-              'previous_status': statusToSave,
-              'status': 'archived',
-            })
+            .update({'previous_status': statusToSave, 'status': 'archived'})
             .eq('parent_id', parentId);
       } else {
         final cur = await _client
@@ -1002,16 +1026,14 @@ class SupabaseParentRepository {
             .eq('parent_id', parentId)
             .maybeSingle();
         final prev = cur?['previous_status']?.toString();
-        final targetStatus = (prev != null && prev.isNotEmpty && prev != 'archived')
+        final targetStatus =
+            (prev != null && prev.isNotEmpty && prev != 'archived')
             ? prev
             : 'active';
 
         await _client
             .from('parent_profiles')
-            .update({
-              'status': targetStatus,
-              'previous_status': null,
-            })
+            .update({'status': targetStatus, 'previous_status': null})
             .eq('parent_id', parentId);
       }
     } catch (e) {

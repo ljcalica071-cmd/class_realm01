@@ -77,8 +77,9 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
           _termHeaderHorizontalController.offset !=
               _termBodyHorizontalController.offset) {
         _isSyncingTermScroll = true;
-        _termHeaderHorizontalController
-            .jumpTo(_termBodyHorizontalController.offset);
+        _termHeaderHorizontalController.jumpTo(
+          _termBodyHorizontalController.offset,
+        );
         _isSyncingTermScroll = false;
       }
     });
@@ -89,8 +90,9 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
           _termBodyHorizontalController.offset !=
               _termHeaderHorizontalController.offset) {
         _isSyncingTermScroll = true;
-        _termBodyHorizontalController
-            .jumpTo(_termHeaderHorizontalController.offset);
+        _termBodyHorizontalController.jumpTo(
+          _termHeaderHorizontalController.offset,
+        );
         _isSyncingTermScroll = false;
       }
     });
@@ -101,8 +103,9 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
           _finalHeaderHorizontalController.offset !=
               _finalBodyHorizontalController.offset) {
         _isSyncingFinalScroll = true;
-        _finalHeaderHorizontalController
-            .jumpTo(_finalBodyHorizontalController.offset);
+        _finalHeaderHorizontalController.jumpTo(
+          _finalBodyHorizontalController.offset,
+        );
         _isSyncingFinalScroll = false;
       }
     });
@@ -113,8 +116,9 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
           _finalBodyHorizontalController.offset !=
               _finalHeaderHorizontalController.offset) {
         _isSyncingFinalScroll = true;
-        _finalBodyHorizontalController
-            .jumpTo(_finalHeaderHorizontalController.offset);
+        _finalBodyHorizontalController.jumpTo(
+          _finalHeaderHorizontalController.offset,
+        );
         _isSyncingFinalScroll = false;
       }
     });
@@ -837,7 +841,9 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
           _buildTopControls(theme, isDark),
           const SizedBox(height: 16),
 
-          if (!_isLoadingSubjects && !_isLoadingStudents && (_teacherSubjects.isEmpty || _students.isEmpty)) ...[
+          if (!_isLoadingSubjects &&
+              !_isLoadingStudents &&
+              (_teacherSubjects.isEmpty || _students.isEmpty)) ...[
             _buildNoStudentsBanner(theme, isDark),
             const SizedBox(height: 12),
           ],
@@ -1303,8 +1309,6 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
     );
   }
 
-
-
   Widget _buildNoStudentsBanner(ThemeData theme, bool isDark) {
     final bg = isDark ? const Color(0xFF1E293B) : const Color(0xFFEFF6FF);
     final border = isDark
@@ -1362,10 +1366,7 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
         if (_studentLoadError != null)
           MaterialBanner(
             content: Text(_studentLoadError!),
-            leading: Icon(
-              Icons.people_outline,
-              color: theme.colorScheme.error,
-            ),
+            leading: Icon(Icons.people_outline, color: theme.colorScheme.error),
             actions: [
               TextButton(
                 onPressed: () {
@@ -1382,10 +1383,7 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
         if (_sheetLoadError != null)
           MaterialBanner(
             content: Text(_sheetLoadError!),
-            leading: Icon(
-              Icons.error_outline,
-              color: theme.colorScheme.error,
-            ),
+            leading: Icon(Icons.error_outline, color: theme.colorScheme.error),
             actions: [
               TextButton(
                 onPressed: () {
@@ -1403,17 +1401,10 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
           child: Container(
             decoration: BoxDecoration(
               color: cellBg,
-              border: Border(
-                bottom: BorderSide(
-                  color: borderColor,
-                  width: 2,
-                ),
-              ),
+              border: Border(bottom: BorderSide(color: borderColor, width: 2)),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withValues(
-                    alpha: isDark ? 0.3 : 0.08,
-                  ),
+                  color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.08),
                   blurRadius: 4,
                   offset: const Offset(0, 2),
                 ),
@@ -1423,7 +1414,7 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
               children: [
                 // Left fixed header (width 231.5 accommodates 1.5 border without child overflow)
                 Container(
-                  width: 231.5,
+                  width: 233.0,
                   decoration: BoxDecoration(
                     color: cellBg,
                     border: Border(
@@ -1530,7 +1521,7 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
                 // Left fixed student names (width 231.5 accommodates 1.5 border without child overflow)
                 RepaintBoundary(
                   child: Container(
-                    width: 231.5,
+                    width: 233.0,
                     decoration: BoxDecoration(
                       color: cellBg,
                       border: Border(
@@ -1543,7 +1534,8 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
                     child: Column(
                       children: [
                         Visibility(
-                          visible: _selectedGender == 'All' ||
+                          visible:
+                              _selectedGender == 'All' ||
                               _selectedGender == 'Male',
                           maintainState: true,
                           child: Column(
@@ -1571,7 +1563,8 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
                           ),
                         ),
                         Visibility(
-                          visible: _selectedGender == 'All' ||
+                          visible:
+                              _selectedGender == 'All' ||
                               _selectedGender == 'Female',
                           maintainState: true,
                           child: Column(
@@ -1621,7 +1614,8 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
                         child: Column(
                           children: [
                             Visibility(
-                              visible: _selectedGender == 'All' ||
+                              visible:
+                                  _selectedGender == 'All' ||
                                   _selectedGender == 'Male',
                               maintainState: true,
                               child: Column(
@@ -1649,7 +1643,8 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
                               ),
                             ),
                             Visibility(
-                              visible: _selectedGender == 'All' ||
+                              visible:
+                                  _selectedGender == 'All' ||
                                   _selectedGender == 'Female',
                               maintainState: true,
                               child: Column(
@@ -1737,34 +1732,33 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
           double width,
           double height, {
           Color? bg,
-        }) =>
-            Container(
-              width: width,
-              height: height,
-              alignment: Alignment.center,
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              decoration: BoxDecoration(
-                color: bg ?? headerBg,
-                border: Border(
-                  right: BorderSide(
-                    color: Colors.white.withValues(alpha: 0.2),
-                    width: 0.5,
-                  ),
-                ),
+        }) => Container(
+          width: width,
+          height: height,
+          alignment: Alignment.center,
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          decoration: BoxDecoration(
+            color: bg ?? headerBg,
+            border: Border(
+              right: BorderSide(
+                color: Colors.white.withValues(alpha: 0.2),
+                width: 0.5,
               ),
-              child: Text(
-                label,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                  letterSpacing: 0.4,
-                ),
-              ),
-            );
+            ),
+          ),
+          child: Text(
+            label,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+              letterSpacing: 0.4,
+            ),
+          ),
+        );
 
         Widget buildTwoTierHeader() => Container(
           height: 52,
@@ -1858,10 +1852,14 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
               child: Container(
                 decoration: BoxDecoration(
                   color: headerBg,
-                  border: Border(bottom: BorderSide(color: borderColor, width: 1.5)),
+                  border: Border(
+                    bottom: BorderSide(color: borderColor, width: 1.5),
+                  ),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.08),
+                      color: Colors.black.withValues(
+                        alpha: isDark ? 0.3 : 0.08,
+                      ),
                       blurRadius: 4,
                       offset: const Offset(0, 2),
                     ),
@@ -1895,7 +1893,8 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Visibility(
-                            visible: _selectedGender == 'All' ||
+                            visible:
+                                _selectedGender == 'All' ||
                                 _selectedGender == 'Male',
                             maintainState: true,
                             child: Column(
@@ -1904,7 +1903,11 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
                               children: [
                                 genderHeader('MALE (${_maleStudents.length})'),
                                 if (_maleStudents.isEmpty)
-                                  ..._buildFinalGradeEmptyRows(widths, borderColor, theme)
+                                  ..._buildFinalGradeEmptyRows(
+                                    widths,
+                                    borderColor,
+                                    theme,
+                                  )
                                 else
                                   ..._maleStudents.asMap().entries.map(
                                     (entry) => _buildFinalGradeStudentRow(
@@ -1919,16 +1922,23 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
                             ),
                           ),
                           Visibility(
-                            visible: _selectedGender == 'All' ||
+                            visible:
+                                _selectedGender == 'All' ||
                                 _selectedGender == 'Female',
                             maintainState: true,
                             child: Column(
                               mainAxisSize: MainAxisSize.min,
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                genderHeader('FEMALE (${_femaleStudents.length})'),
+                                genderHeader(
+                                  'FEMALE (${_femaleStudents.length})',
+                                ),
                                 if (_femaleStudents.isEmpty)
-                                  ..._buildFinalGradeEmptyRows(widths, borderColor, theme)
+                                  ..._buildFinalGradeEmptyRows(
+                                    widths,
+                                    borderColor,
+                                    theme,
+                                  )
                                 else
                                   ..._femaleStudents.asMap().entries.map(
                                     (entry) => _buildFinalGradeStudentRow(
@@ -1963,104 +1973,114 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
     ThemeData theme,
   ) {
     return RepaintBoundary(
-      key: ValueKey('rb-final-grade-row-${student.gender ?? "U"}-${student.id}-$rowNumber'),
+      key: ValueKey(
+        'rb-final-grade-row-${student.gender ?? "U"}-${student.id}-$rowNumber',
+      ),
       child: AnimatedBuilder(
-        key: ValueKey('final-grade-row-${student.gender ?? "U"}-${student.id}-$rowNumber'),
+        key: ValueKey(
+          'final-grade-row-${student.gender ?? "U"}-${student.id}-$rowNumber',
+        ),
         animation: Listenable.merge([_revisionFor(student.id), _hpsRevision]),
         builder: (context, _) {
-        final activeTermsList = _activeTerms.isEmpty ? const [1] : _activeTerms;
-        final termCount = activeTermsList.length;
-        final termGrades = {
-          for (final term in activeTermsList)
-            term: _termGrade(student.id, term),
-        };
-        final finalGrade = DepEdGradingEngine.computeFinalGrade(
-          termsTaught: _termsTaught,
-          activeTerms: activeTermsList,
-          termGrades: termGrades,
-          unitsPerTerm: _unitsPerTerm,
-          totalUnitsEarned: _unitsPerYear,
-        );
-        final values = <String>[
-          '$rowNumber',
-          student.lrn ?? '-',
-          _displayName(student),
-          for (final term in activeTermsList)
-            termGrades[term]?.toString() ?? '',
-          finalGrade?.toString() ?? '',
-          finalGrade == null
-              ? ''
-              : DepEdGradingEngine.getDescriptor(finalGrade),
-          finalGrade == null ? '' : DepEdGradingEngine.getRemarks(finalGrade),
-        ];
-        final isDark = theme.brightness == Brightness.dark;
-        final rowBackground = rowNumber.isOdd
-            ? (isDark
-                  ? theme.colorScheme.surfaceContainerHighest.withValues(
-                      alpha: 0.3,
-                    )
-                  : const Color(0xFFF8FAFC))
-            : theme.colorScheme.surface;
+          final activeTermsList = _activeTerms.isEmpty
+              ? const [1]
+              : _activeTerms;
+          final termCount = activeTermsList.length;
+          final termGrades = {
+            for (final term in activeTermsList)
+              term: _termGrade(student.id, term),
+          };
+          final finalGrade = DepEdGradingEngine.computeFinalGrade(
+            termsTaught: _termsTaught,
+            activeTerms: activeTermsList,
+            termGrades: termGrades,
+            unitsPerTerm: _unitsPerTerm,
+            totalUnitsEarned: _unitsPerYear,
+          );
+          final values = <String>[
+            '$rowNumber',
+            student.lrn ?? '-',
+            _displayName(student),
+            for (final term in activeTermsList)
+              termGrades[term]?.toString() ?? '',
+            finalGrade?.toString() ?? '',
+            finalGrade == null
+                ? ''
+                : DepEdGradingEngine.getDescriptor(finalGrade),
+            finalGrade == null ? '' : DepEdGradingEngine.getRemarks(finalGrade),
+          ];
+          final isDark = theme.brightness == Brightness.dark;
+          final rowBackground = rowNumber.isOdd
+              ? (isDark
+                    ? theme.colorScheme.surfaceContainerHighest.withValues(
+                        alpha: 0.3,
+                      )
+                    : const Color(0xFFF8FAFC))
+              : theme.colorScheme.surface;
 
-        final finalGradeIndex = 3 + termCount;
-        final remarkIndex = finalGradeIndex + 2;
+          final finalGradeIndex = 3 + termCount;
+          final remarkIndex = finalGradeIndex + 2;
 
-        return Container(
-          height: 38,
-          decoration: BoxDecoration(
-            color: rowBackground,
-            border: Border(bottom: BorderSide(color: borderColor, width: 0.5)),
-          ),
-          child: Row(
-            children: List.generate(values.length, (index) {
-              final isNum = index == 0;
-              final isLrn = index == 1;
-              final isName = index == 2;
-              final isFinalGrade = index == finalGradeIndex;
-              final isRemark = index == remarkIndex;
-              final textColor = theme.colorScheme.onSurface;
+          return Container(
+            height: 38,
+            decoration: BoxDecoration(
+              color: rowBackground,
+              border: Border(
+                bottom: BorderSide(color: borderColor, width: 0.5),
+              ),
+            ),
+            child: Row(
+              children: List.generate(values.length, (index) {
+                final isNum = index == 0;
+                final isLrn = index == 1;
+                final isName = index == 2;
+                final isFinalGrade = index == finalGradeIndex;
+                final isRemark = index == remarkIndex;
+                final textColor = theme.colorScheme.onSurface;
 
-              return Container(
-                width: widths[index],
-                alignment: isName ? Alignment.centerLeft : Alignment.center,
-                padding: EdgeInsets.symmetric(horizontal: isName ? 10 : 4),
-                decoration: BoxDecoration(
-                  border: Border(
-                    right: BorderSide(color: borderColor, width: 0.5),
+                return Container(
+                  width: widths[index],
+                  alignment: isName ? Alignment.centerLeft : Alignment.center,
+                  padding: EdgeInsets.symmetric(horizontal: isName ? 10 : 4),
+                  decoration: BoxDecoration(
+                    border: Border(
+                      right: BorderSide(color: borderColor, width: 0.5),
+                    ),
                   ),
-                ),
-                child: Text(
-                  values[index],
-                  style: TextStyle(
-                    fontSize: isName ? 11 : (isNum ? 10 : 11),
-                    fontWeight: isName
-                        ? FontWeight.w600
-                        : (isNum
-                            ? FontWeight.bold
-                            : ((isFinalGrade || isRemark)
+                  child: Text(
+                    values[index],
+                    style: TextStyle(
+                      fontSize: isName ? 11 : (isNum ? 10 : 11),
+                      fontWeight: isName
+                          ? FontWeight.w600
+                          : (isNum
                                 ? FontWeight.bold
-                                : (isLrn ? FontWeight.w500 : FontWeight.normal))),
-                    color: isNum
-                        ? textColor.withValues(alpha: 0.5)
-                        : (isRemark
-                            ? (finalGrade != null && finalGrade >= 75
-                                ? AppTheme.catGreen
-                                : (finalGrade != null
-                                    ? AppTheme.catRed
-                                    : textColor))
-                            : textColor),
+                                : ((isFinalGrade || isRemark)
+                                      ? FontWeight.bold
+                                      : (isLrn
+                                            ? FontWeight.w500
+                                            : FontWeight.normal))),
+                      color: isNum
+                          ? textColor.withValues(alpha: 0.5)
+                          : (isRemark
+                                ? (finalGrade != null && finalGrade >= 75
+                                      ? AppTheme.catGreen
+                                      : (finalGrade != null
+                                            ? AppTheme.catRed
+                                            : textColor))
+                                : textColor),
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: isName ? TextAlign.left : TextAlign.center,
                   ),
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: isName ? TextAlign.left : TextAlign.center,
-                ),
-              );
-            }),
-          ),
-        );
-      },
-    ),
-  );
-}
+                );
+              }),
+            ),
+          );
+        },
+      ),
+    );
+  }
 
   Widget _buildFinalGradeEmptyRow(
     int rowNumber,

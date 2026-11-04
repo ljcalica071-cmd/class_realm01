@@ -1,4 +1,5 @@
 import 'package:class_realm/core/services/app_data_cache.dart';
+
 import 'dart:async';
 import 'dart:convert';
 
@@ -38,11 +39,15 @@ class StudentDashboardRepository {
     if (!forceRefresh && authUser != null) {
       final cachedWeb = AppDataCache.instance.getCached<StudentDashboardData>(
         'student_dashboard_${authUser.uid}',
-        (json) => StudentDashboardData.fromJson(Map<String, dynamic>.from(json as Map)),
+        (json) => StudentDashboardData.fromJson(
+          Map<String, dynamic>.from(json as Map),
+        ),
       );
       if (cachedWeb != null) {
         _cachedDashboard = cachedWeb;
-        if (!AppDataCache.instance.isFresh('student_dashboard_${authUser.uid}')) {
+        if (!AppDataCache.instance.isFresh(
+          'student_dashboard_${authUser.uid}',
+        )) {
           unawaited(_fetchFromCloud());
         }
         return cachedWeb;
@@ -112,7 +117,9 @@ class StudentDashboardRepository {
             .ilike('status', 'enrolled');
         enrollmentRows = res as List? ?? [];
       } catch (e) {
-        debugPrint('Enrollments full query notice: $e. Retrying without teacher_profiles join...');
+        debugPrint(
+          'Enrollments full query notice: $e. Retrying without teacher_profiles join...',
+        );
         try {
           final res = await client
               .from('student_enrollments')
@@ -147,8 +154,8 @@ class StudentDashboardRepository {
         final prefix = (g == 'female' || g == 'f')
             ? "Ma'am "
             : (g == 'male' || g == 'm')
-                ? "Sir "
-                : "";
+            ? "Sir "
+            : "";
         final teacherName = rawTeacherName.isNotEmpty
             ? '$prefix$rawTeacherName'
             : '';
@@ -216,7 +223,9 @@ class StudentDashboardRepository {
             return {
               'id': m['id']?.toString() ?? '',
               'subject_offering_id': m['subject_offering_id']?.toString() ?? '',
-              'type': m['classwork_type']?.toString() ?? (m['grading_category'] == 'ex' ? 'exam' : 'activity'),
+              'type':
+                  m['classwork_type']?.toString() ??
+                  (m['grading_category'] == 'ex' ? 'exam' : 'activity'),
               'title': m['title']?.toString() ?? '',
               'description': m['description']?.toString(),
               'instructions': m['instructions']?.toString(),
@@ -278,7 +287,8 @@ class StudentDashboardRepository {
               final sec = off['sections'] as Map<String, dynamic>? ?? {};
               final aId = m['id']?.toString() ?? '';
               final attempt = attemptsByAssessmentId[aId];
-              final isSubmitted = attempt != null &&
+              final isSubmitted =
+                  attempt != null &&
                   (attempt['status'] == 'submitted' ||
                       attempt['status'] == 'auto_submitted');
 
@@ -318,11 +328,16 @@ class StudentDashboardRepository {
           'id': uid,
           'email': authUser.email ?? currentUser?.email ?? '',
           'lrn': p['lrn']?.toString() ?? currentUser?.lrn ?? '',
-          'first_name': p['first_name']?.toString() ?? currentUser?.firstName ?? '',
-          'middle_name': p['middle_name']?.toString() ?? currentUser?.middleName,
-          'last_name': p['last_name']?.toString() ?? currentUser?.lastName ?? '',
+          'first_name':
+              p['first_name']?.toString() ?? currentUser?.firstName ?? '',
+          'middle_name':
+              p['middle_name']?.toString() ?? currentUser?.middleName,
+          'last_name':
+              p['last_name']?.toString() ?? currentUser?.lastName ?? '',
           'gender': p['gender']?.toString() ?? currentUser?.gender,
-          'birthday': p['birthday']?.toString() ?? currentUser?.birthday?.toIso8601String(),
+          'birthday':
+              p['birthday']?.toString() ??
+              currentUser?.birthday?.toIso8601String(),
           'enrollments': enrollmentsList,
         },
         'classwork': classworkList,
@@ -336,10 +351,12 @@ class StudentDashboardRepository {
       } catch (_) {}
 
       _cachedDashboard = StudentDashboardData.fromJson(data);
-      unawaited(AppDataCache.instance.setCache(
-        'student_dashboard_${authUser.uid}',
-        data,
-      ));
+      unawaited(
+        AppDataCache.instance.setCache(
+          'student_dashboard_${authUser.uid}',
+          data,
+        ),
+      );
       return _cachedDashboard!;
     } catch (e) {
       debugPrint('Pure Dart student dashboard notice: $e');

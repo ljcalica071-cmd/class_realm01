@@ -1,6 +1,7 @@
 import 'package:class_realm/core/services/supabase_service.dart';
 import 'package:flutter/material.dart';
 import 'package:class_realm/core/theme/app_theme.dart';
+
 import '../models/student_live_proctor_state.dart';
 import '../services/teacher_proctor_channel_service.dart';
 import 'kick_student_alert_dialog.dart';
@@ -49,7 +50,9 @@ class _LiveProctorMonitorModalState extends State<LiveProctorMonitorModal> {
   @override
   void initState() {
     super.initState();
-    _channelService = TeacherProctorChannelService(assessmentId: widget.assessmentId);
+    _channelService = TeacherProctorChannelService(
+      assessmentId: widget.assessmentId,
+    );
     _initializeRoster();
   }
 
@@ -87,12 +90,16 @@ class _LiveProctorMonitorModalState extends State<LiveProctorMonitorModal> {
 
       for (final row in enrollData as List? ?? []) {
         final profile = row['student_profiles'] as Map<String, dynamic>? ?? {};
-        final sId = row['student_id']?.toString() ?? profile['student_id']?.toString() ?? '';
+        final sId =
+            row['student_id']?.toString() ??
+            profile['student_id']?.toString() ??
+            '';
         final firstName = profile['first_name']?.toString() ?? '';
         final lastName = profile['last_name']?.toString() ?? '';
         final name = [firstName, lastName].where((s) => s.isNotEmpty).join(' ');
         final lrn = profile['lrn']?.toString() ?? 'N/A';
-        final sec = profile['department_or_section']?.toString() ?? widget.section;
+        final sec =
+            profile['department_or_section']?.toString() ?? widget.section;
 
         if (sId.isNotEmpty) {
           learners.add({
@@ -139,10 +146,16 @@ class _LiveProctorMonitorModalState extends State<LiveProctorMonitorModal> {
       return s.studentName.toLowerCase().contains(q) || s.lrn.contains(q);
     }).toList();
 
-    final activeCount = _students.where((s) => s.status == ProctorSessionStatus.inProgress).length;
-    final submittedCount = _students.where((s) => s.status == ProctorSessionStatus.submitted).length;
+    final activeCount = _students
+        .where((s) => s.status == ProctorSessionStatus.inProgress)
+        .length;
+    final submittedCount = _students
+        .where((s) => s.status == ProctorSessionStatus.submitted)
+        .length;
     final flaggedCount = _students.where((s) => s.hasViolations).length;
-    final kickedCount = _students.where((s) => s.status == ProctorSessionStatus.kicked).length;
+    final kickedCount = _students
+        .where((s) => s.status == ProctorSessionStatus.kicked)
+        .length;
 
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -162,7 +175,11 @@ class _LiveProctorMonitorModalState extends State<LiveProctorMonitorModal> {
                     color: AppTheme.catPurple.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: const Icon(Icons.shield_outlined, color: AppTheme.catPurple, size: 28),
+                  child: const Icon(
+                    Icons.shield_outlined,
+                    color: AppTheme.catPurple,
+                    size: 28,
+                  ),
                 ),
                 const SizedBox(width: 14),
                 Expanded(
@@ -184,7 +201,10 @@ class _LiveProctorMonitorModalState extends State<LiveProctorMonitorModal> {
                           ),
                           const SizedBox(width: 8),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 2,
+                            ),
                             decoration: BoxDecoration(
                               color: AppTheme.catGreen.withValues(alpha: 0.15),
                               borderRadius: BorderRadius.circular(10),
@@ -219,7 +239,9 @@ class _LiveProctorMonitorModalState extends State<LiveProctorMonitorModal> {
                         'Section: ${widget.section.isEmpty ? "All Sections" : widget.section} • Real-time tab-switch & focus monitoring',
                         style: TextStyle(
                           fontSize: 12,
-                          color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                          color: theme.colorScheme.onSurface.withValues(
+                            alpha: 0.6,
+                          ),
                         ),
                       ),
                     ],
@@ -236,13 +258,29 @@ class _LiveProctorMonitorModalState extends State<LiveProctorMonitorModal> {
             // Summary Metric Badges
             Row(
               children: [
-                _buildSummaryBadge('Active Learners', '$activeCount', AppTheme.catBlue),
+                _buildSummaryBadge(
+                  'Active Learners',
+                  '$activeCount',
+                  AppTheme.catBlue,
+                ),
                 const SizedBox(width: 10),
-                _buildSummaryBadge('Completed', '$submittedCount', AppTheme.catGreen),
+                _buildSummaryBadge(
+                  'Completed',
+                  '$submittedCount',
+                  AppTheme.catGreen,
+                ),
                 const SizedBox(width: 10),
-                _buildSummaryBadge('Flagged / Violations', '$flaggedCount', AppTheme.catOrange),
+                _buildSummaryBadge(
+                  'Flagged / Violations',
+                  '$flaggedCount',
+                  AppTheme.catOrange,
+                ),
                 const SizedBox(width: 10),
-                _buildSummaryBadge('Kicked / Disqualified', '$kickedCount', AppTheme.catRed),
+                _buildSummaryBadge(
+                  'Kicked / Disqualified',
+                  '$kickedCount',
+                  AppTheme.catRed,
+                ),
               ],
             ),
             const SizedBox(height: 16),
@@ -271,7 +309,9 @@ class _LiveProctorMonitorModalState extends State<LiveProctorMonitorModal> {
                       child: Text(
                         'No learners found matching filter',
                         style: TextStyle(
-                          color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                          color: theme.colorScheme.onSurface.withValues(
+                            alpha: 0.5,
+                          ),
                         ),
                       ),
                     )
@@ -286,7 +326,10 @@ class _LiveProctorMonitorModalState extends State<LiveProctorMonitorModal> {
                               context: context,
                               studentName: student.studentName,
                               onConfirm: (reason) {
-                                _channelService.kickStudent(student.studentId, reason);
+                                _channelService.kickStudent(
+                                  student.studentId,
+                                  reason,
+                                );
                               },
                             );
                           },
@@ -295,7 +338,9 @@ class _LiveProctorMonitorModalState extends State<LiveProctorMonitorModal> {
                               context: context,
                               studentName: student.studentName,
                               onConfirm: () {
-                                _channelService.authorizeRetake(student.studentId);
+                                _channelService.authorizeRetake(
+                                  student.studentId,
+                                );
                               },
                             );
                           },

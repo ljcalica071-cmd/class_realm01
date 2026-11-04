@@ -93,14 +93,20 @@ class _KickStudentAlertDialogState extends State<KickStudentAlertDialog> {
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.warning_amber_rounded, color: AppTheme.catRed, size: 20),
+                  const Icon(
+                    Icons.warning_amber_rounded,
+                    color: AppTheme.catRed,
+                    size: 20,
+                  ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
                       'This will immediately lock the examination session and record a score of 0 for academic dishonesty.',
                       style: TextStyle(
                         fontSize: 12,
-                        color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.8,
+                        ),
                       ),
                     ),
                   ),
@@ -147,7 +153,9 @@ class _KickStudentAlertDialogState extends State<KickStudentAlertDialog> {
           onPressed: () {
             final reason = _reasonController.text.trim();
             Navigator.of(context).pop();
-            widget.onConfirm(reason.isEmpty ? 'Academic dishonesty violation' : reason);
+            widget.onConfirm(
+              reason.isEmpty ? 'Academic dishonesty violation' : reason,
+            );
           },
         ),
       ],

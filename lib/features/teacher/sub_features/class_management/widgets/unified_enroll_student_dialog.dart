@@ -317,14 +317,17 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
     if (_selectedGradeLevel != null && _selectedGradeLevel!.trim().isNotEmpty) {
       parts.add(_selectedGradeLevel!.trim());
     }
-    if (_selectedSubjectName != null && _selectedSubjectName!.trim().isNotEmpty) {
+    if (_selectedSubjectName != null &&
+        _selectedSubjectName!.trim().isNotEmpty) {
       parts.add(_selectedSubjectName!.trim());
     }
     final sec = _selectedSectionName;
     if (sec != null && sec.isNotEmpty) {
       parts.add(sec);
     }
-    return parts.isEmpty ? 'Target not selected' : 'Target: ${parts.join(" • ")}';
+    return parts.isEmpty
+        ? 'Target not selected'
+        : 'Target: ${parts.join(" • ")}';
   }
 
   @override
@@ -1904,11 +1907,16 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
                 const SizedBox(height: 6),
                 Container(
                   constraints: const BoxConstraints(maxHeight: 180),
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.red.withValues(alpha: 0.05),
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.red.withValues(alpha: 0.25)),
+                    border: Border.all(
+                      color: Colors.red.withValues(alpha: 0.25),
+                    ),
                   ),
                   child: Scrollbar(
                     thumbVisibility: true,
@@ -1955,7 +1963,9 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
                                   TextSpan(
                                     text: item.reason,
                                     style: TextStyle(
-                                      color: Theme.of(context).colorScheme.onSurface
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSurface
                                           .withValues(alpha: 0.85),
                                     ),
                                   ),
@@ -1968,54 +1978,54 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
                     ),
                   ),
                 ),
-              const SizedBox(height: 10),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 8,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.orange.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(
-                    color: Colors.orange.withValues(alpha: 0.25),
+                const SizedBox(height: 10),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 8,
                   ),
-                ),
-                child: const Row(
-                  children: [
-                    Icon(
-                      LucideIcons.alertCircle,
-                      size: 14,
-                      color: Colors.deepOrange,
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(
+                      color: Colors.orange.withValues(alpha: 0.25),
                     ),
-                    SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Strict Policy: All issues must be corrected in your spreadsheet before enrolling.',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.deepOrange,
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(
+                        LucideIcons.alertCircle,
+                        size: 14,
+                        color: Colors.deepOrange,
+                      ),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Strict Policy: All issues must be corrected in your spreadsheet before enrolling.',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.deepOrange,
+                          ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                'Please fix all ${_detectedInvalidRows.length} issue${_detectedInvalidRows.length > 1 ? "s" : ""} in your spreadsheet and upload again to proceed.',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Theme.of(context).colorScheme.onSurface
-                      .withValues(alpha: 0.8),
+                const SizedBox(height: 12),
+                Text(
+                  'Please fix all ${_detectedInvalidRows.length} issue${_detectedInvalidRows.length > 1 ? "s" : ""} in your spreadsheet and upload again to proceed.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Theme.of(context).colorScheme.onSurface
+                        .withValues(alpha: 0.8),
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
-      ),
-      actions: [
+        actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
             child: const Text('Close'),

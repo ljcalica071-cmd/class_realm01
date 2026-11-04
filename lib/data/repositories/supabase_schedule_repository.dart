@@ -14,11 +14,15 @@ class SupabaseScheduleRepository implements ScheduleRepository {
       SupabaseScheduleRepository();
 
   /// Fetch all sections (distinct sections extracted from subject_offerings for this teacher)
-  Future<List<Map<String, dynamic>>> getSections({int? gradeLevel, String? teacherId}) async {
+  Future<List<Map<String, dynamic>>> getSections({
+    int? gradeLevel,
+    String? teacherId,
+  }) async {
     // 1. Fast Drift SQLite check (0ms load)
     if (teacherId != null && teacherId.isNotEmpty) {
       try {
-        final localOfferings = await AppDatabase.instance.getOfferingsForTeacher(teacherId);
+        final localOfferings = await AppDatabase.instance
+            .getOfferingsForTeacher(teacherId);
         if (localOfferings.isNotEmpty) {
           final Map<String, Map<String, dynamic>> distinctSections = {};
           for (final row in localOfferings) {
@@ -36,7 +40,9 @@ class SupabaseScheduleRepository implements ScheduleRepository {
           }
           final list = distinctSections.values.toList();
           list.sort((a, b) {
-            final g = (a['grade_level'] as int).compareTo(b['grade_level'] as int);
+            final g = (a['grade_level'] as int).compareTo(
+              b['grade_level'] as int,
+            );
             if (g != 0) return g;
             return (a['name'] as String).compareTo(b['name'] as String);
           });
@@ -56,7 +62,7 @@ class SupabaseScheduleRepository implements ScheduleRepository {
       if (gradeLevel != null) {
         query = query.eq('sections.grade_level', gradeLevel);
       }
-      
+
       final response = await query;
       final Map<String, Map<String, dynamic>> distinctSections = {};
       for (final row in response) {
@@ -72,7 +78,7 @@ class SupabaseScheduleRepository implements ScheduleRepository {
           };
         }
       }
-      
+
       final list = distinctSections.values.toList();
       list.sort((a, b) {
         final g = (a['grade_level'] as int).compareTo(b['grade_level'] as int);
@@ -86,11 +92,15 @@ class SupabaseScheduleRepository implements ScheduleRepository {
   }
 
   /// Fetch all DepEd subjects for this teacher
-  Future<List<Map<String, dynamic>>> getSubjects({int? gradeLevel, String? teacherId}) async {
+  Future<List<Map<String, dynamic>>> getSubjects({
+    int? gradeLevel,
+    String? teacherId,
+  }) async {
     // 1. Fast Drift SQLite check (0ms load)
     if (teacherId != null && teacherId.isNotEmpty) {
       try {
-        final localOfferings = await AppDatabase.instance.getOfferingsForTeacher(teacherId);
+        final localOfferings = await AppDatabase.instance
+            .getOfferingsForTeacher(teacherId);
         if (localOfferings.isNotEmpty) {
           final results = <Map<String, dynamic>>[];
           for (final row in localOfferings) {
@@ -169,13 +179,14 @@ class SupabaseScheduleRepository implements ScheduleRepository {
       final list = <ScheduleModel>[];
 
       for (final row in response) {
-        final offering = row['subject_offerings'] as Map<String, dynamic>? ?? {};
+        final offering =
+            row['subject_offerings'] as Map<String, dynamic>? ?? {};
         final sub = offering['subjects'] as Map<String, dynamic>? ?? {};
         final sec = offering['sections'] as Map<String, dynamic>? ?? {};
 
         final subName = sub['subject_name']?.toString() ?? 'Subject';
         final secName = sec['section_name']?.toString() ?? 'Section';
-        
+
         if (section != null && section.isNotEmpty && secName != section) {
           continue;
         }
@@ -249,7 +260,8 @@ class SupabaseScheduleRepository implements ScheduleRepository {
 
       final teacherClashes = await teacherQuery;
       for (final clash in teacherClashes) {
-        final offering = clash['subject_offerings'] as Map<String, dynamic>? ?? {};
+        final offering =
+            clash['subject_offerings'] as Map<String, dynamic>? ?? {};
         final sub = offering['subjects'] as Map<String, dynamic>? ?? {};
         final sec = offering['sections'] as Map<String, dynamic>? ?? {};
         final subName = sub['subject_name'] ?? 'Class';
@@ -260,7 +272,9 @@ class SupabaseScheduleRepository implements ScheduleRepository {
       }
 
       // 2. Check Section Clash if offeringId or sectionId is provided
-      final targetOfferingId = (offeringId != null && offeringId.isNotEmpty) ? offeringId : sectionId;
+      final targetOfferingId = (offeringId != null && offeringId.isNotEmpty)
+          ? offeringId
+          : sectionId;
       if (targetOfferingId.isNotEmpty) {
         final offRes = await _client
             .from('subject_offerings')
@@ -290,7 +304,8 @@ class SupabaseScheduleRepository implements ScheduleRepository {
 
           final secClashes = await secQuery;
           for (final clash in secClashes) {
-            final offering = clash['subject_offerings'] as Map<String, dynamic>? ?? {};
+            final offering =
+                clash['subject_offerings'] as Map<String, dynamic>? ?? {};
             final sub = offering['subjects'] as Map<String, dynamic>? ?? {};
             final subName = sub['subject_name'] ?? 'Class';
             final st = ScheduleModel.formatTime24to12(clash['start_time']);
@@ -313,16 +328,14 @@ class SupabaseScheduleRepository implements ScheduleRepository {
     final startTime24 = ScheduleModel.formatTime12to24(schedule.startTime);
     final endTime24 = ScheduleModel.formatTime12to24(schedule.endTime);
 
-    await _client
-        .from('teacher_schedule')
-        .insert({
-          'subject_offering_id': schedule.subjectId,
-          'day_of_week': schedule.dayOfWeekIndex,
-          'start_time': startTime24,
-          'end_time': endTime24,
-          'room': schedule.room,
-          'is_active': true,
-        });
+    await _client.from('teacher_schedule').insert({
+      'subject_offering_id': schedule.subjectId,
+      'day_of_week': schedule.dayOfWeekIndex,
+      'start_time': startTime24,
+      'end_time': endTime24,
+      'room': schedule.room,
+      'is_active': true,
+    });
   }
 
   /// Update schedule in Supabase
@@ -342,7 +355,10 @@ class SupabaseScheduleRepository implements ScheduleRepository {
       updateData['subject_offering_id'] = schedule.subjectId;
     }
 
-    await _client.from('teacher_schedule').update(updateData).eq('id', schedule.id);
+    await _client
+        .from('teacher_schedule')
+        .update(updateData)
+        .eq('id', schedule.id);
   }
 
   /// Delete schedule from Supabase

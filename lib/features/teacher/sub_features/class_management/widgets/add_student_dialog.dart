@@ -327,7 +327,8 @@ class _AddStudentDialogState extends State<AddStudentDialog> {
                         firstDate: BirthdayValidator.getMinDate('student'),
                         lastDate: BirthdayValidator.getMaxDate('student'),
                         onDateSelected: (d) => setState(() => _birthday = d),
-                        validator: (d) => BirthdayValidator.validateBirthday(d, 'student'),
+                        validator: (d) =>
+                            BirthdayValidator.validateBirthday(d, 'student'),
                       ),
                     ),
                     const SizedBox(width: 12),

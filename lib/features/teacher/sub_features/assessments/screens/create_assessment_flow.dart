@@ -4,6 +4,7 @@
 // locking (ST1 -> ST2 -> TE), split-box Date/Time/Duration, and category-isolated Question Builder.
 
 import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -26,7 +27,8 @@ class QuestionDraft {
   final QuestionType type;
   String statement;
   List<String> choices; // 4 choices for multiple choice
-  String correctAnswer; // 'A'/'B'/'C'/'D', 'True'/'False', or identification text
+  String
+  correctAnswer; // 'A'/'B'/'C'/'D', 'True'/'False', or identification text
   double points;
 
   QuestionDraft({
@@ -42,7 +44,8 @@ class QuestionDraft {
     if (statement.trim().isEmpty) return false;
     if (points <= 0) return false;
     if (type == QuestionType.multipleChoice) {
-      if (choices.length < 4 || choices.any((c) => c.trim().isEmpty)) return false;
+      if (choices.length < 4 || choices.any((c) => c.trim().isEmpty))
+        return false;
       return correctAnswer.isNotEmpty;
     } else if (type == QuestionType.trueFalse) {
       return correctAnswer == 'True' || correctAnswer == 'False';
@@ -157,7 +160,8 @@ class _CreateAssessmentFlowDialogState
 
   bool get _isZeroExamSubject {
     if (_selectedOffering == null) return false;
-    final exWeight = (_selectedOffering!['ex_weight'] as num?)?.toDouble() ?? 30.0;
+    final exWeight =
+        (_selectedOffering!['ex_weight'] as num?)?.toDouble() ?? 30.0;
     return exWeight == 0.0;
   }
 
@@ -212,14 +216,17 @@ class _CreateAssessmentFlowDialogState
       return;
     }
     try {
-      final subjects = await SubjectRepository.instance.getTeacherSubjects(user.id);
+      final subjects = await SubjectRepository.instance.getTeacherSubjects(
+        user.id,
+      );
       if (!mounted) return;
 
       Map<String, dynamic>? initial;
       if (widget.initialSection.isNotEmpty) {
         initial = subjects.firstWhere(
           (s) => s['section_name']?.toString() == widget.initialSection,
-          orElse: () => subjects.isNotEmpty ? subjects.first : <String, dynamic>{},
+          orElse: () =>
+              subjects.isNotEmpty ? subjects.first : <String, dynamic>{},
         );
       } else if (subjects.isNotEmpty) {
         initial = subjects.first;
@@ -227,7 +234,9 @@ class _CreateAssessmentFlowDialogState
 
       setState(() {
         _teacherSubjects = subjects;
-        _selectedOffering = initial != null && initial.isNotEmpty ? initial : null;
+        _selectedOffering = initial != null && initial.isNotEmpty
+            ? initial
+            : null;
         _isLoadingOfferings = false;
       });
 
@@ -256,8 +265,13 @@ class _CreateAssessmentFlowDialogState
           .eq('is_archived', false);
 
       // 2. Check gradebook sheet HPS
-      final termSheet = await SubjectRepository.instance.getGradebookTermSheet(offeringId, 1);
-      final hps = termSheet != null ? (termSheet['hps'] as Map? ?? {})['ex'] as Map? ?? {} : {};
+      final termSheet = await SubjectRepository.instance.getGradebookTermSheet(
+        offeringId,
+        1,
+      );
+      final hps = termSheet != null
+          ? (termSheet['hps'] as Map? ?? {})['ex'] as Map? ?? {}
+          : {};
 
       bool hasSt1 = false;
       bool hasSt2 = false;
@@ -266,9 +280,15 @@ class _CreateAssessmentFlowDialogState
       for (final r in (items as List? ?? [])) {
         final col = r['gradebook_column_index'] as int?;
         final t = (r['title'] ?? '').toString().toUpperCase();
-        if (col == 1 || t.contains('ST1') || t.contains('SUMMATIVE TEST 1')) hasSt1 = true;
-        if (col == 2 || t.contains('ST2') || t.contains('SUMMATIVE TEST 2')) hasSt2 = true;
-        if (col == 3 || t.contains('TE') || t.contains('TERM EXAM') || t.contains('PERIODICAL')) hasTe = true;
+        if (col == 1 || t.contains('ST1') || t.contains('SUMMATIVE TEST 1'))
+          hasSt1 = true;
+        if (col == 2 || t.contains('ST2') || t.contains('SUMMATIVE TEST 2'))
+          hasSt2 = true;
+        if (col == 3 ||
+            t.contains('TE') ||
+            t.contains('TERM EXAM') ||
+            t.contains('PERIODICAL'))
+          hasTe = true;
       }
 
       if (hps['st1'] != null && (hps['st1'] as num) > 0) hasSt1 = true;
@@ -312,17 +332,21 @@ class _CreateAssessmentFlowDialogState
 
   Future<void> _pickDate() async {
     final now = DateTime.now();
-    final today = DateTime(now.year < 2026 ? 2026 : now.year, now.month, now.day);
-    final minDate = _completionMode == 'online'
-        ? today
-        : DateTime(2026, 1, 1);
+    final today = DateTime(
+      now.year < 2026 ? 2026 : now.year,
+      now.month,
+      now.day,
+    );
+    final minDate = _completionMode == 'online' ? today : DateTime(2026, 1, 1);
 
     final picked = await showAppDatePickerDialog(
       context,
       initialDate: _scheduledDate.isBefore(minDate) ? minDate : _scheduledDate,
       firstDate: minDate,
       lastDate: DateTime(2100),
-      title: _completionMode == 'online' ? 'Select Scheduled Date' : 'Select Administered Date',
+      title: _completionMode == 'online'
+          ? 'Select Scheduled Date'
+          : 'Select Administered Date',
       icon: Icons.calendar_today_outlined,
     );
 
@@ -346,8 +370,7 @@ class _CreateAssessmentFlowDialogState
       AppModals.showErrorDialog(
         context: context,
         title: 'Zero-Exam Subject',
-        message:
-            'This subject has no Examination component under DepEd Order No. 015, s. 2026. Initial Grades are computed 100% from Written Works and Performance Tasks.',
+        message: 'This subject has no Examination component under DepEd Order No. 015, s. 2026. Initial Grades are computed 100% from Written Works and Performance Tasks.',
       );
       return;
     }
@@ -396,26 +419,53 @@ class _CreateAssessmentFlowDialogState
     final total = mc + tf + id;
 
     if (total == 0) {
-      setState(() => _distributionError = 'Please configure at least 1 question.');
+      setState(
+        () => _distributionError = 'Please configure at least 1 question.',
+      );
       return;
     }
     if (total > 100) {
-      setState(() => _distributionError = 'Total questions cannot exceed 100 items ($total / 100).');
+      setState(
+        () => _distributionError =
+            'Total questions cannot exceed 100 items ($total / 100).',
+      );
       return;
     }
 
     if (_plannedQuestions.isNotEmpty) {
       // Logic for Back Button Adjustments
-      final existingMc = _plannedQuestions.where((q) => q.type == QuestionType.multipleChoice).toList();
-      final existingTf = _plannedQuestions.where((q) => q.type == QuestionType.trueFalse).toList();
-      final existingId = _plannedQuestions.where((q) => q.type == QuestionType.identification).toList();
+      final existingMc = _plannedQuestions
+          .where((q) => q.type == QuestionType.multipleChoice)
+          .toList();
+      final existingTf = _plannedQuestions
+          .where((q) => q.type == QuestionType.trueFalse)
+          .toList();
+      final existingId = _plannedQuestions
+          .where((q) => q.type == QuestionType.identification)
+          .toList();
 
-      if (mc < existingMc.length || tf < existingTf.length || id < existingId.length) {
+      if (mc < existingMc.length ||
+          tf < existingTf.length ||
+          id < existingId.length) {
         // Reduced count - needs confirmation modal
-        _showCountReductionWarning(mc, tf, id, existingMc, existingTf, existingId);
+        _showCountReductionWarning(
+          mc,
+          tf,
+          id,
+          existingMc,
+          existingTf,
+          existingId,
+        );
         return;
       } else {
-        _applyQuestionCountAdjustments(mc, tf, id, existingMc, existingTf, existingId);
+        _applyQuestionCountAdjustments(
+          mc,
+          tf,
+          id,
+          existingMc,
+          existingTf,
+          existingId,
+        );
         setState(() => _currentStep = 2);
         return;
       }
@@ -424,13 +474,17 @@ class _CreateAssessmentFlowDialogState
     final drafts = <QuestionDraft>[];
     int pos = 1;
     for (int i = 0; i < mc; i++) {
-      drafts.add(QuestionDraft(position: pos++, type: QuestionType.multipleChoice));
+      drafts.add(
+        QuestionDraft(position: pos++, type: QuestionType.multipleChoice),
+      );
     }
     for (int i = 0; i < tf; i++) {
       drafts.add(QuestionDraft(position: pos++, type: QuestionType.trueFalse));
     }
     for (int i = 0; i < id; i++) {
-      drafts.add(QuestionDraft(position: pos++, type: QuestionType.identification));
+      drafts.add(
+        QuestionDraft(position: pos++, type: QuestionType.identification),
+      );
     }
 
     setState(() {
@@ -443,9 +497,13 @@ class _CreateAssessmentFlowDialogState
   }
 
   void _applyQuestionCountAdjustments(
-      int targetMc, int targetTf, int targetId,
-      List<QuestionDraft> exMc, List<QuestionDraft> exTf, List<QuestionDraft> exId) {
-    
+    int targetMc,
+    int targetTf,
+    int targetId,
+    List<QuestionDraft> exMc,
+    List<QuestionDraft> exTf,
+    List<QuestionDraft> exId,
+  ) {
     // Create new list preserving order Part 1 -> Part 2 -> Part 3
     final newDrafts = <QuestionDraft>[];
     int pos = 1;
@@ -453,27 +511,58 @@ class _CreateAssessmentFlowDialogState
     // Multiple Choice
     for (int i = 0; i < targetMc; i++) {
       if (i < exMc.length) {
-        newDrafts.add(QuestionDraft(position: pos++, type: QuestionType.multipleChoice, statement: exMc[i].statement, choices: exMc[i].choices, correctAnswer: exMc[i].correctAnswer, points: exMc[i].points));
+        newDrafts.add(
+          QuestionDraft(
+            position: pos++,
+            type: QuestionType.multipleChoice,
+            statement: exMc[i].statement,
+            choices: exMc[i].choices,
+            correctAnswer: exMc[i].correctAnswer,
+            points: exMc[i].points,
+          ),
+        );
       } else {
-        newDrafts.add(QuestionDraft(position: pos++, type: QuestionType.multipleChoice));
+        newDrafts.add(
+          QuestionDraft(position: pos++, type: QuestionType.multipleChoice),
+        );
       }
     }
 
     // True/False
     for (int i = 0; i < targetTf; i++) {
       if (i < exTf.length) {
-        newDrafts.add(QuestionDraft(position: pos++, type: QuestionType.trueFalse, statement: exTf[i].statement, correctAnswer: exTf[i].correctAnswer, points: exTf[i].points));
+        newDrafts.add(
+          QuestionDraft(
+            position: pos++,
+            type: QuestionType.trueFalse,
+            statement: exTf[i].statement,
+            correctAnswer: exTf[i].correctAnswer,
+            points: exTf[i].points,
+          ),
+        );
       } else {
-        newDrafts.add(QuestionDraft(position: pos++, type: QuestionType.trueFalse));
+        newDrafts.add(
+          QuestionDraft(position: pos++, type: QuestionType.trueFalse),
+        );
       }
     }
 
     // Identification
     for (int i = 0; i < targetId; i++) {
       if (i < exId.length) {
-        newDrafts.add(QuestionDraft(position: pos++, type: QuestionType.identification, statement: exId[i].statement, correctAnswer: exId[i].correctAnswer, points: exId[i].points));
+        newDrafts.add(
+          QuestionDraft(
+            position: pos++,
+            type: QuestionType.identification,
+            statement: exId[i].statement,
+            correctAnswer: exId[i].correctAnswer,
+            points: exId[i].points,
+          ),
+        );
       } else {
-        newDrafts.add(QuestionDraft(position: pos++, type: QuestionType.identification));
+        newDrafts.add(
+          QuestionDraft(position: pos++, type: QuestionType.identification),
+        );
       }
     }
 
@@ -487,13 +576,17 @@ class _CreateAssessmentFlowDialogState
   }
 
   void _showCountReductionWarning(
-      int targetMc, int targetTf, int targetId,
-      List<QuestionDraft> exMc, List<QuestionDraft> exTf, List<QuestionDraft> exId) {
-    
+    int targetMc,
+    int targetTf,
+    int targetId,
+    List<QuestionDraft> exMc,
+    List<QuestionDraft> exTf,
+    List<QuestionDraft> exId,
+  ) {
     int reducedMc = exMc.length > targetMc ? exMc.length - targetMc : 0;
     int reducedTf = exTf.length > targetTf ? exTf.length - targetTf : 0;
     int reducedId = exId.length > targetId ? exId.length - targetId : 0;
-    
+
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -503,7 +596,7 @@ class _CreateAssessmentFlowDialogState
           '${reducedMc > 0 ? '$reducedMc MC, ' : ''}'
           '${reducedTf > 0 ? '$reducedTf TF, ' : ''}'
           '${reducedId > 0 ? '$reducedId ID ' : ''}'
-          'question(s) will be permanently deleted. Do you want to proceed?'
+          'question(s) will be permanently deleted. Do you want to proceed?',
         ),
         actions: [
           TextButton(
@@ -522,7 +615,14 @@ class _CreateAssessmentFlowDialogState
             label: 'Proceed',
             onPressed: () {
               Navigator.pop(ctx); // Close modal
-              _applyQuestionCountAdjustments(targetMc, targetTf, targetId, exMc, exTf, exId);
+              _applyQuestionCountAdjustments(
+                targetMc,
+                targetTf,
+                targetId,
+                exMc,
+                exTf,
+                exId,
+              );
               setState(() => _currentStep = 2);
             },
           ),
@@ -555,13 +655,17 @@ class _CreateAssessmentFlowDialogState
   }
 
   bool _saveCurrentEditorState() {
-    if (_activeQuestionIndex < 0 || _activeQuestionIndex >= _plannedQuestions.length) {
+    if (_activeQuestionIndex < 0 ||
+        _activeQuestionIndex >= _plannedQuestions.length) {
       return false;
     }
     final q = _plannedQuestions[_activeQuestionIndex];
     final statement = _qStatementCtrl.text.trim();
     if (statement.length < 2) {
-      setState(() => _editorError = 'Question statement must be at least 2 characters.');
+      setState(
+        () =>
+            _editorError = 'Question statement must be at least 2 characters.',
+      );
       return false;
     }
 
@@ -577,11 +681,15 @@ class _CreateAssessmentFlowDialogState
       final c = _choiceCCtrl.text.trim();
       final d = _choiceDCtrl.text.trim();
       if (a.length < 2 || b.length < 2 || c.length < 2 || d.length < 2) {
-        setState(() => _editorError = 'All 4 choices (A, B, C, D) are required (min 2 characters each).');
+        setState(
+          () => _editorError = 'All 4 choices (A, B, C, D) are required (min 2 characters each).',
+        );
         return false;
       }
       if (_selectedMcAnswer == null || _selectedMcAnswer!.isEmpty) {
-        setState(() => _editorError = 'Please select the correct answer radio.');
+        setState(
+          () => _editorError = 'Please select the correct answer radio.',
+        );
         return false;
       }
       q.statement = statement;
@@ -590,7 +698,9 @@ class _CreateAssessmentFlowDialogState
       q.correctAnswer = _selectedMcAnswer!;
     } else if (q.type == QuestionType.trueFalse) {
       if (_selectedTfAnswer == null || _selectedTfAnswer!.isEmpty) {
-        setState(() => _editorError = 'Please select True or False as the answer key.');
+        setState(
+          () => _editorError = 'Please select True or False as the answer key.',
+        );
         return false;
       }
       q.statement = statement;
@@ -600,7 +710,9 @@ class _CreateAssessmentFlowDialogState
     } else if (q.type == QuestionType.identification) {
       final key = _qIdAnswerCtrl.text.trim();
       if (key.length < 2) {
-        setState(() => _editorError = 'Please specify the official answer key for identification (min 2 characters).');
+        setState(
+          () => _editorError = 'Please specify the official answer key for identification (min 2 characters).',
+        );
         return false;
       }
       q.statement = statement;
@@ -620,14 +732,18 @@ class _CreateAssessmentFlowDialogState
         'offeringId': offeringId,
         'slot': _examCategory,
         'instructions': _instructionsCtrl.text,
-        'questions': _plannedQuestions.map((q) => {
-          'position': q.position,
-          'type': q.type.name,
-          'statement': q.statement,
-          'choices': q.choices,
-          'correctAnswer': q.correctAnswer,
-          'points': q.points,
-        }).toList(),
+        'questions': _plannedQuestions
+            .map(
+              (q) => {
+                'position': q.position,
+                'type': q.type.name,
+                'statement': q.statement,
+                'choices': q.choices,
+                'correctAnswer': q.correctAnswer,
+                'points': q.points,
+              },
+            )
+            .toList(),
       };
       AppDataCache.instance.set(
         'exam_draft_${offeringId}_$_examCategory',
@@ -668,13 +784,22 @@ class _CreateAssessmentFlowDialogState
       });
 
       // 2. Synchronize Gradebook Term Sheet HPS
-      final termSheet = await SubjectRepository.instance.getGradebookTermSheet(offeringId, 1) ?? {};
+      final termSheet =
+          await SubjectRepository.instance.getGradebookTermSheet(
+            offeringId,
+            1,
+          ) ??
+          {};
       final hps = Map<String, dynamic>.from(termSheet['hps'] as Map? ?? {});
       final exHps = Map<String, dynamic>.from(hps['ex'] as Map? ?? {});
       exHps[_examCategory.toLowerCase()] = hpsPoints;
       hps['ex'] = exHps;
       termSheet['hps'] = hps;
-      await SubjectRepository.instance.saveGradebookTermSheet(offeringId, 1, termSheet);
+      await SubjectRepository.instance.saveGradebookTermSheet(
+        offeringId,
+        1,
+        termSheet,
+      );
 
       AppDataCache.instance.invalidatePrefix('teacher_activities_');
       AppDataCache.instance.invalidatePrefix('student_dashboard_');
@@ -686,7 +811,8 @@ class _CreateAssessmentFlowDialogState
       AppModals.showSuccessDialog(
         context: context,
         title: 'Examination Recorded',
-        message: '$title has been saved in Gradebook as an In-Person examination with $hpsPoints total points.',
+        message:
+            '$title has been saved in Gradebook as an In-Person examination with $hpsPoints total points.',
       );
     } catch (e) {
       if (mounted) {
@@ -708,7 +834,8 @@ class _CreateAssessmentFlowDialogState
       AppModals.showErrorDialog(
         context: context,
         title: 'Incomplete Questions',
-        message: 'Question #${incomplete.first.position} is missing its statement or answer key. Please review all items.',
+        message:
+            'Question #${incomplete.first.position} is missing its statement or answer key. Please review all items.',
       );
       _loadQuestionIntoEditor(incomplete.first.position - 1);
       return;
@@ -739,7 +866,10 @@ class _CreateAssessmentFlowDialogState
         _ => 1,
       };
 
-      final totalPoints = _plannedQuestions.fold<double>(0.0, (sum, q) => sum + q.points);
+      final totalPoints = _plannedQuestions.fold<double>(
+        0.0,
+        (sum, q) => sum + q.points,
+      );
 
       // 1. Create digital_assessments record
       final assessmentRow = await client
@@ -839,16 +969,27 @@ class _CreateAssessmentFlowDialogState
       });
 
       // 4. Update Gradebook Sheet HPS
-      final termSheet = await SubjectRepository.instance.getGradebookTermSheet(offeringId, 1) ?? {};
+      final termSheet =
+          await SubjectRepository.instance.getGradebookTermSheet(
+            offeringId,
+            1,
+          ) ??
+          {};
       final hps = Map<String, dynamic>.from(termSheet['hps'] as Map? ?? {});
       final exHps = Map<String, dynamic>.from(hps['ex'] as Map? ?? {});
       exHps[_examCategory.toLowerCase()] = totalPoints.toInt();
       hps['ex'] = exHps;
       termSheet['hps'] = hps;
-      await SubjectRepository.instance.saveGradebookTermSheet(offeringId, 1, termSheet);
+      await SubjectRepository.instance.saveGradebookTermSheet(
+        offeringId,
+        1,
+        termSheet,
+      );
 
       // Clean local draft
-      AppDataCache.instance.invalidate('exam_draft_${offeringId}_$_examCategory');
+      AppDataCache.instance.invalidate(
+        'exam_draft_${offeringId}_$_examCategory',
+      );
       AppDataCache.instance.invalidatePrefix('teacher_activities_');
       AppDataCache.instance.invalidatePrefix('student_dashboard_');
 
@@ -859,7 +1000,8 @@ class _CreateAssessmentFlowDialogState
       AppModals.showSuccessDialog(
         context: context,
         title: 'Examination Published',
-        message: '$title has been published for ${_selectedOffering!['section_name']}. Scheduled for ${_formatDate(_scheduledDate)} at ${AppTimePickerField.format(_startTime)} (${duration}m duration).',
+        message:
+            '$title has been published for ${_selectedOffering!['section_name']}. Scheduled for ${_formatDate(_scheduledDate)} at ${AppTimePickerField.format(_startTime)} (${duration}m duration).',
       );
     } catch (e) {
       if (mounted) {
@@ -893,7 +1035,8 @@ class _CreateAssessmentFlowDialogState
         builder: (ctx) => AlertDialog(
           title: const Text('Discard Assessment?'),
           content: const Text(
-              'You have unsaved changes. Are you sure you want to close this? Your progress will be lost.'),
+            'You have unsaved changes. Are you sure you want to close this? Your progress will be lost.',
+          ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx),
@@ -902,7 +1045,9 @@ class _CreateAssessmentFlowDialogState
             AppPrimaryButton(
               label: 'Discard',
               icon: Icons.delete_outline,
-              backgroundColor: const Color(0xFFDC2626), // Keep discard action red
+              backgroundColor: const Color(
+                0xFFDC2626,
+              ), // Keep discard action red
               onPressed: () {
                 Navigator.pop(ctx);
                 Navigator.of(context).pop();
@@ -917,7 +1062,8 @@ class _CreateAssessmentFlowDialogState
   }
 
   void _openAiGeneration() {
-    final subName = _selectedOffering?['subject_name']?.toString() ?? 'General Subject';
+    final subName =
+        _selectedOffering?['subject_name']?.toString() ?? 'General Subject';
     AiGenerationModal.show(
       context,
       isExam: true,
@@ -926,14 +1072,16 @@ class _CreateAssessmentFlowDialogState
         final drafts = <QuestionDraft>[];
         int pos = 1;
         for (final q in generated) {
-          drafts.add(QuestionDraft(
-            position: pos++,
-            type: q.type,
-            statement: q.questionText,
-            choices: List.from(q.choices),
-            correctAnswer: q.correctAnswer,
-            points: q.points,
-          ));
+          drafts.add(
+            QuestionDraft(
+              position: pos++,
+              type: q.type,
+              statement: q.questionText,
+              choices: List.from(q.choices),
+              correctAnswer: q.correctAnswer,
+              points: q.points,
+            ),
+          );
         }
         setState(() {
           _plannedQuestions = drafts;
@@ -944,7 +1092,8 @@ class _CreateAssessmentFlowDialogState
         AppModals.showSuccessDialog(
           context: context,
           title: 'Questions Generated with Gemini AI',
-          message: '${drafts.length} questions were generated. You can now navigate the items, verify answer keys, and adjust points before publishing.',
+          message:
+              '${drafts.length} questions were generated. You can now navigate the items, verify answer keys, and adjust points before publishing.',
         );
       },
     );
@@ -960,7 +1109,7 @@ class _CreateAssessmentFlowDialogState
 
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      backgroundColor: Colors.white,
+      backgroundColor: theme.colorScheme.surface,
       insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
       child: Container(
         width: 820,
@@ -971,7 +1120,11 @@ class _CreateAssessmentFlowDialogState
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
               decoration: BoxDecoration(
-                border: Border(bottom: BorderSide(color: theme.colorScheme.onSurface.withValues(alpha: 0.12))),
+                border: Border(
+                  bottom: BorderSide(
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.12),
+                  ),
+                ),
               ),
               child: Row(
                 children: [
@@ -981,7 +1134,11 @@ class _CreateAssessmentFlowDialogState
                       color: AppTheme.catRed.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: const Icon(Icons.description_outlined, color: AppTheme.catRed, size: 22),
+                    child: const Icon(
+                      Icons.description_outlined,
+                      color: AppTheme.catRed,
+                      size: 22,
+                    ),
                   ),
                   const SizedBox(width: 14),
                   Expanded(
@@ -990,7 +1147,10 @@ class _CreateAssessmentFlowDialogState
                       children: [
                         const Text(
                           'Configure Periodical Examination',
-                          style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+                          style: TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                         Text(
                           _currentStep == 1
@@ -998,14 +1158,19 @@ class _CreateAssessmentFlowDialogState
                               : 'Question Builder — Author statements and mandatory answer keys',
                           style: TextStyle(
                             fontSize: 12,
-                            color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                            color: theme.colorScheme.onSurface.withValues(
+                              alpha: 0.6,
+                            ),
                           ),
                         ),
                       ],
                     ),
                   ),
                   IconButton(
-                    icon: Icon(Icons.close, color: theme.colorScheme.onSurface.withValues(alpha: 0.6)),
+                    icon: Icon(
+                      Icons.close,
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                    ),
                     onPressed: _handleClose,
                   ),
                 ],
@@ -1024,7 +1189,11 @@ class _CreateAssessmentFlowDialogState
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
               decoration: BoxDecoration(
                 color: const Color(0xFFF8FAFC),
-                border: Border(top: BorderSide(color: theme.colorScheme.onSurface.withValues(alpha: 0.12))),
+                border: Border(
+                  top: BorderSide(
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.12),
+                  ),
+                ),
                 borderRadius: const BorderRadius.only(
                   bottomLeft: Radius.circular(20),
                   bottomRight: Radius.circular(20),
@@ -1048,7 +1217,9 @@ class _CreateAssessmentFlowDialogState
                         child: Text(
                           'Cancel',
                           style: TextStyle(
-                            color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                            color: theme.colorScheme.onSurface.withValues(
+                              alpha: 0.6,
+                            ),
                             fontWeight: FontWeight.w600,
                           ),
                         ),
@@ -1057,14 +1228,22 @@ class _CreateAssessmentFlowDialogState
                       if (_currentStep == 1)
                         AppPrimaryButton(
                           label: _completionMode == 'in_person'
-                              ? (_isPublishing ? 'Publishing...' : 'Publish Examination')
+                              ? (_isPublishing
+                                    ? 'Publishing...'
+                                    : 'Publish Examination')
                               : 'Continue',
                           icon: _completionMode == 'in_person'
                               ? Icons.publish
                               : Icons.arrow_forward,
                           height: 42,
-                          backgroundColor: theme.colorScheme.primary, // 30% Primary
-                          onPressed: (_areAllSlotsFilled || _isPublishing || (_completionMode == 'online' && (_totalPlannedQuestions == 0 || _totalPlannedQuestions > 100)))
+                          backgroundColor:
+                              theme.colorScheme.primary, // 30% Primary
+                          onPressed:
+                              (_areAllSlotsFilled ||
+                                  _isPublishing ||
+                                  (_completionMode == 'online' &&
+                                      (_totalPlannedQuestions == 0 ||
+                                          _totalPlannedQuestions > 100)))
                               ? null
                               : _handleContinueOrPublish,
                         ),
@@ -1075,7 +1254,8 @@ class _CreateAssessmentFlowDialogState
                               : 'Save & Publish Examination',
                           icon: Icons.check_circle_outline,
                           height: 42,
-                          backgroundColor: theme.colorScheme.primary, // 30% Primary
+                          backgroundColor:
+                              theme.colorScheme.primary, // 30% Primary
                           onPressed: _isPublishing ? null : _publishOnlineExam,
                         ),
                     ],
@@ -1112,7 +1292,9 @@ class _CreateAssessmentFlowDialogState
                 ],
               ),
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: AppTheme.catPurple.withValues(alpha: 0.28)),
+              border: Border.all(
+                color: AppTheme.catPurple.withValues(alpha: 0.28),
+              ),
             ),
             child: Row(
               children: [
@@ -1122,7 +1304,11 @@ class _CreateAssessmentFlowDialogState
                     color: AppTheme.catPurple.withValues(alpha: 0.15),
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(Icons.auto_awesome, color: AppTheme.catPurple, size: 20),
+                  child: const Icon(
+                    Icons.auto_awesome,
+                    color: AppTheme.catPurple,
+                    size: 20,
+                  ),
                 ),
                 const SizedBox(width: 14),
                 Expanded(
@@ -1133,18 +1319,28 @@ class _CreateAssessmentFlowDialogState
                         children: [
                           const Text(
                             'Generate Examination with Gemini AI',
-                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                            ),
                           ),
                           const SizedBox(width: 8),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
                             decoration: BoxDecoration(
                               color: AppTheme.catPurple.withValues(alpha: 0.15),
                               borderRadius: BorderRadius.circular(6),
                             ),
                             child: const Text(
                               'AI POWERED',
-                              style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: AppTheme.catPurple),
+                              style: TextStyle(
+                                fontSize: 9,
+                                fontWeight: FontWeight.bold,
+                                color: AppTheme.catPurple,
+                              ),
                             ),
                           ),
                         ],
@@ -1154,7 +1350,9 @@ class _CreateAssessmentFlowDialogState
                         'Upload syllabus files (.pdf, .docx) to auto-generate questions and answer keys.',
                         style: TextStyle(
                           fontSize: 11,
-                          color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                          color: theme.colorScheme.onSurface.withValues(
+                            alpha: 0.7,
+                          ),
                         ),
                       ),
                     ],
@@ -1168,8 +1366,13 @@ class _CreateAssessmentFlowDialogState
                     backgroundColor: AppTheme.catPurple,
                     foregroundColor: Colors.white,
                     elevation: 0,
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 10,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
                   ),
                   onPressed: _openAiGeneration,
                 ),
@@ -1181,7 +1384,9 @@ class _CreateAssessmentFlowDialogState
           Container(
             padding: const EdgeInsets.all(4),
             decoration: BoxDecoration(
-              color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
+              color: theme.colorScheme.surfaceContainerHighest.withValues(
+                alpha: 0.4,
+              ),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Row(
@@ -1192,7 +1397,9 @@ class _CreateAssessmentFlowDialogState
                     child: Container(
                       padding: const EdgeInsets.symmetric(vertical: 10),
                       decoration: BoxDecoration(
-                        color: _completionMode == 'online' ? Colors.white : Colors.transparent,
+                        color: _completionMode == 'online'
+                            ? Colors.white
+                            : Colors.transparent,
                         borderRadius: BorderRadius.circular(8),
                         boxShadow: _completionMode == 'online'
                             ? [
@@ -1210,15 +1417,21 @@ class _CreateAssessmentFlowDialogState
                           Icon(
                             Icons.laptop_chromebook,
                             size: 16,
-                            color: _completionMode == 'online' ? const Color(0xFF0F8A48) : Colors.grey,
+                            color: _completionMode == 'online'
+                                ? const Color(0xFF0F8A48)
+                                : Colors.grey,
                           ),
                           const SizedBox(width: 6),
                           Text(
                             'Online (Take via App)',
                             style: TextStyle(
                               fontSize: 13,
-                              fontWeight: _completionMode == 'online' ? FontWeight.w700 : FontWeight.w500,
-                              color: _completionMode == 'online' ? const Color(0xFF0F8A48) : Colors.grey.shade600,
+                              fontWeight: _completionMode == 'online'
+                                  ? FontWeight.w700
+                                  : FontWeight.w500,
+                              color: _completionMode == 'online'
+                                  ? const Color(0xFF0F8A48)
+                                  : Colors.grey.shade600,
                             ),
                           ),
                         ],
@@ -1232,7 +1445,9 @@ class _CreateAssessmentFlowDialogState
                     child: Container(
                       padding: const EdgeInsets.symmetric(vertical: 10),
                       decoration: BoxDecoration(
-                        color: _completionMode == 'in_person' ? Colors.white : Colors.transparent,
+                        color: _completionMode == 'in_person'
+                            ? Colors.white
+                            : Colors.transparent,
                         borderRadius: BorderRadius.circular(8),
                         boxShadow: _completionMode == 'in_person'
                             ? [
@@ -1250,15 +1465,21 @@ class _CreateAssessmentFlowDialogState
                           Icon(
                             Icons.people_alt_outlined,
                             size: 16,
-                            color: _completionMode == 'in_person' ? const Color(0xFF0F8A48) : Colors.grey,
+                            color: _completionMode == 'in_person'
+                                ? const Color(0xFF0F8A48)
+                                : Colors.grey,
                           ),
                           const SizedBox(width: 6),
                           Text(
                             'In-Person (Manual Record)',
                             style: TextStyle(
                               fontSize: 13,
-                              fontWeight: _completionMode == 'in_person' ? FontWeight.w700 : FontWeight.w500,
-                              color: _completionMode == 'in_person' ? const Color(0xFF0F8A48) : Colors.grey.shade600,
+                              fontWeight: _completionMode == 'in_person'
+                                  ? FontWeight.w700
+                                  : FontWeight.w500,
+                              color: _completionMode == 'in_person'
+                                  ? const Color(0xFF0F8A48)
+                                  : Colors.grey.shade600,
                             ),
                           ),
                         ],
@@ -1273,21 +1494,34 @@ class _CreateAssessmentFlowDialogState
 
           // 2. Target Section Chip
           if (_isLoadingOfferings)
-            const Center(child: Padding(padding: EdgeInsets.all(12), child: CircularProgressIndicator()))
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.all(12),
+                child: CircularProgressIndicator(),
+              ),
+            )
           else if (_selectedOffering != null)
             _teacherSubjects.length > 1
                 ? Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
                       color: const Color(0xFFE8F5E9),
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: const Color(0xFF0F8A48).withValues(alpha: 0.2)),
+                      border: Border.all(
+                        color: const Color(0xFF0F8A48).withValues(alpha: 0.2),
+                      ),
                     ),
                     child: DropdownButtonHideUnderline(
                       child: DropdownButton<Map<String, dynamic>>(
                         value: _selectedOffering,
                         isExpanded: true,
-                        icon: const Icon(Icons.arrow_drop_down, color: Color(0xFF0F8A48)),
+                        icon: const Icon(
+                          Icons.arrow_drop_down,
+                          color: Color(0xFF0F8A48),
+                        ),
                         items: _teacherSubjects.map((s) {
                           return DropdownMenuItem<Map<String, dynamic>>(
                             value: s,
@@ -1315,11 +1549,16 @@ class _CreateAssessmentFlowDialogState
                   )
                 : Container(
                     width: double.infinity,
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 10,
+                    ),
                     decoration: BoxDecoration(
                       color: const Color(0xFFE8F5E9),
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: const Color(0xFF0F8A48).withValues(alpha: 0.2)),
+                      border: Border.all(
+                        color: const Color(0xFF0F8A48).withValues(alpha: 0.2),
+                      ),
                     ),
                     alignment: Alignment.center,
                     child: Text(
@@ -1395,12 +1634,19 @@ class _CreateAssessmentFlowDialogState
               ),
               child: Row(
                 children: [
-                  Icon(Icons.info_outline, size: 16, color: Colors.amber.shade800),
+                  Icon(
+                    Icons.info_outline,
+                    size: 16,
+                    color: Colors.amber.shade800,
+                  ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       'All examination slots (ST1, ST2, TE) are already configured for this offering.',
-                      style: TextStyle(fontSize: 12, color: Colors.amber.shade900),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.amber.shade900,
+                      ),
                     ),
                   ),
                 ],
@@ -1422,30 +1668,46 @@ class _CreateAssessmentFlowDialogState
                     children: [
                       Text(
                         'Scheduled Date *',
-                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: theme.colorScheme.onSurface),
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: theme.colorScheme.onSurface,
+                        ),
                       ),
                       const SizedBox(height: 6),
                       InkWell(
                         onTap: _pickDate,
                         borderRadius: BorderRadius.circular(10),
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 12,
+                          ),
                           decoration: BoxDecoration(
                             border: Border.all(
                               color: _dateError != null
                                   ? const Color(0xFFDC2626)
-                                  : theme.colorScheme.outline.withValues(alpha: 0.3),
+                                  : theme.colorScheme.outline.withValues(
+                                      alpha: 0.3,
+                                    ),
                             ),
                             borderRadius: BorderRadius.circular(10),
                           ),
                           child: Row(
                             children: [
-                              Icon(Icons.calendar_today_outlined, size: 18, color: theme.colorScheme.primary),
+                              Icon(
+                                Icons.calendar_today_outlined,
+                                size: 18,
+                                color: theme.colorScheme.primary,
+                              ),
                               const SizedBox(width: 10),
                               Expanded(
                                 child: Text(
                                   _formatDate(_scheduledDate),
-                                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                                  style: const TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w500,
+                                  ),
                                 ),
                               ),
                             ],
@@ -1455,7 +1717,13 @@ class _CreateAssessmentFlowDialogState
                       if (_dateError != null)
                         Padding(
                           padding: const EdgeInsets.only(top: 4, left: 4),
-                          child: Text(_dateError!, style: const TextStyle(fontSize: 12, color: Color(0xFFDC2626))),
+                          child: Text(
+                            _dateError!,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Color(0xFFDC2626),
+                            ),
+                          ),
                         ),
                     ],
                   ),
@@ -1481,7 +1749,11 @@ class _CreateAssessmentFlowDialogState
                     children: [
                       Text(
                         'Duration (Mins) *',
-                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: theme.colorScheme.onSurface),
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: theme.colorScheme.onSurface,
+                        ),
                       ),
                       const SizedBox(height: 6),
                       TextField(
@@ -1495,16 +1767,27 @@ class _CreateAssessmentFlowDialogState
                           hintText: 'e.g. 60',
                           filled: true,
                           fillColor: theme.colorScheme.surface,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 12,
+                          ),
                           errorText: _durationError,
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
                           enabledBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(10),
-                            borderSide: BorderSide(color: theme.colorScheme.outline.withValues(alpha: 0.3)),
+                            borderSide: BorderSide(
+                              color: theme.colorScheme.outline.withValues(
+                                alpha: 0.3,
+                              ),
+                            ),
                           ),
                           errorBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(10),
-                            borderSide: const BorderSide(color: Color(0xFFDC2626)),
+                            borderSide: const BorderSide(
+                              color: Color(0xFFDC2626),
+                            ),
                           ),
                         ),
                       ),
@@ -1525,26 +1808,44 @@ class _CreateAssessmentFlowDialogState
                     children: [
                       Text(
                         'Date Administered *',
-                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: theme.colorScheme.onSurface),
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: theme.colorScheme.onSurface,
+                        ),
                       ),
                       const SizedBox(height: 6),
                       InkWell(
                         onTap: _pickDate,
                         borderRadius: BorderRadius.circular(10),
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 12,
+                          ),
                           decoration: BoxDecoration(
-                            border: Border.all(color: theme.colorScheme.outline.withValues(alpha: 0.3)),
+                            border: Border.all(
+                              color: theme.colorScheme.outline.withValues(
+                                alpha: 0.3,
+                              ),
+                            ),
                             borderRadius: BorderRadius.circular(10),
                           ),
                           child: Row(
                             children: [
-                              Icon(Icons.calendar_today_outlined, size: 18, color: theme.colorScheme.primary),
+                              Icon(
+                                Icons.calendar_today_outlined,
+                                size: 18,
+                                color: theme.colorScheme.primary,
+                              ),
                               const SizedBox(width: 10),
                               Expanded(
                                 child: Text(
                                   _formatDate(_scheduledDate),
-                                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                                  style: const TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w500,
+                                  ),
                                 ),
                               ),
                             ],
@@ -1562,7 +1863,11 @@ class _CreateAssessmentFlowDialogState
                     children: [
                       Text(
                         'Total Points (HPS) *',
-                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: theme.colorScheme.onSurface),
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: theme.colorScheme.onSurface,
+                        ),
                       ),
                       const SizedBox(height: 6),
                       TextField(
@@ -1576,11 +1881,20 @@ class _CreateAssessmentFlowDialogState
                           hintText: '100',
                           filled: true,
                           fillColor: theme.colorScheme.surface,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 12,
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
                           enabledBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(10),
-                            borderSide: BorderSide(color: theme.colorScheme.outline.withValues(alpha: 0.3)),
+                            borderSide: BorderSide(
+                              color: theme.colorScheme.outline.withValues(
+                                alpha: 0.3,
+                              ),
+                            ),
                           ),
                         ),
                       ),
@@ -1598,7 +1912,11 @@ class _CreateAssessmentFlowDialogState
             children: [
               Text(
                 'Instructions & Guidelines',
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: theme.colorScheme.onSurface),
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: theme.colorScheme.onSurface,
+                ),
               ),
               Text(
                 '${_instructionsCtrl.text.length} / 1000',
@@ -1617,7 +1935,12 @@ class _CreateAssessmentFlowDialogState
             controller: _instructionsCtrl,
             maxLines: 3,
             maxLength: 1000,
-            buildCounter: (_, {required currentLength, required isFocused, maxLength}) => const SizedBox.shrink(),
+            buildCounter: (
+              _, {
+              required currentLength,
+              required isFocused,
+              maxLength,
+            }) => const SizedBox.shrink(),
             onChanged: (_) => setState(() {}),
             decoration: InputDecoration(
               hintText: 'e.g. Provide test-taking guidelines, no calculators allowed...',
@@ -1625,7 +1948,9 @@ class _CreateAssessmentFlowDialogState
               fillColor: theme.colorScheme.surface,
               contentPadding: const EdgeInsets.all(12),
               errorText: _instructionsError,
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
                 borderSide: BorderSide(
@@ -1637,13 +1962,23 @@ class _CreateAssessmentFlowDialogState
               ),
               errorBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(color: Color(0xFFDC2626), width: 1.5),
+                borderSide: const BorderSide(
+                  color: Color(0xFFDC2626),
+                  width: 1.5,
+                ),
               ),
               focusedErrorBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(color: Color(0xFFDC2626), width: 2.0),
+                borderSide: const BorderSide(
+                  color: Color(0xFFDC2626),
+                  width: 2.0,
+                ),
               ),
-              errorStyle: const TextStyle(fontSize: 12, color: Color(0xFFDC2626), fontWeight: FontWeight.w500),
+              errorStyle: const TextStyle(
+                fontSize: 12,
+                color: Color(0xFFDC2626),
+                fontWeight: FontWeight.w500,
+              ),
             ),
           ),
           const SizedBox(height: 4),
@@ -1651,7 +1986,7 @@ class _CreateAssessmentFlowDialogState
             alignment: Alignment.centerRight,
             child: TextButton.icon(
               onPressed: () {
-                 AntiCheatingDocumentationModal.show(context);
+                AntiCheatingDocumentationModal.show(context);
               },
               icon: const Icon(Icons.shield_outlined, size: 16),
               label: const Text(
@@ -1671,12 +2006,19 @@ class _CreateAssessmentFlowDialogState
           if (_completionMode == 'online') ...[
             Text(
               'Question Distributions (3 Types)',
-              style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface),
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+                color: theme.colorScheme.onSurface,
+              ),
             ),
             const SizedBox(height: 4),
             Text(
               'Enter the planned number of questions per category (maximum 100 items total):',
-              style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurface.withValues(alpha: 0.6)),
+              style: TextStyle(
+                fontSize: 12,
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+              ),
             ),
             const SizedBox(height: 10),
             Container(
@@ -1688,7 +2030,9 @@ class _CreateAssessmentFlowDialogState
                       : theme.colorScheme.outline.withValues(alpha: 0.2),
                 ),
                 borderRadius: BorderRadius.circular(10),
-                color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.2),
+                color: theme.colorScheme.surfaceContainerHighest.withValues(
+                  alpha: 0.2,
+                ),
               ),
               child: Column(
                 children: [
@@ -1705,7 +2049,11 @@ class _CreateAssessmentFlowDialogState
                 padding: const EdgeInsets.only(top: 6, left: 4),
                 child: Text(
                   _distributionError!,
-                  style: const TextStyle(fontSize: 12, color: Color(0xFFDC2626), fontWeight: FontWeight.w500),
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: Color(0xFFDC2626),
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
               ),
             const SizedBox(height: 8),
@@ -1750,17 +2098,21 @@ class _CreateAssessmentFlowDialogState
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
           decoration: BoxDecoration(
             color: isSelected
-                ? theme.colorScheme.primary.withValues(alpha: 0.1) // 30% Primary Theme applied here
+                ? theme.colorScheme.primary.withValues(
+                    alpha: 0.1,
+                  ) // 30% Primary Theme applied here
                 : (isCreated
-                    ? Colors.grey.shade100
-                    : theme.colorScheme.surface),
+                      ? Colors.grey.shade100
+                      : theme.colorScheme.surface),
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
               color: isSelected
-                  ? theme.colorScheme.primary // 10% action color border
+                  ? theme
+                        .colorScheme
+                        .primary // 10% action color border
                   : (isCreated
-                      ? Colors.grey.shade300
-                      : theme.colorScheme.outline.withValues(alpha: 0.3)),
+                        ? Colors.grey.shade300
+                        : theme.colorScheme.outline.withValues(alpha: 0.3)),
               width: isSelected ? 1.8 : 1.0,
             ),
           ),
@@ -1779,20 +2131,30 @@ class _CreateAssessmentFlowDialogState
               const SizedBox(height: 2),
               if (isCreated)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.grey.shade300,
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: const Text(
                     'Already Created',
-                    style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.black54),
+                    style: TextStyle(
+                      fontSize: 9,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black54,
+                    ),
                   ),
                 )
               else
                 Text(
                   slot == 'TE' ? 'Term Exam' : 'Summative',
-                  style: TextStyle(fontSize: 10, color: theme.colorScheme.onSurface.withValues(alpha: 0.6)),
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                  ),
                 ),
             ],
           ),
@@ -1827,7 +2189,9 @@ class _CreateAssessmentFlowDialogState
               filled: true,
               fillColor: Colors.white,
               contentPadding: const EdgeInsets.symmetric(vertical: 8),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
             ),
           ),
         ),
@@ -1874,19 +2238,31 @@ class _CreateAssessmentFlowDialogState
                           backgroundColor: AppTheme.catRed,
                           child: Text(
                             '${currentDraft.position}',
-                            style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                         ),
                         const SizedBox(width: 10),
                         Text(
                           'Question ${currentDraft.position} of ${_plannedQuestions.length}',
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 15,
+                          ),
                         ),
                         const SizedBox(width: 8),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 3,
+                          ),
                           decoration: BoxDecoration(
-                            color: theme.colorScheme.primary.withValues(alpha: 0.1),
+                            color: theme.colorScheme.primary.withValues(
+                              alpha: 0.1,
+                            ),
                             borderRadius: BorderRadius.circular(6),
                           ),
                           child: Text(
@@ -1904,7 +2280,13 @@ class _CreateAssessmentFlowDialogState
                     // Points field
                     Row(
                       children: [
-                        const Text('Points:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                        const Text(
+                          'Points:',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                         const SizedBox(width: 8),
                         SizedBox(
                           width: 55,
@@ -1918,8 +2300,12 @@ class _CreateAssessmentFlowDialogState
                               LengthLimitingTextInputFormatter(2),
                             ],
                             decoration: InputDecoration(
-                              contentPadding: const EdgeInsets.symmetric(vertical: 6),
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                              contentPadding: const EdgeInsets.symmetric(
+                                vertical: 6,
+                              ),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
                             ),
                           ),
                         ),
@@ -1933,8 +2319,17 @@ class _CreateAssessmentFlowDialogState
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text('Question Statement *', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-                    Text('${_qStatementCtrl.text.length} / 500', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                    const Text(
+                      'Question Statement *',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    Text(
+                      '${_qStatementCtrl.text.length} / 500',
+                      style: const TextStyle(fontSize: 11, color: Colors.grey),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 6),
@@ -1942,14 +2337,21 @@ class _CreateAssessmentFlowDialogState
                   controller: _qStatementCtrl,
                   maxLines: 3,
                   maxLength: 500,
-                  buildCounter: (_, {required currentLength, required isFocused, maxLength}) => const SizedBox.shrink(),
+                  buildCounter: (
+                    _, {
+                    required currentLength,
+                    required isFocused,
+                    maxLength,
+                  }) => const SizedBox.shrink(),
                   onChanged: (_) => setState(() {}),
                   decoration: InputDecoration(
                     hintText: 'Enter question text or problem statement...',
                     filled: true,
                     fillColor: Colors.white,
                     contentPadding: const EdgeInsets.all(12),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -1978,17 +2380,23 @@ class _CreateAssessmentFlowDialogState
                     children: [
                       Expanded(
                         child: RadioListTile<String>(
-                          title: const Text('True', style: TextStyle(fontWeight: FontWeight.bold)),
+                          title: const Text(
+                            'True',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
                           value: 'True',
                           groupValue: _selectedTfAnswer,
-                          onChanged: (val) => setState(() => _selectedTfAnswer = val),
+                          onChanged: (val) =>
+                              setState(() => _selectedTfAnswer = val),
                           tileColor: _selectedTfAnswer == 'True'
                               ? AppTheme.catGreen.withValues(alpha: 0.1)
                               : Colors.grey.shade50,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(8),
                             side: BorderSide(
-                              color: _selectedTfAnswer == 'True' ? AppTheme.catGreen : Colors.grey.shade300,
+                              color: _selectedTfAnswer == 'True'
+                                  ? AppTheme.catGreen
+                                  : Colors.grey.shade300,
                             ),
                           ),
                         ),
@@ -1996,24 +2404,31 @@ class _CreateAssessmentFlowDialogState
                       const SizedBox(width: 12),
                       Expanded(
                         child: RadioListTile<String>(
-                          title: const Text('False', style: TextStyle(fontWeight: FontWeight.bold)),
+                          title: const Text(
+                            'False',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
                           value: 'False',
                           groupValue: _selectedTfAnswer,
-                          onChanged: (val) => setState(() => _selectedTfAnswer = val),
+                          onChanged: (val) =>
+                              setState(() => _selectedTfAnswer = val),
                           tileColor: _selectedTfAnswer == 'False'
                               ? AppTheme.catRed.withValues(alpha: 0.1)
                               : Colors.grey.shade50,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(8),
                             side: BorderSide(
-                              color: _selectedTfAnswer == 'False' ? AppTheme.catRed : Colors.grey.shade300,
+                              color: _selectedTfAnswer == 'False'
+                                  ? AppTheme.catRed
+                                  : Colors.grey.shade300,
                             ),
                           ),
                         ),
                       ),
                     ],
                   ),
-                ] else if (currentDraft.type == QuestionType.identification) ...[
+                ] else if (currentDraft.type ==
+                    QuestionType.identification) ...[
                   const Text(
                     'Official Correct Answer Key *',
                     style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
@@ -2026,7 +2441,9 @@ class _CreateAssessmentFlowDialogState
                       prefixIcon: const Icon(Icons.vpn_key_outlined, size: 18),
                       filled: true,
                       fillColor: Colors.white,
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
                     ),
                   ),
                 ],
@@ -2035,12 +2452,20 @@ class _CreateAssessmentFlowDialogState
                   const SizedBox(height: 12),
                   Row(
                     children: [
-                      const Icon(Icons.error_outline, size: 16, color: Color(0xFFDC2626)),
+                      const Icon(
+                        Icons.error_outline,
+                        size: 16,
+                        color: Color(0xFFDC2626),
+                      ),
                       const SizedBox(width: 6),
                       Expanded(
                         child: Text(
                           _editorError!,
-                          style: const TextStyle(fontSize: 12, color: Color(0xFFDC2626), fontWeight: FontWeight.w500),
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: Color(0xFFDC2626),
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
                       ),
                     ],
@@ -2058,8 +2483,13 @@ class _CreateAssessmentFlowDialogState
                         icon: const Icon(Icons.arrow_back, size: 16),
                         label: const Text('Previous Question'),
                         style: OutlinedButton.styleFrom(
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 10,
+                          ),
                         ),
                         onPressed: () {
                           if (_saveCurrentEditorState()) {
@@ -2076,8 +2506,13 @@ class _CreateAssessmentFlowDialogState
                         style: ElevatedButton.styleFrom(
                           backgroundColor: theme.colorScheme.primary,
                           foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 10,
+                          ),
                         ),
                         onPressed: () {
                           if (_saveCurrentEditorState()) {
@@ -2090,10 +2525,16 @@ class _CreateAssessmentFlowDialogState
                         icon: const Icon(Icons.check, size: 16),
                         label: const Text('Review Complete'),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: theme.colorScheme.primary, // 30% primary theme
+                          backgroundColor:
+                              theme.colorScheme.primary, // 30% primary theme
                           foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 10,
+                          ),
                         ),
                         onPressed: () {
                           _saveCurrentEditorState();
@@ -2122,12 +2563,18 @@ class _CreateAssessmentFlowDialogState
               children: [
                 Text(
                   'Question Navigator (${_plannedQuestions.length} Items)',
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                  ),
                 ),
                 const SizedBox(height: 6),
                 Text(
                   'Click any question number to edit. Delete is prohibited to preserve test integrity.',
-                  style: TextStyle(fontSize: 11, color: theme.colorScheme.onSurface.withValues(alpha: 0.6)),
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                  ),
                 ),
                 const SizedBox(height: 12),
 
@@ -2135,11 +2582,20 @@ class _CreateAssessmentFlowDialogState
                 Expanded(
                   child: ListView(
                     children: [
-                      _buildQuestionNavigatorCategory('Multiple Choice', QuestionType.multipleChoice),
+                      _buildQuestionNavigatorCategory(
+                        'Multiple Choice',
+                        QuestionType.multipleChoice,
+                      ),
                       const SizedBox(height: 12),
-                      _buildQuestionNavigatorCategory('True or False', QuestionType.trueFalse),
+                      _buildQuestionNavigatorCategory(
+                        'True or False',
+                        QuestionType.trueFalse,
+                      ),
                       const SizedBox(height: 12),
-                      _buildQuestionNavigatorCategory('Identification', QuestionType.identification),
+                      _buildQuestionNavigatorCategory(
+                        'Identification',
+                        QuestionType.identification,
+                      ),
                     ],
                   ),
                 ),
@@ -2208,15 +2664,17 @@ class _CreateAssessmentFlowDialogState
                   color: isActive
                       ? theme.colorScheme.primary
                       : (isDone
-                          ? theme.colorScheme.primary.withValues(alpha: 0.1) // 30% theme
-                          : Colors.grey.shade100), // 60% theme
+                            ? theme.colorScheme.primary.withValues(
+                                alpha: 0.1,
+                              ) // 30% theme
+                            : Colors.grey.shade100), // 60% theme
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
                     color: isActive
                         ? theme.colorScheme.primary
                         : (isDone
-                            ? theme.colorScheme.primary
-                            : Colors.grey.shade300),
+                              ? theme.colorScheme.primary
+                              : Colors.grey.shade300),
                     width: isActive ? 2 : 1,
                   ),
                 ),
@@ -2255,9 +2713,16 @@ class _CreateAssessmentFlowDialogState
             decoration: InputDecoration(
               labelText: 'Choice $label',
               isDense: true,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-              fillColor: isCorrect ? AppTheme.catGreen.withValues(alpha: 0.05) : Colors.white,
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 10,
+              ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              fillColor: isCorrect
+                  ? AppTheme.catGreen.withValues(alpha: 0.05)
+                  : Colors.white,
               filled: true,
             ),
           ),

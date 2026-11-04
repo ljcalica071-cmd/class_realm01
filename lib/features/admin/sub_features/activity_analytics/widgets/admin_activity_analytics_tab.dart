@@ -106,7 +106,9 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
     }
 
     _realtimeChannel = client
-        .channel('admin_activity_realtime_${DateTime.now().millisecondsSinceEpoch}')
+        .channel(
+          'admin_activity_realtime_${DateTime.now().millisecondsSinceEpoch}',
+        )
         .onPostgresChanges(
           event: PostgresChangeEvent.all,
           schema: 'public',
@@ -114,12 +116,12 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
           callback: (payload) {
             final newData = payload.newRecord;
             if (newData.isNotEmpty && newData['role'] == 'teacher') {
-                _debounceTimer?.cancel();
-                _debounceTimer = Timer(const Duration(milliseconds: 300), () {
-                  if (mounted) {
-                    _loadData(isSilent: true);
-                  }
-                });
+              _debounceTimer?.cancel();
+              _debounceTimer = Timer(const Duration(milliseconds: 300), () {
+                if (mounted) {
+                  _loadData(isSilent: true);
+                }
+              });
             }
           },
         )
@@ -425,11 +427,7 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
 
     if (teachers.isEmpty) {
       return const [
-        _TeacherInfo(
-          id: 'faculty',
-          name: 'Faculty',
-          color: AppTheme.catGreen,
-        ),
+        _TeacherInfo(id: 'faculty', name: 'Faculty', color: AppTheme.catGreen),
       ];
     }
     return teachers;
@@ -439,7 +437,9 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
     if (_selectedTeacherId != null) {
       final teachers = _getTeacherInfoList();
       final match = teachers.where((t) => t.id == _selectedTeacherId);
-      final teacherName = match.isNotEmpty ? match.first.name : 'Selected Faculty';
+      final teacherName = match.isNotEmpty
+          ? match.first.name
+          : 'Selected Faculty';
       return 'Session telemetry & usage timeline for $teacherName';
     }
 
@@ -534,7 +534,9 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
                       t.name,
                       style: TextStyle(
                         fontSize: 12.5,
-                        fontWeight: isCurrent ? FontWeight.bold : FontWeight.w500,
+                        fontWeight: isCurrent
+                            ? FontWeight.bold
+                            : FontWeight.w500,
                         color: isCurrent
                             ? t.color
                             : (isDark ? Colors.white : const Color(0xFF1E293B)),
@@ -542,8 +544,7 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  if (isCurrent)
-                    Icon(Icons.check, size: 16, color: t.color),
+                  if (isCurrent) Icon(Icons.check, size: 16, color: t.color),
                 ],
               ),
             );
@@ -623,16 +624,14 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
     final totalTrackedTeachers = _workloadSummaries.isNotEmpty
         ? _workloadSummaries.length
         : math.max(activeNowCount, 1);
-    final totalDurationSeconds = _sessionLogs.fold<int>(
-      0,
-      (sum, s) {
-        if (s.isActive) {
-          final liveSec = currentNow.difference(s.loginAt).inSeconds;
-          return sum + (liveSec > s.durationSeconds ? liveSec : s.durationSeconds);
-        }
-        return sum + s.durationSeconds;
-      },
-    );
+    final totalDurationSeconds = _sessionLogs.fold<int>(0, (sum, s) {
+      if (s.isActive) {
+        final liveSec = currentNow.difference(s.loginAt).inSeconds;
+        return sum +
+            (liveSec > s.durationSeconds ? liveSec : s.durationSeconds);
+      }
+      return sum + s.durationSeconds;
+    });
 
     return Stack(
       children: [
@@ -1146,7 +1145,9 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
                       _getChartSubtitle(),
                       style: TextStyle(
                         fontSize: 12,
-                        color: isDark ? Colors.white54 : const Color(0xFF64748B),
+                        color: isDark
+                            ? Colors.white54
+                            : const Color(0xFF64748B),
                       ),
                     ),
                   ],
@@ -1387,7 +1388,9 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
     // Determine target teachers to plot
     final List<_TeacherInfo> targetTeachers;
     if (_selectedTeacherId != null) {
-      final matched = allTeachers.where((t) => t.id == _selectedTeacherId).toList();
+      final matched = allTeachers
+          .where((t) => t.id == _selectedTeacherId)
+          .toList();
       targetTeachers = matched.isNotEmpty ? matched : allTeachers;
     } else {
       targetTeachers = allTeachers;
@@ -1396,7 +1399,9 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
     // Filter session logs for target teachers if single teacher selected
     final List<UserSessionLog> relevantLogs;
     if (_selectedTeacherId != null) {
-      relevantLogs = _sessionLogs.where((s) => s.userId == _selectedTeacherId).toList();
+      relevantLogs = _sessionLogs
+          .where((s) => s.userId == _selectedTeacherId)
+          .toList();
     } else {
       relevantLogs = _sessionLogs;
     }
@@ -1405,7 +1410,13 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
       // Collect sorted unique dates across relevant logs
       final allDatesSet = <DateTime>{};
       for (final log in relevantLogs) {
-        allDatesSet.add(DateTime(log.sessionDate.year, log.sessionDate.month, log.sessionDate.day));
+        allDatesSet.add(
+          DateTime(
+            log.sessionDate.year,
+            log.sessionDate.month,
+            log.sessionDate.day,
+          ),
+        );
       }
       final sortedDates = allDatesSet.toList()..sort((a, b) => a.compareTo(b));
 
@@ -1413,8 +1424,11 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
       if (sortedDates.isEmpty) {
         displayDates = List.generate(
           5,
-          (i) => DateTime(currentNow.year, currentNow.month, currentNow.day)
-              .subtract(Duration(days: 4 - i)),
+          (i) => DateTime(
+            currentNow.year,
+            currentNow.month,
+            currentNow.day,
+          ).subtract(Duration(days: 4 - i)),
         );
       } else if (sortedDates.length == 1) {
         final singleDate = sortedDates.first;
@@ -1429,7 +1443,9 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
       }
 
       return targetTeachers.map((teacher) {
-        final teacherLogs = relevantLogs.where((s) => s.userId == teacher.id).toList();
+        final teacherLogs = relevantLogs
+            .where((s) => s.userId == teacher.id)
+            .toList();
         final points = displayDates.map((date) {
           int sec = 0;
           for (final log in teacherLogs) {
@@ -1469,7 +1485,9 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
       final days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
       return targetTeachers.map((teacher) {
-        final teacherLogs = relevantLogs.where((s) => s.userId == teacher.id).toList();
+        final teacherLogs = relevantLogs
+            .where((s) => s.userId == teacher.id)
+            .toList();
         final points = List.generate(7, (weekdayIdx) {
           int sec = 0;
           for (final log in teacherLogs) {
@@ -1506,11 +1524,15 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
     final hourBuckets = [8, 10, 12, 14, 16, 18];
 
     return targetTeachers.map((teacher) {
-      final teacherLogs = relevantLogs.where((s) => s.userId == teacher.id).toList();
+      final teacherLogs = relevantLogs
+          .where((s) => s.userId == teacher.id)
+          .toList();
       final points = List.generate(6, (i) {
         int sec = 0;
         final bucketHour = hourBuckets[i];
-        final nextBucketHour = i < hourBuckets.length - 1 ? hourBuckets[i + 1] : 24;
+        final nextBucketHour = i < hourBuckets.length - 1
+            ? hourBuckets[i + 1]
+            : 24;
 
         for (final log in teacherLogs) {
           final h = log.loginAt.hour;
@@ -1998,8 +2020,8 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
                                           )
                                         : Text(
                                             _formatTimestamp(
-                                                    log.effectiveLogoutAt,
-                                                  ),
+                                              log.effectiveLogoutAt,
+                                            ),
                                             style: const TextStyle(
                                               fontSize: 12.5,
                                             ),
@@ -2029,10 +2051,12 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
                                                 Container(
                                                   width: 6,
                                                   height: 6,
-                                                  decoration: const BoxDecoration(
-                                                    color: AppTheme.catGreen,
-                                                    shape: BoxShape.circle,
-                                                  ),
+                                                  decoration:
+                                                      const BoxDecoration(
+                                                        color:
+                                                            AppTheme.catGreen,
+                                                        shape: BoxShape.circle,
+                                                      ),
                                                 ),
                                                 SizedBox(width: 6),
                                                 Text(
@@ -2275,12 +2299,27 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _skeletonBar(width: 300, height: 24, borderRadius: 8, isDark: isDark),
+                    _skeletonBar(
+                      width: 300,
+                      height: 24,
+                      borderRadius: 8,
+                      isDark: isDark,
+                    ),
                     const SizedBox(height: 8),
-                    _skeletonBar(width: 400, height: 14, borderRadius: 6, isDark: isDark),
+                    _skeletonBar(
+                      width: 400,
+                      height: 14,
+                      borderRadius: 6,
+                      isDark: isDark,
+                    ),
                   ],
                 ),
-                _skeletonBar(width: 280, height: 38, borderRadius: 10, isDark: isDark),
+                _skeletonBar(
+                  width: 280,
+                  height: 38,
+                  borderRadius: 10,
+                  isDark: isDark,
+                ),
               ],
             ),
           ),
@@ -2289,11 +2328,17 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
           // Overview KPI Cards Skeleton
           Row(
             children: [
-              Expanded(child: _buildMetricCardSkeleton(cardBg, borderColor, isDark)),
+              Expanded(
+                child: _buildMetricCardSkeleton(cardBg, borderColor, isDark),
+              ),
               const SizedBox(width: 16),
-              Expanded(child: _buildMetricCardSkeleton(cardBg, borderColor, isDark)),
+              Expanded(
+                child: _buildMetricCardSkeleton(cardBg, borderColor, isDark),
+              ),
               const SizedBox(width: 16),
-              Expanded(child: _buildMetricCardSkeleton(cardBg, borderColor, isDark)),
+              Expanded(
+                child: _buildMetricCardSkeleton(cardBg, borderColor, isDark),
+              ),
             ],
           ),
           const SizedBox(height: 24),
@@ -2371,7 +2416,12 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
 
           // Workload Telemetry Cards Skeleton
           _SkeletonShimmer(
-            child: _skeletonBar(width: 280, height: 18, borderRadius: 6, isDark: isDark),
+            child: _skeletonBar(
+              width: 280,
+              height: 18,
+              borderRadius: 6,
+              isDark: isDark,
+            ),
           ),
           const SizedBox(height: 12),
           Container(
@@ -2422,10 +2472,7 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
     );
   }
 
-  static Widget _skeletonCircle({
-    required double size,
-    bool isDark = false,
-  }) {
+  static Widget _skeletonCircle({required double size, bool isDark = false}) {
     return Container(
       width: size,
       height: size,
@@ -2590,7 +2637,8 @@ class _TeacherActivityCurveChart extends StatefulWidget {
     this.seriesList = const [],
     this.activeFilter = 'today',
     this.onTeacherSelected,
-  }) : points = const [], lineColor = AppTheme.catGreen;
+  }) : points = const [],
+       lineColor = AppTheme.catGreen;
 
   @override
   State<_TeacherActivityCurveChart> createState() =>
@@ -2628,15 +2676,15 @@ class _TeacherActivityCurveChartState extends State<_TeacherActivityCurveChart>
     final effectiveSeries = widget.seriesList.isNotEmpty
         ? widget.seriesList
         : (widget.points.isNotEmpty
-            ? [
-                _TeacherSeries(
-                  teacherId: 'default',
-                  teacherName: 'Faculty',
-                  color: widget.lineColor,
-                  points: widget.points,
-                ),
-              ]
-            : <_TeacherSeries>[]);
+              ? [
+                  _TeacherSeries(
+                    teacherId: 'default',
+                    teacherName: 'Faculty',
+                    color: widget.lineColor,
+                    points: widget.points,
+                  ),
+                ]
+              : <_TeacherSeries>[]);
 
     if (effectiveSeries.isEmpty || effectiveSeries.first.points.isEmpty) {
       return const SizedBox.shrink();
@@ -2654,11 +2702,14 @@ class _TeacherActivityCurveChartState extends State<_TeacherActivityCurveChart>
                 onHover: (event) {
                   final x = event.localPosition.dx;
                   final width = constraints.maxWidth;
-                  final dxPerPoint =
-                      pointsCount > 1 ? width / (pointsCount - 1) : width;
+                  final dxPerPoint = pointsCount > 1
+                      ? width / (pointsCount - 1)
+                      : width;
 
-                  final nearestPointIndex =
-                      (x / dxPerPoint).round().clamp(0, pointsCount - 1);
+                  final nearestPointIndex = (x / dxPerPoint).round().clamp(
+                    0,
+                    pointsCount - 1,
+                  );
 
                   // If multiple series, determine which series line is closest in Y
                   int nearestSeriesIndex = 0;
@@ -2740,8 +2791,9 @@ class _TeacherActivityCurveChartState extends State<_TeacherActivityCurveChart>
                       vertical: 4,
                     ),
                     decoration: BoxDecoration(
-                      color: series.color
-                          .withValues(alpha: widget.isDark ? 0.14 : 0.08),
+                      color: series.color.withValues(
+                        alpha: widget.isDark ? 0.14 : 0.08,
+                      ),
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(
                         color: series.color.withValues(alpha: 0.4),
@@ -2798,22 +2850,23 @@ class _CurveChartPainter extends CustomPainter {
     this.hoveredPointIndex,
     this.hoveredSeriesIndex,
     this.hoverAnimValue = 0.0,
-  }) : hoveredIndex = null, points = const [];
+  }) : hoveredIndex = null,
+       points = const [];
 
   @override
   void paint(Canvas canvas, Size size) {
     final effectiveSeries = seriesList.isNotEmpty
         ? seriesList
         : (points.isNotEmpty
-            ? [
-                _TeacherSeries(
-                  teacherId: 'default',
-                  teacherName: 'Faculty',
-                  color: lineColor,
-                  points: points,
-                ),
-              ]
-            : <_TeacherSeries>[]);
+              ? [
+                  _TeacherSeries(
+                    teacherId: 'default',
+                    teacherName: 'Faculty',
+                    color: lineColor,
+                    points: points,
+                  ),
+                ]
+              : <_TeacherSeries>[]);
 
     if (effectiveSeries.isEmpty || effectiveSeries.first.points.isEmpty) return;
 
@@ -2937,7 +2990,8 @@ class _CurveChartPainter extends CustomPainter {
       for (int i = 0; i < coords.length; i++) {
         final pt = coords[i];
         final isThisTarget = (targetPointIdx == i) && (targetSeriesIdx == sIdx);
-        final isHovered = (hoveredPointIndex == i) && (hoveredSeriesIndex == sIdx);
+        final isHovered =
+            (hoveredPointIndex == i) && (hoveredSeriesIndex == sIdx);
 
         if (isHovered && hoverAnimValue > 0) {
           // Animated glowing ring on hover
@@ -2953,22 +3007,16 @@ class _CurveChartPainter extends CustomPainter {
           canvas.drawCircle(
             pt,
             6.5,
-            Paint()
-              ..color = isDark ? const Color(0xFF1E293B) : Colors.white,
+            Paint()..color = isDark ? const Color(0xFF1E293B) : Colors.white,
           );
           // Inner dot
-          canvas.drawCircle(
-            pt,
-            4.5,
-            Paint()..color = series.color,
-          );
+          canvas.drawCircle(pt, 4.5, Paint()..color = series.color);
         } else {
           // Normal point
           canvas.drawCircle(
             pt,
             isThisTarget ? 6.0 : 4.5,
-            Paint()
-              ..color = isDark ? const Color(0xFF1E293B) : Colors.white,
+            Paint()..color = isDark ? const Color(0xFF1E293B) : Colors.white,
           );
           canvas.drawCircle(
             pt,
@@ -2988,9 +3036,10 @@ class _CurveChartPainter extends CustomPainter {
       final pt = allSeriesCoords[targetSeriesIdx][targetPointIdx];
 
       // Format duration strictly as 00h 00m (or 00s if < 1m)
-      final durationStr = _AdminActivityAnalyticsTabState._formatTooltipDuration(
-        targetPoint.totalSeconds,
-      );
+      final durationStr =
+          _AdminActivityAnalyticsTabState._formatTooltipDuration(
+            targetPoint.totalSeconds,
+          );
 
       final teacherName = targetPoint.teacherName ?? targetSeries.teacherName;
 
@@ -3044,7 +3093,8 @@ class _CurveChartPainter extends CustomPainter {
       }
 
       final badgeWidth = maxContentWidth + 20;
-      final badgeHeight = tpName.height +
+      final badgeHeight =
+          tpName.height +
           tpTime.height +
           (tpDate != null ? tpDate.height + 4 : 0) +
           14;
@@ -3055,8 +3105,10 @@ class _CurveChartPainter extends CustomPainter {
           ? pt.dy - (badgeHeight / 2) - 12
           : pt.dy + (badgeHeight / 2) + 12;
 
-      final badgeCenterX =
-          pt.dx.clamp(badgeWidth / 2 + 6, chartWidth - badgeWidth / 2 - 6);
+      final badgeCenterX = pt.dx.clamp(
+        badgeWidth / 2 + 6,
+        chartWidth - badgeWidth / 2 - 6,
+      );
 
       canvas.save();
       canvas.translate(badgeCenterX, badgeCenterY);
@@ -3101,8 +3153,10 @@ class _CurveChartPainter extends CustomPainter {
 
       // Triangle Caret pointing towards circle dot
       final caretPath = Path();
-      final caretX =
-          (pt.dx - badgeCenterX).clamp(-badgeWidth / 2 + 10, badgeWidth / 2 - 10);
+      final caretX = (pt.dx - badgeCenterX).clamp(
+        -badgeWidth / 2 + 10,
+        badgeWidth / 2 - 10,
+      );
       if (fitsAbove) {
         caretPath.moveTo(caretX - 5, badgeHeight / 2);
         caretPath.lineTo(caretX + 5, badgeHeight / 2);

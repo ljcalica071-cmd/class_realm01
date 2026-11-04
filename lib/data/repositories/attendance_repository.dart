@@ -49,7 +49,9 @@ abstract class AttendanceRepository {
     return AttendanceScheduleStatus(
       hasPlottedScheduleAnyDay: false,
       isScheduledOnDate: true,
-      cutoffConfig: AttendanceCutoffConfig(subjectOfferingId: subjectOfferingId),
+      cutoffConfig: AttendanceCutoffConfig(
+        subjectOfferingId: subjectOfferingId,
+      ),
     );
   }
 

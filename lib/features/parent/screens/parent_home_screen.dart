@@ -381,9 +381,7 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
     return PopupMenuButton<int>(
       tooltip: 'Switch Active Child',
       offset: const Offset(0, 48),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       color: theme.colorScheme.surface,
       elevation: 6,
       onSelected: (int targetIndex) {
@@ -438,8 +436,9 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
                       activeChild!.departmentOrSection!,
                       style: TextStyle(
                         fontSize: 10,
-                        color: theme.colorScheme.onSurface
-                            .withValues(alpha: 0.6),
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.6,
+                        ),
                       ),
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -456,106 +455,104 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
         ),
       ),
       itemBuilder: (BuildContext context) {
-        return List<PopupMenuEntry<int>>.generate(
-          students.length,
-          (index) {
-            final child = students[index];
-            final isSelected = index == (_selectedChildIndex % students.length);
+        return List<PopupMenuEntry<int>>.generate(students.length, (index) {
+          final child = students[index];
+          final isSelected = index == (_selectedChildIndex % students.length);
 
-            return PopupMenuItem<int>(
-              value: index,
-              child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                child: Row(
-                  children: [
-                    CircleAvatar(
-                      radius: 14,
-                      backgroundColor: isSelected
-                          ? theme.colorScheme.primary
-                          : theme.colorScheme.surfaceContainerHighest,
-                      child: Text(
-                        (child.firstName?.isNotEmpty ?? false)
-                            ? child.firstName![0].toUpperCase()
-                            : 'C',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          color: isSelected
-                              ? Colors.white
-                              : theme.colorScheme.onSurface,
+          return PopupMenuItem<int>(
+            value: index,
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 14,
+                    backgroundColor: isSelected
+                        ? theme.colorScheme.primary
+                        : theme.colorScheme.surfaceContainerHighest,
+                    child: Text(
+                      (child.firstName?.isNotEmpty ?? false)
+                          ? child.firstName![0].toUpperCase()
+                          : 'C',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: isSelected
+                            ? Colors.white
+                            : theme.colorScheme.onSurface,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          child.fullName,
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: isSelected
+                                ? FontWeight.bold
+                                : FontWeight.w500,
+                            color: isSelected
+                                ? theme.colorScheme.primary
+                                : theme.colorScheme.onSurface,
+                          ),
+                          overflow: TextOverflow.ellipsis,
                         ),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            child.fullName,
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: isSelected
-                                  ? FontWeight.bold
-                                  : FontWeight.w500,
-                              color: isSelected
-                                  ? theme.colorScheme.primary
-                                  : theme.colorScheme.onSurface,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          Row(
-                            children: [
-                              if (child.lrn != null &&
-                                  child.lrn!.isNotEmpty) ...[
-                                Text(
-                                  'LRN: ${child.lrn}',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: theme.colorScheme.onSurface
-                                        .withValues(alpha: 0.55),
+                        Row(
+                          children: [
+                            if (child.lrn != null && child.lrn!.isNotEmpty) ...[
+                              Text(
+                                'LRN: ${child.lrn}',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: theme.colorScheme.onSurface.withValues(
+                                    alpha: 0.55,
                                   ),
                                 ),
-                                const SizedBox(width: 6),
-                              ],
-                              if (child.departmentOrSection != null)
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 6,
-                                    vertical: 1,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: theme.colorScheme.onSurface
-                                        .withValues(alpha: 0.08),
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                  child: Text(
-                                    child.departmentOrSection!,
-                                    style: TextStyle(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w600,
-                                      color: theme.colorScheme.onSurface
-                                          .withValues(alpha: 0.7),
-                                    ),
-                                  ),
-                                ),
+                              ),
+                              const SizedBox(width: 6),
                             ],
-                          ),
-                        ],
-                      ),
+                            if (child.departmentOrSection != null)
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 1,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: theme.colorScheme.onSurface.withValues(
+                                    alpha: 0.08,
+                                  ),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  child.departmentOrSection!,
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w600,
+                                    color: theme.colorScheme.onSurface
+                                        .withValues(alpha: 0.7),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ],
                     ),
-                    if (isSelected)
-                      Icon(
-                        Icons.check_circle_rounded,
-                        size: 18,
-                        color: theme.colorScheme.primary,
-                      ),
-                  ],
-                ),
+                  ),
+                  if (isSelected)
+                    Icon(
+                      Icons.check_circle_rounded,
+                      size: 18,
+                      color: theme.colorScheme.primary,
+                    ),
+                ],
               ),
-            );
-          },
-        );
+            ),
+          );
+        });
       },
     );
   }

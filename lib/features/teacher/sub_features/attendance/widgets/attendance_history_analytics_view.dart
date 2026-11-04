@@ -1365,153 +1365,158 @@ class AttendanceHistoryAnalyticsViewState
                                 minWidth: max(840.0, constraints.maxWidth),
                               ),
                               child: DataTable(
-                              headingRowHeight: 44,
-                              dataRowMinHeight: 48,
-                              dataRowMaxHeight: 52,
-                              headingRowColor: WidgetStateProperty.all(
-                                theme.colorScheme.primary.withValues(
-                                  alpha: isDark ? 0.12 : 0.06,
-                                ),
-                              ),
-                              columns: const [
-                                DataColumn(
-                                  label: Text(
-                                    'DATE',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 12,
-                                    ),
+                                headingRowHeight: 44,
+                                dataRowMinHeight: 48,
+                                dataRowMaxHeight: 52,
+                                headingRowColor: WidgetStateProperty.all(
+                                  theme.colorScheme.primary.withValues(
+                                    alpha: isDark ? 0.12 : 0.06,
                                   ),
                                 ),
-                                DataColumn(
-                                  label: Text(
-                                    'STUDENT NAME',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                ),
-                                DataColumn(
-                                  label: Text(
-                                    'TIME IN',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                ),
-                                DataColumn(
-                                  label: Text(
-                                    'METHOD',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                ),
-                                DataColumn(
-                                  label: Text(
-                                    'STATUS',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                ),
-                                DataColumn(
-                                  label: Text(
-                                    'REMARKS',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                ),
-                                DataColumn(
-                                  label: Text(
-                                    'ACTIONS',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                              rows: pageRows.map((row) {
-                                final studentName = _getStudentDisplayName(
-                                  row.studentId,
-                                );
-                                final timeInDisplay =
-                                    (row.timeIn != null &&
-                                        row.timeIn!.trim().isNotEmpty)
-                                    ? row.timeIn!.trim()
-                                    : '—';
-
-                                return DataRow(
-                                  cells: [
-                                    DataCell(
-                                      Text(
-                                        _formatDate(row.attendanceDate),
-                                        style: const TextStyle(
-                                          fontSize: 12.5,
-                                          fontWeight: FontWeight.w600,
-                                        ),
+                                columns: const [
+                                  DataColumn(
+                                    label: Text(
+                                      'DATE',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 12,
                                       ),
                                     ),
-                                    DataCell(
-                                      Text(
-                                        studentName,
-                                        style: const TextStyle(
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.bold,
-                                        ),
+                                  ),
+                                  DataColumn(
+                                    label: Text(
+                                      'STUDENT NAME',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 12,
                                       ),
                                     ),
-                                    DataCell(
-                                      Text(
-                                        timeInDisplay,
-                                        style: const TextStyle(fontSize: 12.5),
+                                  ),
+                                  DataColumn(
+                                    label: Text(
+                                      'TIME IN',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 12,
                                       ),
                                     ),
-                                    DataCell(
-                                      _buildProvenancePill(theme, row.source),
-                                    ),
-                                    DataCell(
-                                      StatusBadge.fromAttendance(row.status),
-                                    ),
-                                    DataCell(
-                                      Text(
-                                        row.remarks != null &&
-                                                row.remarks!.trim().isNotEmpty
-                                            ? row.remarks!.trim()
-                                            : '—',
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          fontStyle: row.remarks != null
-                                              ? FontStyle.italic
-                                              : FontStyle.normal,
-                                          color: theme.colorScheme.onSurface
-                                              .withValues(alpha: 0.7),
-                                        ),
+                                  ),
+                                  DataColumn(
+                                    label: Text(
+                                      'METHOD',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 12,
                                       ),
                                     ),
-                                    DataCell(
-                                      AppButton.outline(
-                                        label: 'Correct',
-                                        icon: LucideIcons.fileEdit,
-                                        isSmall: true,
-                                        onPressed: () =>
-                                            _showCorrectionDialog(context, row),
+                                  ),
+                                  DataColumn(
+                                    label: Text(
+                                      'STATUS',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 12,
                                       ),
                                     ),
-                                  ],
+                                  ),
+                                  DataColumn(
+                                    label: Text(
+                                      'REMARKS',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ),
+                                  DataColumn(
+                                    label: Text(
+                                      'ACTIONS',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                                rows: pageRows.map((row) {
+                                  final studentName = _getStudentDisplayName(
+                                    row.studentId,
                                   );
-                              }).toList(),
+                                  final timeInDisplay =
+                                      (row.timeIn != null &&
+                                          row.timeIn!.trim().isNotEmpty)
+                                      ? row.timeIn!.trim()
+                                      : '—';
+
+                                  return DataRow(
+                                    cells: [
+                                      DataCell(
+                                        Text(
+                                          _formatDate(row.attendanceDate),
+                                          style: const TextStyle(
+                                            fontSize: 12.5,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ),
+                                      DataCell(
+                                        Text(
+                                          studentName,
+                                          style: const TextStyle(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ),
+                                      DataCell(
+                                        Text(
+                                          timeInDisplay,
+                                          style: const TextStyle(
+                                            fontSize: 12.5,
+                                          ),
+                                        ),
+                                      ),
+                                      DataCell(
+                                        _buildProvenancePill(theme, row.source),
+                                      ),
+                                      DataCell(
+                                        StatusBadge.fromAttendance(row.status),
+                                      ),
+                                      DataCell(
+                                        Text(
+                                          row.remarks != null &&
+                                                  row.remarks!.trim().isNotEmpty
+                                              ? row.remarks!.trim()
+                                              : '—',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontStyle: row.remarks != null
+                                                ? FontStyle.italic
+                                                : FontStyle.normal,
+                                            color: theme.colorScheme.onSurface
+                                                .withValues(alpha: 0.7),
+                                          ),
+                                        ),
+                                      ),
+                                      DataCell(
+                                        AppButton.outline(
+                                          label: 'Correct',
+                                          icon: LucideIcons.fileEdit,
+                                          isSmall: true,
+                                          onPressed: () =>
+                                              _showCorrectionDialog(
+                                                context,
+                                                row,
+                                              ),
+                                        ),
+                                      ),
+                                    ],
+                                  );
+                                }).toList(),
+                              ),
                             ),
-                          ),
-                        );
-                      },
+                          );
+                        },
                       ),
                     ),
                     // Pagination Footer (20 per page, matching student management)
@@ -1539,7 +1544,8 @@ class AttendanceHistoryAnalyticsViewState
                                 ),
                                 onPressed: safePage > 1
                                     ? () => setState(
-                                        () => _historyCurrentPage = safePage - 1,
+                                        () =>
+                                            _historyCurrentPage = safePage - 1,
                                       )
                                     : null,
                               ),
@@ -1570,7 +1576,8 @@ class AttendanceHistoryAnalyticsViewState
                                 ),
                                 onPressed: safePage < totalPages
                                     ? () => setState(
-                                        () => _historyCurrentPage = safePage + 1,
+                                        () =>
+                                            _historyCurrentPage = safePage + 1,
                                       )
                                     : null,
                               ),

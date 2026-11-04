@@ -6,12 +6,12 @@ import 'package:class_realm/core/theme/app_theme.dart';
 // SEMANTIC BUTTON TYPE ENUM
 // ─────────────────────────────────────────────
 enum AppButtonType {
-  primary,   // colorScheme.primary — main CTA (Add, Save, Submit, Import)
-  success,   // catGreen — confirm positive actions (Mark Present, Approve)
-  danger,    // catRed — destructive actions (Delete, Mark All Absent)
-  warning,   // catOrange — cautionary actions (Archive, Mark Late)
-  outline,   // Outlined + primary color — secondary actions (Cancel, View History)
-  ghost,     // Text-only — tertiary actions (View All, See more)
+  primary, // colorScheme.primary — main CTA (Add, Save, Submit, Import)
+  success, // catGreen — confirm positive actions (Mark Present, Approve)
+  danger, // catRed — destructive actions (Delete, Mark All Absent)
+  warning, // catOrange — cautionary actions (Archive, Mark Late)
+  outline, // Outlined + primary color — secondary actions (Cancel, View History)
+  ghost, // Text-only — tertiary actions (View All, See more)
 }
 
 // ─────────────────────────────────────────────
@@ -51,8 +51,8 @@ class AppButton extends StatelessWidget {
     this.width,
     this.isSmall = false,
     this.backgroundColor,
-  })  : type = AppButtonType.primary,
-        height = 42;
+  }) : type = AppButtonType.primary,
+       height = 42;
 
   const AppButton.success({
     super.key,
@@ -63,8 +63,8 @@ class AppButton extends StatelessWidget {
     this.width,
     this.isSmall = false,
     this.backgroundColor,
-  })  : type = AppButtonType.success,
-        height = 42;
+  }) : type = AppButtonType.success,
+       height = 42;
 
   const AppButton.danger({
     super.key,
@@ -75,8 +75,8 @@ class AppButton extends StatelessWidget {
     this.width,
     this.isSmall = false,
     this.backgroundColor,
-  })  : type = AppButtonType.danger,
-        height = 42;
+  }) : type = AppButtonType.danger,
+       height = 42;
 
   const AppButton.outline({
     super.key,
@@ -87,8 +87,8 @@ class AppButton extends StatelessWidget {
     this.width,
     this.isSmall = false,
     this.backgroundColor,
-  })  : type = AppButtonType.outline,
-        height = 42;
+  }) : type = AppButtonType.outline,
+       height = 42;
 
   const AppButton.secondary({
     super.key,
@@ -99,8 +99,8 @@ class AppButton extends StatelessWidget {
     this.width,
     this.isSmall = false,
     this.backgroundColor,
-  })  : type = AppButtonType.outline,
-        height = 42;
+  }) : type = AppButtonType.outline,
+       height = 42;
 
   const AppButton.ghost({
     super.key,
@@ -111,19 +111,25 @@ class AppButton extends StatelessWidget {
     this.width,
     this.isSmall = false,
     this.backgroundColor,
-  })  : type = AppButtonType.ghost,
-        height = 42;
+  }) : type = AppButtonType.ghost,
+       height = 42;
 
   Color _bgColor(BuildContext context) {
     if (backgroundColor != null) return backgroundColor!;
     final primary = Theme.of(context).colorScheme.primary;
     switch (type) {
-      case AppButtonType.primary: return primary;
-      case AppButtonType.success: return AppTheme.catGreen;
-      case AppButtonType.danger:  return AppTheme.catRed;
-      case AppButtonType.warning: return AppTheme.catOrange;
-      case AppButtonType.outline: return Colors.transparent;
-      case AppButtonType.ghost:   return Colors.transparent;
+      case AppButtonType.primary:
+        return primary;
+      case AppButtonType.success:
+        return AppTheme.catGreen;
+      case AppButtonType.danger:
+        return AppTheme.catRed;
+      case AppButtonType.warning:
+        return AppTheme.catOrange;
+      case AppButtonType.outline:
+        return Colors.transparent;
+      case AppButtonType.ghost:
+        return Colors.transparent;
     }
   }
 
@@ -135,9 +141,12 @@ class AppButton extends StatelessWidget {
       case AppButtonType.primary:
       case AppButtonType.success:
       case AppButtonType.danger:
-      case AppButtonType.warning: return Colors.white;
-      case AppButtonType.outline: return primary;
-      case AppButtonType.ghost:   return onSurface.withValues(alpha: 0.75);
+      case AppButtonType.warning:
+        return Colors.white;
+      case AppButtonType.outline:
+        return primary;
+      case AppButtonType.ghost:
+        return onSurface.withValues(alpha: 0.75);
     }
   }
 

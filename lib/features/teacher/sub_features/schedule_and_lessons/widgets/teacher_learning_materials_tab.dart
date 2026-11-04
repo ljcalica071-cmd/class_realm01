@@ -142,7 +142,8 @@ class _TeacherLearningMaterialsTabState
     if (teacherId == null || teacherId.isEmpty) {
       setState(() {
         _isLoading = false;
-        _errorMessage = 'Please log in as a teacher to manage learning materials.';
+        _errorMessage =
+            'Please log in as a teacher to manage learning materials.';
       });
       return;
     }

@@ -77,8 +77,8 @@ class StudentClassworkCard extends StatelessWidget {
         !isSubmitted &&
         classwork.deadline != null &&
         classwork.deadline!.isBefore(DateTime.now());
-    final isMissing = !isSubmitted &&
-        (isOverdue || classwork.status == 'missing');
+    final isMissing =
+        !isSubmitted && (isOverdue || classwork.status == 'missing');
     final status = classwork.status == 'graded'
         ? 'Graded'
         : classwork.status == 'submitted'
@@ -123,8 +123,8 @@ class StudentClassworkCard extends StatelessWidget {
                     classwork.type == 'performance_task'
                         ? Icons.workspace_premium_outlined
                         : (classwork.type == 'quiz' || classwork.type == 'exam'
-                            ? Icons.quiz_outlined
-                            : Icons.assignment_outlined),
+                              ? Icons.quiz_outlined
+                              : Icons.assignment_outlined),
                     color: theme.colorScheme.onPrimaryContainer,
                   ),
                 ),
@@ -178,12 +178,14 @@ class StudentClassworkCard extends StatelessWidget {
                 width: double.infinity,
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: theme.colorScheme.surfaceContainerHighest
-                      .withValues(alpha: 0.3),
+                  color: theme.colorScheme.surfaceContainerHighest.withValues(
+                    alpha: 0.3,
+                  ),
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(
-                    color: theme.colorScheme.outlineVariant
-                        .withValues(alpha: 0.5),
+                    color: theme.colorScheme.outlineVariant.withValues(
+                      alpha: 0.5,
+                    ),
                   ),
                 ),
                 child: Column(
@@ -261,8 +263,10 @@ class StudentClassworkCard extends StatelessWidget {
             if (classwork.completionMode == 'in_person') ...[
               const SizedBox(height: 12),
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
                   color: const Color(0xFF8B5CF6).withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
@@ -293,12 +297,15 @@ class StudentClassworkCard extends StatelessWidget {
                   ],
                 ),
               ),
-            ] else if (classwork.type == 'exam' || classwork.type == 'quiz') ...[
+            ] else if (classwork.type == 'exam' ||
+                classwork.type == 'quiz') ...[
               const SizedBox(height: 12),
               if (isSubmitted) ...[
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
                   decoration: BoxDecoration(
                     color: const Color(0xFF0F8A48).withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(8),
@@ -308,8 +315,11 @@ class StudentClassworkCard extends StatelessWidget {
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.check_circle,
-                          size: 18, color: Color(0xFF0F8A48)),
+                      const Icon(
+                        Icons.check_circle,
+                        size: 18,
+                        color: Color(0xFF0F8A48),
+                      ),
                       const SizedBox(width: 8),
                       Text(
                         classwork.score != null
@@ -326,8 +336,10 @@ class StudentClassworkCard extends StatelessWidget {
                 ),
               ] else if (isOverdue) ...[
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
                   decoration: BoxDecoration(
                     color: theme.colorScheme.error.withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(8),
@@ -337,8 +349,11 @@ class StudentClassworkCard extends StatelessWidget {
                   ),
                   child: Row(
                     children: [
-                      Icon(Icons.lock_clock_outlined,
-                          size: 16, color: theme.colorScheme.error),
+                      Icon(
+                        Icons.lock_clock_outlined,
+                        size: 16,
+                        color: theme.colorScheme.error,
+                      ),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
@@ -360,7 +375,9 @@ class StudentClassworkCard extends StatelessWidget {
                     style: FilledButton.styleFrom(
                       backgroundColor: const Color(0xFFDC2626),
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 10),
+                        horizontal: 16,
+                        vertical: 10,
+                      ),
                     ),
                     onPressed: () => _startAssessmentFlow(context),
                     icon: const Icon(Icons.play_arrow_rounded, size: 18),
@@ -375,8 +392,10 @@ class StudentClassworkCard extends StatelessWidget {
               if (isOverdue) ...[
                 const SizedBox(height: 12),
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
                   decoration: BoxDecoration(
                     color: theme.colorScheme.error.withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(8),
@@ -447,8 +466,10 @@ class StudentClassworkCard extends StatelessWidget {
             if (classwork.score != null) ...[
               const SizedBox(height: 12),
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
                   color: const Color(0xFF0F8A48).withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(8),
@@ -518,7 +539,9 @@ class StudentClassworkCard extends StatelessWidget {
         decoration: BoxDecoration(
           color: isSubmittedWork
               ? const Color(0xFF0F8A48).withValues(alpha: 0.06)
-              : theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.25),
+              : theme.colorScheme.surfaceContainerHighest.withValues(
+                  alpha: 0.25,
+                ),
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
             color: isSubmittedWork
@@ -545,7 +568,9 @@ class StudentClassworkCard extends StatelessWidget {
                     children: [
                       Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 1),
+                          horizontal: 6,
+                          vertical: 1,
+                        ),
                         decoration: BoxDecoration(
                           color: accentColor.withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(4),
@@ -656,7 +681,6 @@ class StudentClassworkCard extends StatelessWidget {
       ? score.toInt().toString()
       : score.toStringAsFixed(1);
 
-
   Future<void> _startAssessmentFlow(BuildContext context) async {
     if (classwork.assignedAt != null &&
         classwork.assignedAt!.isAfter(DateTime.now())) {
@@ -717,7 +741,8 @@ class StudentClassworkCard extends StatelessWidget {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-                content: Text('Could not load examination details.')),
+              content: Text('Could not load examination details.'),
+            ),
           );
         }
         return;
@@ -726,8 +751,11 @@ class StudentClassworkCard extends StatelessWidget {
       final qRows = (rawAssess['assessment_questions'] as List? ?? [])
           .map((q) => Map<String, dynamic>.from(q as Map))
           .toList();
-      qRows.sort((a, b) => ((a['position'] as num?) ?? 0)
-          .compareTo((b['position'] as num?) ?? 0));
+      qRows.sort(
+        (a, b) => ((a['position'] as num?) ?? 0).compareTo(
+          (b['position'] as num?) ?? 0,
+        ),
+      );
 
       final questions = qRows.map((q) {
         final qTypeStr = q['question_type']?.toString().toLowerCase() ?? '';
@@ -802,9 +830,8 @@ class StudentClassworkCard extends StatelessWidget {
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to launch exam: $e')),
-        );
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Failed to launch exam: $e')));
       }
     }
   }
@@ -853,5 +880,4 @@ class _Detail extends StatelessWidget {
       ],
     );
   }
-
 }

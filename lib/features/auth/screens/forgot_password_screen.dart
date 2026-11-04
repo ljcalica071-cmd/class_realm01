@@ -166,7 +166,8 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       AppModals.showErrorDialog(
         context: context,
         title: 'Account Temporarily Locked',
-        message: 'Too many incorrect attempts. Please try again after $mins minute(s).',
+        message:
+            'Too many incorrect attempts. Please try again after $mins minute(s).',
       );
       return;
     }
@@ -182,7 +183,8 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         AppModals.showErrorDialog(
           context: context,
           title: 'Account Not Found',
-          message: 'It looks like there\'s no account associated with $email.\nPlease double-check your spelling or contact the ClassRealm Admin for assistance.',
+          message:
+              'It looks like there\'s no account associated with $email.\nPlease double-check your spelling or contact the ClassRealm Admin for assistance.',
         );
         return;
       }
@@ -214,9 +216,12 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
           title: 'Verify Password Reset',
           subtitle: 'We sent a 6-digit verification code to:\n$email',
           submitButtonLabel: 'Verify & Reset Password',
-          initialResendCooldown: (otpResult['resendAfter'] as num?)?.toInt() ?? 60,
-          initialInputCountdown: (otpResult['expiresIn'] as num?)?.toInt() ?? 300,
-          onVerify: (code) => AuthRepository.instance.verifyForgotPasswordOtp(code),
+          initialResendCooldown:
+              (otpResult['resendAfter'] as num?)?.toInt() ?? 60,
+          initialInputCountdown:
+              (otpResult['expiresIn'] as num?)?.toInt() ?? 300,
+          onVerify: (code) =>
+              AuthRepository.instance.verifyForgotPasswordOtp(code),
           onResend: () => AuthRepository.instance.sendForgotPasswordOtp(
             email: email,
             recipientName: user.fullName,
@@ -329,21 +334,27 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                 FocusScope.of(context).requestFocus(_confirmPassFocusNode);
               },
               inputFormatters: AppValidators.passwordFormatters,
-              buildCounter: (context, {required currentLength, required isFocused, maxLength}) {
-                return Padding(
-                  padding: const EdgeInsets.only(top: 4),
-                  child: Text(
-                    '$currentLength/${maxLength ?? 50}',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: currentLength >= (maxLength ?? 50)
-                          ? const Color(0xFFDC2626)
-                          : const Color(0xFF64748B),
-                    ),
-                  ),
-                );
-              },
+              buildCounter:
+                  (
+                    context, {
+                    required currentLength,
+                    required isFocused,
+                    maxLength,
+                  }) {
+                    return Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        '$currentLength/${maxLength ?? 50}',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: currentLength >= (maxLength ?? 50)
+                              ? const Color(0xFFDC2626)
+                              : const Color(0xFF64748B),
+                        ),
+                      ),
+                    );
+                  },
               style: const TextStyle(
                 color: Color(0xFF0F172A),
                 fontSize: 14,
@@ -392,21 +403,27 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                 }
               },
               inputFormatters: AppValidators.passwordFormatters,
-              buildCounter: (context, {required currentLength, required isFocused, maxLength}) {
-                return Padding(
-                  padding: const EdgeInsets.only(top: 4),
-                  child: Text(
-                    '$currentLength/${maxLength ?? 50}',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: currentLength >= (maxLength ?? 50)
-                          ? const Color(0xFFDC2626)
-                          : const Color(0xFF64748B),
-                    ),
-                  ),
-                );
-              },
+              buildCounter:
+                  (
+                    context, {
+                    required currentLength,
+                    required isFocused,
+                    maxLength,
+                  }) {
+                    return Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        '$currentLength/${maxLength ?? 50}',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: currentLength >= (maxLength ?? 50)
+                              ? const Color(0xFFDC2626)
+                              : const Color(0xFF64748B),
+                        ),
+                      ),
+                    );
+                  },
               style: const TextStyle(
                 color: Color(0xFF0F172A),
                 fontSize: 14,
@@ -425,14 +442,19 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                     color: const Color(0xFF64748B),
                     size: 20,
                   ),
-                  onPressed: () => setState(() => _obscureConfirm = !_obscureConfirm),
+                  onPressed: () =>
+                      setState(() => _obscureConfirm = !_obscureConfirm),
                 ),
                 focusedBorderColor: _confirmPassController.text.isEmpty
                     ? null
-                    : (_passwordsMatch ? const Color(0xFF16A34A) : const Color(0xFFDC2626)),
+                    : (_passwordsMatch
+                          ? const Color(0xFF16A34A)
+                          : const Color(0xFFDC2626)),
                 enabledBorderColor: _confirmPassController.text.isEmpty
                     ? null
-                    : (_passwordsMatch ? const Color(0xFF16A34A) : const Color(0xFFDC2626)),
+                    : (_passwordsMatch
+                          ? const Color(0xFF16A34A)
+                          : const Color(0xFFDC2626)),
               ),
             ),
             if (_confirmPassController.text.isNotEmpty && !_passwordsMatch)
@@ -458,20 +480,29 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
             // Back to Login Link
             Center(
               child: TextButton.icon(
-                onPressed: _isLoading ? null : () {
-                  Navigator.pushReplacementNamed(context, AppRoutes.login);
-                },
+                onPressed: _isLoading
+                    ? null
+                    : () {
+                        Navigator.pushReplacementNamed(
+                          context,
+                          AppRoutes.login,
+                        );
+                      },
                 icon: Icon(
                   LucideIcons.arrowLeft,
                   size: 16,
-                  color: _isLoading ? const Color(0xFF94A3B8) : const Color(0xFF487898),
+                  color: _isLoading
+                      ? const Color(0xFF94A3B8)
+                      : const Color(0xFF487898),
                 ),
                 label: Text(
                   'Back to Login',
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.bold,
-                    color: _isLoading ? const Color(0xFF94A3B8) : const Color(0xFF487898),
+                    color: _isLoading
+                        ? const Color(0xFF94A3B8)
+                        : const Color(0xFF487898),
                   ),
                 ),
               ),

@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:class_realm/models/academic_models.dart';
@@ -13,7 +14,8 @@ class TeacherNotificationsTab extends StatefulWidget {
   const TeacherNotificationsTab({super.key});
 
   @override
-  State<TeacherNotificationsTab> createState() => _TeacherNotificationsTabState();
+  State<TeacherNotificationsTab> createState() =>
+      _TeacherNotificationsTabState();
 }
 
 class _TeacherNotificationsTabState extends State<TeacherNotificationsTab> {
@@ -59,7 +61,8 @@ class _TeacherNotificationsTabState extends State<TeacherNotificationsTab> {
   }
 
   void _onScroll() {
-    if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 200 &&
+    if (_scrollController.position.pixels >=
+            _scrollController.position.maxScrollExtent - 200 &&
         !_isLoadingMore &&
         _hasMore) {
       _loadNotifications();
@@ -202,9 +205,7 @@ class _TeacherNotificationsTabState extends State<TeacherNotificationsTab> {
             );
           }
           final notification = _notifications[index];
-          return ExpandableNotificationCard(
-            notification: notification,
-          );
+          return ExpandableNotificationCard(notification: notification);
         },
       ),
     );

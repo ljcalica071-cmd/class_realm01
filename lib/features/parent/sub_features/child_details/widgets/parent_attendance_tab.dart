@@ -19,14 +19,18 @@ class ParentAttendanceTab extends StatelessWidget {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    final presentCount =
-        attendance.where((r) => r.status == AttendanceStatus.present).length;
-    final lateCount =
-        attendance.where((r) => r.status == AttendanceStatus.late).length;
-    final absentCount =
-        attendance.where((r) => r.status == AttendanceStatus.absent).length;
-    final excusedCount =
-        attendance.where((r) => r.status == AttendanceStatus.excused).length;
+    final presentCount = attendance
+        .where((r) => r.status == AttendanceStatus.present)
+        .length;
+    final lateCount = attendance
+        .where((r) => r.status == AttendanceStatus.late)
+        .length;
+    final absentCount = attendance
+        .where((r) => r.status == AttendanceStatus.absent)
+        .length;
+    final excusedCount = attendance
+        .where((r) => r.status == AttendanceStatus.excused)
+        .length;
 
     final totalAccounted = presentCount + lateCount + absentCount;
     final rate = totalAccounted > 0
@@ -67,12 +71,7 @@ class ParentAttendanceTab extends StatelessWidget {
                     AppTheme.catRed,
                   ),
                   const SizedBox(width: 8),
-                  _buildStatCard(
-                    theme,
-                    'Rate',
-                    '$rate%',
-                    AppTheme.catBlue,
-                  ),
+                  _buildStatCard(theme, 'Rate', '$rate%', AppTheme.catBlue),
                 ],
               ),
               if (excusedCount > 0) ...[
@@ -101,101 +100,102 @@ class ParentAttendanceTab extends StatelessWidget {
                     child: const AppEmptyState(
                       icon: Icons.family_restroom_outlined,
                       title: 'No Attendance Logs Yet',
-                      message:
-                          'Your child\'s daily subject attendance records will appear here.',
+                      message: 'Your child\'s daily subject attendance records will appear here.',
                     ),
                   )
                 : ListView.separated(
                     physics: const AlwaysScrollableScrollPhysics(),
                     padding: const EdgeInsets.all(16),
-                  itemCount: attendance.length,
-                  separatorBuilder: (_, _) => const SizedBox(height: 10),
-                  itemBuilder: (ctx, i) {
-                    final att = attendance[i];
-                    final source = _resolveProvenance(att);
-                    final classLabel = _resolveClassLabel(att);
-                    final timeInDisplay = att.timeIn.trim().isEmpty
-                        ? '—'
-                        : att.timeIn.trim();
+                    itemCount: attendance.length,
+                    separatorBuilder: (_, _) => const SizedBox(height: 10),
+                    itemBuilder: (ctx, i) {
+                      final att = attendance[i];
+                      final source = _resolveProvenance(att);
+                      final classLabel = _resolveClassLabel(att);
+                      final timeInDisplay = att.timeIn.trim().isEmpty
+                          ? '—'
+                          : att.timeIn.trim();
 
-                    return Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.surface,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: theme.colorScheme.onSurface
-                              .withValues(alpha: isDark ? 0.16 : 0.12),
+                      return Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.surface,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: theme.colorScheme.onSurface.withValues(
+                              alpha: isDark ? 0.16 : 0.12,
+                            ),
+                          ),
                         ),
-                      ),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  classLabel,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: 15,
-                                    color: theme.colorScheme.onSurface,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Wrap(
-                                  spacing: 10,
-                                  runSpacing: 4,
-                                  crossAxisAlignment: WrapCrossAlignment.center,
-                                  children: [
-                                    Text(
-                                      _formatDate(att.date),
-                                      style: TextStyle(
-                                        fontSize: 12.5,
-                                        fontWeight: FontWeight.w600,
-                                        color: theme.colorScheme.onSurface
-                                            .withValues(alpha: 0.72),
-                                      ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    classLabel,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 15,
+                                      color: theme.colorScheme.onSurface,
                                     ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Wrap(
+                                    spacing: 10,
+                                    runSpacing: 4,
+                                    crossAxisAlignment:
+                                        WrapCrossAlignment.center,
+                                    children: [
+                                      Text(
+                                        _formatDate(att.date),
+                                        style: TextStyle(
+                                          fontSize: 12.5,
+                                          fontWeight: FontWeight.w600,
+                                          color: theme.colorScheme.onSurface
+                                              .withValues(alpha: 0.72),
+                                        ),
+                                      ),
+                                      Text(
+                                        'Time In: $timeInDisplay',
+                                        style: TextStyle(
+                                          fontSize: 12.5,
+                                          color: theme.colorScheme.onSurface
+                                              .withValues(alpha: 0.68),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8),
+                                  _buildProvenancePill(theme, source),
+                                  if (att.remarks != null &&
+                                      att.remarks!.trim().isNotEmpty) ...[
+                                    const SizedBox(height: 6),
                                     Text(
-                                      'Time In: $timeInDisplay',
+                                      att.remarks!.trim(),
                                       style: TextStyle(
-                                        fontSize: 12.5,
+                                        fontSize: 11.5,
+                                        fontStyle: FontStyle.italic,
                                         color: theme.colorScheme.onSurface
-                                            .withValues(alpha: 0.68),
+                                            .withValues(alpha: 0.65),
                                       ),
                                     ),
                                   ],
-                                ),
-                                const SizedBox(height: 8),
-                                _buildProvenancePill(theme, source),
-                                if (att.remarks != null &&
-                                    att.remarks!.trim().isNotEmpty) ...[
-                                  const SizedBox(height: 6),
-                                  Text(
-                                    att.remarks!.trim(),
-                                    style: TextStyle(
-                                      fontSize: 11.5,
-                                      fontStyle: FontStyle.italic,
-                                      color: theme.colorScheme.onSurface
-                                          .withValues(alpha: 0.65),
-                                    ),
-                                  ),
                                 ],
-                              ],
+                              ),
                             ),
-                          ),
-                          const SizedBox(width: 10),
-                          StatusBadge.fromAttendance(att.status),
-                        ],
-                      ),
-                    );
-                  },
-                ),
+                            const SizedBox(width: 10),
+                            StatusBadge.fromAttendance(att.status),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
           ),
         ),
       ],
@@ -372,7 +372,11 @@ class ParentAttendanceTab extends StatelessWidget {
     return '${months[date.month - 1]} ${date.day}, ${date.year}';
   }
 
-  Widget _buildParentAbsenceTierAlert(ThemeData theme, bool isDark, int absentCount) {
+  Widget _buildParentAbsenceTierAlert(
+    ThemeData theme,
+    bool isDark,
+    int absentCount,
+  ) {
     if (absentCount < 3) return const SizedBox.shrink();
 
     final Color bannerColor;
@@ -388,24 +392,21 @@ class ParentAttendanceTab extends StatelessWidget {
       textColor = isDark ? const Color(0xFFFCA5A5) : const Color(0xFF991B1B);
       icon = Icons.error_rounded;
       title = 'Critical Notice: $absentCount Recorded Absences (SARDO Risk)';
-      subtitle =
-          'Your child has accumulated 10 absences and is at imminent risk of dropping out (DepEd SARDO policy). Please attend an urgent conference with the class adviser.';
+      subtitle = 'Your child has accumulated 10 absences and is at imminent risk of dropping out (DepEd SARDO policy). Please attend an urgent conference with the class adviser.';
     } else if (absentCount >= 5) {
       bannerColor = isDark ? const Color(0xFF431407) : const Color(0xFFFFF7ED);
       borderColor = const Color(0xFFEA580C);
       textColor = isDark ? const Color(0xFFFDBA74) : const Color(0xFF9A3412);
       icon = Icons.warning_amber_rounded;
       title = 'Attendance Alert: $absentCount Recorded Absences';
-      subtitle =
-          'Attendance intervention required. Please coordinate with your child\'s subject teacher or class adviser regarding missed school days.';
+      subtitle = 'Attendance intervention required. Please coordinate with your child\'s subject teacher or class adviser regarding missed school days.';
     } else {
       bannerColor = isDark ? const Color(0xFF422006) : const Color(0xFFFEFCE8);
       borderColor = const Color(0xFFCA8A04);
       textColor = isDark ? const Color(0xFFFDE047) : const Color(0xFF854D0E);
       icon = Icons.info_outline_rounded;
       title = 'Early Warning: $absentCount Recorded Absences';
-      subtitle =
-          'Your child has 3 recorded absences. Please ensure regular attendance to maintain academic standing.';
+      subtitle = 'Your child has 3 recorded absences. Please ensure regular attendance to maintain academic standing.';
     }
 
     return Container(

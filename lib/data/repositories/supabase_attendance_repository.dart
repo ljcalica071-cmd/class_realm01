@@ -17,7 +17,7 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
   SyncStatus _syncStatus = SyncStatus.online;
 
   SupabaseAttendanceRepository({SupabaseClient? client})
-      : _injectedClient = client;
+    : _injectedClient = client;
 
   SupabaseClient get _client => _injectedClient ?? Supabase.instance.client;
 
@@ -116,9 +116,8 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
       return '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
     }
 
-    final time24Match = RegExp(
-      r'^(\d{1,2}):(\d{2})(?::(\d{2}))?',
-    ).firstMatch(text);
+    final time24Match = RegExp(r'^(\d{1,2}):(\d{2})(?::(\d{2}))?')
+        .firstMatch(text);
     if (time24Match != null) {
       final h = int.tryParse(time24Match.group(1)!) ?? 0;
       final m = int.tryParse(time24Match.group(2)!) ?? 0;
@@ -204,7 +203,8 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
           code == '42883' || // undefined_function
           code == 'PGRST202' || // function not found in schema cache
           code == 'PGRST204' || // column not found in schema cache
-          code == 'PGRST205') { // table not found in schema cache
+          code == 'PGRST205') {
+        // table not found in schema cache
         return true;
       }
       if (msg.contains('does not exist') ||
@@ -312,16 +312,16 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
   static void _sortRosterAlphabetically(List<AttendanceRosterStudent> list) {
     list.sort((a, b) {
       final lastCmp = a.lastName.trim().toLowerCase().compareTo(
-            b.lastName.trim().toLowerCase(),
-          );
+        b.lastName.trim().toLowerCase(),
+      );
       if (lastCmp != 0) return lastCmp;
       final firstCmp = a.firstName.trim().toLowerCase().compareTo(
-            b.firstName.trim().toLowerCase(),
-          );
+        b.firstName.trim().toLowerCase(),
+      );
       if (firstCmp != 0) return firstCmp;
       return (a.middleName ?? '').trim().toLowerCase().compareTo(
-            (b.middleName ?? '').trim().toLowerCase(),
-          );
+        (b.middleName ?? '').trim().toLowerCase(),
+      );
     });
   }
 
@@ -337,7 +337,9 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
     final dateStr = _formatDate(date);
     final cacheKey = 'attendance_workspace_${subjectOfferingId}_$dateStr';
 
-    final memCached = AppDataCache.instance.get<AttendanceRosterResult>(cacheKey);
+    final memCached = AppDataCache.instance.get<AttendanceRosterResult>(
+      cacheKey,
+    );
     if (memCached != null &&
         AppDataCache.instance.isFresh(
           cacheKey,
@@ -416,66 +418,72 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
         }
       }
 
-      final localRfidFallback =
-          cloudHasRfidColumn ? const <String, String>{} : _readLocalRfidOverrides();
+      final localRfidFallback = cloudHasRfidColumn
+          ? const <String, String>{}
+          : _readLocalRfidOverrides();
 
       final enrollmentCompanions = <LocalEnrollmentsCompanion>[];
       final studentCompanions = <LocalStudentsCompanion>[];
 
-      final studentsList = enrollments.map((e) {
-        final p = e['student_profiles'] as Map<String, dynamic>?;
-        final studentId =
-            p?['student_id']?.toString() ?? e['student_id']?.toString() ?? '';
-        final lrn = p?['lrn']?.toString();
-        final rawRfid = p?['rfid_uid']?.toString().trim();
-        final resolvedRfid = (rawRfid != null && rawRfid.isNotEmpty)
-            ? rawRfid.toUpperCase()
-            : localRfidFallback[studentId];
-        final firstName = p?['first_name']?.toString() ?? '';
-        final middleName = p?['middle_name']?.toString();
-        final lastName = p?['last_name']?.toString() ?? '';
-        final gender =
-            (p?['gender']?.toString() ?? 'unspecified').toLowerCase();
+      final studentsList = enrollments
+          .map((e) {
+            final p = e['student_profiles'] as Map<String, dynamic>?;
+            final studentId =
+                p?['student_id']?.toString() ??
+                e['student_id']?.toString() ??
+                '';
+            final lrn = p?['lrn']?.toString();
+            final rawRfid = p?['rfid_uid']?.toString().trim();
+            final resolvedRfid = (rawRfid != null && rawRfid.isNotEmpty)
+                ? rawRfid.toUpperCase()
+                : localRfidFallback[studentId];
+            final firstName = p?['first_name']?.toString() ?? '';
+            final middleName = p?['middle_name']?.toString();
+            final lastName = p?['last_name']?.toString() ?? '';
+            final gender = (p?['gender']?.toString() ?? 'unspecified')
+                .toLowerCase();
 
-        final enrollmentId = e['id']?.toString() ?? '';
-        if (studentId.isNotEmpty) {
-          studentCompanions.add(
-            LocalStudentsCompanion.insert(
+            final enrollmentId = e['id']?.toString() ?? '';
+            if (studentId.isNotEmpty) {
+              studentCompanions.add(
+                LocalStudentsCompanion.insert(
+                  studentId: studentId,
+                  lrn: Value(lrn),
+                  rfidUid: cloudHasRfidColumn
+                      ? Value(resolvedRfid)
+                      : (resolvedRfid != null
+                            ? Value(resolvedRfid)
+                            : const Value.absent()),
+                  firstName: firstName,
+                  middleName: Value(middleName),
+                  lastName: lastName,
+                  gender: Value(gender),
+                ),
+              );
+              if (enrollmentId.isNotEmpty) {
+                enrollmentCompanions.add(
+                  LocalEnrollmentsCompanion.insert(
+                    id: enrollmentId,
+                    studentId: studentId,
+                    subjectOfferingId: subjectOfferingId,
+                    status: Value(e['status']?.toString() ?? 'enrolled'),
+                  ),
+                );
+              }
+            }
+
+            return AttendanceRosterStudent(
               studentId: studentId,
-              lrn: Value(lrn),
-              rfidUid: cloudHasRfidColumn
-                  ? Value(resolvedRfid)
-                  : (resolvedRfid != null
-                        ? Value(resolvedRfid)
-                        : const Value.absent()),
+              lrn: lrn,
+              rfidUid: resolvedRfid,
               firstName: firstName,
-              middleName: Value(middleName),
+              middleName: middleName,
               lastName: lastName,
-              gender: Value(gender),
-            ),
-          );
-          if (enrollmentId.isNotEmpty) {
-            enrollmentCompanions.add(
-              LocalEnrollmentsCompanion.insert(
-                id: enrollmentId,
-                studentId: studentId,
-                subjectOfferingId: subjectOfferingId,
-                status: Value(e['status']?.toString() ?? 'enrolled'),
-              ),
+              gender: gender,
             );
-          }
-        }
-
-        return AttendanceRosterStudent(
-          studentId: studentId,
-          lrn: lrn,
-          rfidUid: resolvedRfid,
-          firstName: firstName,
-          middleName: middleName,
-          lastName: lastName,
-          gender: gender,
-        );
-      }).where((s) => s.studentId.isNotEmpty).toList();
+          })
+          .where((s) => s.studentId.isNotEmpty)
+          .toList();
 
       _sortRosterAlphabetically(studentsList);
 
@@ -598,7 +606,8 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
                     id: rec.id,
                     studentId: rec.studentId,
                     subjectOfferingId: rec.subjectOfferingId,
-                    attendanceDate: DateTime.tryParse(rec.attendanceDate) ?? date,
+                    attendanceDate:
+                        DateTime.tryParse(rec.attendanceDate) ?? date,
                     status: _parseAttendanceStatus(rec.status),
                     source: _safeParseSource(
                       rec.recordingMethod.isNotEmpty
@@ -675,7 +684,9 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
           .toList();
     }
 
-    Future<void> fallbackDeleteAndInsert(List<Map<String, dynamic>> rows) async {
+    Future<void> fallbackDeleteAndInsert(
+      List<Map<String, dynamic>> rows,
+    ) async {
       final studentIds = rows
           .map((r) => r['student_id']?.toString() ?? '')
           .where((s) => s.isNotEmpty)
@@ -692,7 +703,9 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
     }
 
     try {
-      await _client.from('attendance_records').upsert(
+      await _client
+          .from('attendance_records')
+          .upsert(
             fullRows,
             onConflict: 'student_id,subject_offering_id,attendance_date',
           );
@@ -713,7 +726,9 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
       if (_isMissingSchemaObject(err)) {
         final baseRows = buildBaseRows();
         try {
-          await _client.from('attendance_records').upsert(
+          await _client
+              .from('attendance_records')
+              .upsert(
                 baseRows,
                 onConflict: 'student_id,subject_offering_id,attendance_date',
               );
@@ -800,7 +815,9 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
       );
 
       _syncStatus = SyncStatus.online;
-      unawaited(_checkAndTriggerAbsenceAlerts(subjectOfferingId, normalizedRecords));
+      unawaited(
+        _checkAndTriggerAbsenceAlerts(subjectOfferingId, normalizedRecords),
+      );
 
       if (!kIsWeb) {
         try {
@@ -955,7 +972,9 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
     try {
       final schedRows = await _client
           .from('teacher_schedule')
-          .select('id, subject_offering_id, day_of_week, start_time, end_time, room, is_active')
+          .select(
+            'id, subject_offering_id, day_of_week, start_time, end_time, room, is_active',
+          )
           .eq('subject_offering_id', subjectOfferingId)
           .eq('is_active', true)
           .order('start_time', ascending: true);
@@ -985,7 +1004,8 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
             final companions = list
                 .map(
                   (r) => LocalSchedulesCompanion.insert(
-                    id: r['id']?.toString() ??
+                    id:
+                        r['id']?.toString() ??
                         '${subjectOfferingId}_${r['day_of_week']}_${r['start_time']}',
                     subjectOfferingId: subjectOfferingId,
                     teacherId: _currentUserId() ?? '',
@@ -1034,7 +1054,8 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
           hasPlottedScheduleAnyDay = true;
           for (final item in cachedScheds) {
             if (item is Map) {
-              final dow = (item['day_of_week'] as num?)?.toInt() ??
+              final dow =
+                  (item['day_of_week'] as num?)?.toInt() ??
                   int.tryParse(item['day_of_week']?.toString() ?? '');
               if (dow == targetDow) {
                 isScheduledOnDate = true;
@@ -1213,17 +1234,14 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
     _invalidateAttendanceCaches();
 
     try {
-      await _client.from('attendance_cutoffs').upsert(
-        {
-          'subject_offering_id': config.subjectOfferingId,
-          'present_start_mins_before': config.presentStartMinsBefore,
-          'present_grace_mins': config.presentGraceMins,
-          'late_cutoff_mins': config.lateCutoffMins,
-          'absent_cutoff_mins': config.absentCutoffMins,
-          'updated_at': DateTime.now().toUtc().toIso8601String(),
-        },
-        onConflict: 'subject_offering_id',
-      );
+      await _client.from('attendance_cutoffs').upsert({
+        'subject_offering_id': config.subjectOfferingId,
+        'present_start_mins_before': config.presentStartMinsBefore,
+        'present_grace_mins': config.presentGraceMins,
+        'late_cutoff_mins': config.lateCutoffMins,
+        'absent_cutoff_mins': config.absentCutoffMins,
+        'updated_at': DateTime.now().toUtc().toIso8601String(),
+      }, onConflict: 'subject_offering_id');
     } catch (e) {
       if (_isMissingSchemaObject(e)) {
         debugPrint(
@@ -1268,7 +1286,9 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
       // Exact case-insensitive match first
       final directRows = await _client
           .from('student_profiles')
-          .select('student_id, first_name, middle_name, last_name, lrn, rfid_uid')
+          .select(
+            'student_id, first_name, middle_name, last_name, lrn, rfid_uid',
+          )
           .ilike('rfid_uid', cleanUid);
 
       Map<String, dynamic>? conflictRow;
@@ -1284,7 +1304,9 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
       if (conflictRow == null && cleanHex.isNotEmpty) {
         final allAssigned = await _client
             .from('student_profiles')
-            .select('student_id, first_name, middle_name, last_name, lrn, rfid_uid')
+            .select(
+              'student_id, first_name, middle_name, last_name, lrn, rfid_uid',
+            )
             .not('rfid_uid', 'is', null);
         for (final row in (allAssigned as List).cast<Map<String, dynamic>>()) {
           final sid = row['student_id']?.toString() ?? '';
@@ -1308,8 +1330,9 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
         return RfidCardConflictCheck(
           isTaken: true,
           existingStudentId: conflictRow['student_id']?.toString(),
-          existingStudentName:
-              formattedName.isNotEmpty ? formattedName : conflictRow['student_id']?.toString(),
+          existingStudentName: formattedName.isNotEmpty
+              ? formattedName
+              : conflictRow['student_id']?.toString(),
           existingLrn: conflictRow['lrn']?.toString(),
         );
       }
@@ -1492,7 +1515,11 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
           scanTimestamp: effectiveTimestamp,
           studentId: outcome.studentId!,
           status: outcome.status!,
-          timeIn: outcome.timeIn ?? _formatTimeDisplay(effectiveTimestamp.toIso8601String().split('T').last),
+          timeIn:
+              outcome.timeIn ??
+              _formatTimeDisplay(
+                effectiveTimestamp.toIso8601String().split('T').last,
+              ),
           deviceId: deviceId,
           isSynced: true,
         );
@@ -1562,7 +1589,8 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
       return RfidScanOutcome(
         success: false,
         code: 'HOLIDAY_LOCKED',
-        message: schedStatus.lockReason ??
+        message:
+            schedStatus.lockReason ??
             'Recognized school holiday. Attendance scans are disabled.',
       );
     }
@@ -1578,7 +1606,8 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
       if (rows.isNotEmpty) {
         final r = Map<String, dynamic>.from(rows.first as Map);
         studentId = r['student_id']?.toString();
-        studentName = '${r['last_name'] ?? ''}, ${r['first_name'] ?? ''}'.trim();
+        studentName = '${r['last_name'] ?? ''}, ${r['first_name'] ?? ''}'
+            .trim();
       }
     } catch (err) {
       if (!_isMissingSchemaObject(err)) rethrow;
@@ -1601,7 +1630,8 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
             .eq('student_id', studentId)
             .maybeSingle();
         if (p != null) {
-          studentName = '${p['last_name'] ?? ''}, ${p['first_name'] ?? ''}'.trim();
+          studentName = '${p['last_name'] ?? ''}, ${p['first_name'] ?? ''}'
+              .trim();
         }
       }
     }
@@ -1629,12 +1659,14 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
         code: 'CROSS_SECTION_TAP',
         studentId: studentId,
         studentName: studentName,
-        message: '${studentName ?? "Student"} is not enrolled in this class section.',
+        message:
+            '${studentName ?? "Student"} is not enrolled in this class section.',
       );
     }
 
     // 4. Validate schedule & cutoff window
-    if (schedStatus.hasPlottedScheduleAnyDay && !schedStatus.isScheduledOnDate) {
+    if (schedStatus.hasPlottedScheduleAnyDay &&
+        !schedStatus.isScheduledOnDate) {
       return RfidScanOutcome(
         success: false,
         code: 'NO_SCHEDULE_TODAY',
@@ -1716,7 +1748,8 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
               'recording_method': 'RFID',
               'time_in': scanTime24,
               'device_id': deviceId,
-              'remarks': 'Promoted from System Auto-Absent via delayed RFID tap',
+              'remarks':
+                  'Promoted from System Auto-Absent via delayed RFID tap',
               'updated_at': DateTime.now().toUtc().toIso8601String(),
             },
           ],
@@ -1875,7 +1908,8 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
       studentId: studentId,
       studentName: studentName,
       timeIn: scanTimeDisplay,
-      message: 'Attendance recorded as ${calculatedStatus.name[0].toUpperCase()}${calculatedStatus.name.substring(1)}.',
+      message:
+          'Attendance recorded as ${calculatedStatus.name[0].toUpperCase()}${calculatedStatus.name.substring(1)}.',
     );
   }
 
@@ -1927,8 +1961,8 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
         );
         if (localStudent != null) {
           studentId = localStudent.studentId;
-          studentName =
-              '${localStudent.lastName}, ${localStudent.firstName}'.trim();
+          studentName = '${localStudent.lastName}, ${localStudent.firstName}'
+              .trim();
 
           final offeringStudents = await AppDatabase.instance
               .getStudentsForOffering(subjectOfferingId);
@@ -1961,7 +1995,8 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
         code: 'CROSS_SECTION_TAP',
         studentId: studentId,
         studentName: studentName,
-        message: '${studentName ?? "Student"} is not enrolled in this class section.',
+        message:
+            '${studentName ?? "Student"} is not enrolled in this class section.',
         isOfflineQueued: false,
       );
     }
@@ -1978,12 +2013,14 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
         code: 'HOLIDAY_LOCKED',
         studentId: studentId,
         studentName: studentName,
-        message: schedStatus.lockReason ??
+        message:
+            schedStatus.lockReason ??
             'Recognized school holiday. Attendance scans are disabled.',
       );
     }
 
-    if (schedStatus.hasPlottedScheduleAnyDay && !schedStatus.isScheduledOnDate) {
+    if (schedStatus.hasPlottedScheduleAnyDay &&
+        !schedStatus.isScheduledOnDate) {
       return RfidScanOutcome(
         success: false,
         code: 'NO_SCHEDULE_TODAY',
@@ -2085,8 +2122,8 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
       );
       final webQueue = webScanQueueRaw is List
           ? webScanQueueRaw
-              .map((e) => Map<String, dynamic>.from(e as Map))
-              .toList()
+                .map((e) => Map<String, dynamic>.from(e as Map))
+                .toList()
           : <Map<String, dynamic>>[];
       webQueue.add(scanPayload);
       await LocalStorageService.saveJson('offline_rfid_scans_queue', webQueue);
@@ -2106,7 +2143,8 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
     );
   }
 
-  ({AttendanceStatus? status, RfidScanOutcome? rejection}) _evaluateCutoffWindow({
+  ({AttendanceStatus? status, RfidScanOutcome? rejection})
+  _evaluateCutoffWindow({
     required String scanTime24,
     required String startTime,
     required String? endTime,
@@ -2343,7 +2381,8 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
 
             if (item.action == 'batch_save' ||
                 item.action == 'save_attendance') {
-              final offeringId = payload['subject_offering_id']?.toString() ?? '';
+              final offeringId =
+                  payload['subject_offering_id']?.toString() ?? '';
               final dateStr = payload['date']?.toString() ?? '';
               final rawRecords = (payload['records'] as List? ?? []);
               if (offeringId.isNotEmpty &&
@@ -2405,7 +2444,9 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
       }
 
       // 2. Also drain Web / LocalStorageService offline queues
-      final webScansRaw = LocalStorageService.getJson('offline_rfid_scans_queue');
+      final webScansRaw = LocalStorageService.getJson(
+        'offline_rfid_scans_queue',
+      );
       if (webScansRaw is List && webScansRaw.isNotEmpty) {
         final remaining = <Map<String, dynamic>>[];
         for (final raw in webScansRaw) {
@@ -2430,7 +2471,10 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
             }
           }
         }
-        await LocalStorageService.saveJson('offline_rfid_scans_queue', remaining);
+        await LocalStorageService.saveJson(
+          'offline_rfid_scans_queue',
+          remaining,
+        );
       }
 
       final lsBatches = LocalStorageService.getOfflineAttendanceQueue();
@@ -2670,9 +2714,9 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
       atRiskStudents.sort((a, b) {
         final cmp = b.absenceCount.compareTo(a.absenceCount);
         if (cmp != 0) return cmp;
-        return a.studentName
-            .toLowerCase()
-            .compareTo(b.studentName.toLowerCase());
+        return a.studentName.toLowerCase().compareTo(
+          b.studentName.toLowerCase(),
+        );
       });
 
       final dateGroups = <String, List<Map<String, dynamic>>>{};
@@ -2750,20 +2794,26 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
 
     final uid = _currentUserId();
     try {
-      await _client.from('attendance_records').update({
-        'status': newStatus.name,
-        'recording_method': 'Manual',
-        'remarks': trimmedReason,
-        if (uid != null) 'recorded_by': uid,
-        'updated_at': DateTime.now().toUtc().toIso8601String(),
-      }).eq('id', recordId);
+      await _client
+          .from('attendance_records')
+          .update({
+            'status': newStatus.name,
+            'recording_method': 'Manual',
+            'remarks': trimmedReason,
+            if (uid != null) 'recorded_by': uid,
+            'updated_at': DateTime.now().toUtc().toIso8601String(),
+          })
+          .eq('id', recordId);
     } catch (err) {
       if (_isMissingSchemaObject(err)) {
-        await _client.from('attendance_records').update({
-          'status': newStatus.name,
-          'remarks': trimmedReason,
-          if (uid != null) 'recorded_by': uid,
-        }).eq('id', recordId);
+        await _client
+            .from('attendance_records')
+            .update({
+              'status': newStatus.name,
+              'remarks': trimmedReason,
+              if (uid != null) 'recorded_by': uid,
+            })
+            .eq('id', recordId);
       } else {
         rethrow;
       }
@@ -2867,14 +2917,14 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
     final subMap = row['subject_offerings'] as Map<String, dynamic>?;
     final subjectName =
         (subMap?['subjects'] as Map<String, dynamic>?)?['subject_name']
-                ?.toString()
-                .trim() ??
-            fallbackSubject;
+            ?.toString()
+            .trim() ??
+        fallbackSubject;
     final sectionName =
         (subMap?['sections'] as Map<String, dynamic>?)?['section_name']
-                ?.toString()
-                .trim() ??
-            '';
+            ?.toString()
+            .trim() ??
+        '';
 
     final profileMap = row['student_profiles'] as Map<String, dynamic>?;
     String studentName = '';
@@ -2903,7 +2953,8 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
       studentId: row['student_id']?.toString() ?? '',
       studentName: studentName,
       section: sectionDisplay.isNotEmpty ? sectionDisplay : subjectName,
-      date: DateTime.tryParse(row['attendance_date']?.toString() ?? '') ??
+      date:
+          DateTime.tryParse(row['attendance_date']?.toString() ?? '') ??
           DateTime.now(),
       status: status,
       timeIn: _formatTimeDisplay(row['time_in']),

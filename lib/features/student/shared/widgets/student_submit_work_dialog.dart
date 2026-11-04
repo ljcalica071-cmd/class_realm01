@@ -180,8 +180,7 @@ class _StudentSubmitWorkDialogState extends State<StudentSubmitWorkDialog> {
         if (ext == 'doc') {
           mimeType = 'application/msword';
         } else if (ext == 'docx') {
-          mimeType =
-              'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+          mimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
         }
 
         try {

@@ -99,22 +99,31 @@ class _AiGenerationModalState extends State<AiGenerationModal> {
     setState(() => _errorMessage = null);
 
     if (_selectedFocusDomains.isEmpty) {
-      setState(() => _errorMessage = 'Select at least one assessment focus domain.');
+      setState(
+        () => _errorMessage = 'Select at least one assessment focus domain.',
+      );
       return;
     }
 
-    if (!_includeMultipleChoice && !_includeTrueFalse && !_includeIdentification) {
+    if (!_includeMultipleChoice &&
+        !_includeTrueFalse &&
+        !_includeIdentification) {
       setState(() => _errorMessage = 'Select at least one question type.');
       return;
     }
 
     final total = _totalPlannedItems;
     if (total < 1) {
-      setState(() => _errorMessage = 'Planned question count must be at least 1.');
+      setState(
+        () => _errorMessage = 'Planned question count must be at least 1.',
+      );
       return;
     }
     if (total > 100) {
-      setState(() => _errorMessage = 'Maximum limit reached: Total cannot exceed 100 items.');
+      setState(
+        () => _errorMessage =
+            'Maximum limit reached: Total cannot exceed 100 items.',
+      );
       return;
     }
 
@@ -134,7 +143,8 @@ class _AiGenerationModalState extends State<AiGenerationModal> {
           QuestionModel(
             id: 'q_gen_${DateTime.now().millisecondsSinceEpoch}_$questionIndex',
             type: QuestionType.multipleChoice,
-            questionText: 'Item $questionIndex: Which principle best defines the core relationship in ${widget.subjectName.isNotEmpty ? widget.subjectName : "the topic"}?',
+            questionText:
+                'Item $questionIndex: Which principle best defines the core relationship in ${widget.subjectName.isNotEmpty ? widget.subjectName : "the topic"}?',
             choices: [
               'Primary foundational postulate',
               'Secondary derivative factor',
@@ -157,7 +167,8 @@ class _AiGenerationModalState extends State<AiGenerationModal> {
           QuestionModel(
             id: 'q_gen_${DateTime.now().millisecondsSinceEpoch}_$questionIndex',
             type: QuestionType.trueFalse,
-            questionText: 'Item $questionIndex: The stated thesis remains valid under all standard thermodynamic and structural assumptions.',
+            questionText:
+                'Item $questionIndex: The stated thesis remains valid under all standard thermodynamic and structural assumptions.',
             choices: ['True', 'False'],
             correctAnswer: i.isEven ? 'True' : 'False',
             points: 1.0,
@@ -175,7 +186,8 @@ class _AiGenerationModalState extends State<AiGenerationModal> {
           QuestionModel(
             id: 'q_gen_${DateTime.now().millisecondsSinceEpoch}_$questionIndex',
             type: QuestionType.identification,
-            questionText: 'Item $questionIndex: Identify the term used to describe this phenomenon.',
+            questionText:
+                'Item $questionIndex: Identify the term used to describe this phenomenon.',
             choices: const [],
             correctAnswer: 'Equilibrium',
             points: 1.0,
@@ -213,7 +225,11 @@ class _AiGenerationModalState extends State<AiGenerationModal> {
                     color: AppTheme.catPurple.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: const Icon(Icons.auto_awesome, color: AppTheme.catPurple, size: 24),
+                  child: const Icon(
+                    Icons.auto_awesome,
+                    color: AppTheme.catPurple,
+                    size: 24,
+                  ),
                 ),
                 const SizedBox(width: 14),
                 Expanded(
@@ -232,7 +248,9 @@ class _AiGenerationModalState extends State<AiGenerationModal> {
                         'Document-grounded question generator with hybrid cognitive domains.',
                         style: TextStyle(
                           fontSize: 12,
-                          color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                          color: theme.colorScheme.onSurface.withValues(
+                            alpha: 0.6,
+                          ),
                         ),
                       ),
                     ],
@@ -256,7 +274,11 @@ class _AiGenerationModalState extends State<AiGenerationModal> {
                 ),
                 child: Text(
                   _errorMessage!,
-                  style: const TextStyle(color: AppTheme.catRed, fontSize: 12, fontWeight: FontWeight.bold),
+                  style: const TextStyle(
+                    color: AppTheme.catRed,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
 
@@ -267,7 +289,10 @@ class _AiGenerationModalState extends State<AiGenerationModal> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     // Document Upload Section
-                    Text('1. Reference Document (.pdf, .docx, .txt — Max 5 MiB)', style: _stepHeaderStyle(theme)),
+                    Text(
+                      '1. Reference Document (.pdf, .docx, .txt — Max 5 MiB)',
+                      style: _stepHeaderStyle(theme),
+                    ),
                     const SizedBox(height: 8),
                     InkWell(
                       onTap: _pickReferenceDocument,
@@ -278,14 +303,18 @@ class _AiGenerationModalState extends State<AiGenerationModal> {
                           color: theme.colorScheme.surface,
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
-                            color: theme.colorScheme.primary.withValues(alpha: 0.3),
+                            color: theme.colorScheme.primary.withValues(
+                              alpha: 0.3,
+                            ),
                             style: BorderStyle.solid,
                           ),
                         ),
                         child: Row(
                           children: [
                             Icon(
-                              _pickedFile != null ? Icons.description : Icons.cloud_upload_outlined,
+                              _pickedFile != null
+                                  ? Icons.description
+                                  : Icons.cloud_upload_outlined,
                               color: theme.colorScheme.primary,
                               size: 28,
                             ),
@@ -308,7 +337,8 @@ class _AiGenerationModalState extends State<AiGenerationModal> {
                                         : 'Zero hallucination: AI strictly generates items from this document',
                                     style: TextStyle(
                                       fontSize: 11,
-                                      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                                      color: theme.colorScheme.onSurface
+                                          .withValues(alpha: 0.6),
                                     ),
                                   ),
                                 ],
@@ -317,7 +347,8 @@ class _AiGenerationModalState extends State<AiGenerationModal> {
                             if (_pickedFile != null)
                               IconButton(
                                 icon: const Icon(Icons.close, size: 18),
-                                onPressed: () => setState(() => _pickedFile = null),
+                                onPressed: () =>
+                                    setState(() => _pickedFile = null),
                               ),
                           ],
                         ),
@@ -326,34 +357,42 @@ class _AiGenerationModalState extends State<AiGenerationModal> {
                     const SizedBox(height: 18),
 
                     // Cognitive Domain Selector
-                    Text('2. Assessment Focus & Cognitive Domains (Select 1 or more)', style: _stepHeaderStyle(theme)),
+                    Text(
+                      '2. Assessment Focus & Cognitive Domains (Select 1 or more)',
+                      style: _stepHeaderStyle(theme),
+                    ),
                     const SizedBox(height: 8),
                     Wrap(
                       spacing: 8,
                       runSpacing: 8,
-                      children: [
-                        'Terms and Definitions',
-                        'Conceptual Understanding',
-                        'Application & Problem Solving',
-                        'Critical Thinking & Analysis',
-                      ].map((domain) {
-                        final isSelected = _selectedFocusDomains.contains(domain);
-                        return FilterChip(
-                          label: Text(domain),
-                          selected: isSelected,
-                          selectedColor: AppTheme.catPurple.withValues(alpha: 0.2),
-                          checkmarkColor: AppTheme.catPurple,
-                          onSelected: (val) {
-                            setState(() {
-                              if (val) {
-                                _selectedFocusDomains.add(domain);
-                              } else {
-                                _selectedFocusDomains.remove(domain);
-                              }
-                            });
-                          },
-                        );
-                      }).toList(),
+                      children:
+                          [
+                            'Terms and Definitions',
+                            'Conceptual Understanding',
+                            'Application & Problem Solving',
+                            'Critical Thinking & Analysis',
+                          ].map((domain) {
+                            final isSelected = _selectedFocusDomains.contains(
+                              domain,
+                            );
+                            return FilterChip(
+                              label: Text(domain),
+                              selected: isSelected,
+                              selectedColor: AppTheme.catPurple.withValues(
+                                alpha: 0.2,
+                              ),
+                              checkmarkColor: AppTheme.catPurple,
+                              onSelected: (val) {
+                                setState(() {
+                                  if (val) {
+                                    _selectedFocusDomains.add(domain);
+                                  } else {
+                                    _selectedFocusDomains.remove(domain);
+                                  }
+                                });
+                              },
+                            );
+                          }).toList(),
                     ),
                     const SizedBox(height: 18),
 
@@ -361,21 +400,41 @@ class _AiGenerationModalState extends State<AiGenerationModal> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text('3. Question Types & Item Counts', style: _stepHeaderStyle(theme)),
+                        Text(
+                          '3. Question Types & Item Counts',
+                          style: _stepHeaderStyle(theme),
+                        ),
                         Text(
                           'Total: $_totalPlannedItems / 100 items',
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.bold,
-                            color: _totalPlannedItems > 100 ? AppTheme.catRed : theme.colorScheme.primary,
+                            color: _totalPlannedItems > 100
+                                ? AppTheme.catRed
+                                : theme.colorScheme.primary,
                           ),
                         ),
                       ],
                     ),
                     const SizedBox(height: 8),
-                    _buildTypeCountRow('Multiple Choice (4 choices)', _includeMultipleChoice, (v) => setState(() => _includeMultipleChoice = v), _mcCountCtrl),
-                    _buildTypeCountRow('True or False', _includeTrueFalse, (v) => setState(() => _includeTrueFalse = v), _tfCountCtrl),
-                    _buildTypeCountRow('Identification (Direct recall)', _includeIdentification, (v) => setState(() => _includeIdentification = v), _idCountCtrl),
+                    _buildTypeCountRow(
+                      'Multiple Choice (4 choices)',
+                      _includeMultipleChoice,
+                      (v) => setState(() => _includeMultipleChoice = v),
+                      _mcCountCtrl,
+                    ),
+                    _buildTypeCountRow(
+                      'True or False',
+                      _includeTrueFalse,
+                      (v) => setState(() => _includeTrueFalse = v),
+                      _tfCountCtrl,
+                    ),
+                    _buildTypeCountRow(
+                      'Identification (Direct recall)',
+                      _includeIdentification,
+                      (v) => setState(() => _includeIdentification = v),
+                      _idCountCtrl,
+                    ),
                   ],
                 ),
               ),
@@ -387,7 +446,9 @@ class _AiGenerationModalState extends State<AiGenerationModal> {
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
                 TextButton(
-                  onPressed: _isGenerating ? null : () => Navigator.of(context).pop(),
+                  onPressed: _isGenerating
+                      ? null
+                      : () => Navigator.of(context).pop(),
                   child: const Text('Cancel'),
                 ),
                 const SizedBox(width: 12),
@@ -396,15 +457,27 @@ class _AiGenerationModalState extends State<AiGenerationModal> {
                       ? const SizedBox(
                           width: 16,
                           height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
                         )
                       : const Icon(Icons.auto_awesome, size: 18),
-                  label: Text(_isGenerating ? 'Generating with Gemini...' : 'Generate Assessment'),
+                  label: Text(
+                    _isGenerating
+                        ? 'Generating with Gemini...'
+                        : 'Generate Assessment',
+                  ),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppTheme.catPurple,
                     foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 12,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
                   ),
                   onPressed: _isGenerating ? null : _startAiGeneration,
                 ),
@@ -436,15 +509,19 @@ class _AiGenerationModalState extends State<AiGenerationModal> {
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.1)),
+        border: Border.all(
+          color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.1),
+        ),
       ),
       child: Row(
         children: [
-          Checkbox(
-            value: isEnabled,
-            onChanged: (v) => onToggle(v ?? false),
+          Checkbox(value: isEnabled, onChanged: (v) => onToggle(v ?? false)),
+          Expanded(
+            child: Text(
+              label,
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+            ),
           ),
-          Expanded(child: Text(label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500))),
           if (isEnabled)
             SizedBox(
               width: 80,
@@ -457,7 +534,9 @@ class _AiGenerationModalState extends State<AiGenerationModal> {
                   contentPadding: EdgeInsets.zero,
                   suffixText: 'items',
                   suffixStyle: const TextStyle(fontSize: 10),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(6),
+                  ),
                 ),
                 onChanged: (_) => setState(() {}),
               ),

@@ -128,7 +128,10 @@ class _AttendanceCutoffDialogState extends State<AttendanceCutoffDialog> {
     }
 
     // Relational checks once individual numbers are within valid range
-    if (graceErr == null && lateErr == null && graceVal != null && lateVal != null) {
+    if (graceErr == null &&
+        lateErr == null &&
+        graceVal != null &&
+        lateVal != null) {
       if (graceVal >= lateVal) {
         lateErr =
             'Late cutoff must be strictly greater than Present grace period ($graceVal mins).';
@@ -363,7 +366,8 @@ class _AttendanceCutoffDialogState extends State<AttendanceCutoffDialog> {
                 theme: theme,
                 isDark: isDark,
                 label: 'Scan Window Opens Before Start (mins)',
-                helper: 'Allowed range: 0–60 mins before class start (default 15)',
+                helper:
+                    'Allowed range: 0–60 mins before class start (default 15)',
                 controller: _openBeforeCtrl,
                 errorText: _openBeforeError,
                 accentColor: AppTheme.catTeal,
@@ -379,7 +383,8 @@ class _AttendanceCutoffDialogState extends State<AttendanceCutoffDialog> {
                 theme: theme,
                 isDark: isDark,
                 label: 'Present Grace Period After Start (mins)',
-                helper: 'Allowed range: 0–120 mins after class start (default 15)',
+                helper:
+                    'Allowed range: 0–120 mins after class start (default 15)',
                 controller: _presentGraceCtrl,
                 errorText: _presentGraceError,
                 accentColor: AppTheme.catGreen,
@@ -401,8 +406,7 @@ class _AttendanceCutoffDialogState extends State<AttendanceCutoffDialog> {
                 theme: theme,
                 isDark: isDark,
                 label: 'Late Cutoff After Start (mins)',
-                helper:
-                    'Allowed range: 1–180 mins; must be greater than Present grace period',
+                helper: 'Allowed range: 1–180 mins; must be greater than Present grace period',
                 controller: _lateCutoffCtrl,
                 errorText: _lateCutoffError,
                 accentColor: AppTheme.catOrange,
@@ -523,9 +527,7 @@ class _AttendanceCutoffDialogState extends State<AttendanceCutoffDialog> {
           controller: controller,
           enabled: !_isSaving,
           keyboardType: TextInputType.number,
-          inputFormatters: [
-            LengthLimitingTextInputFormatter(4),
-          ],
+          inputFormatters: [LengthLimitingTextInputFormatter(4)],
           onChanged: onChanged,
           style: TextStyle(
             fontSize: 13.5,

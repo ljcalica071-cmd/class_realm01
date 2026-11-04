@@ -28,7 +28,9 @@ class TeacherReportsTab extends StatelessWidget {
       decoration: BoxDecoration(
         color: theme.colorScheme.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: theme.colorScheme.onSurface.withValues(alpha: 0.12)),
+        border: Border.all(
+          color: theme.colorScheme.onSurface.withValues(alpha: 0.12),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -62,7 +64,9 @@ class TeacherReportsTab extends StatelessWidget {
                       subtitle,
                       style: TextStyle(
                         fontSize: 11,
-                        color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.6,
+                        ),
                       ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
@@ -129,8 +133,7 @@ class TeacherReportsTab extends StatelessWidget {
                   AppModals.showSuccessDialog(
                     context: context,
                     title: 'Reports Export Simulated',
-                    message:
-                        'Official SF2 (Attendance) and SF9 (Progress Report) generated successfully in PDF/Excel format.',
+                    message: 'Official SF2 (Attendance) and SF9 (Progress Report) generated successfully in PDF/Excel format.',
                   );
                 },
               ),
@@ -190,7 +193,9 @@ class TeacherReportsTab extends StatelessWidget {
                 icon: Icons.assignment_turned_in_outlined,
                 color: AppTheme.catPurple,
                 onDownload: () => _showExportConfirm(
-                    context, 'Activity Completion Masterlist'),
+                  context,
+                  'Activity Completion Masterlist',
+                ),
               ),
             ],
           ),

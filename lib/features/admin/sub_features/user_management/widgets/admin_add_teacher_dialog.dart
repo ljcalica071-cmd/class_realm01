@@ -21,12 +21,14 @@ class AdminAddTeacherDialog extends StatefulWidget {
     required String gender,
     required DateTime birthday,
     required bool isResend,
-  })? onSendVerification;
+  })?
+  onSendVerification;
 
   final Future<Map<String, dynamic>> Function({
     required String email,
     required String code,
-  })? onVerifyOtp;
+  })?
+  onVerifyOtp;
 
   const AdminAddTeacherDialog({
     super.key,
@@ -629,192 +631,194 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog>
                 ),
               ),
 
-            // Visual 6 separated digit boxes with proper focus, cursor & selection indicator
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: List.generate(6, (index) {
-                final isFilled = index < currentLength;
-                final digit = isFilled ? _otpController.text[index] : '';
+              // Visual 6 separated digit boxes with proper focus, cursor & selection indicator
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: List.generate(6, (index) {
+                  final isFilled = index < currentLength;
+                  final digit = isFilled ? _otpController.text[index] : '';
 
-                final isSelected = isFocused && (_selectedIndex == index);
-                final isNextEmpty =
-                    isFocused &&
-                    (index == currentLength && currentLength < 6) &&
-                    (_selectedIndex >= currentLength);
-                final isActive =
-                    (isSelected || isNextEmpty) &&
-                    !_isLockedOut &&
-                    _otpSecondsRemaining > 0;
+                  final isSelected = isFocused && (_selectedIndex == index);
+                  final isNextEmpty =
+                      isFocused &&
+                      (index == currentLength && currentLength < 6) &&
+                      (_selectedIndex >= currentLength);
+                  final isActive =
+                      (isSelected || isNextEmpty) &&
+                      !_isLockedOut &&
+                      _otpSecondsRemaining > 0;
 
-                Color borderColor;
-                double borderWidth = 1.0;
-                Color boxBg;
-                List<BoxShadow>? shadows;
+                  Color borderColor;
+                  double borderWidth = 1.0;
+                  Color boxBg;
+                  List<BoxShadow>? shadows;
 
-                if (hasError) {
-                  borderColor = Colors.red.shade500;
-                  borderWidth = isActive ? 2.0 : 1.6;
-                  boxBg = Colors.red.withValues(alpha: isDark ? 0.12 : 0.04);
-                  if (isActive) {
+                  if (hasError) {
+                    borderColor = Colors.red.shade500;
+                    borderWidth = isActive ? 2.0 : 1.6;
+                    boxBg = Colors.red.withValues(alpha: isDark ? 0.12 : 0.04);
+                    if (isActive) {
+                      shadows = [
+                        BoxShadow(
+                          color: Colors.red.withValues(alpha: 0.18),
+                          blurRadius: 6,
+                          spreadRadius: 0,
+                        ),
+                      ];
+                    }
+                  } else if (isActive) {
+                    borderColor = theme.colorScheme.primary;
+                    borderWidth = 2.2;
+                    boxBg = theme.colorScheme.primary.withValues(
+                      alpha: isDark ? 0.14 : 0.06,
+                    );
                     shadows = [
                       BoxShadow(
-                        color: Colors.red.withValues(alpha: 0.18),
-                        blurRadius: 6,
-                        spreadRadius: 0,
+                        color: theme.colorScheme.primary.withValues(
+                          alpha: 0.25,
+                        ),
+                        blurRadius: 8,
+                        spreadRadius: 1,
                       ),
                     ];
+                  } else if (isFilled) {
+                    borderColor = isDark
+                        ? Colors.white38
+                        : const Color(0xFF94A3B8);
+                    borderWidth = 1.4;
+                    boxBg = isDark ? const Color(0xFF1E293B) : Colors.white;
+                  } else {
+                    borderColor = isDark
+                        ? Colors.white12
+                        : const Color(0xFFCBD5E1);
+                    borderWidth = 1.0;
+                    boxBg = isDark
+                        ? const Color(0xFF0F172A).withValues(alpha: 0.5)
+                        : const Color(0xFFF8FAFC);
                   }
-                } else if (isActive) {
-                  borderColor = theme.colorScheme.primary;
-                  borderWidth = 2.2;
-                  boxBg = theme.colorScheme.primary.withValues(
-                    alpha: isDark ? 0.14 : 0.06,
-                  );
-                  shadows = [
-                    BoxShadow(
-                      color: theme.colorScheme.primary.withValues(alpha: 0.25),
-                      blurRadius: 8,
-                      spreadRadius: 1,
-                    ),
-                  ];
-                } else if (isFilled) {
-                  borderColor = isDark
-                      ? Colors.white38
-                      : const Color(0xFF94A3B8);
-                  borderWidth = 1.4;
-                  boxBg = isDark ? const Color(0xFF1E293B) : Colors.white;
-                } else {
-                  borderColor = isDark
-                      ? Colors.white12
-                      : const Color(0xFFCBD5E1);
-                  borderWidth = 1.0;
-                  boxBg = isDark
-                      ? const Color(0xFF0F172A).withValues(alpha: 0.5)
-                      : const Color(0xFFF8FAFC);
-                }
 
-                return GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () => _onDigitBoxTapped(index),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 180),
-                    curve: Curves.easeOut,
-                    width: 48,
-                    height: 58,
-                    margin: const EdgeInsets.symmetric(horizontal: 4),
-                    decoration: BoxDecoration(
-                      color: boxBg,
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(
-                        color: borderColor,
-                        width: borderWidth,
+                  return GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => _onDigitBoxTapped(index),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 180),
+                      curve: Curves.easeOut,
+                      width: 48,
+                      height: 58,
+                      margin: const EdgeInsets.symmetric(horizontal: 4),
+                      decoration: BoxDecoration(
+                        color: boxBg,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: borderColor,
+                          width: borderWidth,
+                        ),
+                        boxShadow: shadows,
                       ),
-                      boxShadow: shadows,
-                    ),
-                    child: Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        if (digit.isNotEmpty)
-                          Text(
-                            digit,
-                            style: TextStyle(
-                              fontSize: 24,
-                              fontWeight: FontWeight.bold,
-                              color: hasError
-                                  ? Colors.red.shade600
-                                  : theme.colorScheme.onSurface,
-                            ),
-                          )
-                        else if (isActive)
-                          FadeTransition(
-                            opacity: _effectiveCursorBlinkController,
-                            child: Container(
-                              width: 2.2,
-                              height: 24,
-                              decoration: BoxDecoration(
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          if (digit.isNotEmpty)
+                            Text(
+                              digit,
+                              style: TextStyle(
+                                fontSize: 24,
+                                fontWeight: FontWeight.bold,
                                 color: hasError
                                     ? Colors.red.shade600
-                                    : theme.colorScheme.primary,
-                                borderRadius: BorderRadius.circular(1),
+                                    : theme.colorScheme.onSurface,
                               ),
-                            ),
-                          )
-                        else
-                          Container(
-                            width: 6,
-                            height: 6,
-                            decoration: BoxDecoration(
-                              color: isDark
-                                  ? Colors.white24
-                                  : Colors.grey.shade400,
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-
-                        if (isFilled && isActive && !hasError)
-                          Positioned(
-                            bottom: 6,
-                            child: Container(
-                              width: 18,
-                              height: 3,
+                            )
+                          else if (isActive)
+                            FadeTransition(
+                              opacity: _effectiveCursorBlinkController,
+                              child: Container(
+                                width: 2.2,
+                                height: 24,
+                                decoration: BoxDecoration(
+                                  color: hasError
+                                      ? Colors.red.shade600
+                                      : theme.colorScheme.primary,
+                                  borderRadius: BorderRadius.circular(1),
+                                ),
+                              ),
+                            )
+                          else
+                            Container(
+                              width: 6,
+                              height: 6,
                               decoration: BoxDecoration(
-                                color: theme.colorScheme.primary,
-                                borderRadius: BorderRadius.circular(2),
+                                color: isDark
+                                    ? Colors.white24
+                                    : Colors.grey.shade400,
+                                shape: BoxShape.circle,
                               ),
                             ),
-                          ),
-                      ],
+
+                          if (isFilled && isActive && !hasError)
+                            Positioned(
+                              bottom: 6,
+                              child: Container(
+                                width: 18,
+                                height: 3,
+                                decoration: BoxDecoration(
+                                  color: theme.colorScheme.primary,
+                                  borderRadius: BorderRadius.circular(2),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
                     ),
+                  );
+                }),
+              ),
+            ],
+          ),
+
+          // Clear code action button
+          if (_otpController.text.isNotEmpty &&
+              !_isLockedOut &&
+              !_isAnyBusy &&
+              _otpSecondsRemaining > 0) ...[
+            const SizedBox(height: 8),
+            Center(
+              child: TextButton.icon(
+                onPressed: () {
+                  setState(() {
+                    _otpController.value = const TextEditingValue(
+                      text: '',
+                      selection: TextSelection.collapsed(offset: 0),
+                    );
+                    _selectedIndex = 0;
+                    _error = null;
+                  });
+                  _requestOtpKeyboard();
+                },
+                icon: Icon(
+                  LucideIcons.x,
+                  size: 14,
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                ),
+                label: Text(
+                  'Clear code',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
                   ),
-                );
-              }),
+                ),
+                style: TextButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
+                ),
+              ),
             ),
           ],
-        ),
-
-        // Clear code action button
-        if (_otpController.text.isNotEmpty &&
-            !_isLockedOut &&
-            !_isAnyBusy &&
-            _otpSecondsRemaining > 0) ...[
-          const SizedBox(height: 8),
-          Center(
-            child: TextButton.icon(
-              onPressed: () {
-                setState(() {
-                  _otpController.value = const TextEditingValue(
-                    text: '',
-                    selection: TextSelection.collapsed(offset: 0),
-                  );
-                  _selectedIndex = 0;
-                  _error = null;
-                });
-                _requestOtpKeyboard();
-              },
-              icon: Icon(
-                LucideIcons.x,
-                size: 14,
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-              ),
-              label: Text(
-                'Clear code',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
-                ),
-              ),
-              style: TextButton.styleFrom(
-                visualDensity: VisualDensity.compact,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 4,
-                ),
-              ),
-            ),
-          ),
         ],
-      ],
       ),
     );
   }

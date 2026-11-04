@@ -58,15 +58,19 @@ class ParentSubjectDetailsSheet extends StatelessWidget {
     final teacherFirstName = teacherMap['first_name']?.toString() ?? '';
     final teacherLastName = teacherMap['last_name']?.toString() ?? '';
     final teacherGender = teacherMap['gender']?.toString() ?? '';
-    final teacherName = [teacherFirstName, teacherLastName]
-        .where((s) => s.isNotEmpty)
-        .join(' ');
-    final teacherTitle = teacherGender.toLowerCase() == 'female' ? 'Ms.' : 'Mr.';
+    final teacherName = [
+      teacherFirstName,
+      teacherLastName,
+    ].where((s) => s.isNotEmpty).join(' ');
+    final teacherTitle = teacherGender.toLowerCase() == 'female'
+        ? 'Ms.'
+        : 'Mr.';
     final teacherDisplayName = teacherName.isNotEmpty
         ? '$teacherTitle $teacherName'
         : 'Assigned Subject Teacher';
 
-    final teacherEmail = teacherMap['email']?.toString() ??
+    final teacherEmail =
+        teacherMap['email']?.toString() ??
         (teacherLastName.isNotEmpty
             ? '${teacherLastName.toLowerCase()}@classrealm.edu'
             : '');
@@ -81,7 +85,8 @@ class ParentSubjectDetailsSheet extends StatelessWidget {
     // Filter schedules for this subject
     final relevantSchedules = schedules.where((s) {
       final sSubject = s.subject.toLowerCase();
-      if (subjectCode.isNotEmpty && sSubject.contains(subjectCode.toLowerCase())) {
+      if (subjectCode.isNotEmpty &&
+          sSubject.contains(subjectCode.toLowerCase())) {
         return true;
       }
       return sSubject.contains(subjectName.toLowerCase()) ||
@@ -160,7 +165,8 @@ class ParentSubjectDetailsSheet extends StatelessWidget {
                                   vertical: 2.5,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: theme.colorScheme.surfaceContainerHighest,
+                                  color:
+                                      theme.colorScheme.surfaceContainerHighest,
                                   borderRadius: BorderRadius.circular(6),
                                 ),
                                 child: Text(
@@ -347,7 +353,10 @@ class ParentSubjectDetailsSheet extends StatelessWidget {
                                       }
                                     }
                                   },
-                                  icon: const Icon(Icons.send_rounded, size: 14),
+                                  icon: const Icon(
+                                    Icons.send_rounded,
+                                    size: 14,
+                                  ),
                                   label: const Text('Contact'),
                                   style: TextButton.styleFrom(
                                     visualDensity: VisualDensity.compact,
@@ -616,8 +625,8 @@ class ParentSubjectDetailsSheet extends StatelessWidget {
     final Color badgeColor = !hasGrade
         ? theme.colorScheme.onSurface.withValues(alpha: 0.4)
         : (isPassing
-            ? (isDark ? const Color(0xFF2DD4BF) : AppTheme.catTeal)
-            : AppTheme.catRed);
+              ? (isDark ? const Color(0xFF2DD4BF) : AppTheme.catTeal)
+              : AppTheme.catRed);
 
     return Expanded(
       child: Container(
@@ -625,7 +634,9 @@ class ParentSubjectDetailsSheet extends StatelessWidget {
         decoration: BoxDecoration(
           color: hasGrade
               ? badgeColor.withValues(alpha: isDark ? 0.14 : 0.08)
-              : theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
+              : theme.colorScheme.surfaceContainerHighest.withValues(
+                  alpha: 0.4,
+                ),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: hasGrade
@@ -654,9 +665,7 @@ class ParentSubjectDetailsSheet extends StatelessWidget {
             ),
             const SizedBox(height: 2),
             Text(
-              !hasGrade
-                  ? 'Ongoing'
-                  : (isPassing ? 'Passed' : 'Needs Help'),
+              !hasGrade ? 'Ongoing' : (isPassing ? 'Passed' : 'Needs Help'),
               style: TextStyle(
                 fontSize: 9.5,
                 fontWeight: FontWeight.w600,

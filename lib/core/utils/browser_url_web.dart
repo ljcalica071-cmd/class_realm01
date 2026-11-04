@@ -53,7 +53,8 @@ void removePreBootstrapLoaderWeb() {
       }
       loader.style.pointerEvents = 'none';
       loader.style.opacity = '0';
-      loader.style.transition = 'opacity 0.25s ease-out, transform 0.25s ease-out';
+      loader.style.transition =
+          'opacity 0.25s ease-out, transform 0.25s ease-out';
       loader.style.transform = 'scale(1.02)';
       Future.delayed(const Duration(milliseconds: 260), () {
         try {
@@ -92,12 +93,10 @@ void updatePreBootstrapProgressWeb(double progress, String status) {
     loader.setAttribute('data-progress', pct.toString());
     html.document.getElementById('bootstrap-progress-fill')?.style.width =
         '$pct%';
-    html.document.getElementById('bootstrap-progress-value')?.text =
-        '$pct%';
-    loader.querySelector('[role="progressbar"]')?.setAttribute(
-      'aria-valuenow',
-      pct.toString(),
-    );
+    html.document.getElementById('bootstrap-progress-value')?.text = '$pct%';
+    loader
+        .querySelector('[role="progressbar"]')
+        ?.setAttribute('aria-valuenow', pct.toString());
     html.document.getElementById('bootstrap-status')?.text = status;
   } catch (_) {}
 }
@@ -168,7 +167,9 @@ void downloadFileStringWeb({
 html.EventListener? _webDragOverListener;
 html.EventListener? _webDropListener;
 
-void registerWebFileDropListener(void Function(Uint8List bytes, String fileName, int size) onFileDropped) {
+void registerWebFileDropListener(
+  void Function(Uint8List bytes, String fileName, int size) onFileDropped,
+) {
   try {
     unregisterWebFileDropListener();
 
@@ -193,9 +194,17 @@ void registerWebFileDropListener(void Function(Uint8List bytes, String fileName,
         reader.onLoadEnd.listen((_) {
           final res = reader.result;
           if (res is Uint8List) {
-            onFileDropped(res, file.name ?? 'dropped_file.xlsx', file.size ?? res.length);
+            onFileDropped(
+              res,
+              file.name ?? 'dropped_file.xlsx',
+              file.size ?? res.length,
+            );
           } else if (res is ByteBuffer) {
-            onFileDropped(res.asUint8List(), file.name ?? 'dropped_file.xlsx', file.size ?? res.lengthInBytes);
+            onFileDropped(
+              res.asUint8List(),
+              file.name ?? 'dropped_file.xlsx',
+              file.size ?? res.lengthInBytes,
+            );
           }
         });
       }
@@ -224,7 +233,10 @@ void registerWebConnectivityListenersPlatform({
 }) {
   try {
     html.window.addEventListener('online', (_) => onConnectivityChanged(true));
-    html.window.addEventListener('offline', (_) => onConnectivityChanged(false));
+    html.window.addEventListener(
+      'offline',
+      (_) => onConnectivityChanged(false),
+    );
   } catch (_) {}
 }
 

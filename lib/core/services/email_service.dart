@@ -1,4 +1,5 @@
 import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -32,7 +33,9 @@ class EmailService {
         lower.endsWith('@test.com') ||
         lower.endsWith('@sample.com') ||
         lower == 'example@gmail.com') {
-      debugPrint('[EmailService] Test/example recipient ($cleanRecipient) - delivery simulated successfully.');
+      debugPrint(
+        '[EmailService] Test/example recipient ($cleanRecipient) - delivery simulated successfully.',
+      );
       return true;
     }
 
@@ -71,10 +74,14 @@ class EmailService {
           try {
             final data = jsonDecode(response.body);
             if (data is Map && data['success'] == true) {
-              debugPrint('[EmailService] Dispatched via Supabase Edge Function to $cleanRecipient');
+              debugPrint(
+                '[EmailService] Dispatched via Supabase Edge Function to $cleanRecipient',
+              );
               return true;
             } else if (data is Map && data['error'] != null) {
-              throw EmailDeliveryException(_formatDeliveryError(cleanRecipient, data['error'].toString()));
+              throw EmailDeliveryException(
+                _formatDeliveryError(cleanRecipient, data['error'].toString()),
+              );
             }
           } catch (e) {
             if (e is EmailDeliveryException) rethrow;
@@ -88,15 +95,21 @@ class EmailService {
               rawError = data['error'].toString();
             }
           } catch (_) {}
-          debugPrint('[EmailService] Supabase Edge Function error (${response.statusCode}): $rawError');
-          throw EmailDeliveryException(_formatDeliveryError(cleanRecipient, rawError));
+          debugPrint(
+            '[EmailService] Supabase Edge Function error (${response.statusCode}): $rawError',
+          );
+          throw EmailDeliveryException(
+            _formatDeliveryError(cleanRecipient, rawError),
+          );
         }
       } on EmailDeliveryException {
         rethrow;
       } catch (e) {
         debugPrint('[EmailService] Supabase send-email error: $e');
         if (e is EmailDeliveryException) rethrow;
-        throw EmailDeliveryException(_formatDeliveryError(cleanRecipient, e.toString()));
+        throw EmailDeliveryException(
+          _formatDeliveryError(cleanRecipient, e.toString()),
+        );
       }
     }
 
@@ -111,14 +124,18 @@ class EmailService {
             'Content-Type': 'application/json',
           },
           body: jsonEncode({
-            'from': dotenv.env['EMAIL_FROM'] ?? 'ClassRealm <onboarding@resend.dev>',
+            'from':
+                dotenv.env['EMAIL_FROM'] ??
+                'ClassRealm <onboarding@resend.dev>',
             'to': [cleanRecipient],
             'subject': subject,
             'html': html,
           }),
         );
         if (res.statusCode >= 200 && res.statusCode < 300) {
-          debugPrint('[EmailService] Dispatched via Resend API to $cleanRecipient');
+          debugPrint(
+            '[EmailService] Dispatched via Resend API to $cleanRecipient',
+          );
           return true;
         }
       } catch (e) {
@@ -137,14 +154,23 @@ class EmailService {
             'Content-Type': 'application/json',
           },
           body: jsonEncode({
-            'sender': {'name': 'ClassRealm', 'email': EnvConfig.smtpEmail.isNotEmpty ? EnvConfig.smtpEmail : 'noreply@classrealm.edu'},
-            'to': [{'email': cleanRecipient}],
+            'sender': {
+              'name': 'ClassRealm',
+              'email': EnvConfig.smtpEmail.isNotEmpty
+                  ? EnvConfig.smtpEmail
+                  : 'noreply@classrealm.edu',
+            },
+            'to': [
+              {'email': cleanRecipient},
+            ],
             'subject': subject,
             'htmlContent': html,
           }),
         );
         if (res.statusCode >= 200 && res.statusCode < 300) {
-          debugPrint('[EmailService] Dispatched via Brevo API to $cleanRecipient');
+          debugPrint(
+            '[EmailService] Dispatched via Brevo API to $cleanRecipient',
+          );
           return true;
         }
       } catch (e) {
@@ -162,7 +188,9 @@ class EmailService {
     if (lower.contains('535') ||
         lower.contains('badcredentials') ||
         lower.contains('username and password not accepted')) {
-      final sender = EnvConfig.smtpEmail.isNotEmpty ? EnvConfig.smtpEmail : 'SMTP account';
+      final sender = EnvConfig.smtpEmail.isNotEmpty
+          ? EnvConfig.smtpEmail
+          : 'SMTP account';
       return "App Password Expired: The system rejected the email credentials for ($sender). Please contact ClassRealm Admin to generate a fresh App Password at myaccount.google.com/apppasswords.";
     }
     if (lower.contains('daily user sending limit exceeded') ||
@@ -211,7 +239,8 @@ class EmailService {
     required String recipientName,
     required String otpCode,
   }) async {
-    final String htmlTemplate = '''
+    final String htmlTemplate =
+        '''
       <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1a1a1a; line-height: 1.6; max-width: 500px; margin: 40px auto; border: 1px solid #eaeaea; border-radius: 16px; padding: 32px; box-shadow: 0 4px 24px rgba(0,0,0,0.04);">
         <div style="text-align: center; margin-bottom: 32px;">
           <h2 style="color: #0f172a; font-size: 24px; font-weight: 700; margin: 0;">Verify your password change</h2>
@@ -242,7 +271,8 @@ class EmailService {
     bool skipBounceCheck = true,
   }) async {
     final cleanRecipient = recipientEmail.trim();
-    final String htmlTemplate = '''
+    final String htmlTemplate =
+        '''
       <div style="font-family: Arial, sans-serif; max-width: 520px; margin: 20px auto; padding: 26px; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff;">
         <h2 style="color: #1e3a5f; margin-top: 0; font-size: 22px; font-weight: bold;">Welcome to ClassRealm!</h2>
         <p style="font-size: 15px; color: #334155; margin-bottom: 8px;">Hello <strong>$studentName</strong>,</p>
@@ -302,7 +332,8 @@ class EmailService {
     required String teacherName,
     required String code,
   }) async {
-    final String htmlTemplate = '''
+    final String htmlTemplate =
+        '''
       <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 20px auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff;">
         <h2 style="color: #1e3a5f; margin-top: 0;">Teacher Account Verification</h2>
         <p>Hello <strong>$teacherName</strong>,</p>
@@ -337,7 +368,8 @@ class EmailService {
     required String teacherName,
     required String tempPassword,
   }) async {
-    final String htmlTemplate = '''
+    final String htmlTemplate =
+        '''
       <div style="font-family: Arial, sans-serif; max-width: 520px; margin: 20px auto; padding: 26px; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff;">
         <h2 style="color: #1e3a5f; margin-top: 0; font-size: 22px; font-weight: bold;">Welcome to ClassRealm!</h2>
         <p style="font-size: 15px; color: #334155; margin-bottom: 8px;">Hello <strong>$teacherName</strong>,</p>
@@ -382,11 +414,12 @@ class EmailService {
     required bool isEnabled,
   }) async {
     final currentYear = DateTime.now().year;
-    final String subject = isEnabled 
+    final String subject = isEnabled
         ? '⚠️ ClassRealm Alert: System Maintenance in Progress'
         : '✅ ClassRealm Alert: System Successfully Restored';
-    
-    final String htmlTemplate = isEnabled ? '''
+
+    final String htmlTemplate = isEnabled
+        ? '''
       <!DOCTYPE html>
       <html lang="en">
       <head>
@@ -443,7 +476,8 @@ class EmailService {
         </table>
       </body>
       </html>
-    ''' : '''
+    '''
+        : '''
       <!DOCTYPE html>
       <html lang="en">
       <head>
@@ -505,13 +539,12 @@ class EmailService {
 
     // Dispatch emails silently
     for (final email in recipientEmails) {
-      if (email.trim().isNotEmpty && email.trim().toLowerCase() != 'parent' && email.trim().toLowerCase() != 'teacher' && email.trim().toLowerCase() != 'student') {
+      if (email.trim().isNotEmpty &&
+          email.trim().toLowerCase() != 'parent' &&
+          email.trim().toLowerCase() != 'teacher' &&
+          email.trim().toLowerCase() != 'student') {
         try {
-          await sendEmail(
-            to: email,
-            subject: subject,
-            html: htmlTemplate,
-          );
+          await sendEmail(to: email, subject: subject, html: htmlTemplate);
           // Slight delay to prevent rate limit spikes
           await Future.delayed(const Duration(milliseconds: 50));
         } catch (e) {

@@ -30,9 +30,9 @@ class TeacherLessonPlanStore {
   TeacherLessonPlanStore({
     UserModel? Function()? currentUserProvider,
     SupabaseClient? supabaseClient,
-  })  : _currentUserProvider =
-            currentUserProvider ?? (() => AuthRepository.instance.currentUser),
-        _supabaseClientOverride = supabaseClient;
+  }) : _currentUserProvider =
+           currentUserProvider ?? (() => AuthRepository.instance.currentUser),
+       _supabaseClientOverride = supabaseClient;
 
   static final TeacherLessonPlanStore instance = TeacherLessonPlanStore();
 

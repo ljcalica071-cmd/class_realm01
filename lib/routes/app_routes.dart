@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:class_realm/models/user_model.dart';
 
 class AppRoutes {
-  static final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+  static final GlobalKey<NavigatorState> navigatorKey =
+      GlobalKey<NavigatorState>();
 
   static const String splash = '/splash';
   static const String login = '/login';

@@ -53,24 +53,16 @@ class AuthResponsiveScaffold extends StatelessWidget {
       labelText: labelText,
       errorText: errorText,
       errorMaxLines: 4,
-      errorStyle: errorStyle ??
+      errorStyle:
+          errorStyle ??
           const TextStyle(
             color: Color(0xFFDC2626),
             fontSize: 12,
             fontWeight: FontWeight.w500,
           ),
-      hintStyle: const TextStyle(
-        color: Color(0xFF94A3B8),
-        fontSize: 14,
-      ),
-      labelStyle: const TextStyle(
-        color: Color(0xFF64748B),
-        fontSize: 14,
-      ),
-      contentPadding: const EdgeInsets.symmetric(
-        horizontal: 16,
-        vertical: 14,
-      ),
+      hintStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 14),
+      labelStyle: const TextStyle(color: Color(0xFF64748B), fontSize: 14),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
         borderSide: BorderSide(
@@ -87,17 +79,11 @@ class AuthResponsiveScaffold extends StatelessWidget {
       ),
       errorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(
-          color: Color(0xFFDC2626),
-          width: 1.4,
-        ),
+        borderSide: const BorderSide(color: Color(0xFFDC2626), width: 1.4),
       ),
       focusedErrorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(
-          color: Color(0xFFDC2626),
-          width: 1.8,
-        ),
+        borderSide: const BorderSide(color: Color(0xFFDC2626), width: 1.8),
       ),
     );
   }
@@ -149,16 +135,17 @@ class AuthResponsiveScaffold extends StatelessWidget {
   }
 
   /// Clean white sub-container for secondary items like checklists and info panels
-  static Widget frostedSection({required Widget child, EdgeInsetsGeometry? padding}) {
+  static Widget frostedSection({
+    required Widget child,
+    EdgeInsetsGeometry? padding,
+  }) {
     return Container(
-      padding: padding ?? const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      padding:
+          padding ?? const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: const Color(0xFFE2E8F0),
-          width: 1.2,
-        ),
+        border: Border.all(color: const Color(0xFFE2E8F0), width: 1.2),
       ),
       child: child,
     );
@@ -188,10 +175,7 @@ class AuthResponsiveScaffold extends StatelessWidget {
         child: Container(
           color: Colors.white,
           padding: const EdgeInsets.all(2.0),
-          child: Image.asset(
-            AssetPaths.schoolLogo,
-            fit: BoxFit.contain,
-          ),
+          child: Image.asset(AssetPaths.schoolLogo, fit: BoxFit.contain),
         ),
       ),
     );
@@ -226,8 +210,10 @@ class AuthResponsiveScaffold extends StatelessWidget {
                         begin: Alignment.centerLeft,
                         end: Alignment.centerRight,
                         colors: [
-                          const Color(0xFF034A7F).withValues(alpha: 0.90), // Much darker on the left text area
-                          const Color(0xFF0267A3).withValues(alpha: 0.70), 
+                          const Color(0xFF034A7F).withValues(
+                            alpha: 0.90,
+                          ), // Much darker on the left text area
+                          const Color(0xFF0267A3).withValues(alpha: 0.70),
                           const Color(0xFF0284C7).withValues(alpha: 0.35),
                           const Color(0xFF0284C7).withValues(alpha: 0.05),
                         ],
@@ -282,7 +268,12 @@ class AuthResponsiveScaffold extends StatelessWidget {
           alignment: Alignment.centerLeft,
           child: Container(
             constraints: const BoxConstraints(maxWidth: 1420),
-            padding: const EdgeInsets.only(left: 100, right: 48, top: 24, bottom: 24),
+            padding: const EdgeInsets.only(
+              left: 100,
+              right: 48,
+              top: 24,
+              bottom: 24,
+            ),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
@@ -397,7 +388,10 @@ class AuthResponsiveScaffold extends StatelessWidget {
                         initialOffset: const Offset(0.0, 0.06),
                         duration: const Duration(milliseconds: 460),
                         curve: Curves.easeOutCubic,
-                        child: _buildDecoratedCard(isMobile: false, isTablet: false),
+                        child: _buildDecoratedCard(
+                          isMobile: false,
+                          isTablet: false,
+                        ),
                       ),
                     ),
                   ),
@@ -468,13 +462,26 @@ class AuthResponsiveScaffold extends StatelessWidget {
                             fontWeight: FontWeight.w900,
                             height: 1.25,
                             shadows: [
-                              Shadow(color: Color(0x66000000), offset: Offset(0, 2), blurRadius: 5),
+                              Shadow(
+                                color: Color(0x66000000),
+                                offset: Offset(0, 2),
+                                blurRadius: 5,
+                              ),
                             ],
                           ),
                           children: [
-                            TextSpan(text: 'One Realm ', style: TextStyle(color: Color(0xFFF59E0B))),
-                            TextSpan(text: 'for Every\n', style: TextStyle(color: Colors.white)),
-                            TextSpan(text: 'Learning Journey.', style: TextStyle(color: Color(0xFF38BDF8))),
+                            TextSpan(
+                              text: 'One Realm ',
+                              style: TextStyle(color: Color(0xFFF59E0B)),
+                            ),
+                            TextSpan(
+                              text: 'for Every\n',
+                              style: TextStyle(color: Colors.white),
+                            ),
+                            TextSpan(
+                              text: 'Learning Journey.',
+                              style: TextStyle(color: Color(0xFF38BDF8)),
+                            ),
                           ],
                         ),
                       ),
@@ -551,13 +558,26 @@ class AuthResponsiveScaffold extends StatelessWidget {
                         fontWeight: FontWeight.w900,
                         height: 1.25,
                         shadows: [
-                          Shadow(color: Color(0x66000000), offset: Offset(0, 2), blurRadius: 4),
+                          Shadow(
+                            color: Color(0x66000000),
+                            offset: Offset(0, 2),
+                            blurRadius: 4,
+                          ),
                         ],
                       ),
                       children: [
-                        TextSpan(text: 'One Realm ', style: TextStyle(color: Color(0xFFF59E0B))),
-                        TextSpan(text: 'for Every\n', style: TextStyle(color: Colors.white)),
-                        TextSpan(text: 'Learning Journey.', style: TextStyle(color: Color(0xFF38BDF8))),
+                        TextSpan(
+                          text: 'One Realm ',
+                          style: TextStyle(color: Color(0xFFF59E0B)),
+                        ),
+                        TextSpan(
+                          text: 'for Every\n',
+                          style: TextStyle(color: Colors.white),
+                        ),
+                        TextSpan(
+                          text: 'Learning Journey.',
+                          style: TextStyle(color: Color(0xFF38BDF8)),
+                        ),
                       ],
                     ),
                   ),
@@ -568,7 +588,9 @@ class AuthResponsiveScaffold extends StatelessWidget {
 
             // Center Frosted Glass Login Card with all 3D decorations anchored
             ConstrainedBox(
-              constraints: BoxConstraints(maxWidth: cardMaxWidth.clamp(320.0, 390.0)),
+              constraints: BoxConstraints(
+                maxWidth: cardMaxWidth.clamp(320.0, 390.0),
+              ),
               child: StaggeredEntrance(
                 index: 1,
                 delay: const Duration(milliseconds: 90),
@@ -621,10 +643,7 @@ class AuthResponsiveScaffold extends StatelessWidget {
       decoration: BoxDecoration(
         color: const Color(0xFFF8FAFC),
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(
-          color: Colors.white,
-          width: 1.5,
-        ),
+        border: Border.all(color: Colors.white, width: 1.5),
         boxShadow: [
           BoxShadow(
             color: const Color(0xFF0F172A).withValues(alpha: 0.12),

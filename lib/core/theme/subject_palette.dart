@@ -104,27 +104,18 @@ class SubjectPalette {
   }
 
   /// Returns a background tint for schedule tiles / badges.
-  static Color getPastelBackground(
-    Color baseColor, {
-    required bool isDark,
-  }) {
+  static Color getPastelBackground(Color baseColor, {required bool isDark}) {
     if (isDark) {
       return Color.alphaBlend(
         baseColor.withValues(alpha: 0.18),
         const Color(0xFF1E293B),
       );
     }
-    return Color.alphaBlend(
-      baseColor.withValues(alpha: 0.14),
-      Colors.white,
-    );
+    return Color.alphaBlend(baseColor.withValues(alpha: 0.14), Colors.white);
   }
 
   /// Returns a high-contrast text color compliant with WCAG AA (>= 4.5:1).
-  static Color getTextColor(
-    Color baseColor, {
-    required bool isDark,
-  }) {
+  static Color getTextColor(Color baseColor, {required bool isDark}) {
     final idx = colors.indexOf(baseColor);
     if (idx != -1) {
       return isDark ? lightTextShades[idx] : darkTextShades[idx];

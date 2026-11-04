@@ -1,11 +1,7 @@
 // Model for Anti-Cheating violation events
 // File size constrained to <= 350 lines according to project architecture policy.
 
-enum ProctorViolationType {
-  tabSwitch,
-  windowBlur,
-  appBackgrounded,
-}
+enum ProctorViolationType { tabSwitch, windowBlur, appBackgrounded }
 
 extension ProctorViolationTypeExtension on ProctorViolationType {
   String get value {

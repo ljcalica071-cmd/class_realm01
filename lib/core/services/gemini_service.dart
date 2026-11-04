@@ -39,8 +39,7 @@ class GeminiLessonPlanResult {
   factory GeminiLessonPlanResult.missingKeys() {
     return const GeminiLessonPlanResult._(
       missingApiKeys: true,
-      errorMessage:
-          'No Gemini API keys are configured in .env yet (GEMINI_API_KEY_1, GEMINI_API_KEY_2, GEMINI_API_KEY_3).',
+      errorMessage: 'No Gemini API keys are configured in .env yet (GEMINI_API_KEY_1, GEMINI_API_KEY_2, GEMINI_API_KEY_3).',
     );
   }
 
@@ -209,8 +208,7 @@ class GeminiService {
             );
 
             if (rawText == null || rawText.trim().isEmpty) {
-              lastRedactedError =
-                  'Gemini AI returned an empty response. Trying backup key if available.';
+              lastRedactedError = 'Gemini AI returned an empty response. Trying backup key if available.';
               break; // Try next API key
             }
 

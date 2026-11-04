@@ -75,11 +75,11 @@ class AuthRepository {
 
   custom.UserModel? _currentUser;
   custom.UserModel? get currentUser =>
-      _currentUser ??
-      LocalStorageService.getCachedUser();
+      _currentUser ?? LocalStorageService.getCachedUser();
 
   String? _activeSessionId;
-  String? get activeSessionId => _activeSessionId ?? LocalStorageService.getActiveSessionId();
+  String? get activeSessionId =>
+      _activeSessionId ?? LocalStorageService.getActiveSessionId();
   Future<String?>? _inFlightSessionFuture;
   bool _isLoggingOut = false;
 
@@ -188,7 +188,8 @@ class AuthRepository {
         return _currentUser;
       }
     } on firebase.FirebaseAuthException catch (e) {
-      if (e.code == 'network-request-failed' || e.message?.contains('network AuthError') == true) {
+      if (e.code == 'network-request-failed' ||
+          e.message?.contains('network AuthError') == true) {
         final cached = LocalStorageService.getCachedUser();
         if (cached != null &&
             cached.email.toLowerCase() == cleanEmail &&
@@ -198,9 +199,11 @@ class AuthRepository {
           markWarmSession();
           return _currentUser;
         }
-        throw Exception("We're having trouble connecting to the network right now. Please check your internet connection and try again.");
+        throw Exception(
+          "We're having trouble connecting to the network right now. Please check your internet connection and try again.",
+        );
       }
-      
+
       // Record failure on both account-level and device-level progressive trackers
       final accFail = await RateLimitService.instance.recordFailure(
         feature: 'login_account',
@@ -269,10 +272,10 @@ class AuthRepository {
     var firebaseUser = _firebaseAuth.currentUser;
     if (firebaseUser == null) {
       try {
-        firebaseUser = await _firebaseAuth
-            .authStateChanges()
-            .first
-            .timeout(const Duration(seconds: 2), onTimeout: () => null);
+        firebaseUser = await _firebaseAuth.authStateChanges().first.timeout(
+          const Duration(seconds: 2),
+          onTimeout: () => null,
+        );
       } catch (_) {}
     }
 
@@ -575,7 +578,8 @@ class AuthRepository {
       final roleStr = user.role.name;
 
       // Re-use active session if one already exists
-      final existingSessionId = LocalStorageService.getActiveSessionId() ?? _activeSessionId;
+      final existingSessionId =
+          LocalStorageService.getActiveSessionId() ?? _activeSessionId;
       if (existingSessionId != null) {
         _activeSessionId = existingSessionId;
         return existingSessionId;
@@ -656,7 +660,10 @@ class AuthRepository {
   Future<void> recordHeartbeat([String? sessionId]) async {
     final user = currentUser;
     if (user == null) return;
-    final id = sessionId ?? LocalStorageService.getActiveSessionId() ?? _activeSessionId;
+    final id =
+        sessionId ??
+        LocalStorageService.getActiveSessionId() ??
+        _activeSessionId;
     if (id == null) return;
     final now = DateTime.now().toUtc();
     try {
@@ -704,14 +711,19 @@ class AuthRepository {
 
     final now = DateTime.now().toUtc();
     final cleanReason =
-        (reason == null || reason.isEmpty || reason == 'manual' || reason == 'manual_logout')
+        (reason == null ||
+            reason.isEmpty ||
+            reason == 'manual' ||
+            reason == 'manual_logout')
         ? 'manual'
         : (reason == 'inactivity' || reason == 'inactivity_timeout'
               ? 'inactivity'
               : 'terminated');
     try {
       final sessionId =
-          targetSessionId ?? LocalStorageService.getActiveSessionId() ?? _activeSessionId;
+          targetSessionId ??
+          LocalStorageService.getActiveSessionId() ??
+          _activeSessionId;
       final user = targetUser ?? currentUser;
 
       if (sessionId != null) {
@@ -759,7 +771,7 @@ class AuthRepository {
       // Even if session ID is lost in local storage (due to hot reloads/tests),
       // force close ALL active sessions for this user to guarantee accuracy.
       if (user != null) {
-        // If this is a 'terminated' call from background, DO NOT bulk close 
+        // If this is a 'terminated' call from background, DO NOT bulk close
         // other legitimate active sessions, only targeted ones!
         if (cleanReason != 'terminated') {
           await _supabaseClient
@@ -2167,8 +2179,7 @@ class AuthRepository {
     required String gender,
     required DateTime birthday,
   }) async {
-    final cleanMiddleName =
-        AppValidators.normalizeMiddleInitial(middleName);
+    final cleanMiddleName = AppValidators.normalizeMiddleInitial(middleName);
     try {
       final cleanEmail = email.trim().toLowerCase();
 

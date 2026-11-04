@@ -109,10 +109,15 @@ class LocalStorageService {
   }
 
   /// Marks credentials as saved on this device (boolean flag only, never plaintext password).
-  static Future<void> markCredentialsSaved(String email, [String? password]) async {
+  static Future<void> markCredentialsSaved(
+    String email, [
+    String? password,
+  ]) async {
     final sanitizedEmail = email.trim().toLowerCase();
     final prefs = await _prefs;
-    await _ensureSaved(await prefs.setBool('$_savedCredPrefix$sanitizedEmail', true));
+    await _ensureSaved(
+      await prefs.setBool('$_savedCredPrefix$sanitizedEmail', true),
+    );
   }
 
   static Future<void> saveUser(UserModel user) async {
@@ -210,15 +215,25 @@ class LocalStorageService {
 
   // OTP Rate Limiting & Cooldown Lockout (10 minutes)
   static Future<void> setOtpLockout(String email, Duration duration) async {
-    final cleanEmail = email.trim().toLowerCase().replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_');
+    final cleanEmail = email.trim().toLowerCase().replaceAll(
+      RegExp(r'[^a-zA-Z0-9]'),
+      '_',
+    );
     final unlockAt = DateTime.now().add(duration).millisecondsSinceEpoch;
     final prefs = await _prefs;
-    await _ensureSaved(await prefs.setInt('${_authPrefix}otp_lockout_$cleanEmail', unlockAt));
+    await _ensureSaved(
+      await prefs.setInt('${_authPrefix}otp_lockout_$cleanEmail', unlockAt),
+    );
   }
 
   static Duration? getOtpLockoutRemaining(String email) {
-    final cleanEmail = email.trim().toLowerCase().replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_');
-    final unlockAt = _preferences?.getInt('${_authPrefix}otp_lockout_$cleanEmail');
+    final cleanEmail = email.trim().toLowerCase().replaceAll(
+      RegExp(r'[^a-zA-Z0-9]'),
+      '_',
+    );
+    final unlockAt = _preferences?.getInt(
+      '${_authPrefix}otp_lockout_$cleanEmail',
+    );
     if (unlockAt == null) return null;
     final remainingMs = unlockAt - DateTime.now().millisecondsSinceEpoch;
     if (remainingMs <= 0) {
@@ -229,9 +244,14 @@ class LocalStorageService {
   }
 
   static Future<void> clearOtpLockout(String email) async {
-    final cleanEmail = email.trim().toLowerCase().replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_');
+    final cleanEmail = email.trim().toLowerCase().replaceAll(
+      RegExp(r'[^a-zA-Z0-9]'),
+      '_',
+    );
     final prefs = await _prefs;
-    await _ensureSaved(await prefs.remove('${_authPrefix}otp_lockout_$cleanEmail'));
+    await _ensureSaved(
+      await prefs.remove('${_authPrefix}otp_lockout_$cleanEmail'),
+    );
   }
 
   static Future<void> saveString(String key, String value) async {
@@ -318,7 +338,9 @@ class LocalStorageService {
   ) async {
     _validateGradebookKey(offeringId, termNumber);
     final prefs = await _prefs;
-    await prefs.remove('${_cachePrefix}gradebook_${offeringId}_term_$termNumber');
+    await prefs.remove(
+      '${_cachePrefix}gradebook_${offeringId}_term_$termNumber',
+    );
   }
 
   static void _validateGradebookKey(String offeringId, int termNumber) {
@@ -440,9 +462,15 @@ class LocalStorageService {
     await prefs.remove('session.last_interaction');
   }
 
-  static Future<void> savePendingHeartbeat(String sessionId, DateTime dt) async {
+  static Future<void> savePendingHeartbeat(
+    String sessionId,
+    DateTime dt,
+  ) async {
     final prefs = await _prefs;
-    await prefs.setString('session.pending_heartbeat_$sessionId', dt.toIso8601String());
+    await prefs.setString(
+      'session.pending_heartbeat_$sessionId',
+      dt.toIso8601String(),
+    );
   }
 
   static Future<void> saveLastActiveRoute(String route) async {
@@ -469,4 +497,3 @@ class LocalStorageService {
     }
   }
 }
-

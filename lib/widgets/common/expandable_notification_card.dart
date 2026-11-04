@@ -44,10 +44,12 @@ class ExpandableNotificationCard extends StatefulWidget {
   }
 
   @override
-  State<ExpandableNotificationCard> createState() => _ExpandableNotificationCardState();
+  State<ExpandableNotificationCard> createState() =>
+      _ExpandableNotificationCardState();
 }
 
-class _ExpandableNotificationCardState extends State<ExpandableNotificationCard> {
+class _ExpandableNotificationCardState
+    extends State<ExpandableNotificationCard> {
   bool _isExpanded = false;
 
   String _formatAudience(String audience) {
@@ -90,7 +92,9 @@ class _ExpandableNotificationCardState extends State<ExpandableNotificationCard>
     final isDark = theme.brightness == Brightness.dark;
     final n = widget.notification;
 
-    final formattedMessage = ExpandableNotificationCard.wrapUnbrokenString(n.message);
+    final formattedMessage = ExpandableNotificationCard.wrapUnbrokenString(
+      n.message,
+    );
     final isLongMessage = n.message.length > 180;
 
     return Card(
@@ -120,7 +124,8 @@ class _ExpandableNotificationCardState extends State<ExpandableNotificationCard>
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: _getAudienceColor(n.targetAudience).withValues(alpha: 0.12),
+                      color: _getAudienceColor(n.targetAudience)
+                          .withValues(alpha: 0.12),
                       shape: BoxShape.circle,
                     ),
                     child: Icon(
@@ -136,7 +141,9 @@ class _ExpandableNotificationCardState extends State<ExpandableNotificationCard>
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          ExpandableNotificationCard.wrapUnbrokenString(n.title),
+                          ExpandableNotificationCard.wrapUnbrokenString(
+                            n.title,
+                          ),
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 15,
@@ -149,9 +156,13 @@ class _ExpandableNotificationCardState extends State<ExpandableNotificationCard>
                         Row(
                           children: [
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 2,
+                              ),
                               decoration: BoxDecoration(
-                                color: _getAudienceColor(n.targetAudience).withValues(alpha: 0.15),
+                                color: _getAudienceColor(n.targetAudience)
+                                    .withValues(alpha: 0.15),
                                 borderRadius: BorderRadius.circular(6),
                               ),
                               child: Text(
@@ -168,7 +179,9 @@ class _ExpandableNotificationCardState extends State<ExpandableNotificationCard>
                               _formatTime(n.timestamp),
                               style: TextStyle(
                                 fontSize: 12,
-                                color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                                color: theme.colorScheme.onSurface.withValues(
+                                  alpha: 0.5,
+                                ),
                               ),
                             ),
                           ],
@@ -196,11 +209,15 @@ class _ExpandableNotificationCardState extends State<ExpandableNotificationCard>
                       formattedMessage,
                       maxLines: _isExpanded ? null : 3,
                       softWrap: true,
-                      overflow: _isExpanded ? TextOverflow.visible : TextOverflow.ellipsis,
+                      overflow: _isExpanded
+                          ? TextOverflow.visible
+                          : TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: 13.5,
                         height: 1.5,
-                        color: theme.colorScheme.onSurface.withValues(alpha: 0.85),
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.85,
+                        ),
                       ),
                     ),
                   );

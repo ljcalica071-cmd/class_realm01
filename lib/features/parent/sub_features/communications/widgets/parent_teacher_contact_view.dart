@@ -12,9 +12,7 @@ class ParentTeacherContactView extends StatelessWidget {
     final t = teacher;
     if (t == null) {
       return Scaffold(
-        appBar: AppBar(
-          title: const Text('Teacher Contact'),
-        ),
+        appBar: AppBar(title: const Text('Teacher Contact')),
         body: Center(
           child: Padding(
             padding: const EdgeInsets.all(24),
@@ -77,8 +75,9 @@ class ParentTeacherContactView extends StatelessWidget {
                 children: [
                   CircleAvatar(
                     radius: 36,
-                    backgroundColor:
-                        theme.colorScheme.primary.withValues(alpha: 0.12),
+                    backgroundColor: theme.colorScheme.primary.withValues(
+                      alpha: 0.12,
+                    ),
                     child: Icon(
                       Icons.person,
                       size: 42,
@@ -96,7 +95,9 @@ class ParentTeacherContactView extends StatelessWidget {
                   const SizedBox(height: 6),
                   Container(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 10, vertical: 4),
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
                       color: theme.colorScheme.primaryContainer,
                       borderRadius: BorderRadius.circular(12),
@@ -118,8 +119,7 @@ class ParentTeacherContactView extends StatelessWidget {
                     leading: Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color:
-                            theme.colorScheme.primary.withValues(alpha: 0.1),
+                        color: theme.colorScheme.primary.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Icon(
@@ -135,8 +135,7 @@ class ParentTeacherContactView extends StatelessWidget {
                     leading: Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color:
-                            theme.colorScheme.primary.withValues(alpha: 0.1),
+                        color: theme.colorScheme.primary.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Icon(

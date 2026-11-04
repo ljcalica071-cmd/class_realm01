@@ -166,7 +166,8 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
     final confirm = await AppModals.showConfirmDialog(
       context: context,
       title: 'Restore Teacher',
-      message: 'Are you sure you want to restore ${t.fullName}? This will restore their previous status and re-enable login.',
+      message:
+          'Are you sure you want to restore ${t.fullName}? This will restore their previous status and re-enable login.',
       confirmLabel: 'Restore',
       confirmColor: Colors.green,
     );
@@ -788,7 +789,8 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
                                             width: colActionsWidth,
                                             hasRightBorder: false,
                                             child: Row(
-                                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment.spaceEvenly,
                                               children: [
                                                 if (!_showArchivedTeachers) ...[
                                                   IconButton(

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:nfc_manager/nfc_manager.dart';
 
 class PhoneNfcService {
@@ -8,6 +9,8 @@ class PhoneNfcService {
   static final PhoneNfcService instance = PhoneNfcService._();
 
   bool _isSessionActive = false;
+  final Map<String, DateTime> _uidCooldownMap = {};
+  static const Duration _cooldownDuration = Duration(milliseconds: 3000);
 
   /// Check if the current device has NFC hardware available
   Future<bool> isNfcAvailable() async {
@@ -44,12 +47,35 @@ class PhoneNfcService {
     try {
       await NfcManager.instance.startSession(
         onDiscovered: (NfcTag tag) async {
-          final uid = _extractUidFromTag(tag);
-          if (uid != null && uid.isNotEmpty) {
-            onCardScanned(uid);
-          } else {
+          final rawData = _extractRawBytesFromTag(tag);
+          if (rawData == null || rawData.isEmpty) {
             onError?.call('Could not read card UID.');
+            return;
           }
+
+          // Scenario 8: Detect randomized/rotating virtual UID from smartphones (Apple Pay / Google Wallet)
+          if (rawData.length == 4 && rawData[0] == 0x08) {
+            HapticFeedback.heavyImpact();
+            onError?.call(
+              'DYNAMIC_VIRTUAL_UID: Smartphone virtual wallet detected. Students must tap their physical school RFID card.',
+            );
+            return;
+          }
+
+          final uid = rawData
+              .map((b) => b.toRadixString(16).padLeft(2, '0').toUpperCase())
+              .join();
+
+          // Scenario 14: Debounce card hovering against NFC coil (3000ms cooldown per UID)
+          final now = DateTime.now();
+          final lastScan = _uidCooldownMap[uid];
+          if (lastScan != null && now.difference(lastScan) < _cooldownDuration) {
+            return;
+          }
+          _uidCooldownMap[uid] = now;
+
+          HapticFeedback.mediumImpact();
+          onCardScanned(uid);
         },
       );
     } catch (e) {
@@ -67,8 +93,8 @@ class PhoneNfcService {
     } catch (_) {}
   }
 
-  /// Helper to extract Hexadecimal UID across Mifare, NfcA, NfcB, IsoDep, etc.
-  String? _extractUidFromTag(NfcTag tag) {
+  /// Helper to extract raw byte identifier across Mifare, NfcA, NfcB, IsoDep, etc.
+  List<int>? _extractRawBytesFromTag(NfcTag tag) {
     List<int>? identifier;
 
     final data = tag.data;
@@ -89,10 +115,6 @@ class PhoneNfcService {
       identifier = (nfcb?['applicationData'] as List<dynamic>?)?.cast<int>();
     }
 
-    if (identifier == null || identifier.isEmpty) return null;
-
-    return identifier
-        .map((b) => b.toRadixString(16).padLeft(2, '0').toUpperCase())
-        .join();
+    return identifier;
   }
 }

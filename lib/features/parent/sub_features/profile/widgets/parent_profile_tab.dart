@@ -123,13 +123,15 @@ class _ParentProfileTabState extends State<ParentProfileTab> {
                     }
                     if (newP.length < 6) {
                       setDialogState(() {
-                        inlineError = 'New password must be at least 6 characters.';
+                        inlineError =
+                            'New password must be at least 6 characters.';
                       });
                       return;
                     }
                     if (newP != confP) {
                       setDialogState(() {
-                        inlineError = 'New password and confirmation do not match.';
+                        inlineError =
+                            'New password and confirmation do not match.';
                       });
                       return;
                     }
@@ -138,8 +140,7 @@ class _ParentProfileTabState extends State<ParentProfileTab> {
                     AppModals.showSuccessDialog(
                       context: context,
                       title: 'Password Updated',
-                      message:
-                          'Your password has been changed successfully. Please remember your new credentials.',
+                      message: 'Your password has been changed successfully. Please remember your new credentials.',
                     );
                   },
                   child: const Text('Update'),
@@ -179,7 +180,9 @@ class _ParentProfileTabState extends State<ParentProfileTab> {
                       height: 4,
                       margin: const EdgeInsets.only(bottom: 16),
                       decoration: BoxDecoration(
-                        color: theme.colorScheme.onSurface.withValues(alpha: 0.2),
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.2,
+                        ),
                         borderRadius: BorderRadius.circular(99),
                       ),
                     ),
@@ -199,7 +202,9 @@ class _ParentProfileTabState extends State<ParentProfileTab> {
                     style: TextStyle(
                       fontSize: 13.5,
                       height: 1.55,
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.85),
+                      color: theme.colorScheme.onSurface.withValues(
+                        alpha: 0.85,
+                      ),
                     ),
                   ),
                   const SizedBox(height: 24),
@@ -397,7 +402,9 @@ class _ParentProfileTabState extends State<ParentProfileTab> {
                   setState(() => _notificationsEnabled = val);
                   AppModals.showSuccessDialog(
                     context: context,
-                    title: val ? 'Notifications Enabled' : 'Notifications Muted',
+                    title: val
+                        ? 'Notifications Enabled'
+                        : 'Notifications Muted',
                     message: val
                         ? 'You will receive immediate alerts for your child\'s attendance and grades.'
                         : 'Notification alerts have been muted.',
@@ -464,7 +471,10 @@ class _ParentProfileTabState extends State<ParentProfileTab> {
                     leading: Icon(Icons.verified_outlined),
                     title: Text(
                       'App Version',
-                      style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                      ),
                     ),
                     trailing: Text(
                       '1.0.0 (SSHS Edition)',
@@ -479,7 +489,10 @@ class _ParentProfileTabState extends State<ParentProfileTab> {
                     leading: const Icon(Icons.description_outlined),
                     title: const Text(
                       'Terms of Service',
-                      style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                      ),
                     ),
                     trailing: const Icon(Icons.chevron_right_rounded),
                     onTap: () {
@@ -495,7 +508,10 @@ class _ParentProfileTabState extends State<ParentProfileTab> {
                     leading: const Icon(Icons.privacy_tip_outlined),
                     title: const Text(
                       'Privacy Policy',
-                      style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                      ),
                     ),
                     trailing: const Icon(Icons.chevron_right_rounded),
                     onTap: () {
@@ -526,7 +542,10 @@ class _ParentProfileTabState extends State<ParentProfileTab> {
                 ),
               ),
               child: ListTile(
-                leading: const Icon(Icons.logout_rounded, color: AppTheme.catRed),
+                leading: const Icon(
+                  Icons.logout_rounded,
+                  color: AppTheme.catRed,
+                ),
                 title: const Text(
                   'Logout',
                   style: TextStyle(
@@ -543,8 +562,7 @@ class _ParentProfileTabState extends State<ParentProfileTab> {
                   AppModals.showConfirmationDialog(
                     context: context,
                     title: 'Confirm Logout',
-                    message:
-                        'Are you sure you want to log out of the parent portal?',
+                    message: 'Are you sure you want to log out of the parent portal?',
                     confirmLabel: 'Logout',
                     confirmColor: AppTheme.catRed,
                     onConfirm: () => LogoutHelper.logout(context),

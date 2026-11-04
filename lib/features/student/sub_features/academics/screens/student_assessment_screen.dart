@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:class_realm/core/services/supabase_service.dart';
 import 'package:class_realm/core/theme/app_theme.dart';
@@ -61,28 +62,39 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
     final studentId = AuthRepository.instance.currentUser?.id ?? 'student';
     final seed = studentId.hashCode ^ widget.assessment.id.hashCode;
 
-    final mcQuestions = widget.assessment.questions
-        .where((q) => q.type == QuestionType.multipleChoice)
-        .toList()
-      ..shuffle(Random(seed));
+    final mcQuestions =
+        widget.assessment.questions
+            .where((q) => q.type == QuestionType.multipleChoice)
+            .toList()
+          ..shuffle(Random(seed));
 
-    final tfQuestions = widget.assessment.questions
-        .where((q) => q.type == QuestionType.trueFalse)
-        .toList()
-      ..shuffle(Random(seed + 1));
+    final tfQuestions =
+        widget.assessment.questions
+            .where((q) => q.type == QuestionType.trueFalse)
+            .toList()
+          ..shuffle(Random(seed + 1));
 
-    final idQuestions = widget.assessment.questions
-        .where((q) => q.type == QuestionType.identification)
-        .toList()
-      ..shuffle(Random(seed + 2));
+    final idQuestions =
+        widget.assessment.questions
+            .where((q) => q.type == QuestionType.identification)
+            .toList()
+          ..shuffle(Random(seed + 2));
 
     final otherQuestions = widget.assessment.questions
-        .where((q) => q.type != QuestionType.multipleChoice &&
-                      q.type != QuestionType.trueFalse &&
-                      q.type != QuestionType.identification)
+        .where(
+          (q) =>
+              q.type != QuestionType.multipleChoice &&
+              q.type != QuestionType.trueFalse &&
+              q.type != QuestionType.identification,
+        )
         .toList();
 
-    _orderedQuestions = [...mcQuestions, ...tfQuestions, ...idQuestions, ...otherQuestions];
+    _orderedQuestions = [
+      ...mcQuestions,
+      ...tfQuestions,
+      ...idQuestions,
+      ...otherQuestions,
+    ];
 
     for (var q in _orderedQuestions) {
       _studentAnswers[q.id] = '';
@@ -137,13 +149,16 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
     // Background audit logging into anti_cheating_logs
     try {
       final user = AuthRepository.instance.currentUser;
-      SupabaseService().client.from('anti_cheating_logs').insert({
-        'event_type': 'window_focus_lost',
-        'details': '$event (Infraction #$_violations)',
-        'student_id': user?.id,
-        'assessment_id': widget.assessment.id,
-        'logged_at': DateTime.now().toIso8601String(),
-      }).catchError((_) {});
+      SupabaseService().client
+          .from('anti_cheating_logs')
+          .insert({
+            'event_type': 'window_focus_lost',
+            'details': '$event (Infraction #$_violations)',
+            'student_id': user?.id,
+            'assessment_id': widget.assessment.id,
+            'logged_at': DateTime.now().toIso8601String(),
+          })
+          .catchError((_) {});
     } catch (_) {}
 
     // Strictly SILENT violation logging - Do NOT show warning pop-ups on the student's screen per user request
@@ -214,10 +229,9 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
       }
     }
 
-    final durationTaken =
-        _startTime != null
-            ? DateTime.now().difference(_startTime!).inMinutes
-            : 0;
+    final durationTaken = _startTime != null
+        ? DateTime.now().difference(_startTime!).inMinutes
+        : 0;
 
     final student =
         AuthRepository.instance.currentUser ??
@@ -233,14 +247,19 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
     try {
       final user = AuthRepository.instance.currentUser;
       final attemptStatus = autoSubmit ? 'auto_submitted' : 'submitted';
-      SupabaseService().client.from('assessment_attempts').upsert({
-        'assessment_id': widget.assessment.id,
-        'student_id': user?.id ?? student.id,
-        'attempt_number': 1,
-        'status': attemptStatus,
-        'started_at': _startTime?.toIso8601String() ?? DateTime.now().toIso8601String(),
-        'submitted_at': DateTime.now().toIso8601String(),
-      }).catchError((_) {});
+      SupabaseService().client
+          .from('assessment_attempts')
+          .upsert({
+            'assessment_id': widget.assessment.id,
+            'student_id': user?.id ?? student.id,
+            'attempt_number': 1,
+            'status': attemptStatus,
+            'started_at':
+                _startTime?.toIso8601String() ??
+                DateTime.now().toIso8601String(),
+            'submitted_at': DateTime.now().toIso8601String(),
+          })
+          .catchError((_) {});
     } catch (_) {}
 
     if (!mounted) return;
@@ -277,8 +296,9 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.assessment.title),
-        backgroundColor:
-            widget.assessment.isExam ? AppTheme.catRed : Theme.of(context).colorScheme.primary,
+        backgroundColor: widget.assessment.isExam
+            ? AppTheme.catRed
+            : Theme.of(context).colorScheme.primary,
         foregroundColor: Theme.of(context).colorScheme.onPrimary,
       ),
       body: PopScope(
@@ -288,8 +308,7 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
           AppModals.showWarningDialog(
             context: context,
             title: 'Exam In Progress',
-            message:
-                'You cannot leave the assessment while the exam timer is actively running. Please complete or submit your examination.',
+            message: 'You cannot leave the assessment while the exam timer is actively running. Please complete or submit your examination.',
           );
         },
         child: Stack(
@@ -303,7 +322,10 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
                   decoration: BoxDecoration(
                     color: Theme.of(context).colorScheme.surface,
                     borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.12)),
+                    border: Border.all(
+                      color: Theme.of(context).colorScheme.onSurface
+                          .withValues(alpha: 0.12),
+                    ),
                   ),
                   child: Column(
                     children: [
@@ -332,10 +354,9 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
               children: [
                 Icon(
                   widget.assessment.isExam ? Icons.description : Icons.quiz,
-                  color:
-                      widget.assessment.isExam
-                          ? AppTheme.catRed
-                          : Theme.of(context).colorScheme.primary,
+                  color: widget.assessment.isExam
+                      ? AppTheme.catRed
+                      : Theme.of(context).colorScheme.primary,
                   size: 32,
                 ),
                 const SizedBox(width: 14),
@@ -353,7 +374,8 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
                       Text(
                         'Subject: ${widget.assessment.subject} • Section: ${widget.assessment.section}',
                         style: TextStyle(
-                          color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+                          color: Theme.of(context).colorScheme.onSurface
+                              .withValues(alpha: 0.6),
                           fontSize: 13,
                         ),
                       ),
@@ -400,30 +422,31 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
               height: 48,
               child: ElevatedButton(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor:
-                      widget.assessment.isExam
-                          ? AppTheme.catRed
-                          : Theme.of(context).colorScheme.primary,
+                  backgroundColor: widget.assessment.isExam
+                      ? AppTheme.catRed
+                      : Theme.of(context).colorScheme.primary,
                 ),
-                onPressed:
-                    _rulesAccepted
-                        ? () {
-                            final now = DateTime.now();
-                            if (now.isBefore(widget.assessment.scheduleDate)) {
-                               AppModals.showErrorDialog(
-                                  context: context,
-                                  title: 'Assessment Locked',
-                                  message: 'You cannot start this assessment yet. It is scheduled to begin later.',
-                               );
-                               return;
-                            }
-                          setState(() => _currentStep = 1);
-                          _startTimer();
+                onPressed: _rulesAccepted
+                    ? () {
+                        final now = DateTime.now();
+                        if (now.isBefore(widget.assessment.scheduleDate)) {
+                          AppModals.showErrorDialog(
+                            context: context,
+                            title: 'Assessment Locked',
+                            message: 'You cannot start this assessment yet. It is scheduled to begin later.',
+                          );
+                          return;
                         }
-                        : null,
+                        setState(() => _currentStep = 1);
+                        _startTimer();
+                      }
+                    : null,
                 child: const Text(
                   'START ASSESSMENT',
-                  style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.2),
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.2,
+                  ),
                 ),
               ),
             ),
@@ -444,7 +467,11 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
           Expanded(
             child: Text(
               text,
-              style: TextStyle(fontSize: 14, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6)),
+              style: TextStyle(
+                fontSize: 14,
+                color: Theme.of(context).colorScheme.onSurface
+                    .withValues(alpha: 0.6),
+              ),
             ),
           ),
         ],
@@ -467,7 +494,12 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
             decoration: BoxDecoration(
               color: const Color(0xFFF8FAFC),
-              border: Border(bottom: BorderSide(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.12))),
+              border: Border(
+                bottom: BorderSide(
+                  color: Theme.of(context).colorScheme.onSurface
+                      .withValues(alpha: 0.12),
+                ),
+              ),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -485,10 +517,9 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
                         vertical: 3,
                       ),
                       decoration: BoxDecoration(
-                        color:
-                            answeredCount == totalQ
-                                ? AppTheme.catGreen.withValues(alpha: 0.12)
-                                : AppTheme.catOrange.withValues(alpha: 0.12),
+                        color: answeredCount == totalQ
+                            ? AppTheme.catGreen.withValues(alpha: 0.12)
+                            : AppTheme.catOrange.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Text(
@@ -496,10 +527,9 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.bold,
-                          color:
-                              answeredCount == totalQ
-                                  ? AppTheme.catGreen
-                                  : AppTheme.catOrange,
+                          color: answeredCount == totalQ
+                              ? AppTheme.catGreen
+                              : AppTheme.catOrange,
                         ),
                       ),
                     ),
@@ -549,7 +579,8 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
                           vertical: 4,
                         ),
                         decoration: BoxDecoration(
-                          color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.15),
+                          color: Theme.of(context).colorScheme.primary
+                              .withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: Text(
@@ -567,7 +598,8 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.bold,
-                          color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+                          color: Theme.of(context).colorScheme.onSurface
+                              .withValues(alpha: 0.6),
                         ),
                       ),
                       const Spacer(),
@@ -577,7 +609,8 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
                           'Simulate: Copy attempt detected',
                           style: TextStyle(fontSize: 10),
                         ),
-                        onPressed: () => _recordViolation('Copy attempt detected'),
+                        onPressed: () =>
+                            _recordViolation('Copy attempt detected'),
                       ),
                     ],
                   ),
@@ -600,13 +633,16 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
                       return Container(
                         margin: const EdgeInsets.only(bottom: 12),
                         decoration: BoxDecoration(
-                          color:
-                              isSelected
-                                  ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.08)
-                                  : Theme.of(context).colorScheme.surface,
+                          color: isSelected
+                              ? Theme.of(context).colorScheme.primary
+                                    .withValues(alpha: 0.08)
+                              : Theme.of(context).colorScheme.surface,
                           borderRadius: BorderRadius.circular(10),
                           border: Border.all(
-                            color: isSelected ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.12),
+                            color: isSelected
+                                ? Theme.of(context).colorScheme.primary
+                                : Theme.of(context).colorScheme.onSurface
+                                      .withValues(alpha: 0.12),
                             width: isSelected ? 2 : 1,
                           ),
                         ),
@@ -614,8 +650,9 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
                           title: Text(
                             choice,
                             style: TextStyle(
-                              fontWeight:
-                                  isSelected ? FontWeight.bold : FontWeight.normal,
+                              fontWeight: isSelected
+                                  ? FontWeight.bold
+                                  : FontWeight.normal,
                             ),
                           ),
                           value: choice,
@@ -629,48 +666,47 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
                     }),
                   ] else if (q.type == QuestionType.matching) ...[
                     Column(
-                      children:
-                          q.matchingPairs.keys.map((left) {
-                            final options = q.matchingPairs.values.toList();
-                            final current = _studentAnswers[q.id]
-                                ?.split('|')
-                                .firstWhere(
-                                  (entry) => entry.startsWith('$left='),
-                                  orElse: () => '',
+                      children: q.matchingPairs.keys.map((left) {
+                        final options = q.matchingPairs.values.toList();
+                        final current = _studentAnswers[q.id]
+                            ?.split('|')
+                            .firstWhere(
+                              (entry) => entry.startsWith('$left='),
+                              orElse: () => '',
+                            )
+                            .split('=')
+                            .skip(1)
+                            .join('=');
+                        return DropdownButtonFormField<String>(
+                          initialValue: options.contains(current)
+                              ? current
+                              : null,
+                          decoration: InputDecoration(labelText: left),
+                          items: options
+                              .map(
+                                (option) => DropdownMenuItem(
+                                  value: option,
+                                  child: Text(option),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: (value) {
+                            if (value == null) return;
+                            final answers = (_studentAnswers[q.id] ?? '')
+                                .split('|')
+                                .where(
+                                  (entry) =>
+                                      entry.isNotEmpty &&
+                                      !entry.startsWith('$left='),
                                 )
-                                .split('=')
-                                .skip(1)
-                                .join('=');
-                            return DropdownButtonFormField<String>(
-                              initialValue:
-                                  options.contains(current) ? current : null,
-                              decoration: InputDecoration(labelText: left),
-                              items:
-                                  options
-                                      .map(
-                                        (option) => DropdownMenuItem(
-                                          value: option,
-                                          child: Text(option),
-                                        ),
-                                      )
-                                      .toList(),
-                              onChanged: (value) {
-                                if (value == null) return;
-                                final answers = (_studentAnswers[q.id] ?? '')
-                                    .split('|')
-                                    .where(
-                                      (entry) =>
-                                          entry.isNotEmpty &&
-                                          !entry.startsWith('$left='),
-                                    )
-                                    .toList();
-                                answers.add('$left=$value');
-                                setState(
-                                  () => _studentAnswers[q.id] = answers.join('|'),
-                                );
-                              },
+                                .toList();
+                            answers.add('$left=$value');
+                            setState(
+                              () => _studentAnswers[q.id] = answers.join('|'),
                             );
-                          }).toList(),
+                          },
+                        );
+                      }).toList(),
                     ),
                   ] else ...[
                     Column(
@@ -703,15 +739,11 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
                                   vertical: 5,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: Theme.of(context)
-                                      .colorScheme
-                                      .primary
+                                  color: Theme.of(context).colorScheme.primary
                                       .withValues(alpha: 0.1),
                                   borderRadius: BorderRadius.circular(6),
                                   border: Border.all(
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .primary
+                                    color: Theme.of(context).colorScheme.primary
                                         .withValues(alpha: 0.3),
                                   ),
                                 ),
@@ -721,8 +753,9 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
                                     Icon(
                                       Icons.not_interested,
                                       size: 13,
-                                      color:
-                                          Theme.of(context).colorScheme.primary,
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .primary,
                                     ),
                                     const SizedBox(width: 4),
                                     Text(
@@ -730,10 +763,9 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
                                       style: TextStyle(
                                         fontSize: 11,
                                         fontWeight: FontWeight.bold,
-                                        color:
-                                            Theme.of(context)
-                                                .colorScheme
-                                                .primary,
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .primary,
                                       ),
                                     ),
                                   ],
@@ -751,8 +783,7 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
                           decoration: InputDecoration(
                             labelText: 'Type your answer here',
                             hintText: "Enter answer (or type 'N/A' if unknown)",
-                            helperText:
-                                "Required: Blank answers are prohibited on submission. If you do not know the answer, enter 'N/A'.",
+                            helperText: "Required: Blank answers are prohibited on submission. If you do not know the answer, enter 'N/A'.",
                             helperMaxLines: 2,
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(10),
@@ -771,7 +802,12 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
             decoration: BoxDecoration(
-              border: Border(top: BorderSide(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.12))),
+              border: Border(
+                top: BorderSide(
+                  color: Theme.of(context).colorScheme.onSurface
+                      .withValues(alpha: 0.12),
+                ),
+              ),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -779,10 +815,9 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
                 OutlinedButton.icon(
                   icon: const Icon(Icons.arrow_back, size: 16),
                   label: const Text('Previous'),
-                  onPressed:
-                      _currentQuestionIndex > 0
-                          ? () => setState(() => _currentQuestionIndex--)
-                          : null,
+                  onPressed: _currentQuestionIndex > 0
+                      ? () => setState(() => _currentQuestionIndex--)
+                      : null,
                 ),
                 // Number bubbles
                 Expanded(
@@ -797,42 +832,38 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
                                 .isNotEmpty;
                         final isCurrent = idx == _currentQuestionIndex;
                         return InkWell(
-                          onTap: () => setState(() => _currentQuestionIndex = idx),
+                          onTap: () =>
+                              setState(() => _currentQuestionIndex = idx),
                           child: Container(
                             margin: const EdgeInsets.symmetric(horizontal: 4),
                             width: 32,
                             height: 32,
                             alignment: Alignment.center,
                             decoration: BoxDecoration(
-                              color:
-                                  isCurrent
-                                      ? Theme.of(context).colorScheme.primary
-                                      : isAnswered
-                                      ? AppTheme.catGreen.withValues(alpha: 0.12)
-                                      : Theme.of(context).scaffoldBackgroundColor,
+                              color: isCurrent
+                                  ? Theme.of(context).colorScheme.primary
+                                  : isAnswered
+                                  ? AppTheme.catGreen.withValues(alpha: 0.12)
+                                  : Theme.of(context).scaffoldBackgroundColor,
                               borderRadius: BorderRadius.circular(8),
                               border: Border.all(
-                                color:
-                                    isCurrent
-                                        ? Theme.of(context).colorScheme.primary
-                                        : isAnswered
-                                        ? AppTheme.catGreen
-                                        : Theme.of(context)
-                                            .colorScheme
-                                            .onSurface
-                                            .withValues(alpha: 0.2),
+                                color: isCurrent
+                                    ? Theme.of(context).colorScheme.primary
+                                    : isAnswered
+                                    ? AppTheme.catGreen
+                                    : Theme.of(context).colorScheme.onSurface
+                                          .withValues(alpha: 0.2),
                                 width: isCurrent || isAnswered ? 1.5 : 1,
                               ),
                             ),
                             child: Text(
                               '${idx + 1}',
                               style: TextStyle(
-                                color:
-                                    isCurrent
-                                        ? Theme.of(context).colorScheme.onPrimary
-                                        : isAnswered
-                                        ? AppTheme.catGreen
-                                        : Theme.of(context).colorScheme.onSurface,
+                                color: isCurrent
+                                    ? Theme.of(context).colorScheme.onPrimary
+                                    : isAnswered
+                                    ? AppTheme.catGreen
+                                    : Theme.of(context).colorScheme.onSurface,
                                 fontWeight: FontWeight.bold,
                                 fontSize: 12,
                               ),
@@ -854,21 +885,20 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
                   )
                 else
                   AppPrimaryButton(
-                    label: _isSubmitting ? 'Submitting...' : 'Submit Assessment',
-                    backgroundColor:
-                        answeredCount == totalQ
-                            ? AppTheme.catGreen
-                            : AppTheme.catOrange,
-                    icon:
-                        answeredCount == totalQ
-                            ? Icons.check_circle
-                            : Icons.warning_amber_rounded,
+                    label: _isSubmitting
+                        ? 'Submitting...'
+                        : 'Submit Assessment',
+                    backgroundColor: answeredCount == totalQ
+                        ? AppTheme.catGreen
+                        : AppTheme.catOrange,
+                    icon: answeredCount == totalQ
+                        ? Icons.check_circle
+                        : Icons.warning_amber_rounded,
                     height: 40,
                     width: 180,
-                    onPressed:
-                        _isSubmitting
-                            ? null
-                            : () => _submitAssessment(autoSubmit: false),
+                    onPressed: _isSubmitting
+                        ? null
+                        : () => _submitAssessment(autoSubmit: false),
                   ),
               ],
             ),
@@ -929,7 +959,11 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
             const SizedBox(height: 8),
             Text(
               widget.assessment.title,
-              style: TextStyle(fontSize: 14, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6)),
+              style: TextStyle(
+                fontSize: 14,
+                color: Theme.of(context).colorScheme.onSurface
+                    .withValues(alpha: 0.6),
+              ),
             ),
             const SizedBox(height: 24),
             if (widget.assessment.resultsReleased || result.isReleased) ...[
@@ -938,7 +972,10 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
                 decoration: BoxDecoration(
                   color: Theme.of(context).scaffoldBackgroundColor,
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.12)),
+                  border: Border.all(
+                    color: Theme.of(context).colorScheme.onSurface
+                        .withValues(alpha: 0.12),
+                  ),
                 ),
                 child: Column(
                   children: [
@@ -968,12 +1005,17 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
                 decoration: BoxDecoration(
                   color: AppTheme.catOrange.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppTheme.catOrange.withValues(alpha: 0.3)),
+                  border: Border.all(
+                    color: AppTheme.catOrange.withValues(alpha: 0.3),
+                  ),
                 ),
                 child: Text(
                   'Your assessment has been submitted and recorded. Official results and answer breakdowns will be available once the teacher releases the results.',
                   textAlign: TextAlign.center,
-                  style: TextStyle(color: Theme.of(context).colorScheme.onSurface, height: 1.4),
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurface,
+                    height: 1.4,
+                  ),
                 ),
               ),
             ],

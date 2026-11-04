@@ -17,7 +17,8 @@ class AdminAddTeacherScreen extends StatelessWidget {
             if (Navigator.of(context).canPop()) {
               Navigator.of(context).pop();
             } else {
-              Navigator.of(context).pushReplacementNamed(AppRoutes.adminDashboard);
+              Navigator.of(context)
+                  .pushReplacementNamed(AppRoutes.adminDashboard);
             }
           },
         ),

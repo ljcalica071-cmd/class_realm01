@@ -27,9 +27,8 @@ class SubjectTemplate {
 
   bool get isNoExam => ex == 0;
 
-  String get weightSummary => isNoExam
-      ? 'WW $ww% · PT $pt% · NO EXAM'
-      : 'WW $ww% · PT $pt% · EX $ex%';
+  String get weightSummary =>
+      isNoExam ? 'WW $ww% · PT $pt% · NO EXAM' : 'WW $ww% · PT $pt% · EX $ex%';
 
   String get termsSummary {
     if (termsTaught == 3) return '3 Terms (Full Year)';

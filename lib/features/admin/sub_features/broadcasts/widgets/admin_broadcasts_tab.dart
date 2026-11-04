@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -33,7 +34,12 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
   String? _messageError;
 
   // Active User Counts by Role (excluding archived users)
-  Map<String, int> _userCounts = {'teachers': 0, 'students': 0, 'parents': 0, 'total': 0};
+  Map<String, int> _userCounts = {
+    'teachers': 0,
+    'students': 0,
+    'parents': 0,
+    'total': 0,
+  };
 
   // Broadcast History State
   List<AppNotificationModel> _broadcasts = [];
@@ -157,7 +163,9 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
   }
 
   Future<void> _loadBroadcastHistory() async {
-    final list = await AdminRepository.instance.getBroadcastAnnouncements(limit: 50);
+    final list = await AdminRepository.instance.getBroadcastAnnouncements(
+      limit: 50,
+    );
     if (mounted) {
       setState(() {
         _broadcasts = list;
@@ -172,15 +180,18 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
 
   Future<void> _handleMaintenanceToggle(bool targetState) async {
     // 5-second persistent cooldown via RateLimitService
-    final cooldownRemaining = await RateLimitService.instance.checkAdminCooldown(
-      actionKey: 'admin_maintenance_toggle',
-      cooldownSeconds: 5,
-    );
+    final cooldownRemaining = await RateLimitService.instance
+        .checkAdminCooldown(
+          actionKey: 'admin_maintenance_toggle',
+          cooldownSeconds: 5,
+        );
     if (cooldownRemaining > 0) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Please wait $cooldownRemaining seconds before changing maintenance mode again.'),
+            content: Text(
+              'Please wait $cooldownRemaining seconds before changing maintenance mode again.',
+            ),
           ),
         );
       }
@@ -208,7 +219,7 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
         actionKey: 'admin_maintenance_toggle',
         cooldownSeconds: 5,
       );
-      
+
       // DISPATCH EMAILS IN BACKGROUND (Fire and forget)
       AdminRepository.instance.getActiveUserEmails().then((emails) {
         if (emails.isNotEmpty) {
@@ -239,7 +250,10 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
       if (mounted) {
         setState(() => _isTogglingMaintenance = false); // UI rollback
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(backgroundColor: AppTheme.catRed, content: Text('Failed to update maintenance mode: $e')),
+          SnackBar(
+            backgroundColor: AppTheme.catRed,
+            content: Text('Failed to update maintenance mode: $e'),
+          ),
         );
       }
     }
@@ -258,10 +272,16 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
       context: context,
       builder: (ctx) {
         return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
           title: const Row(
             children: [
-              Icon(Icons.check_circle_outline_rounded, color: AppTheme.catGreen, size: 28),
+              Icon(
+                Icons.check_circle_outline_rounded,
+                color: AppTheme.catGreen,
+                size: 28,
+              ),
               SizedBox(width: 12),
               Text('Disable Maintenance Mode?'),
             ],
@@ -295,8 +315,16 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('• ', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-          Expanded(child: Text(text, style: const TextStyle(fontSize: 13, height: 1.35))),
+          const Text(
+            '• ',
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+          ),
+          Expanded(
+            child: Text(
+              text,
+              style: const TextStyle(fontSize: 13, height: 1.35),
+            ),
+          ),
         ],
       ),
     );
@@ -339,13 +367,12 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
     }
 
     // Rate Limiting & Cooldown Check (30 seconds via RateLimitService)
-    final cooldownRemaining = await RateLimitService.instance.checkAdminCooldown(
-      actionKey: 'admin_broadcast',
-      cooldownSeconds: 30,
-    );
+    final cooldownRemaining = await RateLimitService.instance
+        .checkAdminCooldown(actionKey: 'admin_broadcast', cooldownSeconds: 30);
     if (cooldownRemaining > 0) {
       setState(() {
-        _messageError = 'Please wait $cooldownRemaining seconds before sending another announcement.';
+        _messageError =
+            'Please wait $cooldownRemaining seconds before sending another announcement.';
       });
       return;
     }
@@ -391,13 +418,14 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
       if (mounted) {
         setState(() => _isSubmittingAnnouncement = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(backgroundColor: AppTheme.catRed, content: Text('Error: $e')),
+          SnackBar(
+            backgroundColor: AppTheme.catRed,
+            content: Text('Error: $e'),
+          ),
         );
       }
     }
   }
-
-
 
   @override
   Widget build(BuildContext context) {
@@ -422,7 +450,10 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
           const SizedBox(height: 6),
           Text(
             'Manage system-wide announcements and toggle operational maintenance mode.',
-            style: TextStyle(fontSize: 14, color: theme.colorScheme.onSurface.withValues(alpha: 0.6)),
+            style: TextStyle(
+              fontSize: 14,
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+            ),
           ),
           const SizedBox(height: 24),
 
@@ -454,8 +485,12 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
                     shape: BoxShape.circle,
                   ),
                   child: Icon(
-                    _isMaintenanceMode ? Icons.build_circle_rounded : Icons.check_circle_outline_rounded,
-                    color: _isMaintenanceMode ? AppTheme.catRed : AppTheme.catGreen,
+                    _isMaintenanceMode
+                        ? Icons.build_circle_rounded
+                        : Icons.check_circle_outline_rounded,
+                    color: _isMaintenanceMode
+                        ? AppTheme.catRed
+                        : AppTheme.catGreen,
                     size: 28,
                   ),
                 ),
@@ -476,13 +511,20 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
                           ),
                           const SizedBox(width: 8),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 2,
+                            ),
                             decoration: BoxDecoration(
-                              color: _isMaintenanceMode ? AppTheme.catRed : AppTheme.catGreen,
+                              color: _isMaintenanceMode
+                                  ? AppTheme.catRed
+                                  : AppTheme.catGreen,
                               borderRadius: BorderRadius.circular(6),
                             ),
                             child: Text(
-                              _isMaintenanceMode ? 'ACTIVE (LOCKED)' : 'OPERATIONAL',
+                              _isMaintenanceMode
+                                  ? 'ACTIVE (LOCKED)'
+                                  : 'OPERATIONAL',
                               style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 11,
@@ -499,7 +541,9 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
                             : 'All users (Teachers, Students, Parents) can log in and use the system normally.',
                         style: TextStyle(
                           fontSize: 13,
-                          color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                          color: theme.colorScheme.onSurface.withValues(
+                            alpha: 0.7,
+                          ),
                         ),
                       ),
                     ],
@@ -528,262 +572,306 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
             const ShimmerComposeCard()
           else
             Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: isDark ? theme.colorScheme.surface : Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: isDark ? Colors.white12 : Colors.grey.shade200,
-                width: 1,
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: isDark ? theme.colorScheme.surface : Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: isDark ? Colors.white12 : Colors.grey.shade200,
+                  width: 1,
+                ),
               ),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    const Icon(Icons.campaign_outlined, color: AppTheme.catPurple, size: 24),
-                    const SizedBox(width: 10),
-                    Text(
-                      'Compose Global Push Announcement',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: theme.colorScheme.onSurface,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.campaign_outlined,
+                        color: AppTheme.catPurple,
+                        size: 24,
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 18),
-
-                // Target Audience Dropdown
-                Row(
-                  children: [
-                    Text(
-                      'Target Audience:',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: theme.colorScheme.onSurface,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    DropdownButton<String>(
-                      value: _selectedAudience,
-                      underline: Container(),
-                      items: [
-                        DropdownMenuItem(
-                          value: 'all',
-                          enabled: (_userCounts['total'] ?? 0) > 0,
-                          child: Text(
-                            'All Users (${_userCounts['total'] ?? 0} active${(_userCounts['total'] ?? 0) == 0 ? ' - No users' : ''})',
-                            style: TextStyle(
-                              color: (_userCounts['total'] ?? 0) == 0 ? Colors.grey : null,
-                            ),
-                          ),
+                      const SizedBox(width: 10),
+                      Text(
+                        'Compose Global Push Announcement',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: theme.colorScheme.onSurface,
                         ),
-                        DropdownMenuItem(
-                          value: 'teachers',
-                          enabled: (_userCounts['teachers'] ?? 0) > 0,
-                          child: Text(
-                            'Teachers (${_userCounts['teachers'] ?? 0} active${(_userCounts['teachers'] ?? 0) == 0 ? ' - No users' : ''})',
-                            style: TextStyle(
-                              color: (_userCounts['teachers'] ?? 0) == 0 ? Colors.grey : null,
-                            ),
-                          ),
-                        ),
-                        DropdownMenuItem(
-                          value: 'students',
-                          enabled: (_userCounts['students'] ?? 0) > 0,
-                          child: Text(
-                            'Students (${_userCounts['students'] ?? 0} active${(_userCounts['students'] ?? 0) == 0 ? ' - No users' : ''})',
-                            style: TextStyle(
-                              color: (_userCounts['students'] ?? 0) == 0 ? Colors.grey : null,
-                            ),
-                          ),
-                        ),
-                        DropdownMenuItem(
-                          value: 'parents',
-                          enabled: (_userCounts['parents'] ?? 0) > 0,
-                          child: Text(
-                            'Parents (${_userCounts['parents'] ?? 0} active${(_userCounts['parents'] ?? 0) == 0 ? ' - No users' : ''})',
-                            style: TextStyle(
-                              color: (_userCounts['parents'] ?? 0) == 0 ? Colors.grey : null,
-                            ),
-                          ),
-                        ),
-                      ],
-                      onChanged: (v) {
-                        if (v != null) setState(() => _selectedAudience = v);
-                      },
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 14),
-
-                // Title Input with Inline Error Outline
-                TextField(
-                  controller: _titleController,
-                  maxLength: 100,
-                  decoration: InputDecoration(
-                    labelText: 'Announcement Title',
-                    hintText: 'e.g., Campus Schedule Advisory or System Update',
-                    counterText: '',
-                    errorText: _titleError,
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: BorderSide(
-                        color: isDark ? Colors.white24 : Colors.grey.shade300,
                       ),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: BorderSide(
-                        color: theme.colorScheme.primary,
-                        width: 1.5,
-                      ),
-                    ),
-                    errorBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: const BorderSide(
-                        color: Color(0xFFDC2626),
-                        width: 1.5,
-                      ),
-                    ),
-                    focusedErrorBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: const BorderSide(
-                        color: Color(0xFFDC2626),
-                        width: 2.0,
-                      ),
-                    ),
-                    errorStyle: const TextStyle(
-                      color: Color(0xFFDC2626),
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                    ),
+                    ],
                   ),
-                ),
-                const SizedBox(height: 14),
+                  const SizedBox(height: 18),
 
-                // Message Input with Inline Error Outline
-                TextField(
-                  controller: _messageController,
-                  maxLength: 1000,
-                  maxLines: 5,
-                  decoration: InputDecoration(
-                    labelText: 'Message Content',
-                    hintText: 'Type your message here (up to 1,000 characters)...',
-                    counterText: '',
-                    errorText: _messageError,
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: BorderSide(
-                        color: isDark ? Colors.white24 : Colors.grey.shade300,
+                  // Target Audience Dropdown
+                  Row(
+                    children: [
+                      Text(
+                        'Target Audience:',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: theme.colorScheme.onSurface,
+                        ),
                       ),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: BorderSide(
-                        color: theme.colorScheme.primary,
-                        width: 1.5,
-                      ),
-                    ),
-                    errorBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: const BorderSide(
-                        color: Color(0xFFDC2626),
-                        width: 1.5,
-                      ),
-                    ),
-                    focusedErrorBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: const BorderSide(
-                        color: Color(0xFFDC2626),
-                        width: 2.0,
-                      ),
-                    ),
-                    errorStyle: const TextStyle(
-                      color: Color(0xFFDC2626),
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 6),
-
-                // Live Character Counter & Submit Button
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      '$charCount / 1000 characters',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: charCount > 950 ? AppTheme.catRed : theme.colorScheme.onSurface.withValues(alpha: 0.5),
-                        fontWeight: charCount > 950 ? FontWeight.bold : FontWeight.normal,
-                      ),
-                    ),
-                    ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: theme.colorScheme.primary,
-                        foregroundColor: Colors.white,
-                        disabledBackgroundColor: isDark ? Colors.white12 : Colors.grey.shade300,
-                        disabledForegroundColor: Colors.grey.shade500,
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      ),
-                      onPressed: (_isSubmittingAnnouncement || _selectedAudienceCount == 0)
-                          ? null
-                          : _handleSendAnnouncement,
-                      icon: _isSubmittingAnnouncement
-                          ? LoadingAnimationWidget.staggeredDotsWave(
-                              color: Colors.white,
-                              size: 16,
-                            )
-                          : const Icon(Icons.send_rounded, size: 18),
-                      label: Text(
-                        _isSubmittingAnnouncement ? 'Sending...' : 'Send Broadcast',
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                  ],
-                ),
-                if (_selectedAudienceCount == 0)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 10),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: Colors.orange.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(Icons.info_outline, size: 16, color: Colors.orange.shade800),
-                          const SizedBox(width: 8),
-                          Expanded(
+                      const SizedBox(width: 12),
+                      DropdownButton<String>(
+                        value: _selectedAudience,
+                        underline: Container(),
+                        items: [
+                          DropdownMenuItem(
+                            value: 'all',
+                            enabled: (_userCounts['total'] ?? 0) > 0,
                             child: Text(
-                              _userCounts['total'] == 0
-                                  ? 'Broadcast disabled: There are currently no active non-archived users in the system.'
-                                  : 'Broadcast disabled: No active non-archived $_selectedAudience found to receive announcements.',
+                              'All Users (${_userCounts['total'] ?? 0} active${(_userCounts['total'] ?? 0) == 0 ? ' - No users' : ''})',
                               style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.orange.shade800,
-                                fontWeight: FontWeight.w500,
+                                color: (_userCounts['total'] ?? 0) == 0
+                                    ? Colors.grey
+                                    : null,
+                              ),
+                            ),
+                          ),
+                          DropdownMenuItem(
+                            value: 'teachers',
+                            enabled: (_userCounts['teachers'] ?? 0) > 0,
+                            child: Text(
+                              'Teachers (${_userCounts['teachers'] ?? 0} active${(_userCounts['teachers'] ?? 0) == 0 ? ' - No users' : ''})',
+                              style: TextStyle(
+                                color: (_userCounts['teachers'] ?? 0) == 0
+                                    ? Colors.grey
+                                    : null,
+                              ),
+                            ),
+                          ),
+                          DropdownMenuItem(
+                            value: 'students',
+                            enabled: (_userCounts['students'] ?? 0) > 0,
+                            child: Text(
+                              'Students (${_userCounts['students'] ?? 0} active${(_userCounts['students'] ?? 0) == 0 ? ' - No users' : ''})',
+                              style: TextStyle(
+                                color: (_userCounts['students'] ?? 0) == 0
+                                    ? Colors.grey
+                                    : null,
+                              ),
+                            ),
+                          ),
+                          DropdownMenuItem(
+                            value: 'parents',
+                            enabled: (_userCounts['parents'] ?? 0) > 0,
+                            child: Text(
+                              'Parents (${_userCounts['parents'] ?? 0} active${(_userCounts['parents'] ?? 0) == 0 ? ' - No users' : ''})',
+                              style: TextStyle(
+                                color: (_userCounts['parents'] ?? 0) == 0
+                                    ? Colors.grey
+                                    : null,
                               ),
                             ),
                           ),
                         ],
+                        onChanged: (v) {
+                          if (v != null) setState(() => _selectedAudience = v);
+                        },
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+
+                  // Title Input with Inline Error Outline
+                  TextField(
+                    controller: _titleController,
+                    maxLength: 100,
+                    decoration: InputDecoration(
+                      labelText: 'Announcement Title',
+                      hintText:
+                          'e.g., Campus Schedule Advisory or System Update',
+                      counterText: '',
+                      errorText: _titleError,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: BorderSide(
+                          color: isDark ? Colors.white24 : Colors.grey.shade300,
+                        ),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: BorderSide(
+                          color: theme.colorScheme.primary,
+                          width: 1.5,
+                        ),
+                      ),
+                      errorBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: const BorderSide(
+                          color: Color(0xFFDC2626),
+                          width: 1.5,
+                        ),
+                      ),
+                      focusedErrorBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: const BorderSide(
+                          color: Color(0xFFDC2626),
+                          width: 2.0,
+                        ),
+                      ),
+                      errorStyle: const TextStyle(
+                        color: Color(0xFFDC2626),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
                       ),
                     ),
                   ),
-              ],
+                  const SizedBox(height: 14),
+
+                  // Message Input with Inline Error Outline
+                  TextField(
+                    controller: _messageController,
+                    maxLength: 1000,
+                    maxLines: 5,
+                    decoration: InputDecoration(
+                      labelText: 'Message Content',
+                      hintText:
+                          'Type your message here (up to 1,000 characters)...',
+                      counterText: '',
+                      errorText: _messageError,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: BorderSide(
+                          color: isDark ? Colors.white24 : Colors.grey.shade300,
+                        ),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: BorderSide(
+                          color: theme.colorScheme.primary,
+                          width: 1.5,
+                        ),
+                      ),
+                      errorBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: const BorderSide(
+                          color: Color(0xFFDC2626),
+                          width: 1.5,
+                        ),
+                      ),
+                      focusedErrorBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: const BorderSide(
+                          color: Color(0xFFDC2626),
+                          width: 2.0,
+                        ),
+                      ),
+                      errorStyle: const TextStyle(
+                        color: Color(0xFFDC2626),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+
+                  // Live Character Counter & Submit Button
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        '$charCount / 1000 characters',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: charCount > 950
+                              ? AppTheme.catRed
+                              : theme.colorScheme.onSurface.withValues(
+                                  alpha: 0.5,
+                                ),
+                          fontWeight: charCount > 950
+                              ? FontWeight.bold
+                              : FontWeight.normal,
+                        ),
+                      ),
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: theme.colorScheme.primary,
+                          foregroundColor: Colors.white,
+                          disabledBackgroundColor: isDark
+                              ? Colors.white12
+                              : Colors.grey.shade300,
+                          disabledForegroundColor: Colors.grey.shade500,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 12,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                        onPressed:
+                            (_isSubmittingAnnouncement ||
+                                _selectedAudienceCount == 0)
+                            ? null
+                            : _handleSendAnnouncement,
+                        icon: _isSubmittingAnnouncement
+                            ? LoadingAnimationWidget.staggeredDotsWave(
+                                color: Colors.white,
+                                size: 16,
+                              )
+                            : const Icon(Icons.send_rounded, size: 18),
+                        label: Text(
+                          _isSubmittingAnnouncement
+                              ? 'Sending...'
+                              : 'Send Broadcast',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (_selectedAudienceCount == 0)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 10),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: Colors.orange.withValues(alpha: 0.3),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.info_outline,
+                              size: 16,
+                              color: Colors.orange.shade800,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                _userCounts['total'] == 0
+                                    ? 'Broadcast disabled: There are currently no active non-archived users in the system.'
+                                    : 'Broadcast disabled: No active non-archived $_selectedAudience found to receive announcements.',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.orange.shade800,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                ],
+              ),
             ),
-          ),
           const SizedBox(height: 28),
 
           // =================================================================
@@ -925,7 +1013,9 @@ class _EnableMaintenanceDialogState extends State<_EnableMaintenanceDialog> {
         // Auto-submit when strictly confirmed
         Future.delayed(const Duration(milliseconds: 200), _handleConfirm);
       } else if (value.isNotEmpty &&
-          !_requiredText.toLowerCase().startsWith(value.trimLeft().toLowerCase())) {
+          !_requiredText.toLowerCase().startsWith(
+            value.trimLeft().toLowerCase(),
+          )) {
         _inlineError = "Please type '$_requiredText' exactly.";
       } else {
         _inlineError = null;
@@ -970,8 +1060,9 @@ class _EnableMaintenanceDialogState extends State<_EnableMaintenanceDialog> {
                 decoration: BoxDecoration(
                   color: AppTheme.catRed.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(10),
-                  border:
-                      Border.all(color: AppTheme.catRed.withValues(alpha: 0.3)),
+                  border: Border.all(
+                    color: AppTheme.catRed.withValues(alpha: 0.3),
+                  ),
                 ),
                 child: const Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -998,13 +1089,17 @@ class _EnableMaintenanceDialogState extends State<_EnableMaintenanceDialog> {
               ),
               const SizedBox(height: 8),
               _AdminBroadcastsTabState._buildBulletPoint(
-                  'Non-admin users (Teachers, Students, Parents) CANNOT log in.'),
+                'Non-admin users (Teachers, Students, Parents) CANNOT log in.',
+              ),
               _AdminBroadcastsTabState._buildBulletPoint(
-                  'All currently active Teachers, Students, and Parents will be FORCEFULLY LOGGED OUT of their accounts.'),
+                'All currently active Teachers, Students, and Parents will be FORCEFULLY LOGGED OUT of their accounts.',
+              ),
               _AdminBroadcastsTabState._buildBulletPoint(
-                  'Any pending offline teacher queues will be preserved before logout.'),
+                'Any pending offline teacher queues will be preserved before logout.',
+              ),
               _AdminBroadcastsTabState._buildBulletPoint(
-                  'Only System Administrators can access the portal to perform IT maintenance.'),
+                'Only System Administrators can access the portal to perform IT maintenance.',
+              ),
               const SizedBox(height: 18),
 
               // Type to confirm instruction
@@ -1035,10 +1130,13 @@ class _EnableMaintenanceDialogState extends State<_EnableMaintenanceDialog> {
                 controller: _controller,
                 focusNode: _focusNode,
                 maxLength: 15,
-                buildCounter: (_, {required currentLength, required isFocused, required maxLength}) => null, // Hide counter text
-                inputFormatters: [
-                  LengthLimitingTextInputFormatter(15),
-                ],
+                buildCounter: (
+                  _, {
+                  required currentLength,
+                  required isFocused,
+                  required maxLength,
+                }) => null, // Hide counter text
+                inputFormatters: [LengthLimitingTextInputFormatter(15)],
                 onChanged: _onTextChanged,
                 onSubmitted: (_) {
                   if (_isConfirmed) _handleConfirm();
@@ -1116,8 +1214,9 @@ class _EnableMaintenanceDialogState extends State<_EnableMaintenanceDialog> {
         OutlinedButton(
           onPressed: () => Navigator.of(context).pop(false),
           style: OutlinedButton.styleFrom(
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
           ),
           child: const Text('Cancel'),
         ),

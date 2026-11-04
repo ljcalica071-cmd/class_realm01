@@ -121,9 +121,9 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   Future<void> _checkGradebookLockStatus() async {
     final user = widget.teacher ?? AuthRepository.instance.currentUser;
     if (user == null) return;
-    
+
     // Debounce to prevent spamming the database
-    if (_lastGradebookCheck != null && 
+    if (_lastGradebookCheck != null &&
         DateTime.now().difference(_lastGradebookCheck!).inSeconds < 3) {
       return;
     }
@@ -148,14 +148,10 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     try {
       final teacherId =
           widget.teacher?.id ?? AuthRepository.instance.currentUser?.id;
-      final activitiesFuture =
-          SupabaseTeacherClassworkRepository.instance.getActivities(
-            teacherId: teacherId,
-          );
-      final assessmentsFuture =
-          SupabaseTeacherClassworkRepository.instance.getAssessments(
-            teacherId: teacherId,
-          );
+      final activitiesFuture = SupabaseTeacherClassworkRepository.instance
+          .getActivities(teacherId: teacherId);
+      final assessmentsFuture = SupabaseTeacherClassworkRepository.instance
+          .getAssessments(teacherId: teacherId);
       final results = await Future.wait([activitiesFuture, assessmentsFuture]);
       if (mounted) {
         setState(() {
@@ -452,7 +448,11 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                   final teacher =
                       widget.teacher ?? AuthRepository.instance.currentUser;
                   if (teacher != null) {
-                    LocalStorageService.saveUserThemeMode(teacher.id, newIsDark, email: teacher.email);
+                    LocalStorageService.saveUserThemeMode(
+                      teacher.id,
+                      newIsDark,
+                      email: teacher.email,
+                    );
                   } else {
                     LocalStorageService.saveThemeMode(newIsDark);
                   }
@@ -510,40 +510,40 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                   );
                 },
               ),
-          ],
-        ),
-      ),
-
-      // Dynamic Body View
-      Expanded(
-        child: Container(
-          color: Colors.transparent, // Inherits Scaffold 60% Background
-          child: IndexedStack(
-            index: (_selectedIndex >= 0 && _selectedIndex < 20)
-                ? _selectedIndex
-                : 0,
-            children: List<Widget>.generate(20, (idx) {
-              if (!_loadedTabIndices.contains(idx)) {
-                return const SizedBox.shrink();
-              }
-              return _buildTeacherBodyContent(
-                idx,
-                activeStudents,
-                archivedStudents,
-                parents,
-                activities,
-                quizzesAndExams,
-                lessonPlans,
-                materials,
-                criteria,
-                examReviews,
-              );
-            }),
+            ],
           ),
         ),
-      ),
-    ],
-  );
+
+        // Dynamic Body View
+        Expanded(
+          child: Container(
+            color: Colors.transparent, // Inherits Scaffold 60% Background
+            child: IndexedStack(
+              index: (_selectedIndex >= 0 && _selectedIndex < 20)
+                  ? _selectedIndex
+                  : 0,
+              children: List<Widget>.generate(20, (idx) {
+                if (!_loadedTabIndices.contains(idx)) {
+                  return const SizedBox.shrink();
+                }
+                return _buildTeacherBodyContent(
+                  idx,
+                  activeStudents,
+                  archivedStudents,
+                  parents,
+                  activities,
+                  quizzesAndExams,
+                  lessonPlans,
+                  materials,
+                  criteria,
+                  examReviews,
+                );
+              }),
+            ),
+          ),
+        ),
+      ],
+    );
 
     return PopScope(
       canPop: false,
@@ -646,8 +646,8 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         borderRadius: BorderRadius.circular(8),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
-          onTap: isLocked 
-              ? null 
+          onTap: isLocked
+              ? null
               : () {
                   _onSelectTab(index);
                   if (!isGradebook) {
@@ -665,8 +665,10 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                   color: isLocked
                       ? theme.colorScheme.onSurface.withValues(alpha: 0.4)
                       : (isSelected
-                          ? theme.colorScheme.primary
-                          : theme.colorScheme.onSurface.withValues(alpha: 0.75)),
+                            ? theme.colorScheme.primary
+                            : theme.colorScheme.onSurface.withValues(
+                                alpha: 0.75,
+                              )),
                   size: 18,
                 ),
                 if (_isSidebarExpanded) ...[
@@ -678,10 +680,10 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                         color: isLocked
                             ? theme.colorScheme.onSurface.withValues(alpha: 0.4)
                             : (isSelected
-                                ? theme.colorScheme.primary
-                                : theme.colorScheme.onSurface.withValues(
-                                    alpha: 0.9,
-                                  )),
+                                  ? theme.colorScheme.primary
+                                  : theme.colorScheme.onSurface.withValues(
+                                      alpha: 0.9,
+                                    )),
                         fontWeight: isSelected
                             ? FontWeight.w700
                             : FontWeight.w500,
@@ -702,10 +704,10 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
       return MouseRegion(
         onEnter: (_) {
           if (_isGradebookLocked) {
-             _checkGradebookLockStatus();
+            _checkGradebookLockStatus();
           }
         },
-        child: isLocked 
+        child: isLocked
             ? Tooltip(
                 message: 'Gradebook feature is not yet available. Please add subjects and enroll students in Classroom Setup first.',
                 waitDuration: const Duration(milliseconds: 300),

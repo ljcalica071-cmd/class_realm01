@@ -54,7 +54,9 @@ class SupabaseTeacherClassworkRepository implements TeacherClassworkRepository {
       cacheKey: cacheKey,
       fetcher: () async {
         try {
-          var query = _client.from('classwork_items').select('''
+          var query = _client
+              .from('classwork_items')
+              .select('''
             *,
             subject_offerings!inner (
               id,
@@ -70,13 +72,17 @@ class SupabaseTeacherClassworkRepository implements TeacherClassworkRepository {
                 grade_level
               )
             )
-          ''').eq('is_archived', false);
+          ''')
+              .eq('is_archived', false);
 
           if (subjectOfferingId != null && subjectOfferingId.isNotEmpty) {
             query = query.eq('subject_offering_id', subjectOfferingId);
           } else if (effectiveTeacherId != null &&
               effectiveTeacherId.isNotEmpty) {
-            query = query.eq('subject_offerings.teacher_id', effectiveTeacherId);
+            query = query.eq(
+              'subject_offerings.teacher_id',
+              effectiveTeacherId,
+            );
           }
 
           final rows = await query.order('created_at', ascending: false);
@@ -350,8 +356,11 @@ class SupabaseTeacherClassworkRepository implements TeacherClassworkRepository {
         final qRows = (r['assessment_questions'] as List? ?? [])
             .map((q) => Map<String, dynamic>.from(q as Map))
             .toList();
-        qRows.sort((a, b) =>
-            ((a['position'] as num?) ?? 0).compareTo((b['position'] as num?) ?? 0));
+        qRows.sort(
+          (a, b) => ((a['position'] as num?) ?? 0).compareTo(
+            (b['position'] as num?) ?? 0,
+          ),
+        );
 
         final questions = qRows.map((q) {
           final qTypeStr = q['question_type']?.toString().toLowerCase() ?? '';
@@ -408,7 +417,8 @@ class SupabaseTeacherClassworkRepository implements TeacherClassworkRepository {
             : DateTime.now();
 
         final aType = r['assessment_type']?.toString().toLowerCase();
-        final isExam = aType == 'st1' ||
+        final isExam =
+            aType == 'st1' ||
             aType == 'st2' ||
             aType == 'term_exam' ||
             r['grading_category'] == 'ex';
@@ -454,8 +464,10 @@ class SupabaseTeacherClassworkRepository implements TeacherClassworkRepository {
             .eq('is_archived', false);
 
         if (subjectOfferingId != null && subjectOfferingId.isNotEmpty) {
-          inPersonQuery =
-              inPersonQuery.eq('subject_offering_id', subjectOfferingId);
+          inPersonQuery = inPersonQuery.eq(
+            'subject_offering_id',
+            subjectOfferingId,
+          );
         }
 
         final inPersonRows = await inPersonQuery;

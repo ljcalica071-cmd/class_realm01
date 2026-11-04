@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 /// A modern, intuitive date-picker field designed to avoid cumbersome month-by-month scrolling.
@@ -191,7 +192,8 @@ class AppDatePickerField extends FormField<DateTime> {
          },
        );
 
-  static int _calculateAge(DateTime birthDate) => _calculateAgeHelper(birthDate);
+  static int _calculateAge(DateTime birthDate) =>
+      _calculateAgeHelper(birthDate);
 
   static String _formatDate(DateTime date) => _formatDateHelper(date);
 }
@@ -233,8 +235,16 @@ Future<DateTime?> showAppDatePickerDialog(
           ? DateTime(now.year - 18, now.month, now.day)
           : DateTime(now.year + 10, 12, 31));
 
-  final minDateOnly = DateTime(effectiveMin.year, effectiveMin.month, effectiveMin.day);
-  final maxDateOnly = DateTime(effectiveMax.year, effectiveMax.month, effectiveMax.day);
+  final minDateOnly = DateTime(
+    effectiveMin.year,
+    effectiveMin.month,
+    effectiveMin.day,
+  );
+  final maxDateOnly = DateTime(
+    effectiveMax.year,
+    effectiveMax.month,
+    effectiveMax.day,
+  );
 
   DateTime tempDate = initialDate ?? (showAge ? DateTime(1995, 1, 1) : now);
   if (tempDate.isAfter(maxDateOnly)) tempDate = maxDateOnly;
@@ -301,7 +311,8 @@ Future<DateTime?> showAppDatePickerDialog(
           }
 
           final isCandidateOutOfRange =
-              currentCandidate.isAfter(maxDateOnly) || currentCandidate.isBefore(minDateOnly);
+              currentCandidate.isAfter(maxDateOnly) ||
+              currentCandidate.isBefore(minDateOnly);
           final isConfirmDisabled = isUnderage || isCandidateOutOfRange;
 
           return Dialog(
@@ -468,7 +479,8 @@ Future<DateTime?> showAppDatePickerDialog(
                                           selectedYear,
                                           selectedMonth,
                                         );
-                                        if (selectedDay > days) selectedDay = days;
+                                        if (selectedDay > days)
+                                          selectedDay = days;
                                         final testDate = DateTime(
                                           selectedYear,
                                           selectedMonth,
@@ -522,9 +534,14 @@ Future<DateTime?> showAppDatePickerDialog(
                               ),
                               child: DropdownButtonHideUnderline(
                                 child: DropdownButton<int>(
-                                  value: validMonthItems.any((item) => item.value == selectedMonth)
+                                  value:
+                                      validMonthItems.any(
+                                        (item) => item.value == selectedMonth,
+                                      )
                                       ? selectedMonth
-                                      : (validMonthItems.isNotEmpty ? validMonthItems.last.value : 1),
+                                      : (validMonthItems.isNotEmpty
+                                            ? validMonthItems.last.value
+                                            : 1),
                                   isExpanded: true,
                                   menuMaxHeight: 300,
                                   items: validMonthItems,
@@ -536,7 +553,8 @@ Future<DateTime?> showAppDatePickerDialog(
                                           selectedYear,
                                           selectedMonth,
                                         );
-                                        if (selectedDay > days) selectedDay = days;
+                                        if (selectedDay > days)
+                                          selectedDay = days;
                                         final testDate = DateTime(
                                           selectedYear,
                                           selectedMonth,
@@ -567,9 +585,7 @@ Future<DateTime?> showAppDatePickerDialog(
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      color: theme.colorScheme.onSurface.withValues(
-                        alpha: 0.7,
-                      ),
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -603,14 +619,17 @@ Future<DateTime?> showAppDatePickerDialog(
                           dayNum,
                         );
                         final isDayDisabled =
-                            dayDate.isBefore(minDateOnly) || dayDate.isAfter(maxDateOnly);
-                        final isSelected = dayNum == selectedDay && !isDayDisabled;
+                            dayDate.isBefore(minDateOnly) ||
+                            dayDate.isAfter(maxDateOnly);
+                        final isSelected =
+                            dayNum == selectedDay && !isDayDisabled;
 
                         return InkWell(
                           borderRadius: BorderRadius.circular(8),
                           onTap: isDayDisabled
                               ? null
-                              : () => setDialogState(() => selectedDay = dayNum),
+                              : () =>
+                                    setDialogState(() => selectedDay = dayNum),
                           child: AnimatedContainer(
                             duration: const Duration(milliseconds: 150),
                             alignment: Alignment.center,
@@ -618,8 +637,9 @@ Future<DateTime?> showAppDatePickerDialog(
                               color: isSelected
                                   ? theme.colorScheme.primary
                                   : (isDayDisabled
-                                      ? theme.colorScheme.onSurface.withValues(alpha: 0.04)
-                                      : Colors.transparent),
+                                        ? theme.colorScheme.onSurface
+                                              .withValues(alpha: 0.04)
+                                        : Colors.transparent),
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Text(
@@ -630,10 +650,12 @@ Future<DateTime?> showAppDatePickerDialog(
                                     ? FontWeight.bold
                                     : FontWeight.normal,
                                 color: isDayDisabled
-                                    ? theme.colorScheme.onSurface.withValues(alpha: 0.22)
+                                    ? theme.colorScheme.onSurface.withValues(
+                                        alpha: 0.22,
+                                      )
                                     : (isSelected
-                                        ? theme.colorScheme.onPrimary
-                                        : theme.colorScheme.onSurface),
+                                          ? theme.colorScheme.onPrimary
+                                          : theme.colorScheme.onSurface),
                               ),
                             ),
                           ),

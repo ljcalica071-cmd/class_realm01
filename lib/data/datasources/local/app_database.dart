@@ -1,27 +1,30 @@
 import 'package:flutter/foundation.dart';
 import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
+
 import 'tables.dart';
 
 part 'app_database.g.dart';
 
-@DriftDatabase(tables: [
-  LocalSettings,
-  LocalUserProfiles,
-  LocalSubjects,
-  LocalSections,
-  LocalSubjectOfferings,
-  LocalStudents,
-  LocalEnrollments,
-  LocalParents,
-  LocalParentStudentLinks,
-  LocalAttendanceRecords,
-  LocalAttendanceCutoffs,
-  LocalSchedules,
-  LocalAssessments,
-  LocalStudentScores,
-  OfflineSyncQueue,
-])
+@DriftDatabase(
+  tables: [
+    LocalSettings,
+    LocalUserProfiles,
+    LocalSubjects,
+    LocalSections,
+    LocalSubjectOfferings,
+    LocalStudents,
+    LocalEnrollments,
+    LocalParents,
+    LocalParentStudentLinks,
+    LocalAttendanceRecords,
+    LocalAttendanceCutoffs,
+    LocalSchedules,
+    LocalAssessments,
+    LocalStudentScores,
+    OfflineSyncQueue,
+  ],
+)
 class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? executor]) : super(executor ?? _openConnection());
 
@@ -33,33 +36,33 @@ class AppDatabase extends _$AppDatabase {
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
-        onCreate: (m) => m.createAll(),
-        onUpgrade: (m, from, to) async {
-          if (from < 2) {
-            await _safeAddColumn(m, localStudents, localStudents.rfidUid);
-            await _safeAddColumn(
-              m,
-              localAttendanceRecords,
-              localAttendanceRecords.recordingMethod,
-            );
-            await _safeAddColumn(
-              m,
-              localAttendanceRecords,
-              localAttendanceRecords.timeIn,
-            );
-            await _safeAddColumn(
-              m,
-              localAttendanceRecords,
-              localAttendanceRecords.deviceId,
-            );
-            try {
-              await m.createTable(localAttendanceCutoffs);
-            } catch (e) {
-              debugPrint('Drift createTable(localAttendanceCutoffs) notice: $e');
-            }
-          }
-        },
-      );
+    onCreate: (m) => m.createAll(),
+    onUpgrade: (m, from, to) async {
+      if (from < 2) {
+        await _safeAddColumn(m, localStudents, localStudents.rfidUid);
+        await _safeAddColumn(
+          m,
+          localAttendanceRecords,
+          localAttendanceRecords.recordingMethod,
+        );
+        await _safeAddColumn(
+          m,
+          localAttendanceRecords,
+          localAttendanceRecords.timeIn,
+        );
+        await _safeAddColumn(
+          m,
+          localAttendanceRecords,
+          localAttendanceRecords.deviceId,
+        );
+        try {
+          await m.createTable(localAttendanceCutoffs);
+        } catch (e) {
+          debugPrint('Drift createTable(localAttendanceCutoffs) notice: $e');
+        }
+      }
+    },
+  );
 
   Future<void> _safeAddColumn(
     Migrator m,
@@ -155,8 +158,7 @@ class AppDatabase extends _$AppDatabase {
     required String offeringId,
     required bool isArchived,
   }) async {
-    await (update(localSubjectOfferings)
-          ..where((t) => t.id.equals(offeringId)))
+    await (update(localSubjectOfferings)..where((t) => t.id.equals(offeringId)))
         .write(LocalSubjectOfferingsCompanion(isArchived: Value(isArchived)));
   }
 
@@ -173,9 +175,9 @@ class AppDatabase extends _$AppDatabase {
 
   /// Delete a single offering by id
   Future<void> deleteOfferingById(String offeringId) async {
-    await (delete(localSubjectOfferings)
-          ..where((t) => t.id.equals(offeringId)))
-        .go();
+    await (delete(
+      localSubjectOfferings,
+    )..where((t) => t.id.equals(offeringId))).go();
   }
 
   /// Prune offerings for a teacher that are not in the active set
@@ -184,16 +186,14 @@ class AppDatabase extends _$AppDatabase {
     Set<String> keepOfferingIds,
   ) async {
     if (keepOfferingIds.isEmpty) {
-      await (delete(localSubjectOfferings)
-            ..where((t) => t.teacherId.equals(teacherId)))
-          .go();
+      await (delete(
+        localSubjectOfferings,
+      )..where((t) => t.teacherId.equals(teacherId))).go();
     } else {
-      await (delete(localSubjectOfferings)
-            ..where(
-              (t) =>
-                  t.teacherId.equals(teacherId) &
-                  t.id.isNotIn(keepOfferingIds),
-            ))
+      await (delete(localSubjectOfferings)..where(
+            (t) =>
+                t.teacherId.equals(teacherId) & t.id.isNotIn(keepOfferingIds),
+          ))
           .go();
     }
   }
@@ -234,8 +234,7 @@ class AppDatabase extends _$AppDatabase {
         }
       }
 
-      await (update(localStudents)
-            ..where((t) => t.studentId.equals(studentId)))
+      await (update(localStudents)..where((t) => t.studentId.equals(studentId)))
           .write(LocalStudentsCompanion(rfidUid: Value(normalized)));
     });
   }
@@ -246,9 +245,9 @@ class AppDatabase extends _$AppDatabase {
     if (cleanUid.isEmpty) return null;
     final hexOnly = cleanUid.replaceAll(RegExp(r'[^0-9A-F]'), '');
 
-    final candidates = await (select(localStudents)
-          ..where((t) => t.rfidUid.isNotNull()))
-        .get();
+    final candidates = await (select(
+      localStudents,
+    )..where((t) => t.rfidUid.isNotNull())).get();
 
     for (final student in candidates) {
       final stored = student.rfidUid?.trim().toUpperCase();
@@ -269,16 +268,16 @@ class AppDatabase extends _$AppDatabase {
 
   /// Get students for a specific offering
   Future<List<LocalStudent>> getStudentsForOffering(String offeringId) async {
-    final query = select(localStudents).join([
-      innerJoin(
-        localEnrollments,
-        localEnrollments.studentId.equalsExp(localStudents.studentId),
-      ),
-    ])
-      ..where(
-        localEnrollments.subjectOfferingId.equals(offeringId) &
-            localEnrollments.status.lower().equals('enrolled'),
-      );
+    final query =
+        select(localStudents).join([
+          innerJoin(
+            localEnrollments,
+            localEnrollments.studentId.equalsExp(localStudents.studentId),
+          ),
+        ])..where(
+          localEnrollments.subjectOfferingId.equals(offeringId) &
+              localEnrollments.status.lower().equals('enrolled'),
+        );
     final rows = await query.get();
     return rows.map((r) => r.readTable(localStudents)).toList();
   }
@@ -317,9 +316,9 @@ class AppDatabase extends _$AppDatabase {
 
   /// Retrieve cached cutoff configuration for a subject offering
   Future<LocalAttendanceCutoff?> getCutoffConfig(String offeringId) {
-    return (select(localAttendanceCutoffs)
-          ..where((t) => t.subjectOfferingId.equals(offeringId)))
-        .getSingleOrNull();
+    return (select(
+      localAttendanceCutoffs,
+    )..where((t) => t.subjectOfferingId.equals(offeringId))).getSingleOrNull();
   }
 
   /// Batch upsert schedules for offline schedule guarding
@@ -332,9 +331,9 @@ class AppDatabase extends _$AppDatabase {
 
   /// Retrieve cached schedules for a subject offering
   Future<List<LocalSchedule>> getSchedulesForOffering(String offeringId) {
-    return (select(localSchedules)
-          ..where((t) => t.subjectOfferingId.equals(offeringId)))
-        .get();
+    return (select(
+      localSchedules,
+    )..where((t) => t.subjectOfferingId.equals(offeringId))).get();
   }
 
   // =========================================================================
@@ -377,9 +376,9 @@ class AppDatabase extends _$AppDatabase {
 
   /// Mark a sync queue item as failed (or increment retry count)
   Future<void> markSyncQueueFailed(String id, String error) async {
-    final existing = await (select(offlineSyncQueue)
-          ..where((t) => t.id.equals(id)))
-        .getSingleOrNull();
+    final existing = await (select(
+      offlineSyncQueue,
+    )..where((t) => t.id.equals(id))).getSingleOrNull();
     final nextRetry = (existing?.retryCount ?? 0) + 1;
     await (update(offlineSyncQueue)..where((t) => t.id.equals(id))).write(
       OfflineSyncQueueCompanion(

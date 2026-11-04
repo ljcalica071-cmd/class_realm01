@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:class_realm/models/admin_portal_models.dart';
@@ -73,9 +74,15 @@ class AdminRepository {
         merged.add(interval);
       } else {
         final last = merged.last;
-        if (interval.start.isBefore(last.end) || interval.start.isAtSameMomentAs(last.end)) {
-          final newEnd = interval.end.isAfter(last.end) ? interval.end : last.end;
-          merged[merged.length - 1] = DateTimeRange(start: last.start, end: newEnd);
+        if (interval.start.isBefore(last.end) ||
+            interval.start.isAtSameMomentAs(last.end)) {
+          final newEnd = interval.end.isAfter(last.end)
+              ? interval.end
+              : last.end;
+          merged[merged.length - 1] = DateTimeRange(
+            start: last.start,
+            end: newEnd,
+          );
         } else {
           merged.add(interval);
         }
@@ -86,13 +93,20 @@ class AdminRepository {
   }
 
   /// Splits an interval across midnight into separate daily slices
-  static List<DateTimeRange> splitIntervalAtMidnight(DateTime start, DateTime end) {
+  static List<DateTimeRange> splitIntervalAtMidnight(
+    DateTime start,
+    DateTime end,
+  ) {
     if (!end.isAfter(start)) return [];
     final slices = <DateTimeRange>[];
     DateTime currentStart = start;
 
     while (true) {
-      final nextMidnight = DateTime(currentStart.year, currentStart.month, currentStart.day + 1);
+      final nextMidnight = DateTime(
+        currentStart.year,
+        currentStart.month,
+        currentStart.day + 1,
+      );
       if (end.isBefore(nextMidnight) || end.isAtSameMomentAs(nextMidnight)) {
         slices.add(DateTimeRange(start: currentStart, end: end));
         break;
@@ -150,7 +164,7 @@ class AdminRepository {
           .select('email')
           .eq('is_archived', false)
           .not('email', 'in', '("parent","student","teacher")');
-          
+
       final List<String> emails = [];
       for (final row in res as List) {
         if (row['email'] != null && row['email'].toString().isNotEmpty) {
@@ -203,7 +217,9 @@ class AdminRepository {
   }
 
   /// Edge Case #11: Pre-transition audit check
-  Future<PreTransitionAuditResult> checkPreTransitionAudit(String currentSchoolYearId) async {
+  Future<PreTransitionAuditResult> checkPreTransitionAudit(
+    String currentSchoolYearId,
+  ) async {
     try {
       // 1. Check unfinalized grades in current school year's sections/offerings
       final gradesRes = await _client
@@ -237,11 +253,16 @@ class AdminRepository {
   }
 
   /// Transition to new school year (Edge Cases #11, #13, #14)
-  Future<void> transitionToNewSchoolYear(String newSchoolYearString, String adminId) async {
+  Future<void> transitionToNewSchoolYear(
+    String newSchoolYearString,
+    String adminId,
+  ) async {
     // 1. Validate consecutive format
     final regex = RegExp(r'^\d{4}-\d{4}$');
     if (!regex.hasMatch(newSchoolYearString)) {
-      throw const FormatException('Invalid School Year format. Expected YYYY-YYYY.');
+      throw const FormatException(
+        'Invalid School Year format. Expected YYYY-YYYY.',
+      );
     }
     final parts = newSchoolYearString.split('-');
     final startYear = int.parse(parts[0]);
@@ -271,17 +292,33 @@ class AdminRepository {
 
     // 4. Seed the 3 fixed Trimester terms for the new School Year
     final terms = [
-      {'school_year_id': newSyId, 'term_number': 1, 'term_name': 'Term 1', 'is_archived': false},
-      {'school_year_id': newSyId, 'term_number': 2, 'term_name': 'Term 2', 'is_archived': false},
-      {'school_year_id': newSyId, 'term_number': 3, 'term_name': 'Term 3', 'is_archived': false},
+      {
+        'school_year_id': newSyId,
+        'term_number': 1,
+        'term_name': 'Term 1',
+        'is_archived': false,
+      },
+      {
+        'school_year_id': newSyId,
+        'term_number': 2,
+        'term_name': 'Term 2',
+        'is_archived': false,
+      },
+      {
+        'school_year_id': newSyId,
+        'term_number': 3,
+        'term_name': 'Term 3',
+        'is_archived': false,
+      },
     ];
 
     await _client.from('terms').upsert(terms);
 
     // 5. Update system settings timestamp
-    await _client.from('system_settings').update({
-      'school_year_updated_at': DateTime.now().toIso8601String(),
-    }).eq('id', true);
+    await _client
+        .from('system_settings')
+        .update({'school_year_updated_at': DateTime.now().toIso8601String()})
+        .eq('id', true);
   }
 
   // =========================================================================
@@ -409,10 +446,14 @@ class AdminRepository {
     final cleanMessage = message.trim().replaceAll(RegExp(r'\s+'), ' ');
 
     if (cleanTitle.length < 3 || cleanTitle.length > 100) {
-      throw const FormatException('Title must be between 3 and 100 characters.');
+      throw const FormatException(
+        'Title must be between 3 and 100 characters.',
+      );
     }
     if (cleanMessage.length < 5 || cleanMessage.length > 1000) {
-      throw const FormatException('Message must be between 5 and 1000 characters.');
+      throw const FormatException(
+        'Message must be between 5 and 1000 characters.',
+      );
     }
 
     final res = await _client
@@ -448,7 +489,9 @@ class AdminRepository {
   }) async {
     try {
       // 1. Proactively reconcile stale active sessions (no heartbeat in > 5 minutes)
-      final staleCutoff = DateTime.now().toUtc().subtract(const Duration(minutes: 5));
+      final staleCutoff = DateTime.now().toUtc().subtract(
+        const Duration(minutes: 5),
+      );
       try {
         final staleSessions = await _client
             .from('user_session_logs')
@@ -459,19 +502,28 @@ class AdminRepository {
         for (final stale in (staleSessions as List)) {
           final sId = stale['id']?.toString();
           final lastActiveStr = stale['last_active_at']?.toString();
-          final loginAt = stale['login_at'] != null ? DateTime.tryParse(stale['login_at'].toString()) : null;
-          final lastActiveDt = lastActiveStr != null ? DateTime.tryParse(lastActiveStr) : null;
+          final loginAt = stale['login_at'] != null
+              ? DateTime.tryParse(stale['login_at'].toString())
+              : null;
+          final lastActiveDt = lastActiveStr != null
+              ? DateTime.tryParse(lastActiveStr)
+              : null;
           final dur = (loginAt != null && lastActiveDt != null)
               ? lastActiveDt.difference(loginAt).inSeconds
               : 0;
 
           if (sId != null) {
-            await _client.from('user_session_logs').update({
-              'is_active': false,
-              'logout_at': lastActiveStr ?? DateTime.now().toUtc().toIso8601String(),
-              'logout_reason': 'terminated',
-              'duration_seconds': dur >= 0 ? dur : 0,
-            }).eq('id', sId).eq('is_active', true);
+            await _client
+                .from('user_session_logs')
+                .update({
+                  'is_active': false,
+                  'logout_at':
+                      lastActiveStr ?? DateTime.now().toUtc().toIso8601String(),
+                  'logout_reason': 'terminated',
+                  'duration_seconds': dur >= 0 ? dur : 0,
+                })
+                .eq('id', sId)
+                .eq('is_active', true);
           }
         }
       } catch (staleErr) {
@@ -484,13 +536,21 @@ class AdminRepository {
           .eq('role', 'teacher');
 
       if (startDate != null) {
-        filterQuery = filterQuery.gte('session_date', startDate.toIso8601String().split('T').first);
+        filterQuery = filterQuery.gte(
+          'session_date',
+          startDate.toIso8601String().split('T').first,
+        );
       }
       if (endDate != null) {
-        filterQuery = filterQuery.lte('session_date', endDate.toIso8601String().split('T').first);
+        filterQuery = filterQuery.lte(
+          'session_date',
+          endDate.toIso8601String().split('T').first,
+        );
       }
 
-      final res = await filterQuery.order('login_at', ascending: false).limit(200);
+      final res = await filterQuery
+          .order('login_at', ascending: false)
+          .limit(200);
       final rawLogs = res as List;
       if (rawLogs.isEmpty) return [];
 
@@ -514,27 +574,34 @@ class AdminRepository {
         final prefix = (g == 'female' || g == 'f')
             ? "Ma'am "
             : (g == 'male' || g == 'm')
-                ? "Sir "
-                : "";
+            ? "Sir "
+            : "";
         final raw = [fn, ln].where((s) => s.isNotEmpty).join(' ');
         nameMap[id] = raw.isNotEmpty ? '$prefix$raw' : 'Teacher';
       }
 
       final logs = rawLogs
-        .map((r) {
-          final uId = r['user_id']?.toString() ?? '';
-          final teacherName = nameMap[uId] ?? 'Teacher';
-          return UserSessionLog.fromJson(r as Map<String, dynamic>, teacherName: teacherName);
-        })
-        .where((log) => log.isActive || log.durationSeconds > 30) // Hide micro/ghost sessions under 30 seconds
-        .toList();
+          .map((r) {
+            final uId = r['user_id']?.toString() ?? '';
+            final teacherName = nameMap[uId] ?? 'Teacher';
+            return UserSessionLog.fromJson(
+              r as Map<String, dynamic>,
+              teacherName: teacherName,
+            );
+          })
+          .where(
+            (log) => log.isActive || log.durationSeconds > 30,
+          ) // Hide micro/ghost sessions under 30 seconds
+          .toList();
 
       // Deduplicate overlapping or parallel twin sessions for the same user within 60 seconds
       final deduplicatedLogs = <UserSessionLog>[];
       for (final log in logs) {
-        final existingIndex = deduplicatedLogs.indexWhere((existing) =>
-            existing.userId == log.userId &&
-            existing.loginAt.difference(log.loginAt).inSeconds.abs() <= 60);
+        final existingIndex = deduplicatedLogs.indexWhere(
+          (existing) =>
+              existing.userId == log.userId &&
+              existing.loginAt.difference(log.loginAt).inSeconds.abs() <= 60,
+        );
 
         if (existingIndex == -1) {
           deduplicatedLogs.add(log);
@@ -542,8 +609,12 @@ class AdminRepository {
           final existing = deduplicatedLogs[existingIndex];
           // Keep the primary/accurate record:
           // Prefer active sessions, then prefer 'manual' logout, then highest duration
-          final preferNew = (log.isActive && !existing.isActive) ||
-              (!existing.isActive && !log.isActive && log.logoutReason == 'manual' && existing.logoutReason != 'manual') ||
+          final preferNew =
+              (log.isActive && !existing.isActive) ||
+              (!existing.isActive &&
+                  !log.isActive &&
+                  log.logoutReason == 'manual' &&
+                  existing.logoutReason != 'manual') ||
               (log.durationSeconds > existing.durationSeconds);
           if (preferNew) {
             deduplicatedLogs[existingIndex] = log;
@@ -566,7 +637,9 @@ class AdminRepository {
   }
 
   /// Privacy-compliant teacher workload summary: integer counts only!
-  Future<List<TeacherWorkloadSummary>> getTeacherWorkloadSummaries(String schoolYearId) async {
+  Future<List<TeacherWorkloadSummary>> getTeacherWorkloadSummaries(
+    String schoolYearId,
+  ) async {
     try {
       // 1. Get ONLY active teachers (teacher_settings.status = active), excluding archived and pending_first_login
       final activeSettings = await _client
@@ -605,7 +678,9 @@ class AdminRepository {
       // 3. Get today and week sessions
       final now = DateTime.now();
       final todayStart = DateTime(now.year, now.month, now.day);
-      final weekStart = todayStart.subtract(Duration(days: todayStart.weekday - 1)); // Monday
+      final weekStart = todayStart.subtract(
+        Duration(days: todayStart.weekday - 1),
+      ); // Monday
 
       final sessionsRes = await _client
           .from('user_session_logs')
@@ -628,20 +703,30 @@ class AdminRepository {
         final prefix = (g == 'female' || g == 'f')
             ? "Ma'am "
             : (g == 'male' || g == 'm')
-                ? "Sir "
-                : "";
+            ? "Sir "
+            : "";
         final raw = [fn, ln].where((s) => s.isNotEmpty).join(' ');
         final tName = raw.isNotEmpty ? '$prefix$raw' : 'Teacher';
 
-        final teacherOfferings = offerings.where((o) => o['teacher_id'] == tId).toList();
-        final uniqueSubjects = teacherOfferings.map((o) => o['subject_id']).toSet().length;
-        final uniqueSections = teacherOfferings.map((o) => o['section_id']).toSet().length;
+        final teacherOfferings = offerings
+            .where((o) => o['teacher_id'] == tId)
+            .toList();
+        final uniqueSubjects = teacherOfferings
+            .map((o) => o['subject_id'])
+            .toSet()
+            .length;
+        final uniqueSections = teacherOfferings
+            .map((o) => o['section_id'])
+            .toSet()
+            .length;
 
         final teacherSessions = sessions.where((s) => s.userId == tId).toList();
         final isActiveNow = teacherSessions.any((s) => s.isActive);
 
         final todayDuration = calculateMergedDurationSeconds(
-          teacherSessions.where((s) => !s.loginAt.isBefore(todayStart)).toList(),
+          teacherSessions
+              .where((s) => !s.loginAt.isBefore(todayStart))
+              .toList(),
           filterStart: todayStart,
         );
 
@@ -679,38 +764,52 @@ class AdminRepository {
           .select('id, role, is_archived');
       final userList = List<Map<String, dynamic>>.from(usersResponse as List);
 
-      final teacherUsers = userList.where((u) => u['role'] == 'teacher').toList();
-      final studentUsers = userList.where((u) => u['role'] == 'student').toList();
+      final teacherUsers = userList
+          .where((u) => u['role'] == 'teacher')
+          .toList();
+      final studentUsers = userList
+          .where((u) => u['role'] == 'student')
+          .toList();
       final parentUsers = userList.where((u) => u['role'] == 'parent').toList();
 
       // Fetch teacher settings for status
       List<dynamic> teacherSettingsResp = [];
       try {
-        teacherSettingsResp = (await _client.from('teacher_settings').select('teacher_id, status')) as List;
+        teacherSettingsResp =
+            (await _client
+                    .from('teacher_settings')
+                    .select('teacher_id, status'))
+                as List;
       } catch (_) {}
       final teacherSettingsMap = {
         for (var ts in teacherSettingsResp)
-          ts['teacher_id']?.toString(): ts['status']?.toString()
+          ts['teacher_id']?.toString(): ts['status']?.toString(),
       };
 
       // Fetch student settings for status
       List<dynamic> studentSettingsResp = [];
       try {
-        studentSettingsResp = (await _client.from('student_settings').select('student_id, status')) as List;
+        studentSettingsResp =
+            (await _client
+                    .from('student_settings')
+                    .select('student_id, status'))
+                as List;
       } catch (_) {}
       final studentSettingsMap = {
         for (var ss in studentSettingsResp)
-          ss['student_id']?.toString(): ss['status']?.toString()
+          ss['student_id']?.toString(): ss['status']?.toString(),
       };
 
       // Fetch parent profiles for status
       List<dynamic> parentProfilesResp = [];
       try {
-        parentProfilesResp = (await _client.from('parent_profiles').select('parent_id, status')) as List;
+        parentProfilesResp =
+            (await _client.from('parent_profiles').select('parent_id, status'))
+                as List;
       } catch (_) {}
       final parentStatusMap = {
         for (var pp in parentProfilesResp)
-          pp['parent_id']?.toString(): pp['status']?.toString()
+          pp['parent_id']?.toString(): pp['status']?.toString(),
       };
 
       // 1. Teachers: active / total
@@ -756,7 +855,8 @@ class AdminRepository {
         return parentStatusMap[id] == 'pending_first_login';
       }).length;
 
-      final totalPendingFirstLogin = pendingTeachers + pendingStudents + pendingParents;
+      final totalPendingFirstLogin =
+          pendingTeachers + pendingStudents + pendingParents;
 
       return {
         'totalTeachers': totalTeachers,

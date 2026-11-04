@@ -540,7 +540,8 @@ class _AddParentDialogState extends State<AddParentDialog> {
                           label: 'Middle Initial',
                           controller: _middleNameCtrl,
                           textCapitalization: TextCapitalization.characters,
-                          inputFormatters: AppValidators.middleInitialFormatters,
+                          inputFormatters:
+                              AppValidators.middleInitialFormatters,
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -1346,7 +1347,7 @@ class _AddParentDialogState extends State<AddParentDialog> {
     final candidateStudents = widget.students ?? const <UserModel>[];
 
     final query = _studentSearchQuery.trim().toLowerCase();
-    
+
     List<UserModel> matchingStudents = [];
     if (query.isNotEmpty) {
       matchingStudents = candidateStudents.where((u) {
@@ -1355,14 +1356,14 @@ class _AddParentDialogState extends State<AddParentDialog> {
         final isAlreadySelected = _selectedStudents.any((s) => s.id == u.id);
         return !isAlreadySelected && (nameMatch || lrnMatch);
       }).toList();
-      
+
       SearchUtils.sortByRelevance<UserModel>(
-        query, 
-        matchingStudents, 
+        query,
+        matchingStudents,
         (u) => u.fullName,
         secondaryExtractor: (u) => u.lrn ?? '',
       );
-      
+
       if (matchingStudents.length > 6) {
         matchingStudents = matchingStudents.take(6).toList();
       }

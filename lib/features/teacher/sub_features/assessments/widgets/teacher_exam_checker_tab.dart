@@ -23,12 +23,19 @@ class TeacherExamCheckerTab extends StatelessWidget {
         children: [
           Text(
             'Exam Auto-Checker & Scoring',
-            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface),
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+              color: theme.colorScheme.onSurface,
+            ),
           ),
           const SizedBox(height: 6),
           Text(
             'Review student submissions, compare answers against the key, and finalize scores.',
-            style: TextStyle(fontSize: 14, color: theme.colorScheme.onSurface.withValues(alpha: 0.6)),
+            style: TextStyle(
+              fontSize: 14,
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+            ),
           ),
           const SizedBox(height: 24),
           Expanded(
@@ -42,7 +49,11 @@ class TeacherExamCheckerTab extends StatelessWidget {
                   decoration: BoxDecoration(
                     color: theme.colorScheme.surface,
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: theme.colorScheme.onSurface.withValues(alpha: 0.12)),
+                    border: Border.all(
+                      color: theme.colorScheme.onSurface.withValues(
+                        alpha: 0.12,
+                      ),
+                    ),
                   ),
                   child: Row(
                     children: [

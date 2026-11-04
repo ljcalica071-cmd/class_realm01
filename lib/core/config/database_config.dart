@@ -7,10 +7,7 @@
 /// 3. Email Verification API (syntax check, MX record lookup, deliverability validation)
 library;
 
-enum BackendMode {
-  mock,
-  hybridLive,
-}
+enum BackendMode { mock, hybridLive }
 
 class DatabaseConfig {
   /// Current runtime mode: Default is `mock` for local prototype / panel demo.
