@@ -679,7 +679,11 @@ class SubjectRepository {
         'scores': Map<String, dynamic>.from(row?['scores_json'] as Map? ?? {}),
       };
       await _mergeActiveAssessmentsIntoSheet(offeringId, termNumber, payload);
-      await LocalStorageService.saveGradebookSheet(offeringId, termNumber, payload);
+      await LocalStorageService.saveGradebookSheet(
+        offeringId,
+        termNumber,
+        payload,
+      );
     } catch (error) {
       debugPrint(
         'Gradebook background refresh failed for offering $offeringId, term $termNumber: $error',
@@ -706,8 +710,7 @@ class SubjectRepository {
       if (itemsList.isEmpty) return;
 
       final hps = Map<String, dynamic>.from(payload['hps'] as Map? ?? {});
-      final scores =
-          Map<String, dynamic>.from(payload['scores'] as Map? ?? {});
+      final scores = Map<String, dynamic>.from(payload['scores'] as Map? ?? {});
 
       final classworkIds = <String>[];
       final classworkMap = <String, Map<String, dynamic>>{};
@@ -754,10 +757,12 @@ class SubjectRepository {
           final cat = cw['category'] as String;
           final col = cw['column'] as String;
 
-          final studentMap =
-              Map<String, dynamic>.from(scores[stuId] as Map? ?? {});
-          final catScores =
-              Map<String, dynamic>.from(studentMap[cat] as Map? ?? {});
+          final studentMap = Map<String, dynamic>.from(
+            scores[stuId] as Map? ?? {},
+          );
+          final catScores = Map<String, dynamic>.from(
+            studentMap[cat] as Map? ?? {},
+          );
           catScores[col] ??= (scoreVal as num).toDouble();
           studentMap[cat] = catScores;
           scores[stuId] = studentMap;

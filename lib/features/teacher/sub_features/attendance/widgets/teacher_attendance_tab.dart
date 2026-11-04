@@ -400,7 +400,6 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
     }
   }
 
-
   void _handleRealtimePendingScanPayload(PostgresChangePayload payload) {
     if (!mounted) return;
     final row = payload.newRecord;
@@ -905,12 +904,11 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
     );
   }
 
-
-
   Future<void> _assignRfidDirectly(String studentId, String scannedUid) async {
-    final matched = _rosterStudents
-        .cast<AttendanceRosterStudent?>()
-        .firstWhere((s) => s?.studentId == studentId, orElse: () => null);
+    final matched = _rosterStudents.cast<AttendanceRosterStudent?>().firstWhere(
+      (s) => s?.studentId == studentId,
+      orElse: () => null,
+    );
     final studentName = matched?.displayName ?? studentId;
 
     // Check conflict against loaded roster
@@ -930,8 +928,7 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
         _inlineNotice = _WorkspaceInlineNotice(
           tone: _WorkspaceNoticeTone.warning,
           title: 'Card Already Assigned',
-          message:
-              'Card already assigned.',
+          message: 'Card already assigned.',
           code: 'ALREADY_REGISTERED',
         );
       });
@@ -950,8 +947,7 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
           _inlineNotice = _WorkspaceInlineNotice(
             tone: _WorkspaceNoticeTone.warning,
             title: 'Card Already Assigned',
-            message:
-                'Card already assigned.',
+            message: 'Card already assigned.',
             code: 'ALREADY_REGISTERED',
           );
         });

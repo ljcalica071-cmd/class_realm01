@@ -673,7 +673,7 @@ class _CreateRequirementFlowDialogState
 
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      backgroundColor: theme.colorScheme.surface,
+      backgroundColor: Theme.of(context).colorScheme.surface,
       insetPadding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
       child: Container(
         width: 680,

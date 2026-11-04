@@ -415,7 +415,9 @@ class AuthRepository {
         final results = await Future.wait<dynamic>(<Future<dynamic>>[
           _supabaseClient
               .from('student_profiles')
-              .select('student_id, lrn, first_name, middle_name, last_name, birthday, gender')
+              .select(
+                'student_id, lrn, first_name, middle_name, last_name, birthday, gender',
+              )
               .eq('student_id', uid)
               .maybeSingle(),
           _supabaseClient
@@ -431,7 +433,8 @@ class AuthRepository {
               .limit(1)
               .maybeSingle(),
         ]);
-        final profile = results[0] as Map<String, dynamic>? ?? <String, dynamic>{};
+        final profile =
+            results[0] as Map<String, dynamic>? ?? <String, dynamic>{};
         final infoResp = results[1] as Map<String, dynamic>?;
         final enrollment = results[2] as Map<String, dynamic>?;
         final offeringRaw = enrollment?['subject_offerings'];

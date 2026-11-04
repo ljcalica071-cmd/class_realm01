@@ -300,8 +300,10 @@ class LocalStorageService {
   static Future<void> removePrefix(String prefix) async {
     final prefs = await _prefs;
     final fullPrefix = '$_cachePrefix$prefix';
-    final keys =
-        prefs.getKeys().where((k) => k.startsWith(fullPrefix)).toList();
+    final keys = prefs
+        .getKeys()
+        .where((k) => k.startsWith(fullPrefix))
+        .toList();
     for (final k in keys) {
       await prefs.remove(k);
     }

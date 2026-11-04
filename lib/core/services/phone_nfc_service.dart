@@ -69,7 +69,8 @@ class PhoneNfcService {
           // Scenario 14: Debounce card hovering against NFC coil (3000ms cooldown per UID)
           final now = DateTime.now();
           final lastScan = _uidCooldownMap[uid];
-          if (lastScan != null && now.difference(lastScan) < _cooldownDuration) {
+          if (lastScan != null &&
+              now.difference(lastScan) < _cooldownDuration) {
             return;
           }
           _uidCooldownMap[uid] = now;

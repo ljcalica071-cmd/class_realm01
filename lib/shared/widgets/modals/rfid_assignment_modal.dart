@@ -255,7 +255,6 @@ class _RfidAssignmentModalState extends State<RfidAssignmentModal> {
       await _repository.assignStudentRfid(
         studentId: widget.studentId,
         rfidUid: newUid,
-
       );
       AppDataCache.instance.invalidatePrefix('teacher_students_');
 

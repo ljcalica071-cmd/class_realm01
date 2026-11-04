@@ -310,23 +310,31 @@ class StudentDashboardRepository {
             if (storagePath.isNotEmpty || fileName.isNotEmpty) {
               teacherAttachment = {
                 'id': m['id']?.toString() ?? '',
-                'file_name': fileName.isNotEmpty ? fileName : 'Reference Material',
+                'file_name': fileName.isNotEmpty
+                    ? fileName
+                    : 'Reference Material',
                 'storage_url': storagePath,
-                'mime_type': m['mime_type']?.toString() ?? 'application/octet-stream',
+                'mime_type':
+                    m['mime_type']?.toString() ?? 'application/octet-stream',
                 'file_size_bytes': (m['file_size_bytes'] as num?)?.toInt() ?? 0,
               };
             }
 
             Map<String, dynamic>? studentSubmissionMap;
-            final subAttachments = submission?['submission_attachments'] as List? ?? [];
+            final subAttachments =
+                submission?['submission_attachments'] as List? ?? [];
             if (subAttachments.isNotEmpty) {
-              final att = Map<String, dynamic>.from(subAttachments.first as Map);
+              final att = Map<String, dynamic>.from(
+                subAttachments.first as Map,
+              );
               studentSubmissionMap = {
                 'id': att['id']?.toString() ?? '',
                 'file_name': att['file_name']?.toString() ?? 'Submitted Work',
                 'storage_url': att['storage_url']?.toString() ?? '',
-                'mime_type': att['mime_type']?.toString() ?? 'application/octet-stream',
-                'file_size_bytes': (att['file_size_bytes'] as num?)?.toInt() ?? 0,
+                'mime_type':
+                    att['mime_type']?.toString() ?? 'application/octet-stream',
+                'file_size_bytes':
+                    (att['file_size_bytes'] as num?)?.toInt() ?? 0,
               };
             }
 
@@ -344,7 +352,8 @@ class StudentDashboardRepository {
               'max_score': m['max_score'] is num ? m['max_score'] : 100,
               'completion_mode': m['completion_mode']?.toString() ?? 'online',
               'term_number': (m['term_number'] as num?)?.toInt() ?? 1,
-              'gradebook_column_index': (m['gradebook_column_index'] as num?)?.toInt(),
+              'gradebook_column_index': (m['gradebook_column_index'] as num?)
+                  ?.toInt(),
               'subject_name': s['subject_name']?.toString() ?? '',
               'section_name': sec['section_name']?.toString() ?? '',
               'grade_level': sec['grade_level']?.toString() ?? '',
@@ -437,8 +446,9 @@ class StudentDashboardRepository {
 
       final currentUser = AuthRepository.instance.currentUser;
       // Guard against taking stale fallback fields from another user
-      final safeUser =
-          (currentUser != null && currentUser.id == uid) ? currentUser : null;
+      final safeUser = (currentUser != null && currentUser.id == uid)
+          ? currentUser
+          : null;
       final p = profileRes ?? <String, dynamic>{};
       final data = <String, dynamic>{
         'student': {
@@ -447,10 +457,8 @@ class StudentDashboardRepository {
           'lrn': p['lrn']?.toString() ?? safeUser?.lrn ?? '',
           'first_name':
               p['first_name']?.toString() ?? safeUser?.firstName ?? '',
-          'middle_name':
-              p['middle_name']?.toString() ?? safeUser?.middleName,
-          'last_name':
-              p['last_name']?.toString() ?? safeUser?.lastName ?? '',
+          'middle_name': p['middle_name']?.toString() ?? safeUser?.middleName,
+          'last_name': p['last_name']?.toString() ?? safeUser?.lastName ?? '',
           'gender': p['gender']?.toString() ?? safeUser?.gender,
           'birthday':
               p['birthday']?.toString() ??
@@ -469,12 +477,7 @@ class StudentDashboardRepository {
 
       final freshDashboard = StudentDashboardData.fromJson(data);
       _cachedDashboard = freshDashboard;
-      unawaited(
-        AppDataCache.instance.setCache(
-          'student_dashboard_$uid',
-          data,
-        ),
-      );
+      unawaited(AppDataCache.instance.setCache('student_dashboard_$uid', data));
       return freshDashboard;
     } catch (e) {
       debugPrint('Pure Dart student dashboard notice: $e');

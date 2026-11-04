@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:class_realm/core/services/app_data_cache.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -13,11 +14,7 @@ import 'package:class_realm/data/repositories/supabase_schedule_repository.dart'
 import 'package:class_realm/data/repositories/supabase_student_repository.dart';
 import 'package:class_realm/shared/widgets/shimmer_loading.dart';
 
-enum _ScheduleSessionStatus {
-  upcoming,
-  ongoing,
-  completed,
-}
+enum _ScheduleSessionStatus { upcoming, ongoing, completed }
 
 class TeacherDashboardOverviewTab extends StatefulWidget {
   final List<UserModel> activeStudents;
@@ -73,13 +70,18 @@ class _TeacherDashboardOverviewTabState
   void _hydrateOverviewStats() {
     final currentUser = AuthRepository.instance.currentUser;
     if (currentUser != null) {
-      final cachedSubjects = AppDataCache.instance.getCached<List<Map<String, dynamic>>>(
-        'teacher_subjects_${currentUser.id}_2026-2027_false',
-        (json) => (json as List).map((e) => Map<String, dynamic>.from(e as Map)).toList(),
-      );
+      final cachedSubjects = AppDataCache.instance
+          .getCached<List<Map<String, dynamic>>>(
+            'teacher_subjects_${currentUser.id}_2026-2027_false',
+            (json) => (json as List)
+                .map((e) => Map<String, dynamic>.from(e as Map))
+                .toList(),
+          );
       final cachedStudents = AppDataCache.instance.getCached<List<UserModel>>(
         'teacher_students_${currentUser.id}_all_false',
-        (json) => (json as List).map((e) => UserModel.fromJson(Map<String, dynamic>.from(e as Map))).toList(),
+        (json) => (json as List)
+            .map((e) => UserModel.fromJson(Map<String, dynamic>.from(e as Map)))
+            .toList(),
       );
 
       if (cachedSubjects != null) {
@@ -93,8 +95,9 @@ class _TeacherDashboardOverviewTabState
             .toSet()
             .length;
       }
-      
-      final sourceStudents = (cachedStudents != null && cachedStudents.isNotEmpty)
+
+      final sourceStudents =
+          (cachedStudents != null && cachedStudents.isNotEmpty)
           ? cachedStudents
           : widget.activeStudents;
 
@@ -104,7 +107,9 @@ class _TeacherDashboardOverviewTabState
           uniqueMap[s.id] = s;
         }
         final uniqueStudents = uniqueMap.values.toList();
-        activeStudentsCount = uniqueStudents.where((s) => !s.isArchived && s.status == AccountStatus.active).length;
+        activeStudentsCount = uniqueStudents
+            .where((s) => !s.isArchived && s.status == AccountStatus.active)
+            .length;
         totalStudentsCount = uniqueStudents.length;
         final detectedSections = uniqueStudents
             .map((s) => s.departmentOrSection?.trim())
@@ -124,16 +129,16 @@ class _TeacherDashboardOverviewTabState
         uniqueMap[s.id] = s;
       }
       final uniqueStudents = uniqueMap.values.toList();
-      activeStudentsCount = uniqueStudents.where((s) => !s.isArchived && s.status == AccountStatus.active).length;
+      activeStudentsCount = uniqueStudents
+          .where((s) => !s.isArchived && s.status == AccountStatus.active)
+          .length;
       totalStudentsCount = uniqueStudents.length;
       final detectedSections = uniqueStudents
           .map((s) => s.departmentOrSection?.trim())
           .where((sec) => sec != null && sec.isNotEmpty)
           .toSet()
           .length;
-      sectionsWithStudentsCount = detectedSections > 0
-          ? detectedSections
-          : 0;
+      sectionsWithStudentsCount = detectedSections > 0 ? detectedSections : 0;
       isLoadingStats = false;
     }
   }
@@ -149,7 +154,9 @@ class _TeacherDashboardOverviewTabState
               uniqueMap[s.id] = s;
             }
             final uniqueStudents = uniqueMap.values.toList();
-            activeStudentsCount = uniqueStudents.where((s) => !s.isArchived && s.status == AccountStatus.active).length;
+            activeStudentsCount = uniqueStudents
+                .where((s) => !s.isArchived && s.status == AccountStatus.active)
+                .length;
             totalStudentsCount = uniqueStudents.length;
             final detectedSections = uniqueStudents
                 .map((s) => s.departmentOrSection?.trim())
@@ -158,7 +165,9 @@ class _TeacherDashboardOverviewTabState
                 .length;
             sectionsWithStudentsCount = detectedSections > 0
                 ? detectedSections
-                : (totalStudentsCount > 0 && totalSections > 0 ? totalSections : 0);
+                : (totalStudentsCount > 0 && totalSections > 0
+                      ? totalSections
+                      : 0);
           }
           isLoadingStats = false;
         });
@@ -184,14 +193,18 @@ class _TeacherDashboardOverviewTabState
         currentUser.id,
       );
 
-      final sourceStudents = students.isNotEmpty ? students : widget.activeStudents;
+      final sourceStudents = students.isNotEmpty
+          ? students
+          : widget.activeStudents;
       final uniqueMap = <String, UserModel>{};
       for (final s in sourceStudents) {
         uniqueMap[s.id] = s;
       }
       final uniqueStudents = uniqueMap.values.toList();
 
-      final activeCount = uniqueStudents.where((s) => !s.isArchived && s.status == AccountStatus.active).length;
+      final activeCount = uniqueStudents
+          .where((s) => !s.isArchived && s.status == AccountStatus.active)
+          .length;
       final totalCount = uniqueStudents.length;
       final detectedSections = uniqueStudents
           .map((s) => s.departmentOrSection?.trim())
@@ -227,7 +240,9 @@ class _TeacherDashboardOverviewTabState
               uniqueMap[s.id] = s;
             }
             final uniqueStudents = uniqueMap.values.toList();
-            activeStudentsCount = uniqueStudents.where((s) => !s.isArchived && s.status == AccountStatus.active).length;
+            activeStudentsCount = uniqueStudents
+                .where((s) => !s.isArchived && s.status == AccountStatus.active)
+                .length;
             totalStudentsCount = uniqueStudents.length;
             final detectedSections = uniqueStudents
                 .map((s) => s.departmentOrSection?.trim())
@@ -236,7 +251,9 @@ class _TeacherDashboardOverviewTabState
                 .length;
             sectionsWithStudentsCount = detectedSections > 0
                 ? detectedSections
-                : (totalStudentsCount > 0 && totalSections > 0 ? totalSections : 0);
+                : (totalStudentsCount > 0 && totalSections > 0
+                      ? totalSections
+                      : 0);
           } else {
             totalSubjects = 0;
             totalSections = 0;
@@ -244,7 +261,8 @@ class _TeacherDashboardOverviewTabState
             totalStudentsCount = 0;
             sectionsWithStudentsCount = 0;
           }
-          if (widget.initialSchedules != null && widget.initialSchedules!.isNotEmpty) {
+          if (widget.initialSchedules != null &&
+              widget.initialSchedules!.isNotEmpty) {
             _schedules = widget.initialSchedules!;
           } else {
             _schedules = [];
@@ -275,8 +293,12 @@ class _TeacherDashboardOverviewTabState
     switch (status) {
       case _ScheduleSessionStatus.upcoming:
         // Eye-friendly, warm amber/yellow styling for pending classes
-        final yellowAccent = isDark ? const Color(0xFFFBBF24) : const Color(0xFFD97706);
-        final yellowText = isDark ? const Color(0xFFFDE68A) : const Color(0xFFB45309);
+        final yellowAccent = isDark
+            ? const Color(0xFFFBBF24)
+            : const Color(0xFFD97706);
+        final yellowText = isDark
+            ? const Color(0xFFFDE68A)
+            : const Color(0xFFB45309);
 
         cardBg = yellowAccent.withValues(alpha: isDark ? 0.08 : 0.06);
         iconBg = yellowAccent.withValues(alpha: isDark ? 0.18 : 0.14);
@@ -290,8 +312,12 @@ class _TeacherDashboardOverviewTabState
 
       case _ScheduleSessionStatus.ongoing:
         // Vibrant, active Royal Blue styling for ongoing / active class
-        final blueAccent = isDark ? const Color(0xFF60A5FA) : const Color(0xFF2563EB);
-        final blueText = isDark ? const Color(0xFF93C5FD) : const Color(0xFF1D4ED8);
+        final blueAccent = isDark
+            ? const Color(0xFF60A5FA)
+            : const Color(0xFF2563EB);
+        final blueText = isDark
+            ? const Color(0xFF93C5FD)
+            : const Color(0xFF1D4ED8);
 
         cardBg = blueAccent.withValues(alpha: isDark ? 0.1 : 0.06);
         iconBg = blueAccent.withValues(alpha: isDark ? 0.22 : 0.14);
@@ -306,9 +332,15 @@ class _TeacherDashboardOverviewTabState
 
       case _ScheduleSessionStatus.completed:
         // Pleasant, eye-friendly green inspired by the Quick Actions attendance card
-        final greenAccent = isDark ? const Color(0xFF10B981) : const Color(0xFF0D9488);
-        final greenFg = isDark ? const Color(0xFF34D399) : const Color(0xFF0F766E);
-        final greenText = isDark ? const Color(0xFF6EE7B7) : const Color(0xFF0F766E);
+        final greenAccent = isDark
+            ? const Color(0xFF10B981)
+            : const Color(0xFF0D9488);
+        final greenFg = isDark
+            ? const Color(0xFF34D399)
+            : const Color(0xFF0F766E);
+        final greenText = isDark
+            ? const Color(0xFF6EE7B7)
+            : const Color(0xFF0F766E);
 
         cardBg = greenAccent.withValues(alpha: isDark ? 0.08 : 0.06);
         iconBg = greenAccent.withValues(alpha: isDark ? 0.16 : 0.12);
@@ -336,11 +368,7 @@ class _TeacherDashboardOverviewTabState
               color: iconBg,
               borderRadius: BorderRadius.circular(10),
             ),
-            child: Icon(
-              statusIcon,
-              color: iconFg,
-              size: 20,
-            ),
+            child: Icon(statusIcon, color: iconFg, size: 20),
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -362,9 +390,7 @@ class _TeacherDashboardOverviewTabState
                   sectionAndRoom,
                   style: TextStyle(
                     fontSize: 12,
-                    color: theme.colorScheme.onSurface.withValues(
-                      alpha: 0.65,
-                    ),
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
                   ),
                 ),
               ],
@@ -401,9 +427,7 @@ class _TeacherDashboardOverviewTabState
         decoration: BoxDecoration(
           color: accentColor.withValues(alpha: 0.08),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: accentColor.withValues(alpha: 0.2),
-          ),
+          border: Border.all(color: accentColor.withValues(alpha: 0.2)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -465,8 +489,9 @@ class _TeacherDashboardOverviewTabState
     // Loading state for the top cards
     final mainValueSubjects = isLoadingStats ? '-' : '$totalSubjects';
     final mainValueSections = isLoadingStats ? '-' : '$totalSections';
-    final mainValueStudents =
-        isLoadingStats ? '-' : '$activeStudentsCount/$totalStudentsCount';
+    final mainValueStudents = isLoadingStats
+        ? '-'
+        : '$activeStudentsCount/$totalStudentsCount';
     final subTextStudents = isLoadingStats
         ? 'Loading...'
         : 'Across $sectionsWithStudentsCount ${sectionsWithStudentsCount == 1 ? 'section' : 'sections'}';
@@ -642,23 +667,41 @@ class _TeacherDashboardOverviewTabState
                                         color: theme.scaffoldBackgroundColor,
                                         borderRadius: BorderRadius.circular(12),
                                         border: Border.all(
-                                          color: theme.colorScheme.onSurface.withValues(alpha: 0.05),
+                                          color: theme.colorScheme.onSurface
+                                              .withValues(alpha: 0.05),
                                         ),
                                       ),
                                       child: Row(
                                         children: const [
-                                          ShimmerBox(width: 36, height: 36, borderRadius: 10),
+                                          ShimmerBox(
+                                            width: 36,
+                                            height: 36,
+                                            borderRadius: 10,
+                                          ),
                                           SizedBox(width: 14),
                                           Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
                                             children: [
-                                              ShimmerBox(width: 160, height: 14, borderRadius: 4),
+                                              ShimmerBox(
+                                                width: 160,
+                                                height: 14,
+                                                borderRadius: 4,
+                                              ),
                                               SizedBox(height: 6),
-                                              ShimmerBox(width: 110, height: 12, borderRadius: 4),
+                                              ShimmerBox(
+                                                width: 110,
+                                                height: 12,
+                                                borderRadius: 4,
+                                              ),
                                             ],
                                           ),
                                           Spacer(),
-                                          ShimmerBox(width: 80, height: 14, borderRadius: 4),
+                                          ShimmerBox(
+                                            width: 80,
+                                            height: 14,
+                                            borderRadius: 4,
+                                          ),
                                         ],
                                       ),
                                     ),
@@ -669,7 +712,10 @@ class _TeacherDashboardOverviewTabState
                           )
                         else if (todaySchedules.isEmpty)
                           Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 16),
+                            padding: const EdgeInsets.symmetric(
+                              vertical: 32,
+                              horizontal: 16,
+                            ),
                             child: Center(
                               child: Column(
                                 mainAxisSize: MainAxisSize.min,
@@ -677,7 +723,8 @@ class _TeacherDashboardOverviewTabState
                                   Container(
                                     padding: const EdgeInsets.all(14),
                                     decoration: BoxDecoration(
-                                      color: theme.colorScheme.primary.withValues(alpha: 0.08),
+                                      color: theme.colorScheme.primary
+                                          .withValues(alpha: 0.08),
                                       shape: BoxShape.circle,
                                     ),
                                     child: Icon(
@@ -701,7 +748,8 @@ class _TeacherDashboardOverviewTabState
                                     textAlign: TextAlign.center,
                                     style: TextStyle(
                                       fontSize: 12,
-                                      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                                      color: theme.colorScheme.onSurface
+                                          .withValues(alpha: 0.6),
                                     ),
                                   ),
                                 ],
@@ -720,7 +768,8 @@ class _TeacherDashboardOverviewTabState
                             }
 
                             final sec = schedule.section.trim();
-                            final secFormatted = sec.toLowerCase().startsWith('section')
+                            final secFormatted =
+                                sec.toLowerCase().startsWith('section')
                                 ? (sec.isEmpty ? 'Section' : sec)
                                 : (sec.isEmpty ? 'Section' : 'Section $sec');
                             final roomStr = schedule.room.trim();
@@ -734,7 +783,8 @@ class _TeacherDashboardOverviewTabState
                                 context,
                                 subject: schedule.subject,
                                 sectionAndRoom: sectionAndRoom,
-                                time: '${schedule.startTime} - ${schedule.endTime}',
+                                time:
+                                    '${schedule.startTime} - ${schedule.endTime}',
                                 status: status,
                               ),
                             );
@@ -769,7 +819,9 @@ class _TeacherDashboardOverviewTabState
                             Icon(
                               LucideIcons.sparkles,
                               size: 16,
-                              color: theme.colorScheme.primary.withValues(alpha: 0.7),
+                              color: theme.colorScheme.primary.withValues(
+                                alpha: 0.7,
+                              ),
                             ),
                           ],
                         ),

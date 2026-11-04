@@ -1112,7 +1112,7 @@ class _CreateAssessmentFlowDialogState
 
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      backgroundColor: theme.colorScheme.surface,
+      backgroundColor: Theme.of(context).colorScheme.surface,
       insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
       child: Container(
         width: 820,
@@ -1907,11 +1907,17 @@ class _CreateAssessmentFlowDialogState
                           ),
                           errorBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(10),
-                            borderSide: const BorderSide(color: Color(0xFFDC2626), width: 1.5),
+                            borderSide: const BorderSide(
+                              color: Color(0xFFDC2626),
+                              width: 1.5,
+                            ),
                           ),
                           focusedErrorBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(10),
-                            borderSide: const BorderSide(color: Color(0xFFDC2626), width: 2.0),
+                            borderSide: const BorderSide(
+                              color: Color(0xFFDC2626),
+                              width: 2.0,
+                            ),
                           ),
                           errorStyle: const TextStyle(
                             color: Color(0xFFDC2626),

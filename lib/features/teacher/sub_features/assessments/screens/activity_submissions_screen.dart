@@ -358,12 +358,8 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
           );
           final colKey = _activity.gradebookColumnIndex.toString();
 
-          final hps = Map<String, dynamic>.from(
-            termSheet['hps'] as Map? ?? {},
-          );
-          final catHps = Map<String, dynamic>.from(
-            hps[catKey] as Map? ?? {},
-          );
+          final hps = Map<String, dynamic>.from(termSheet['hps'] as Map? ?? {});
+          final catHps = Map<String, dynamic>.from(hps[catKey] as Map? ?? {});
           catHps[colKey] = _activity.maxScore.toInt();
           hps[catKey] = catHps;
           termSheet['hps'] = hps;
@@ -700,438 +696,463 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
             final isDark = theme.brightness == Brightness.dark;
 
             return AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          title: Row(
-            children: [
-              CircleAvatar(
-                radius: 18,
-                backgroundColor: theme.colorScheme.primary.withValues(
-                  alpha: 0.12,
-                ),
-                child: Text(
-                  student.fullName.isNotEmpty
-                      ? student.fullName.trim()[0].toUpperCase()
-                      : 'S',
-                  style: TextStyle(
-                    color: theme.colorScheme.primary,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      student.fullName,
-                      style: const TextStyle(
-                        fontSize: 16,
+              title: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 18,
+                    backgroundColor: theme.colorScheme.primary.withValues(
+                      alpha: 0.12,
+                    ),
+                    child: Text(
+                      student.fullName.isNotEmpty
+                          ? student.fullName.trim()[0].toUpperCase()
+                          : 'S',
+                      style: TextStyle(
+                        color: theme.colorScheme.primary,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    Text(
-                      student.lrn?.isNotEmpty == true
-                          ? 'LRN: ${student.lrn}'
-                          : 'Student Submission Review',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              _buildStatusBadgeWidget(status, isDark),
-            ],
-          ),
-          content: SizedBox(
-            width: 480,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (submittedAt != null) ...[
-                    Row(
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Icon(
-                          Icons.schedule,
-                          size: 15,
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                        const SizedBox(width: 6),
                         Text(
-                          'Submitted on ${_formatDateTime(submittedAt)}',
+                          student.fullName,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        Text(
+                          student.lrn?.isNotEmpty == true
+                              ? 'LRN: ${student.lrn}'
+                              : 'Student Submission Review',
                           style: TextStyle(
-                            fontSize: 12,
+                            fontSize: 11,
                             color: theme.colorScheme.onSurfaceVariant,
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 12),
-                  ],
-
-                  // Online Submitted Document Card (PDF or DOC)
-                  if (!_isInPerson && hasFile) ...[
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color:
-                            (isPdf
-                                    ? const Color(0xFFDC2626)
-                                    : const Color(0xFF2563EB))
-                                .withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                          color:
-                              (isPdf
-                                      ? const Color(0xFFDC2626)
-                                      : const Color(0xFF2563EB))
-                                  .withValues(alpha: 0.25),
+                  ),
+                  _buildStatusBadgeWidget(status, isDark),
+                ],
+              ),
+              content: SizedBox(
+                width: 480,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (submittedAt != null) ...[
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.schedule,
+                              size: 15,
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Submitted on ${_formatDateTime(submittedAt)}',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            isPdf ? Icons.picture_as_pdf : Icons.description,
-                            size: 28,
-                            color: isPdf
-                                ? const Color(0xFFDC2626)
-                                : const Color(0xFF2563EB),
+                        const SizedBox(height: 12),
+                      ],
+
+                      // Online Submitted Document Card (PDF or DOC)
+                      if (!_isInPerson && hasFile) ...[
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color:
+                                (isPdf
+                                        ? const Color(0xFFDC2626)
+                                        : const Color(0xFF2563EB))
+                                    .withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color:
+                                  (isPdf
+                                          ? const Color(0xFFDC2626)
+                                          : const Color(0xFF2563EB))
+                                      .withValues(alpha: 0.25),
+                            ),
                           ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
+                          child: Row(
+                            children: [
+                              Icon(
+                                isPdf
+                                    ? Icons.picture_as_pdf
+                                    : Icons.description,
+                                size: 28,
+                                color: isPdf
+                                    ? const Color(0xFFDC2626)
+                                    : const Color(0xFF2563EB),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 6,
-                                        vertical: 1,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color:
-                                            (isPdf
-                                                    ? const Color(0xFFDC2626)
-                                                    : const Color(0xFF2563EB))
-                                                .withValues(alpha: 0.2),
-                                        borderRadius: BorderRadius.circular(4),
-                                      ),
-                                      child: Text(
-                                        isPdf ? 'PDF' : 'DOC',
-                                        style: TextStyle(
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.bold,
-                                          color: isPdf
-                                              ? const Color(0xFFDC2626)
-                                              : const Color(0xFF2563EB),
+                                    Row(
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 6,
+                                            vertical: 1,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color:
+                                                (isPdf
+                                                        ? const Color(
+                                                            0xFFDC2626,
+                                                          )
+                                                        : const Color(
+                                                            0xFF2563EB,
+                                                          ))
+                                                    .withValues(alpha: 0.2),
+                                            borderRadius: BorderRadius.circular(
+                                              4,
+                                            ),
+                                          ),
+                                          child: Text(
+                                            isPdf ? 'PDF' : 'DOC',
+                                            style: TextStyle(
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.bold,
+                                              color: isPdf
+                                                  ? const Color(0xFFDC2626)
+                                                  : const Color(0xFF2563EB),
+                                            ),
+                                          ),
                                         ),
-                                      ),
+                                        const SizedBox(width: 6),
+                                        const Text(
+                                          'Submitted File',
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ],
                                     ),
-                                    const SizedBox(width: 6),
-                                    const Text(
-                                      'Submitted File',
-                                      style: TextStyle(
-                                        fontSize: 11,
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      fileName.isNotEmpty
+                                          ? fileName
+                                          : 'Submitted Output',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
                                         fontWeight: FontWeight.bold,
+                                        fontSize: 13,
                                       ),
                                     ),
                                   ],
                                 ),
-                                const SizedBox(height: 2),
+                              ),
+                              FilledButton.icon(
+                                onPressed: () => _openStudentFile(submission),
+                                icon: const Icon(Icons.open_in_new, size: 14),
+                                label: const Text('Open File'),
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: isPdf
+                                      ? const Color(0xFFDC2626)
+                                      : const Color(0xFF2563EB),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 8,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                      ] else if (_isInPerson) ...[
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF8B5CF6)
+                                .withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: const Color(0xFF8B5CF6)
+                                  .withValues(alpha: 0.25),
+                            ),
+                          ),
+                          child: const Row(
+                            children: [
+                              Icon(
+                                Icons.handshake_outlined,
+                                size: 20,
+                                color: Color(0xFF8B5CF6),
+                              ),
+                              SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  'In-Person Activity: Student turns in their physical work directly in class.',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFF6D28D9),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                      ],
+
+                      // Student Comments / Remarks (if any)
+                      if (submission?['feedback'] != null &&
+                          submission!['feedback'].toString().isNotEmpty) ...[
+                        Text(
+                          'Student Remarks:',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.surfaceContainerHighest
+                                .withValues(alpha: 0.3),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            submission['feedback'].toString(),
+                            style: const TextStyle(fontSize: 13),
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                      ],
+
+                      // Scoring Input
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
                                 Text(
-                                  fileName.isNotEmpty
-                                      ? fileName
-                                      : 'Submitted Output',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
+                                  'Score (0 to ${_activity.maxScore.toInt()} pts) *',
                                   style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
                                     fontSize: 13,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                TextField(
+                                  controller: scoreCtrl,
+                                  keyboardType: TextInputType.number,
+                                  inputFormatters: [
+                                    FilteringTextInputFormatter.digitsOnly,
+                                    LengthLimitingTextInputFormatter(3),
+                                  ],
+                                  onChanged: (_) {
+                                    if (dialogScoreError != null) {
+                                      setModalState(
+                                        () => dialogScoreError = null,
+                                      );
+                                    }
+                                  },
+                                  decoration: InputDecoration(
+                                    hintText:
+                                        '0 - ${_activity.maxScore.toInt()}',
+                                    errorText: dialogScoreError,
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 10,
+                                    ),
                                   ),
                                 ),
                               ],
                             ),
                           ),
-                          FilledButton.icon(
-                            onPressed: () => _openStudentFile(submission),
-                            icon: const Icon(Icons.open_in_new, size: 14),
-                            label: const Text('Open File'),
-                            style: FilledButton.styleFrom(
-                              backgroundColor: isPdf
-                                  ? const Color(0xFFDC2626)
-                                  : const Color(0xFF2563EB),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 8,
+                          const SizedBox(width: 8),
+                          Padding(
+                            padding: const EdgeInsets.only(top: 25),
+                            child: SizedBox(
+                              height: 44,
+                              child: OutlinedButton(
+                                style: OutlinedButton.styleFrom(
+                                  backgroundColor:
+                                      theme.brightness == Brightness.dark
+                                      ? Colors.red.withValues(alpha: 0.15)
+                                      : const Color(0xFFFEF2F2),
+                                  foregroundColor: const Color(0xFFDC2626),
+                                  side: BorderSide(
+                                    color: theme.brightness == Brightness.dark
+                                        ? Colors.red.withValues(alpha: 0.4)
+                                        : const Color(0xFFFCA5A5),
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 14,
+                                  ),
+                                ),
+                                onPressed: () {
+                                  scoreCtrl.text = '0';
+                                  if (dialogScoreError != null) {
+                                    setModalState(
+                                      () => dialogScoreError = null,
+                                    );
+                                  }
+                                },
+                                child: const Text(
+                                  'Give 0',
+                                  style: TextStyle(fontWeight: FontWeight.w600),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Padding(
+                            padding: const EdgeInsets.only(top: 25),
+                            child: SizedBox(
+                              height: 44,
+                              child: OutlinedButton(
+                                style: OutlinedButton.styleFrom(
+                                  backgroundColor:
+                                      theme.brightness == Brightness.dark
+                                      ? Colors.green.withValues(alpha: 0.15)
+                                      : const Color(0xFFF0FDF4),
+                                  foregroundColor: const Color(0xFF16A34A),
+                                  side: BorderSide(
+                                    color: theme.brightness == Brightness.dark
+                                        ? Colors.green.withValues(alpha: 0.4)
+                                        : const Color(0xFF86EFAC),
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 14,
+                                  ),
+                                ),
+                                onPressed: () {
+                                  scoreCtrl.text = _activity.maxScore
+                                      .toInt()
+                                      .toString();
+                                  if (dialogScoreError != null) {
+                                    setModalState(
+                                      () => dialogScoreError = null,
+                                    );
+                                  }
+                                },
+                                child: Text(
+                                  'Give Max (${_activity.maxScore.toInt()})',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
                               ),
                             ),
                           ),
                         ],
                       ),
-                    ),
-                    const SizedBox(height: 14),
-                  ] else if (_isInPerson) ...[
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF8B5CF6).withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                          color: const Color(0xFF8B5CF6)
-                              .withValues(alpha: 0.25),
+                      const SizedBox(height: 12),
+
+                      // Teacher Feedback
+                      Text(
+                        'Teacher Feedback / Notes:',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: theme.colorScheme.onSurfaceVariant,
                         ),
                       ),
-                      child: const Row(
-                        children: [
-                          Icon(
-                            Icons.handshake_outlined,
-                            size: 20,
-                            color: Color(0xFF8B5CF6),
-                          ),
-                          SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              'In-Person Activity: Student turns in their physical work directly in class.',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: Color(0xFF6D28D9),
-                              ),
-                            ),
-                          ),
+                      const SizedBox(height: 6),
+                      TextField(
+                        controller: feedbackCtrl,
+                        maxLines: 2,
+                        maxLength: 100,
+                        inputFormatters: [
+                          LengthLimitingTextInputFormatter(100),
                         ],
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-                  ],
-
-                  // Student Comments / Remarks (if any)
-                  if (submission?['feedback'] != null &&
-                      submission!['feedback'].toString().isNotEmpty) ...[
-                    Text(
-                      'Student Remarks:',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.surfaceContainerHighest
-                            .withValues(alpha: 0.3),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        submission['feedback'].toString(),
-                        style: const TextStyle(fontSize: 13),
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-                  ],
-
-                  // Scoring Input
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Score (0 to ${_activity.maxScore.toInt()} pts) *',
-                              style: const TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            const SizedBox(height: 6),
-                            TextField(
-                              controller: scoreCtrl,
-                              keyboardType: TextInputType.number,
-                              inputFormatters: [
-                                FilteringTextInputFormatter.digitsOnly,
-                                LengthLimitingTextInputFormatter(3),
-                              ],
-                              onChanged: (_) {
-                                if (dialogScoreError != null) {
-                                  setModalState(() => dialogScoreError = null);
-                                }
-                              },
-                              decoration: InputDecoration(
-                                hintText: '0 - ${_activity.maxScore.toInt()}',
-                                errorText: dialogScoreError,
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 10,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Padding(
-                        padding: const EdgeInsets.only(top: 25),
-                        child: SizedBox(
-                          height: 44,
-                          child: OutlinedButton(
-                            style: OutlinedButton.styleFrom(
-                              backgroundColor: theme.brightness == Brightness.dark
-                                  ? Colors.red.withValues(alpha: 0.15)
-                                  : const Color(0xFFFEF2F2),
-                              foregroundColor: const Color(0xFFDC2626),
-                              side: BorderSide(
-                                color: theme.brightness == Brightness.dark
-                                    ? Colors.red.withValues(alpha: 0.4)
-                                    : const Color(0xFFFCA5A5),
-                              ),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              padding: const EdgeInsets.symmetric(horizontal: 14),
-                            ),
-                            onPressed: () {
-                              scoreCtrl.text = '0';
-                              if (dialogScoreError != null) {
-                                setModalState(() => dialogScoreError = null);
-                              }
-                            },
-                            child: const Text(
-                              'Give 0',
-                              style: TextStyle(fontWeight: FontWeight.w600),
-                            ),
+                        onChanged: (_) {
+                          if (dialogFeedbackError != null) {
+                            setModalState(() => dialogFeedbackError = null);
+                          }
+                        },
+                        decoration: InputDecoration(
+                          hintText:
+                              'Add constructive feedback for the student...',
+                          errorText: dialogFeedbackError,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
                           ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Padding(
-                        padding: const EdgeInsets.only(top: 25),
-                        child: SizedBox(
-                          height: 44,
-                          child: OutlinedButton(
-                            style: OutlinedButton.styleFrom(
-                              backgroundColor: theme.brightness == Brightness.dark
-                                  ? Colors.green.withValues(alpha: 0.15)
-                                  : const Color(0xFFF0FDF4),
-                              foregroundColor: const Color(0xFF16A34A),
-                              side: BorderSide(
-                                color: theme.brightness == Brightness.dark
-                                    ? Colors.green.withValues(alpha: 0.4)
-                                    : const Color(0xFF86EFAC),
-                              ),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              padding: const EdgeInsets.symmetric(horizontal: 14),
-                            ),
-                            onPressed: () {
-                              scoreCtrl.text = _activity.maxScore
-                                  .toInt()
-                                  .toString();
-                              if (dialogScoreError != null) {
-                                setModalState(() => dialogScoreError = null);
-                              }
-                            },
-                            child: Text(
-                              'Give Max (${_activity.maxScore.toInt()})',
-                              style: const TextStyle(fontWeight: FontWeight.w600),
-                            ),
-                          ),
+                          contentPadding: const EdgeInsets.all(10),
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 12),
-
-                  // Teacher Feedback
-                  Text(
-                    'Teacher Feedback / Notes:',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  TextField(
-                    controller: feedbackCtrl,
-                    maxLines: 2,
-                    maxLength: 100,
-                    inputFormatters: [
-                      LengthLimitingTextInputFormatter(100),
-                    ],
-                    onChanged: (_) {
-                      if (dialogFeedbackError != null) {
-                        setModalState(() => dialogFeedbackError = null);
-                      }
-                    },
-                    decoration: InputDecoration(
-                      hintText: 'Add constructive feedback for the student...',
-                      errorText: dialogFeedbackError,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      contentPadding: const EdgeInsets.all(10),
-                    ),
-                  ),
-                ],
+                ),
               ),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogCtx),
-              child: const Text('Cancel'),
-            ),
-            FilledButton.icon(
-              onPressed: () async {
-                final text = scoreCtrl.text.trim();
-                final err = AppValidators.validateClassworkStudentScore(
-                  text,
-                  maxScore: _activity.maxScore,
-                  allowEmpty: false,
-                );
-                if (err != null) {
-                  setModalState(() => dialogScoreError = err);
-                  return;
-                }
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogCtx),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton.icon(
+                  onPressed: () async {
+                    final text = scoreCtrl.text.trim();
+                    final err = AppValidators.validateClassworkStudentScore(
+                      text,
+                      maxScore: _activity.maxScore,
+                      allowEmpty: false,
+                    );
+                    if (err != null) {
+                      setModalState(() => dialogScoreError = err);
+                      return;
+                    }
 
-                final fbRaw = feedbackCtrl.text;
-                if (fbRaw.isNotEmpty && fbRaw.trim().isEmpty) {
-                  setModalState(
-                    () => dialogFeedbackError =
-                        'Feedback cannot consist of only spaces.',
-                  );
-                  return;
-                }
+                    final fbRaw = feedbackCtrl.text;
+                    if (fbRaw.isNotEmpty && fbRaw.trim().isEmpty) {
+                      setModalState(
+                        () => dialogFeedbackError =
+                            'Feedback cannot consist of only spaces.',
+                      );
+                      return;
+                    }
 
-                Navigator.pop(dialogCtx);
-                _scoreControllers[student.id]?.text = text;
-                await _saveScore(
-                  student,
-                  text,
-                  feedback: fbRaw.trim().isNotEmpty ? fbRaw.trim() : null,
-                );
-              },
-              icon: const Icon(Icons.check, size: 16),
-              label: const Text('Save Grade'),
-            ),
-          ],
-        );
+                    Navigator.pop(dialogCtx);
+                    _scoreControllers[student.id]?.text = text;
+                    await _saveScore(
+                      student,
+                      text,
+                      feedback: fbRaw.trim().isNotEmpty ? fbRaw.trim() : null,
+                    );
+                  },
+                  icon: const Icon(Icons.check, size: 16),
+                  label: const Text('Save Grade'),
+                ),
+              ],
+            );
           },
         );
       },
