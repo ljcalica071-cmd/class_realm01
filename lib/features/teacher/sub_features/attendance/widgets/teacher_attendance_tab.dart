@@ -71,6 +71,7 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
 
   // Supabase Realtime Channel for Standalone ESP32 Sync
   RealtimeChannel? _attendanceRealtimeChannel;
+  RealtimeChannel? _pendingScansRealtimeChannel;
   String? _subscribedOfferingId;
 
   List<Map<String, dynamic>> _teacherSubjects = [];
@@ -342,6 +343,13 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
   // ===========================================================================
 
   void _unsubscribeRealtime() {
+    final existingPending = _pendingScansRealtimeChannel;
+    _pendingScansRealtimeChannel = null;
+    if (existingPending != null) {
+      try {
+        Supabase.instance.client.removeChannel(existingPending);
+      } catch (_) {}
+    }
     final existing = _attendanceRealtimeChannel;
     _attendanceRealtimeChannel = null;
     _subscribedOfferingId = null;
@@ -375,10 +383,37 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
             callback: _handleRealtimeAttendancePayload,
           )
           .subscribe();
+
+      _pendingScansRealtimeChannel = client
+          .channel('public_rfid_pending_scans')
+          .onPostgresChanges(
+            event: PostgresChangeEvent.insert,
+            schema: 'public',
+            table: 'rfid_pending_scans',
+            callback: _handleRealtimePendingScanPayload,
+          )
+          .subscribe();
     } catch (_) {
       // Safe no-op in offline/unit-test environments where Supabase isn't initialized
       _subscribedOfferingId = null;
       _attendanceRealtimeChannel = null;
+    }
+  }
+
+
+  void _handleRealtimePendingScanPayload(PostgresChangePayload payload) {
+    if (!mounted) return;
+    final row = payload.newRecord;
+    if (row.isEmpty) return;
+
+    final scannedUid = row['rfid_uid']?.toString().trim().toUpperCase();
+    if (scannedUid == null || scannedUid.isEmpty) return;
+
+    // If teacher is currently waiting to link a specific student inline
+    if (_inlineLinkingStudentId != null) {
+      final targetId = _inlineLinkingStudentId!;
+      setState(() => _inlineLinkingStudentId = null);
+      unawaited(_assignRfidDirectly(targetId, scannedUid));
     }
   }
 

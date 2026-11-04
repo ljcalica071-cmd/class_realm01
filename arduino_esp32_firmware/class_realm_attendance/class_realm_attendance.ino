@@ -222,7 +222,7 @@ void syncRegisteredStudentsCache() {
   if (WiFi.status() != WL_CONNECTED) return;
 
   HTTPClient http;
-  String url = String(SUPABASE_URL) + "/rest/v1/students?select=rfid_uid,first_name,last_name&rfid_uid=not.is.null";
+  String url = String(SUPABASE_URL) + "/rest/v1/student_profiles?select=rfid_uid,first_name,last_name&rfid_uid=not.is.null";
   http.begin(url);
   http.addHeader("apikey", SUPABASE_ANON_KEY);
   http.addHeader("Authorization", String("Bearer ") + SUPABASE_ANON_KEY);
@@ -281,7 +281,7 @@ void syncOfflineQueue() {
     String uid = record.substring(0, sepIndex);
 
     HTTPClient http;
-    String url = String(SUPABASE_URL) + "/rest/v1/students?rfid_uid=eq." + uid + "&select=id";
+    String url = String(SUPABASE_URL) + "/rest/v1/student_profiles?rfid_uid=eq." + uid + "&select=student_id";
     http.begin(url);
     http.addHeader("apikey", SUPABASE_ANON_KEY);
     http.addHeader("Authorization", String("Bearer ") + SUPABASE_ANON_KEY);
@@ -311,6 +311,29 @@ void syncOfflineQueue() {
 // =========================================================================
 // PROCESS RFID SCAN (GUARANTEED FEEDBACK FOR ALL CARDS)
 // =========================================================================
+
+// Broadcast an unregistered card tap to Supabase Realtime so Teacher app can link it instantly
+void broadcastPendingScan(String uid) {
+  if (WiFi.status() != WL_CONNECTED) return;
+  HTTPClient http;
+  String url = String(SUPABASE_URL) + "/rest/v1/rfid_pending_scans";
+  http.begin(url);
+  http.addHeader("apikey", SUPABASE_ANON_KEY);
+  http.addHeader("Authorization", String("Bearer ") + SUPABASE_ANON_KEY);
+  http.addHeader("Content-Type", "application/json");
+  http.addHeader("Prefer", "return=minimal");
+  http.setTimeout(2500);
+
+  String body = "{\"rfid_uid\":\"" + uid + "\",\"device_id\":\"HARDWARE_ESP32\"}";
+  int code = http.POST(body);
+  if (code >= 200 && code < 300) {
+    Serial.println("[PENDING SCAN] Broadcasted unregistered UID " + uid + " to Teacher App!");
+  } else {
+    Serial.println("[PENDING SCAN] Failed to broadcast UID, code: " + String(code));
+  }
+  http.end();
+}
+
 void processRfidScan(String uid) {
   Serial.print("\n>>> [CARD SCANNED] UID: ");
   Serial.println(uid);
@@ -342,7 +365,7 @@ void processRfidScan(String uid) {
   showFeedbackScreen("CHECKING...", uid, "Verifying card...");
 
   HTTPClient http;
-  String url = String(SUPABASE_URL) + "/rest/v1/students?rfid_uid=eq." + uid + "&select=id,first_name,last_name";
+  String url = String(SUPABASE_URL) + "/rest/v1/student_profiles?rfid_uid=eq." + uid + "&select=student_id,first_name,last_name";
   http.begin(url);
   http.addHeader("apikey", SUPABASE_ANON_KEY);
   http.addHeader("Authorization", String("Bearer ") + SUPABASE_ANON_KEY);
@@ -366,9 +389,10 @@ void processRfidScan(String uid) {
       buzzOnce();
       showFeedbackScreen("VERIFIED", "PRESENT", shortName);
     } else {
-      // STRICT RULE: Unregistered Card -> 3 Fast Beeps + NEVER SAVED TO DB!
+      // Unregistered Card: Broadcast to Teacher app for Linking Modal + Friendly Screen
+      broadcastPendingScan(uid);
       buzzDenied();
-      showFeedbackScreen("ERROR", "ACCESS DENIED", "Unregistered Card");
+      showFeedbackScreen("LINK READY", "UNREGISTERED", "Ready to Link!");
     }
   } else {
     // If Supabase timed out: check local offline cache
