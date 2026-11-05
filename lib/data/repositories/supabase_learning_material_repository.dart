@@ -342,7 +342,7 @@ class SupabaseLearningMaterialRepository implements LearningMaterialRepository {
             ),
           );
 
-      storageUrl = _client.storage.from(_bucket).getPublicUrl(storagePath);
+      storageUrl = storagePath;
     }
 
     final createdMaterials = <ClassRealmMaterial>[];
