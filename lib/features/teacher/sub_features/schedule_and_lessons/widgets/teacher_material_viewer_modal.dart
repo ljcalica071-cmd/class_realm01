@@ -3,6 +3,8 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:class_realm/data/repositories/learning_material_repository.dart';
@@ -781,6 +783,34 @@ class _TeacherMaterialViewerModalState
             ),
             const SizedBox(height: 14),
           ],
+
+          // Open / View File Button
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              icon: const Icon(Icons.open_in_new, size: 18),
+              label: const Text('View Material / Download'),
+              onPressed: () async {
+                final path = _currentMaterial.storagePathUrl;
+                if (path == null || path.isEmpty) return;
+                try {
+                  final client = Supabase.instance.client;
+                  final url = await client.storage
+                      .from('classwork-materials')
+                      .createSignedUrl(path, 60 * 60);
+                  final uri = Uri.parse(url);
+                  await launchUrl(uri, mode: LaunchMode.externalApplication);
+                } catch (e) {
+                  _showToast('Failed to open file: $e', isError: true);
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: theme.colorScheme.primary,
+                foregroundColor: Colors.white,
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
 
           // Replace File Button
           SizedBox(
