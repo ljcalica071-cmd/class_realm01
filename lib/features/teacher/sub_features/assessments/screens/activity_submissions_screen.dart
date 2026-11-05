@@ -1690,7 +1690,7 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
                     Text(
                       totalStudents == 0
                           ? 'Showing 0 students'
-                          : 'Showing ${startIndex + 1}–${startIndex + pageStudents.length} of $totalStudents learners (20 per page)',
+                          : 'Showing ${startIndex + 1}–${startIndex + pageStudents.length} of $totalStudents learners (15 per page)',
                       style: TextStyle(
                         fontSize: 13,
                         color: theme.colorScheme.onSurfaceVariant,
