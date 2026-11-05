@@ -1169,6 +1169,21 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
     return '${local.month}/${local.day}/${local.year} $hour:$minute $ampm';
   }
 
+  String _formatSubmissionDate(String? dateStr) {
+    if (dateStr == null || dateStr.isEmpty) return '--';
+    try {
+      final dt = DateTime.parse(dateStr).toLocal();
+      final date =
+          '${dt.month.toString().padLeft(2, '0')}/${dt.day.toString().padLeft(2, '0')}/${dt.year}';
+      final hour = dt.hour > 12 ? dt.hour - 12 : (dt.hour == 0 ? 12 : dt.hour);
+      final period = dt.hour >= 12 ? 'PM' : 'AM';
+      final minute = dt.minute.toString().padLeft(2, '0');
+      return '$date $hour:$minute $period';
+    } catch (_) {
+      return '--';
+    }
+  }
+
   String _computeStudentStatus(UserModel student) {
     final sub = _submissionsByStudent[student.id];
     if (sub == null) {
@@ -1500,10 +1515,6 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
                               value: 'Missing',
                               child: Text('Missing'),
                             ),
-                            DropdownMenuItem(
-                              value: 'Late',
-                              child: Text('Late Submissions'),
-                            ),
                           ],
                           onChanged: (val) {
                             if (val != null) {
@@ -1564,7 +1575,7 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
                         ),
                       ),
                       const SizedBox(
-                        width: 120,
+                        width: 100,
                         child: Text(
                           'STATUS',
                           style: TextStyle(
@@ -1573,7 +1584,18 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
                           ),
                         ),
                       ),
-                      const SizedBox(width: 16),
+                      const SizedBox(width: 8),
+                      const SizedBox(
+                        width: 150,
+                        child: Text(
+                          'DATE SUBMITTED',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
                       const Expanded(
                         flex: 3,
                         child: Text(
@@ -1661,7 +1683,7 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
                 ),
                 const SizedBox(height: 12),
 
-                // Pagination Controls (20 per page)
+                // Pagination Controls (15 per page)
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -1677,42 +1699,96 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
                     ),
                     Row(
                       children: [
-                        OutlinedButton.icon(
+                        OutlinedButton(
+                          onPressed: _currentPage > 1
+                              ? () => setState(() => _currentPage = 1)
+                              : null,
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
+                            visualDensity: VisualDensity.compact,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                          ),
+                          child: const Text(
+                            'First',
+                            style: TextStyle(fontSize: 12),
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        OutlinedButton(
                           onPressed: _currentPage > 1
                               ? () => setState(() => _currentPage--)
                               : null,
-                          icon: const Icon(Icons.chevron_left, size: 18),
-                          label: const Text('Previous'),
                           style: OutlinedButton.styleFrom(
                             padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
+                              horizontal: 8,
                               vertical: 8,
                             ),
                             visualDensity: VisualDensity.compact,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(4),
+                            ),
                           ),
+                          child: const Icon(Icons.chevron_left, size: 16),
                         ),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 14),
+                        const SizedBox(width: 4),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 8,
+                          ),
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.primary,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
                           child: Text(
-                            'Page $_currentPage of $totalPages',
+                            '$_currentPage',
                             style: const TextStyle(
-                              fontSize: 13,
+                              fontSize: 12,
                               fontWeight: FontWeight.bold,
+                              color: Colors.white,
                             ),
                           ),
                         ),
-                        OutlinedButton.icon(
+                        const SizedBox(width: 4),
+                        OutlinedButton(
                           onPressed: _currentPage < totalPages
                               ? () => setState(() => _currentPage++)
                               : null,
-                          icon: const Icon(Icons.chevron_right, size: 18),
-                          label: const Text('Next'),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 8,
+                            ),
+                            visualDensity: VisualDensity.compact,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                          ),
+                          child: const Icon(Icons.chevron_right, size: 16),
+                        ),
+                        const SizedBox(width: 4),
+                        OutlinedButton(
+                          onPressed: _currentPage < totalPages
+                              ? () => setState(() => _currentPage = totalPages)
+                              : null,
                           style: OutlinedButton.styleFrom(
                             padding: const EdgeInsets.symmetric(
                               horizontal: 12,
                               vertical: 8,
                             ),
                             visualDensity: VisualDensity.compact,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                          ),
+                          child: const Text(
+                            'Last',
+                            style: TextStyle(fontSize: 12),
                           ),
                         ),
                       ],
@@ -1885,7 +1961,7 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
 
           // Status Badge / In-Person Selector
           SizedBox(
-            width: 120,
+            width: 100,
             child: _isInPerson
                 ? Container(
                     height: 32,
@@ -1939,7 +2015,18 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
                     child: _buildStatusBadgeWidget(status, isDark),
                   ),
           ),
-          const SizedBox(width: 16),
+          const SizedBox(width: 8),
+
+          // Date Column
+          SizedBox(
+            width: 150,
+            child: Text(
+              _formatSubmissionDate(submission?['submitted_at']?.toString()),
+              style: const TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+          ),
+
+          const SizedBox(width: 8),
 
           // Online Work Attachment Viewer Badge (PDF / DOC)
           Expanded(

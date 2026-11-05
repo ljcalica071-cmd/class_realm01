@@ -49,7 +49,7 @@ class AppValidators {
   /// Classwork & Assessment limits (Performance Tasks & Activities)
   static const int minClassworkTitleLength = 2;
   static const int maxClassworkTitleLength = 100;
-  static const int maxClassworkInstructionsLength = 30000;
+  static const int maxClassworkInstructionsLength = 1000;
   static const int minClassworkHps = 1;
   static const int maxClassworkHps = 100;
   static const int maxClassworkFileSizeBytes =
