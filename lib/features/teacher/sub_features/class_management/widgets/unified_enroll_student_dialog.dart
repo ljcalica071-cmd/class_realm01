@@ -705,61 +705,6 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
                           ],
                         ),
                       ),
-                      const SizedBox(height: 14),
-
-                      // Column Requirements Quick Pill Card
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.primary.withValues(
-                            alpha: 0.06,
-                          ),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
-                            color: theme.colorScheme.primary.withValues(
-                              alpha: 0.2,
-                            ),
-                          ),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Icon(
-                                  LucideIcons.shieldCheck,
-                                  size: 14,
-                                  color: theme.colorScheme.primary,
-                                ),
-                                const SizedBox(width: 6),
-                                const Text(
-                                  'Required Field Formats',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold,
-                                    color: Color(0xFF0F8A48),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            Wrap(
-                              spacing: 6,
-                              runSpacing: 6,
-                              children: [
-                                _buildFormatChip('LRN: 12 numeric digits'),
-                                _buildFormatChip('Email: Valid address'),
-                                _buildFormatChip('Name: Letters only'),
-                                _buildFormatChip('M.I.: 1 char (optional)'),
-                                _buildFormatChip('Gender: Male / Female'),
-                                _buildFormatChip(
-                                  'Birthday: YYYY-MM-DD (Age 5-60)',
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
                       const SizedBox(height: 18),
 
                       // Action Button
@@ -852,27 +797,6 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
           ),
         ),
       ],
-    );
-  }
-
-  Widget _buildFormatChip(String label) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.9),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(
-          color: const Color(0xFF0F8A48).withValues(alpha: 0.25),
-        ),
-      ),
-      child: Text(
-        label,
-        style: const TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w500,
-          color: Color(0xFF0F8A48),
-        ),
-      ),
     );
   }
 
@@ -976,8 +900,8 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
       return;
     }
 
-    // File size validation: max 10 MB
-    const maxBytes = 10 * 1024 * 1024;
+    // File size validation: max 15 MB
+    const maxBytes = 15 * 1024 * 1024;
     if (fileSize > maxBytes) {
       final mb = (fileSize / (1024 * 1024)).toStringAsFixed(1);
       setState(() {
@@ -985,7 +909,7 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
         _batchFileSize = fileSize;
         _isProcessingBatch = false;
         _batchWarningMessage =
-            'The selected file is $mb MB, which exceeds the 10 MB maximum limit.';
+            'The selected file is $mb MB, which exceeds the 15 MB maximum limit.';
       });
       return;
     }
@@ -3105,7 +3029,7 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
                 ),
               ),
 
-              const SizedBox(height: 16),
+              const SizedBox(height: 20),
 
               // ── Cascading Target Selection (Grade -> Subject -> Section) ──
               Padding(
@@ -3113,7 +3037,7 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
                 child: _buildClassroomSelectionCard(theme, isDark),
               ),
 
-              const SizedBox(height: 12),
+              const SizedBox(height: 16),
               Divider(
                 height: 1,
                 color: theme.colorScheme.outline.withValues(alpha: 0.2),
@@ -3152,7 +3076,7 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
         : <Map<String, dynamic>>[];
 
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: isDark
             ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.2)
@@ -3184,7 +3108,7 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
               ),
             ],
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 12),
           Row(
             children: [
               // Grade Level Dropdown
@@ -3328,7 +3252,7 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
                 .withValues(alpha: 0.7),
           ),
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: 6),
         child,
       ],
     );
@@ -3561,7 +3485,7 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
   // ─────────────────────────────────────────────────────────────────────────
   Widget _buildBatchImportView(ThemeData theme, bool isDark) {
     return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(24, 16, 24, 20),
+      padding: const EdgeInsets.fromLTRB(24, 18, 24, 22),
       child: Column(
         children: [
           // ── Resumable Interrupted Session Banner ──
@@ -3650,8 +3574,8 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
           // ── Step 1: Pre-download Banner Guide (Brand 60-30-10 Compliant) ──
           Container(
             width: double.infinity,
-            margin: const EdgeInsets.only(bottom: 16),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            margin: const EdgeInsets.only(bottom: 20),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
             decoration: BoxDecoration(
               color: theme.colorScheme.primary.withValues(alpha: 0.06),
               borderRadius: BorderRadius.circular(12),
@@ -3673,7 +3597,7 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
                     size: 20,
                   ),
                 ),
-                const SizedBox(width: 14),
+                const SizedBox(width: 16),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -3700,7 +3624,7 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
                     ],
                   ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 16),
                 FilledButton.icon(
                   style: FilledButton.styleFrom(
                     backgroundColor: theme.colorScheme.primary,
@@ -3878,7 +3802,7 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
                 color: Colors.amber,
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 10),
             Text(
               _batchWarningMessage!,
               style: TextStyle(
@@ -3888,7 +3812,7 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
               ),
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 18),
+            const SizedBox(height: 22),
             Wrap(
               spacing: 10,
               runSpacing: 8,
@@ -4178,7 +4102,7 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
         ),
         const SizedBox(height: 4),
         Text(
-          'Supports official Excel spreadsheet (.xlsx) up to 10 MB',
+          'Supports official Excel spreadsheet (.xlsx) up to 15 MB',
           style: TextStyle(
             fontSize: 12,
             color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
@@ -4199,38 +4123,6 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
             style: TextStyle(fontWeight: FontWeight.w600),
           ),
           onPressed: _processBatchImport,
-        ),
-        const SizedBox(height: 14),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-          decoration: BoxDecoration(
-            color: theme.colorScheme.surface,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: theme.colorScheme.outline.withValues(alpha: 0.2),
-            ),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                LucideIcons.shieldCheck,
-                size: 14,
-                color: theme.colorScheme.primary,
-              ),
-              const SizedBox(width: 8),
-              Flexible(
-                child: Text(
-                  'Strict Validation: LRN (12 digits) • Email • Name (letters) • M.I. (optional) • Gender • Birthday (Age 5-60)',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.85),
-                  ),
-                ),
-              ),
-            ],
-          ),
         ),
       ],
     );
@@ -4394,7 +4286,7 @@ class _AnimatedMarchingAntsBoxState extends State<_AnimatedMarchingAntsBox>
                 width: double.infinity,
                 padding: const EdgeInsets.symmetric(
                   horizontal: 24,
-                  vertical: 32,
+                  vertical: 36,
                 ),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(14),

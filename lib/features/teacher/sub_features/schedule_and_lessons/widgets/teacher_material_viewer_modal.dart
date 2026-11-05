@@ -232,7 +232,7 @@ class _TeacherMaterialViewerModalState
     if (result == null || result.files.isEmpty) return;
     final file = result.files.first;
 
-    // 2. Validate format, magic bytes, and 3MB size limit
+    // 2. Validate format, magic bytes, and 15MB size limit
     Uint8List? bytes = file.bytes;
     if (bytes == null && !kIsWeb && file.path != null) {
       try {
@@ -823,7 +823,7 @@ class _TeacherMaterialViewerModalState
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'Cloud Storage: Free-tier deduplicated. Verified ≤ 3MB.',
+                    'Cloud Storage: Free-tier deduplicated. Verified ≤ 15MB.',
                     style: TextStyle(
                       fontSize: 10,
                       color: theme.colorScheme.onSurface.withValues(alpha: 0.7),

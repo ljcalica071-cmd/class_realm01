@@ -230,9 +230,9 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
     }
 
     try {
-      final url = _client.storage
+      final url = await _client.storage
           .from('classwork-materials')
-          .getPublicUrl(path);
+          .createSignedUrl(path, 60 * 60); // 1 hour expiry
       final uri = Uri.parse(url);
       final launched = await launchUrl(
         uri,
@@ -256,9 +256,9 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
     if (path == null || path.isEmpty) return;
 
     try {
-      final url = _client.storage
+      final url = await _client.storage
           .from('classwork-materials')
-          .getPublicUrl(path);
+          .createSignedUrl(path, 60 * 60); // 1 hour expiry
       final uri = Uri.parse(url);
       final launched = await launchUrl(
         uri,

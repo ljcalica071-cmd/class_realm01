@@ -386,7 +386,7 @@ class _TeacherLearningMaterialsTabState
       return;
     }
 
-    // Strict 3MB size cap and magic-byte checks
+    // Strict 15MB size cap and magic-byte checks
     final validationError = MaterialFileValidator.validateFile(
       fileName: file.name,
       fileBytes: fileBytes,
@@ -617,7 +617,7 @@ class _TeacherLearningMaterialsTabState
                                 borderRadius: BorderRadius.circular(6),
                               ),
                               child: const Text(
-                                'â‰¤ 3MB Limit OK',
+                                'â‰¤ 15MB Limit OK',
                                 style: TextStyle(
                                   color: Colors.green,
                                   fontSize: 10,

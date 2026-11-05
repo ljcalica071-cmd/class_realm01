@@ -82,7 +82,7 @@ class _AiGenerationModalState extends State<AiGenerationModal> {
       );
       if (result != null && result.files.isNotEmpty) {
         final file = result.files.first;
-        if (file.size > 10 * 1024 * 1024) {
+        if (file.size > 15 * 1024 * 1024) {
           setState(() {
             _errorMessage = 'File exceeds maximum 10 MiB size limit.';
           });
