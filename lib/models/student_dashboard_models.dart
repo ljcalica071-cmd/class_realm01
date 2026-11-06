@@ -80,6 +80,14 @@ class StudentDashboardData {
             : DateTime.tryParse(birthdayValue),
         departmentOrSection: primaryEnrollment?['section_name']?.toString(),
         gradeLevel: primaryEnrollment?['grade_level']?.toString(),
+        hideTermGradesFromParent:
+            (studentJson['hide_term_grades_from_parent'] ??
+                studentJson['hideTermGradesFromParent']) ==
+            true,
+        hideFinalGradesFromParent:
+            (studentJson['hide_final_grades_from_parent'] ??
+                studentJson['hideFinalGradesFromParent']) ==
+            true,
       ),
       classwork: (json['classwork'] as List? ?? const [])
           .whereType<Map>()

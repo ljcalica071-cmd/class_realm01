@@ -1,18 +1,25 @@
 import 'package:flutter/material.dart';
+import 'package:class_realm/core/services/local_storage_service.dart';
 import 'package:class_realm/core/theme/app_theme.dart';
 import 'package:class_realm/core/utils/logout_helper.dart';
+import 'package:class_realm/data/repositories/supabase_parent_repository.dart';
 import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/shared/widgets/shared_widgets.dart';
+import 'package:class_realm/features/parent/sub_features/profile/screens/parent_settings_screen.dart';
 
 class ParentProfileTab extends StatefulWidget {
   final UserModel parent;
   final UserModel? linkedStudent;
+  final List<UserModel> allChildren;
+  final ValueChanged<UserModel>? onSelectChild;
   final Future<void> Function()? onRefresh;
 
   const ParentProfileTab({
     super.key,
     required this.parent,
     required this.linkedStudent,
+    this.allChildren = const [],
+    this.onSelectChild,
     this.onRefresh,
   });
 
@@ -21,235 +28,119 @@ class ParentProfileTab extends StatefulWidget {
 }
 
 class _ParentProfileTabState extends State<ParentProfileTab> {
-  bool _notificationsEnabled = true;
+  late UserModel _liveParent;
 
-  void _showChangePasswordDialog(BuildContext context) {
-    final oldPasswordController = TextEditingController();
-    final newPasswordController = TextEditingController();
-    final confirmPasswordController = TextEditingController();
-    String? inlineError;
+  @override
+  void initState() {
+    super.initState();
+    _liveParent = widget.parent;
+    _hydrateParentProfile();
+  }
 
-    showDialog(
-      context: context,
-      builder: (dialogCtx) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return AlertDialog(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(18),
-              ),
-              title: const Row(
-                children: [
-                  Icon(Icons.lock_outline_rounded),
-                  SizedBox(width: 10),
-                  Text('Change Password', style: TextStyle(fontSize: 18)),
-                ],
-              ),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Enter your current password and choose a strong new password.',
-                      style: TextStyle(fontSize: 12.5),
-                    ),
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: oldPasswordController,
-                      obscureText: true,
-                      decoration: InputDecoration(
-                        labelText: 'Current Password',
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        isDense: true,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: newPasswordController,
-                      obscureText: true,
-                      decoration: InputDecoration(
-                        labelText: 'New Password',
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        isDense: true,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: confirmPasswordController,
-                      obscureText: true,
-                      decoration: InputDecoration(
-                        labelText: 'Confirm New Password',
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        isDense: true,
-                      ),
-                    ),
-                    if (inlineError != null) ...[
-                      const SizedBox(height: 8),
-                      Text(
-                        inlineError!,
-                        style: const TextStyle(
-                          color: Color(0xFFDC2626),
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(dialogCtx),
-                  child: const Text('Cancel'),
-                ),
-                ElevatedButton(
-                  onPressed: () {
-                    final oldP = oldPasswordController.text.trim();
-                    final newP = newPasswordController.text.trim();
-                    final confP = confirmPasswordController.text.trim();
+  @override
+  void didUpdateWidget(covariant ParentProfileTab oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.parent.id != widget.parent.id ||
+        oldWidget.parent.fullName != widget.parent.fullName ||
+        oldWidget.parent.email != widget.parent.email ||
+        oldWidget.parent.birthday != widget.parent.birthday) {
+      _liveParent = widget.parent;
+      _hydrateParentProfile();
+    }
+  }
 
-                    if (oldP.isEmpty || newP.isEmpty || confP.isEmpty) {
-                      setDialogState(() {
-                        inlineError = 'All password fields are required.';
-                      });
-                      return;
-                    }
-                    if (newP.length < 6) {
-                      setDialogState(() {
-                        inlineError =
-                            'New password must be at least 6 characters.';
-                      });
-                      return;
-                    }
-                    if (newP != confP) {
-                      setDialogState(() {
-                        inlineError =
-                            'New password and confirmation do not match.';
-                      });
-                      return;
-                    }
+  Future<void> _hydrateParentProfile() async {
+    if (_liveParent.id.isEmpty) return;
+    try {
+      final fresh = await SupabaseParentRepository().getParentProfile(
+        _liveParent.id,
+      );
+      if (!mounted || fresh == null) return;
+      setState(() {
+        _liveParent = fresh;
+      });
+      await LocalStorageService.saveUser(fresh);
+    } catch (_) {
+      // Keep cached parent profile if offline
+    }
+  }
 
-                    Navigator.pop(dialogCtx);
-                    AppModals.showSuccessDialog(
-                      context: context,
-                      title: 'Password Updated',
-                      message: 'Your password has been changed successfully. Please remember your new credentials.',
-                    );
-                  },
-                  child: const Text('Update'),
-                ),
-              ],
-            );
-          },
-        );
-      },
+  Future<void> _handleRefresh() async {
+    await _hydrateParentProfile();
+    if (widget.onRefresh != null) {
+      await widget.onRefresh!();
+    }
+  }
+
+  void _openParentSettings(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const ParentSettingsScreen()),
     );
   }
 
-  void _showPolicySheet(BuildContext context, String title, String content) {
-    final theme = Theme.of(context);
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: theme.scaffoldBackgroundColor,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
-      ),
-      builder: (ctx) {
-        return DraggableScrollableSheet(
-          initialChildSize: 0.65,
-          minChildSize: 0.4,
-          maxChildSize: 0.88,
-          expand: false,
-          builder: (_, scrollCtrl) {
-            return Padding(
-              padding: const EdgeInsets.all(20),
-              child: ListView(
-                controller: scrollCtrl,
-                children: [
-                  Center(
-                    child: Container(
-                      width: 40,
-                      height: 4,
-                      margin: const EdgeInsets.only(bottom: 16),
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.onSurface.withValues(
-                          alpha: 0.2,
-                        ),
-                        borderRadius: BorderRadius.circular(99),
-                      ),
-                    ),
-                  ),
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  const Divider(height: 1),
-                  const SizedBox(height: 14),
-                  Text(
-                    content,
-                    style: TextStyle(
-                      fontSize: 13.5,
-                      height: 1.55,
-                      color: theme.colorScheme.onSurface.withValues(
-                        alpha: 0.85,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  ElevatedButton(
-                    onPressed: () => Navigator.pop(ctx),
-                    child: const Text('Close'),
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
-    );
+  String _formatBirthday(DateTime date) {
+    const months = [
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December',
+    ];
+    return '${months[date.month - 1]} ${date.day}, ${date.year}';
+  }
+
+  Map<String, List<UserModel>> _groupStudentsByRelationship(
+    List<UserModel> children,
+  ) {
+    final grouped = <String, List<UserModel>>{};
+    for (final child in children) {
+      final rawRel = (child.parentGuardianRelationship ?? '').trim();
+      final category = rawRel.isNotEmpty ? rawRel : 'Guardian';
+      grouped.putIfAbsent(category, () => <UserModel>[]).add(child);
+    }
+    return grouped;
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final parent = widget.parent;
+    final parent = _liveParent;
     final linkedStudent = widget.linkedStudent;
+
+    final effectiveChildren = widget.allChildren.isNotEmpty
+        ? widget.allChildren
+        : (linkedStudent != null ? <UserModel>[linkedStudent] : <UserModel>[]);
+
+    final groupedByRelationship = _groupStudentsByRelationship(
+      effectiveChildren,
+    );
 
     final initial = parent.fullName.trim().isNotEmpty
         ? parent.fullName.trim()[0].toUpperCase()
         : 'P';
     final emailValue = parent.email.trim().isNotEmpty
         ? parent.email.trim()
-        : 'Not provided';
-
-    final linkedStudentLabel = linkedStudent == null
-        ? 'No linked student'
-        : [
-            linkedStudent.fullName,
-            if (linkedStudent.departmentOrSection?.trim().isNotEmpty == true)
-              linkedStudent.departmentOrSection!.trim(),
-          ].join(' · ');
+        : 'Not registered';
+    final statusLabel = parent.status.name.isNotEmpty
+        ? '${parent.status.name[0].toUpperCase()}${parent.status.name.substring(1)}'
+        : 'Active';
 
     return AppPullToRefresh(
-      onRefresh: widget.onRefresh,
+      onRefresh: _handleRefresh,
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 36),
         children: [
-          // ── Parent Profile Card ──
+          // ── Parent Profile Hero Card ──
           Container(
             padding: const EdgeInsets.all(22),
             decoration: BoxDecoration(
@@ -340,25 +231,17 @@ class _ParentProfileTabState extends State<ParentProfileTab> {
           ),
           const SizedBox(height: 20),
 
-          // ── ACCOUNT & GUARDIANSHIP DETAILS ──
-          _buildSectionHeader(theme, 'ACCOUNT & GUARDIANSHIP DETAILS'),
+          // ── PARENT / GUARDIAN INFORMATION ──
+          _buildSectionHeader(theme, 'PARENT / GUARDIAN INFORMATION'),
           _buildInfoTile(
             theme: theme,
             isDark: isDark,
-            icon: Icons.family_restroom_outlined,
-            title: 'Linked Student',
-            value: linkedStudentLabel,
+            icon: Icons.person_outline_rounded,
+            title: 'Full Name',
+            value: parent.fullName.trim().isNotEmpty
+                ? parent.fullName.trim()
+                : 'Parent / Guardian',
           ),
-          if (linkedStudent != null)
-            _buildInfoTile(
-              theme: theme,
-              isDark: isDark,
-              icon: Icons.badge_outlined,
-              title: 'Student LRN',
-              value: linkedStudent.lrn?.trim().isNotEmpty == true
-                  ? linkedStudent.lrn!.trim()
-                  : 'Not provided',
-            ),
           _buildInfoTile(
             theme: theme,
             isDark: isDark,
@@ -366,16 +249,34 @@ class _ParentProfileTabState extends State<ParentProfileTab> {
             title: 'Email Address',
             value: emailValue,
           ),
+          if (parent.birthday != null)
+            _buildInfoTile(
+              theme: theme,
+              isDark: isDark,
+              icon: Icons.cake_outlined,
+              title: 'Birthday',
+              value: _formatBirthday(parent.birthday!),
+            ),
+          _buildInfoTile(
+            theme: theme,
+            isDark: isDark,
+            icon: Icons.verified_user_outlined,
+            title: 'Account Status',
+            value: statusLabel,
+          ),
 
           const SizedBox(height: 20),
 
-          // ── PREFERENCES (SETTINGS) ──
-          _buildSectionHeader(theme, 'PREFERENCES'),
-          Material(
-            color: theme.colorScheme.surface,
-            borderRadius: BorderRadius.circular(14),
-            child: Container(
+          // ── LINKED STUDENTS BY RELATIONSHIP ──
+          _buildSectionHeader(
+            theme,
+            'LINKED STUDENTS BY RELATIONSHIP (${effectiveChildren.length})',
+          ),
+          if (effectiveChildren.isEmpty)
+            Container(
+              padding: const EdgeInsets.all(18),
               decoration: BoxDecoration(
+                color: theme.colorScheme.surface,
                 borderRadius: BorderRadius.circular(14),
                 border: Border.all(
                   color: theme.colorScheme.onSurface.withValues(
@@ -383,41 +284,211 @@ class _ParentProfileTabState extends State<ParentProfileTab> {
                   ),
                 ),
               ),
-              child: SwitchListTile(
-                secondary: Icon(
-                  Icons.notifications_active_outlined,
-                  color: theme.colorScheme.primary,
-                ),
-                title: const Text(
-                  'Enable Notifications',
-                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-                ),
-                subtitle: const Text(
-                  'Receive alerts for attendance and finalized term grades',
-                  style: TextStyle(fontSize: 11.5),
-                ),
-                value: _notificationsEnabled,
-                activeThumbColor: theme.colorScheme.primary,
-                onChanged: (val) {
-                  setState(() => _notificationsEnabled = val);
-                  AppModals.showSuccessDialog(
-                    context: context,
-                    title: val
-                        ? 'Notifications Enabled'
-                        : 'Notifications Muted',
-                    message: val
-                        ? 'You will receive immediate alerts for your child\'s attendance and grades.'
-                        : 'Notification alerts have been muted.',
-                  );
-                },
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.family_restroom_outlined,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'No students are currently linked to this parent account.',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.7,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ),
-          ),
+            )
+          else
+            ...groupedByRelationship.entries.map((entry) {
+              final relationshipCategory = entry.key;
+              final studentsInGroup = entry.value;
+              return Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surface,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: theme.colorScheme.onSurface.withValues(
+                      alpha: isDark ? 0.14 : 0.1,
+                    ),
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(
+                        alpha: isDark ? 0.18 : 0.03,
+                      ),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 10,
+                      ),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.primary.withValues(
+                          alpha: isDark ? 0.14 : 0.07,
+                        ),
+                        borderRadius: const BorderRadius.vertical(
+                          top: Radius.circular(15),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.family_restroom_rounded,
+                            size: 17,
+                            color: theme.colorScheme.primary,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            relationshipCategory.toUpperCase(),
+                            style: TextStyle(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.7,
+                              color: theme.colorScheme.primary,
+                            ),
+                          ),
+                          const Spacer(),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: theme.colorScheme.primary.withValues(
+                                alpha: 0.14,
+                              ),
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: Text(
+                              '${studentsInGroup.length} ${studentsInGroup.length == 1 ? "Student" : "Students"}',
+                              style: TextStyle(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.bold,
+                                color: theme.colorScheme.primary,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    ...studentsInGroup.asMap().entries.map((item) {
+                      final idx = item.key;
+                      final student = item.value;
+                      final isActive = student.id == linkedStudent?.id;
+                      return Column(
+                        children: [
+                          if (idx > 0)
+                            Divider(
+                              height: 1,
+                              color: theme.colorScheme.onSurface.withValues(
+                                alpha: 0.08,
+                              ),
+                            ),
+                          ListTile(
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 2,
+                            ),
+                            leading: CircleAvatar(
+                              radius: 17,
+                              backgroundColor: isActive
+                                  ? theme.colorScheme.primary
+                                  : theme.colorScheme.primary.withValues(
+                                      alpha: 0.12,
+                                    ),
+                              child: Text(
+                                student.fullName.trim().isNotEmpty
+                                    ? student.fullName.trim()[0].toUpperCase()
+                                    : 'S',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold,
+                                  color: isActive
+                                      ? Colors.white
+                                      : theme.colorScheme.primary,
+                                ),
+                              ),
+                            ),
+                            title: Text(
+                              student.fullName,
+                              style: TextStyle(
+                                fontSize: 14.5,
+                                fontWeight: isActive
+                                    ? FontWeight.w700
+                                    : FontWeight.w600,
+                                color: theme.colorScheme.onSurface,
+                              ),
+                            ),
+                            trailing: isActive
+                                ? Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 9,
+                                      vertical: 4,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: AppTheme.catGreen.withValues(
+                                        alpha: 0.14,
+                                      ),
+                                      borderRadius: BorderRadius.circular(999),
+                                      border: Border.all(
+                                        color: AppTheme.catGreen.withValues(
+                                          alpha: 0.35,
+                                        ),
+                                      ),
+                                    ),
+                                    child: const Text(
+                                      'Viewing',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w700,
+                                        color: AppTheme.catGreen,
+                                      ),
+                                    ),
+                                  )
+                                : (widget.onSelectChild != null
+                                      ? TextButton(
+                                          onPressed: () => widget.onSelectChild!
+                                              .call(student),
+                                          child: const Text(
+                                            'Switch',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                          ),
+                                        )
+                                      : null),
+                            onTap: widget.onSelectChild != null
+                                ? () => widget.onSelectChild!.call(student)
+                                : null,
+                          ),
+                        ],
+                      );
+                    }),
+                  ],
+                ),
+              );
+            }),
 
           const SizedBox(height: 20),
 
-          // ── SECURITY ──
-          _buildSectionHeader(theme, 'SECURITY'),
+          // ── SETTINGS & PRIVACY ──
+          _buildSectionHeader(theme, 'SETTINGS & PRIVACY'),
           Material(
             color: theme.colorScheme.surface,
             borderRadius: BorderRadius.circular(14),
@@ -432,97 +503,19 @@ class _ParentProfileTabState extends State<ParentProfileTab> {
               ),
               child: ListTile(
                 leading: Icon(
-                  Icons.lock_outline_rounded,
+                  Icons.settings_outlined,
                   color: theme.colorScheme.primary,
                 ),
                 title: const Text(
-                  'Change Password',
+                  'Settings',
                   style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
                 ),
                 subtitle: const Text(
-                  'Update your account security password',
+                  'Notifications, password, app version, terms of service & privacy policy',
                   style: TextStyle(fontSize: 11.5),
                 ),
                 trailing: const Icon(Icons.chevron_right_rounded),
-                onTap: () => _showChangePasswordDialog(context),
-              ),
-            ),
-          ),
-
-          const SizedBox(height: 20),
-
-          // ── ABOUT CLASSREALM ──
-          _buildSectionHeader(theme, 'ABOUT CLASSREALM'),
-          Material(
-            color: theme.colorScheme.surface,
-            borderRadius: BorderRadius.circular(14),
-            child: Container(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(
-                  color: theme.colorScheme.onSurface.withValues(
-                    alpha: isDark ? 0.14 : 0.1,
-                  ),
-                ),
-              ),
-              child: Column(
-                children: [
-                  const ListTile(
-                    leading: Icon(Icons.verified_outlined),
-                    title: Text(
-                      'App Version',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 14,
-                      ),
-                    ),
-                    trailing: Text(
-                      '1.0.0 (SSHS Edition)',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 13,
-                      ),
-                    ),
-                  ),
-                  const Divider(height: 1),
-                  ListTile(
-                    leading: const Icon(Icons.description_outlined),
-                    title: const Text(
-                      'Terms of Service',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 14,
-                      ),
-                    ),
-                    trailing: const Icon(Icons.chevron_right_rounded),
-                    onTap: () {
-                      _showPolicySheet(
-                        context,
-                        'Terms of Service',
-                        'ClassRealm is designed exclusively for Senior High School (SSHS) educational tracking under DepEd curriculum standards. By using this platform, parents agree to use attendance and academic records respectfully and coordinate directly with teachers during authorized consultation hours.',
-                      );
-                    },
-                  ),
-                  const Divider(height: 1),
-                  ListTile(
-                    leading: const Icon(Icons.privacy_tip_outlined),
-                    title: const Text(
-                      'Privacy Policy',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 14,
-                      ),
-                    ),
-                    trailing: const Icon(Icons.chevron_right_rounded),
-                    onTap: () {
-                      _showPolicySheet(
-                        context,
-                        'Privacy Policy',
-                        'We uphold the Philippine Data Privacy Act of 2012 (RA 10173). Student academic records, LRNs, and attendance logs are securely encrypted and made accessible strictly to authorized parents and designated teachers. Student daily drafts and pending submissions remain confidential to preserve student privacy.',
-                      );
-                    },
-                  ),
-                ],
+                onTap: () => _openParentSettings(context),
               ),
             ),
           ),
@@ -562,7 +555,8 @@ class _ParentProfileTabState extends State<ParentProfileTab> {
                   AppModals.showConfirmationDialog(
                     context: context,
                     title: 'Confirm Logout',
-                    message: 'Are you sure you want to log out of the parent portal?',
+                    message:
+                        'Are you sure you want to log out of the parent portal?',
                     confirmLabel: 'Logout',
                     confirmColor: AppTheme.catRed,
                     onConfirm: () => LogoutHelper.logout(context),

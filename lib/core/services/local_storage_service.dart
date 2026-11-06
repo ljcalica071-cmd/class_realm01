@@ -504,6 +504,50 @@ class LocalStorageService {
     return _preferences?.getInt('session.tab_$role') ?? 0;
   }
 
+  static Future<void> saveSelectedParentChildId(
+    String parentId,
+    String studentId,
+  ) async {
+    if (parentId.trim().isEmpty || studentId.trim().isEmpty) return;
+    final prefs = await _prefs;
+    await prefs.setString(
+      '${_settingsPrefix}parent_active_child_${parentId.trim()}',
+      studentId.trim(),
+    );
+  }
+
+  static String? getSelectedParentChildId(String parentId) {
+    if (parentId.trim().isEmpty) return null;
+    return _preferences?.getString(
+      '${_settingsPrefix}parent_active_child_${parentId.trim()}',
+    );
+  }
+
+  static Future<void> saveStudentGradePrivacy(
+    String studentId, {
+    required bool hideTermGrades,
+    required bool hideFinalGrades,
+  }) async {
+    if (studentId.trim().isEmpty) return;
+    await saveJson('student_grade_privacy_${studentId.trim()}', {
+      'hideTermGrades': hideTermGrades,
+      'hideFinalGrades': hideFinalGrades,
+      'updatedAt': DateTime.now().toIso8601String(),
+    });
+  }
+
+  static Map<String, bool>? getStudentGradePrivacy(String studentId) {
+    if (studentId.trim().isEmpty) return null;
+    final raw = getJson('student_grade_privacy_${studentId.trim()}');
+    if (raw is Map) {
+      return {
+        'hideTermGrades': raw['hideTermGrades'] == true,
+        'hideFinalGrades': raw['hideFinalGrades'] == true,
+      };
+    }
+    return null;
+  }
+
   static Future<void> _ensureSaved(bool saved) async {
     if (!saved) {
       throw StateError('Failed to persist local preference.');

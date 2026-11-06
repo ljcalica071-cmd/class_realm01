@@ -4,7 +4,7 @@ import 'package:class_realm/models/academic_models.dart';
 import 'package:class_realm/models/attendance_workspace_models.dart';
 import 'package:class_realm/shared/widgets/shared_widgets.dart';
 
-class ParentAttendanceTab extends StatelessWidget {
+class ParentAttendanceTab extends StatefulWidget {
   final List<AttendanceRecord> attendance;
   final Future<void> Function()? onRefresh;
 
@@ -15,20 +15,56 @@ class ParentAttendanceTab extends StatelessWidget {
   });
 
   @override
+  State<ParentAttendanceTab> createState() => _ParentAttendanceTabState();
+}
+
+class _ParentAttendanceTabState extends State<ParentAttendanceTab> {
+  String _selectedSubjectFilter = 'All';
+
+  @override
+  void didUpdateWidget(covariant ParentAttendanceTab oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final subjects = _extractUniqueSubjects(widget.attendance);
+    if (_selectedSubjectFilter != 'All' &&
+        !subjects.contains(_selectedSubjectFilter)) {
+      _selectedSubjectFilter = 'All';
+    }
+  }
+
+  List<String> _extractUniqueSubjects(List<AttendanceRecord> records) {
+    final seen = <String>{};
+    final ordered = <String>[];
+    for (final r in records) {
+      final label = _resolveClassLabel(r);
+      if (label.isNotEmpty && seen.add(label)) {
+        ordered.add(label);
+      }
+    }
+    return ordered;
+  }
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    final presentCount = attendance
+    final uniqueSubjects = _extractUniqueSubjects(widget.attendance);
+    final filteredAttendance = _selectedSubjectFilter == 'All'
+        ? widget.attendance
+        : widget.attendance
+              .where((r) => _resolveClassLabel(r) == _selectedSubjectFilter)
+              .toList();
+
+    final presentCount = filteredAttendance
         .where((r) => r.status == AttendanceStatus.present)
         .length;
-    final lateCount = attendance
+    final lateCount = filteredAttendance
         .where((r) => r.status == AttendanceStatus.late)
         .length;
-    final absentCount = attendance
+    final absentCount = filteredAttendance
         .where((r) => r.status == AttendanceStatus.absent)
         .length;
-    final excusedCount = attendance
+    final excusedCount = filteredAttendance
         .where((r) => r.status == AttendanceStatus.excused)
         .length;
 
@@ -36,6 +72,10 @@ class ParentAttendanceTab extends StatelessWidget {
     final rate = totalAccounted > 0
         ? (((presentCount + lateCount) / totalAccounted) * 100).round()
         : (excusedCount > 0 ? 100 : 0);
+
+    final overallAbsentCount = widget.attendance
+        .where((r) => r.status == AttendanceStatus.absent)
+        .length;
 
     return Column(
       children: [
@@ -46,32 +86,37 @@ class ParentAttendanceTab extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (absentCount >= 3)
-                _buildParentAbsenceTierAlert(theme, isDark, absentCount),
+              if (overallAbsentCount >= 3)
+                _buildParentAbsenceTierAlert(theme, isDark, overallAbsentCount),
               Row(
                 children: [
                   _buildStatCard(
                     theme,
                     'Present',
                     '$presentCount',
-                    AppTheme.catGreen,
+                    isDark ? const Color(0xFF4ADE80) : AppTheme.catGreen,
                   ),
                   const SizedBox(width: 8),
                   _buildStatCard(
                     theme,
                     'Late',
                     '$lateCount',
-                    AppTheme.catOrange,
+                    isDark ? const Color(0xFFFBBF24) : AppTheme.catOrange,
                   ),
                   const SizedBox(width: 8),
                   _buildStatCard(
                     theme,
                     'Absent',
                     '$absentCount',
-                    AppTheme.catRed,
+                    isDark ? const Color(0xFFF87171) : AppTheme.catRed,
                   ),
                   const SizedBox(width: 8),
-                  _buildStatCard(theme, 'Rate', '$rate%', AppTheme.catBlue),
+                  _buildStatCard(
+                    theme,
+                    'Rate',
+                    '$rate%',
+                    isDark ? const Color(0xFF60A5FA) : AppTheme.catBlue,
+                  ),
                 ],
               ),
               if (excusedCount > 0) ...[
@@ -85,6 +130,34 @@ class ParentAttendanceTab extends StatelessWidget {
                   ),
                 ),
               ],
+              if (uniqueSubjects.length > 1) ...[
+                const SizedBox(height: 12),
+                SizedBox(
+                  height: 34,
+                  child: ListView(
+                    scrollDirection: Axis.horizontal,
+                    children: [
+                      _buildSubjectChip(
+                        theme,
+                        isDark,
+                        label: 'All Subjects',
+                        value: 'All',
+                      ),
+                      ...uniqueSubjects.map(
+                        (subj) => Padding(
+                          padding: const EdgeInsets.only(left: 8),
+                          child: _buildSubjectChip(
+                            theme,
+                            isDark,
+                            label: subj,
+                            value: subj,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ],
           ),
         ),
@@ -93,23 +166,24 @@ class ParentAttendanceTab extends StatelessWidget {
         // Strictly View-Only Attendance Logs List
         Expanded(
           child: AppPullToRefresh(
-            onRefresh: onRefresh,
-            child: attendance.isEmpty
+            onRefresh: widget.onRefresh,
+            child: filteredAttendance.isEmpty
                 ? AppPullToRefresh.scrollableState(
                     padding: EdgeInsets.zero,
                     child: const AppEmptyState(
-                      icon: Icons.family_restroom_outlined,
+                      icon: Icons.fact_check_outlined,
                       title: 'No Attendance Logs Yet',
-                      message: 'Your child\'s daily subject attendance records will appear here.',
+                      message:
+                          'Your child\'s daily subject attendance records will appear here once recorded by the teacher or RFID scanner.',
                     ),
                   )
                 : ListView.separated(
                     physics: const AlwaysScrollableScrollPhysics(),
                     padding: const EdgeInsets.all(16),
-                    itemCount: attendance.length,
+                    itemCount: filteredAttendance.length,
                     separatorBuilder: (_, _) => const SizedBox(height: 10),
                     itemBuilder: (ctx, i) {
-                      final att = attendance[i];
+                      final att = filteredAttendance[i];
                       final source = _resolveProvenance(att);
                       final classLabel = _resolveClassLabel(att);
                       final timeInDisplay = att.timeIn.trim().isEmpty
@@ -199,6 +273,46 @@ class ParentAttendanceTab extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildSubjectChip(
+    ThemeData theme,
+    bool isDark, {
+    required String label,
+    required String value,
+  }) {
+    final isSelected = _selectedSubjectFilter == value;
+    return ChoiceChip(
+      label: Text(
+        label,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          fontSize: 11.5,
+          fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+          color: isSelected
+              ? Colors.white
+              : theme.colorScheme.onSurface.withValues(alpha: 0.8),
+        ),
+      ),
+      selected: isSelected,
+      selectedColor: theme.colorScheme.primary,
+      backgroundColor: isDark
+          ? theme.colorScheme.secondary
+          : theme.colorScheme.surface,
+      side: BorderSide(
+        color: isSelected
+            ? theme.colorScheme.primary
+            : theme.colorScheme.onSurface.withValues(
+                alpha: isDark ? 0.22 : 0.14,
+              ),
+      ),
+      showCheckmark: false,
+      visualDensity: VisualDensity.compact,
+      onSelected: (_) {
+        setState(() => _selectedSubjectFilter = value);
+      },
     );
   }
 
@@ -392,21 +506,24 @@ class ParentAttendanceTab extends StatelessWidget {
       textColor = isDark ? const Color(0xFFFCA5A5) : const Color(0xFF991B1B);
       icon = Icons.error_rounded;
       title = 'Critical Notice: $absentCount Recorded Absences (SARDO Risk)';
-      subtitle = 'Your child has accumulated 10 absences and is at imminent risk of dropping out (DepEd SARDO policy). Please attend an urgent conference with the class adviser.';
+      subtitle =
+          'Your child has accumulated 10 absences and is at imminent risk of dropping out (DepEd SARDO policy). Please attend an urgent conference with the class adviser.';
     } else if (absentCount >= 5) {
       bannerColor = isDark ? const Color(0xFF431407) : const Color(0xFFFFF7ED);
       borderColor = const Color(0xFFEA580C);
       textColor = isDark ? const Color(0xFFFDBA74) : const Color(0xFF9A3412);
       icon = Icons.warning_amber_rounded;
       title = 'Attendance Alert: $absentCount Recorded Absences';
-      subtitle = 'Attendance intervention required. Please coordinate with your child\'s subject teacher or class adviser regarding missed school days.';
+      subtitle =
+          'Attendance intervention required. Please coordinate with your child\'s subject teacher or class adviser regarding missed school days.';
     } else {
       bannerColor = isDark ? const Color(0xFF422006) : const Color(0xFFFEFCE8);
       borderColor = const Color(0xFFCA8A04);
       textColor = isDark ? const Color(0xFFFDE047) : const Color(0xFF854D0E);
       icon = Icons.info_outline_rounded;
       title = 'Early Warning: $absentCount Recorded Absences';
-      subtitle = 'Your child has 3 recorded absences. Please ensure regular attendance to maintain academic standing.';
+      subtitle =
+          'Your child has 3 recorded absences. Please ensure regular attendance to maintain academic standing.';
     }
 
     return Container(

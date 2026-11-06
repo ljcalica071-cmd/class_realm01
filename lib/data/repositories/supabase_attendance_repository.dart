@@ -755,7 +755,6 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
   }) async {
     final dateStr = _formatDate(date);
     final uid = _currentUserId();
-    final nowIso = DateTime.now().toUtc().toIso8601String();
 
     final normalizedRecords = records.map((rec) {
       return rec.copyWith(
@@ -803,7 +802,6 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
         if ((rec.recordedBy ?? uid) != null &&
             (rec.recordedBy ?? uid)!.isNotEmpty)
           'recorded_by': rec.recordedBy ?? uid,
-        'updated_at': nowIso,
       };
     }).toList();
 
@@ -1748,9 +1746,7 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
               'recording_method': 'RFID',
               'time_in': scanTime24,
               'device_id': deviceId,
-              'remarks':
-                  'Promoted from System Auto-Absent via delayed RFID tap',
-              'updated_at': DateTime.now().toUtc().toIso8601String(),
+              'remarks': null,
             },
           ],
         );
@@ -1789,8 +1785,7 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
               'recording_method': 'RFID',
               'time_in': scanTime24,
               'device_id': deviceId,
-              'remarks': 'Promoted to Present via earlier physical RFID tap',
-              'updated_at': DateTime.now().toUtc().toIso8601String(),
+              'remarks': null,
             },
           ],
         );
@@ -1835,8 +1830,7 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
               'recording_method': 'RFID',
               'time_in': scanTime24,
               'device_id': deviceId,
-              'remarks': 'Timestamp updated to earlier physical RFID tap',
-              'updated_at': DateTime.now().toUtc().toIso8601String(),
+              'remarks': null,
             },
           ],
         );
@@ -1884,8 +1878,7 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
           'recording_method': 'RFID',
           'time_in': scanTime24,
           'device_id': deviceId,
-          'remarks': 'Recorded via $deviceId',
-          'updated_at': DateTime.now().toUtc().toIso8601String(),
+          'remarks': null,
         },
       ],
     );
@@ -2405,7 +2398,6 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
                     'remarks': map['remarks'],
                     if (map['recorded_by'] != null)
                       'recorded_by': map['recorded_by'],
-                    'updated_at': DateTime.now().toUtc().toIso8601String(),
                   };
                 }).toList();
 
@@ -2505,7 +2497,6 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
               'device_id': map['device_id'],
               'remarks': map['remarks'],
               if (map['recorded_by'] != null) 'recorded_by': map['recorded_by'],
-              'updated_at': DateTime.now().toUtc().toIso8601String(),
             };
           }).toList();
 
@@ -2801,7 +2792,6 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
             'recording_method': 'Manual',
             'remarks': trimmedReason,
             if (uid != null) 'recorded_by': uid,
-            'updated_at': DateTime.now().toUtc().toIso8601String(),
           })
           .eq('id', recordId);
     } catch (err) {

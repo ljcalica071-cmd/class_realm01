@@ -19,7 +19,6 @@ import 'package:class_realm/widgets/common/app_modals.dart';
 import 'package:class_realm/widgets/common/app_date_picker_field.dart';
 import 'package:class_realm/widgets/common/app_time_picker_field.dart';
 import 'package:class_realm/features/teacher/sub_features/assessments/widgets/anti_cheating_documentation_modal.dart';
-import 'package:class_realm/features/teacher/sub_features/assessments/quiz_exam_authoring/quiz_exam_authoring.dart';
 
 /// Active draft of an individual question during step 2 authoring.
 class QuestionDraft {
@@ -99,13 +98,19 @@ class _CreateAssessmentFlowDialogState
   // Stepper: 1 = Basic Configuration, 2 = Question Builder (Online mode)
   int _currentStep = 1;
 
+  bool get _isExam => widget.initialIsExam;
+
   // Mode: 'online' (Take via App) or 'in_person' (Manual Record)
   String _completionMode = 'online';
 
-  // Slot: 'ST1', 'ST2', 'TE'
+  // Slot: 'ST1', 'ST2', 'TE' (for Periodical Exams)
   String _examCategory = 'ST1';
 
-  // Sequential slot statuses for selected offering
+  // Slot for Quiz (Written Works: WW 1..10)
+  int _quizSlotIndex = 1;
+  Set<int> _occupiedWwSlots = <int>{};
+
+  // Sequential slot statuses for selected offering (Exams)
   bool _st1Created = false;
   bool _st2Created = false;
   bool _teCreated = false;
@@ -160,6 +165,7 @@ class _CreateAssessmentFlowDialogState
   bool _isPublishing = false;
 
   bool get _isZeroExamSubject {
+    if (!_isExam) return false;
     if (_selectedOffering == null) return false;
     final exWeight =
         (_selectedOffering!['ex_weight'] as num?)?.toDouble() ?? 30.0;
@@ -173,7 +179,9 @@ class _CreateAssessmentFlowDialogState
     return mc + tf + id;
   }
 
-  bool get _areAllSlotsFilled => _st1Created && _st2Created && _teCreated;
+  bool get _areAllSlotsFilled => _isExam
+      ? (_st1Created && _st2Created && _teCreated)
+      : (_occupiedWwSlots.length >= 10);
 
   @override
   void initState() {
@@ -184,7 +192,17 @@ class _CreateAssessmentFlowDialogState
       }
     });
     _durationCtrl.addListener(() {
-      if (_durationError != null) {
+      final text = _durationCtrl.text.trim();
+      if (text.isNotEmpty) {
+        final d = int.tryParse(text);
+        if (d != null && d > 120) {
+          if (_durationError != 'Duration cannot exceed 120 minutes.') {
+            setState(() => _durationError = 'Duration cannot exceed 120 minutes.');
+          }
+        } else if (_durationError != null) {
+          setState(() => _durationError = null);
+        }
+      } else if (_durationError != null) {
         setState(() => _durationError = null);
       }
     });
@@ -257,6 +275,60 @@ class _CreateAssessmentFlowDialogState
     try {
       final client = SupabaseService().client;
 
+      if (!_isExam) {
+        // 1. Check existing classwork items for this offering under WW (Written Works)
+        final items = await client
+            .from('classwork_items')
+            .select('title, gradebook_column_index')
+            .eq('subject_offering_id', offeringId)
+            .eq('grading_category', 'ww')
+            .eq('is_archived', false);
+
+        // 2. Check gradebook sheet HPS for WW
+        final termSheet = await SubjectRepository.instance.getGradebookTermSheet(
+          offeringId,
+          1,
+        );
+        final wwHps = termSheet != null
+            ? (termSheet['hps'] as Map? ?? {})['ww'] as Map? ?? {}
+            : {};
+
+        final occupied = <int>{};
+        for (final r in (items as List? ?? [])) {
+          final col = r['gradebook_column_index'] as int?;
+          if (col != null && col >= 1 && col <= 10) {
+            occupied.add(col);
+          }
+        }
+        for (final entry in wwHps.entries) {
+          final k = int.tryParse(entry.key.toString());
+          if (k != null && (entry.value as num? ?? 0) > 0) {
+            occupied.add(k);
+          }
+        }
+
+        int firstAvailable = 1;
+        for (int i = 1; i <= 10; i++) {
+          if (!occupied.contains(i)) {
+            firstAvailable = i;
+            break;
+          }
+        }
+
+        if (!mounted) return;
+        setState(() {
+          _occupiedWwSlots = occupied;
+          _quizSlotIndex = firstAvailable;
+          _isCheckingSlots = false;
+          if (_titleCtrl.text.isEmpty ||
+              _titleCtrl.text.startsWith('Quiz ') ||
+              _titleCtrl.text.startsWith('Summative')) {
+            _titleCtrl.text = 'Quiz $firstAvailable';
+          }
+        });
+        return;
+      }
+
       // 1. Check existing classwork items for this offering under EX
       final items = await client
           .from('classwork_items')
@@ -320,6 +392,17 @@ class _CreateAssessmentFlowDialogState
     }
   }
 
+  void _setQuizSlot(int slot) {
+    setState(() {
+      _quizSlotIndex = slot;
+      if (_titleCtrl.text.isEmpty ||
+          _titleCtrl.text.startsWith('Quiz ') ||
+          _titleCtrl.text.startsWith('Summative')) {
+        _titleCtrl.text = 'Quiz $slot';
+      }
+    });
+  }
+
   void _setExamSlot(String slot) {
     setState(() {
       _examCategory = slot;
@@ -367,7 +450,7 @@ class _CreateAssessmentFlowDialogState
       _distributionError = null;
     });
 
-    if (_isZeroExamSubject) {
+    if (_isExam && _isZeroExamSubject) {
       AppModals.showErrorDialog(
         context: context,
         title: 'Zero-Exam Subject',
@@ -379,8 +462,10 @@ class _CreateAssessmentFlowDialogState
     if (_areAllSlotsFilled) {
       AppModals.showErrorDialog(
         context: context,
-        title: 'All Examination Slots Filled',
-        message: 'All examination slots (ST1, ST2, TE) are already configured for this offering.',
+        title: _isExam ? 'All Examination Slots Filled' : 'All Written Work Slots Filled',
+        message: _isExam
+            ? 'All examination slots (ST1, ST2, TE) are already configured for this offering.'
+            : 'All 10 Written Work slots are already configured for this offering.',
       );
       return;
     }
@@ -412,7 +497,11 @@ class _CreateAssessmentFlowDialogState
     // Online Mode validations
     final duration = int.tryParse(_durationCtrl.text.trim());
     if (duration == null || duration < 1) {
-      setState(() => _durationError = 'Duration must be greater than 0.');
+      setState(() => _durationError = 'Duration must be at least 1 minute.');
+      return;
+    }
+    if (duration > 120) {
+      setState(() => _durationError = 'Duration cannot exceed 120 minutes.');
       return;
     }
 
@@ -765,16 +854,20 @@ class _CreateAssessmentFlowDialogState
       final title = _titleCtrl.text.trim();
       final instructions = _instructionsCtrl.text.trim();
 
-      final slotIndex = switch (_examCategory) {
-        'ST2' => 2,
-        'TE' => 3,
-        _ => 1,
-      };
+      final slotIndex = _isExam
+          ? switch (_examCategory) {
+              'ST2' => 2,
+              'TE' => 3,
+              _ => 1,
+            }
+          : _quizSlotIndex;
+
+      final category = _isExam ? 'ex' : 'ww';
 
       // 1. Insert into classwork_items
       await client.from('classwork_items').insert({
         'subject_offering_id': offeringId,
-        'grading_category': 'ex',
+        'grading_category': category,
         'title': title,
         'instructions': instructions,
         'max_score': hpsPoints,
@@ -794,9 +887,15 @@ class _CreateAssessmentFlowDialogState
           ) ??
           {};
       final hps = Map<String, dynamic>.from(termSheet['hps'] as Map? ?? {});
-      final exHps = Map<String, dynamic>.from(hps['ex'] as Map? ?? {});
-      exHps[_examCategory.toLowerCase()] = hpsPoints;
-      hps['ex'] = exHps;
+      if (_isExam) {
+        final exHps = Map<String, dynamic>.from(hps['ex'] as Map? ?? {});
+        exHps[_examCategory.toLowerCase()] = hpsPoints;
+        hps['ex'] = exHps;
+      } else {
+        final wwHps = Map<String, dynamic>.from(hps['ww'] as Map? ?? {});
+        wwHps[_quizSlotIndex.toString()] = hpsPoints;
+        hps['ww'] = wwHps;
+      }
       termSheet['hps'] = hps;
       await SubjectRepository.instance.saveGradebookTermSheet(
         offeringId,
@@ -813,9 +912,10 @@ class _CreateAssessmentFlowDialogState
 
       AppModals.showSuccessDialog(
         context: context,
-        title: 'Examination Recorded',
-        message:
-            '$title has been saved in Gradebook as an In-Person examination with $hpsPoints total points.',
+        title: _isExam ? 'Examination Recorded' : 'Quiz Recorded',
+        message: _isExam
+            ? '$title has been saved in Gradebook as an In-Person examination with $hpsPoints total points.'
+            : '$title has been saved in Gradebook as an In-Person quiz with $hpsPoints total points under Written Works (WW $_quizSlotIndex).',
       );
     } catch (e) {
       if (mounted) {
@@ -863,11 +963,22 @@ class _CreateAssessmentFlowDialogState
       );
       final deadline = startDateTime.add(Duration(minutes: duration));
 
-      final slotIndex = switch (_examCategory) {
-        'ST2' => 2,
-        'TE' => 3,
-        _ => 1,
-      };
+      final slotIndex = _isExam
+          ? switch (_examCategory) {
+              'ST2' => 2,
+              'TE' => 3,
+              _ => 1,
+            }
+          : _quizSlotIndex;
+
+      final category = _isExam ? 'ex' : 'ww';
+      final assessType = _isExam
+          ? switch (_examCategory) {
+              'ST2' => 'st2',
+              'TE' => 'term_exam',
+              _ => 'st1',
+            }
+          : 'quiz';
 
       final totalPoints = _plannedQuestions.fold<double>(
         0.0,
@@ -879,12 +990,8 @@ class _CreateAssessmentFlowDialogState
           .from('digital_assessments')
           .insert({
             'subject_offering_id': offeringId,
-            'assessment_type': switch (_examCategory) {
-              'ST2' => 'st2',
-              'TE' => 'term_exam',
-              _ => 'st1',
-            },
-            'grading_category': 'ex',
+            'assessment_type': assessType,
+            'grading_category': category,
             'title': title,
             'instructions': instructions,
             'time_limit_minutes': duration,
@@ -959,7 +1066,7 @@ class _CreateAssessmentFlowDialogState
       // 3. Persist to classwork_items
       await client.from('classwork_items').insert({
         'subject_offering_id': offeringId,
-        'grading_category': 'ex',
+        'grading_category': category,
         'title': title,
         'instructions': instructions,
         'max_score': totalPoints.toInt(),
@@ -979,9 +1086,15 @@ class _CreateAssessmentFlowDialogState
           ) ??
           {};
       final hps = Map<String, dynamic>.from(termSheet['hps'] as Map? ?? {});
-      final exHps = Map<String, dynamic>.from(hps['ex'] as Map? ?? {});
-      exHps[_examCategory.toLowerCase()] = totalPoints.toInt();
-      hps['ex'] = exHps;
+      if (_isExam) {
+        final exHps = Map<String, dynamic>.from(hps['ex'] as Map? ?? {});
+        exHps[_examCategory.toLowerCase()] = totalPoints.toInt();
+        hps['ex'] = exHps;
+      } else {
+        final wwHps = Map<String, dynamic>.from(hps['ww'] as Map? ?? {});
+        wwHps[_quizSlotIndex.toString()] = totalPoints.toInt();
+        hps['ww'] = wwHps;
+      }
       termSheet['hps'] = hps;
       await SubjectRepository.instance.saveGradebookTermSheet(
         offeringId,
@@ -991,7 +1104,9 @@ class _CreateAssessmentFlowDialogState
 
       // Clean local draft
       AppDataCache.instance.invalidate(
-        'exam_draft_${offeringId}_$_examCategory',
+        _isExam
+            ? 'exam_draft_${offeringId}_$_examCategory'
+            : 'quiz_draft_${offeringId}_$_quizSlotIndex',
       );
       AppDataCache.instance.invalidatePrefix('teacher_activities_');
       AppDataCache.instance.invalidatePrefix('student_dashboard_');
@@ -1002,9 +1117,10 @@ class _CreateAssessmentFlowDialogState
 
       AppModals.showSuccessDialog(
         context: context,
-        title: 'Examination Published',
-        message:
-            '$title has been published for ${_selectedOffering!['section_name']}. Scheduled for ${_formatDate(_scheduledDate)} at ${AppTimePickerField.format(_startTime)} (${duration}m duration).',
+        title: _isExam ? 'Examination Published' : 'Quiz Published',
+        message: _isExam
+            ? '$title has been published for ${_selectedOffering!['section_name']}. Scheduled for ${_formatDate(_scheduledDate)} at ${AppTimePickerField.format(_startTime)} (${duration}m duration).'
+            : '$title has been published for ${_selectedOffering!['section_name']} under Written Works (WW $_quizSlotIndex). Scheduled for ${_formatDate(_scheduledDate)} at ${AppTimePickerField.format(_startTime)} (${duration}m duration).',
       );
     } catch (e) {
       if (mounted) {
@@ -1065,40 +1181,9 @@ class _CreateAssessmentFlowDialogState
   }
 
   void _openAiGeneration() {
-    final subName =
-        _selectedOffering?['subject_name']?.toString() ?? 'General Subject';
-    AiGenerationModal.show(
+    AppModals.showUpcomingFeatureDialog(
       context,
-      isExam: true,
-      subjectName: subName,
-      onQuestionsGenerated: (generated) {
-        final drafts = <QuestionDraft>[];
-        int pos = 1;
-        for (final q in generated) {
-          drafts.add(
-            QuestionDraft(
-              position: pos++,
-              type: q.type,
-              statement: q.questionText,
-              choices: List.from(q.choices),
-              correctAnswer: q.correctAnswer,
-              points: q.points,
-            ),
-          );
-        }
-        setState(() {
-          _plannedQuestions = drafts;
-          _currentStep = 2;
-          _activeQuestionIndex = 0;
-        });
-        _loadQuestionIntoEditor(0);
-        AppModals.showSuccessDialog(
-          context: context,
-          title: 'Questions Generated with Gemini AI',
-          message:
-              '${drafts.length} questions were generated. You can now navigate the items, verify answer keys, and adjust points before publishing.',
-        );
-      },
+      featureName: 'AI Exam Question Generator',
     );
   }
 
@@ -1134,12 +1219,12 @@ class _CreateAssessmentFlowDialogState
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: AppTheme.catRed.withValues(alpha: 0.1),
+                      color: (_isExam ? AppTheme.catRed : theme.colorScheme.primary).withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: const Icon(
-                      Icons.description_outlined,
-                      color: AppTheme.catRed,
+                    child: Icon(
+                      _isExam ? Icons.description_outlined : Icons.quiz_outlined,
+                      color: _isExam ? AppTheme.catRed : theme.colorScheme.primary,
                       size: 22,
                     ),
                   ),
@@ -1148,16 +1233,18 @@ class _CreateAssessmentFlowDialogState
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          'Configure Periodical Examination',
-                          style: TextStyle(
+                        Text(
+                          _isExam ? 'Configure Periodical Examination' : 'Configure Quiz',
+                          style: const TextStyle(
                             fontSize: 17,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
                         Text(
                           _currentStep == 1
-                              ? 'Set method, slot, schedule, instructions, and distributions'
+                              ? (_isExam
+                                    ? 'Set method, slot, schedule, instructions, and distributions'
+                                    : 'Set method, WW slot, schedule, instructions, and distributions')
                               : 'Question Builder — Author statements and mandatory answer keys',
                           style: TextStyle(
                             fontSize: 12,
@@ -1233,7 +1320,7 @@ class _CreateAssessmentFlowDialogState
                           label: _completionMode == 'in_person'
                               ? (_isPublishing
                                     ? 'Publishing...'
-                                    : 'Publish Examination')
+                                    : (_isExam ? 'Publish Examination' : 'Publish Quiz'))
                               : 'Continue',
                           icon: _completionMode == 'in_person'
                               ? Icons.publish
@@ -1253,8 +1340,8 @@ class _CreateAssessmentFlowDialogState
                       if (_currentStep == 2)
                         AppPrimaryButton(
                           label: _isPublishing
-                              ? 'Publishing Examination...'
-                              : 'Save & Publish Examination',
+                              ? (_isExam ? 'Publishing Examination...' : 'Publishing Quiz...')
+                              : (_isExam ? 'Save & Publish Examination' : 'Save & Publish Quiz'),
                           icon: Icons.check_circle_outline,
                           height: 42,
                           backgroundColor:
@@ -1320,9 +1407,11 @@ class _CreateAssessmentFlowDialogState
                     children: [
                       Row(
                         children: [
-                          const Text(
-                            'Generate Examination with Gemini AI',
-                            style: TextStyle(
+                          Text(
+                            _isExam
+                                ? 'Generate Examination with Gemini AI'
+                                : 'Generate Quiz with Gemini AI',
+                            style: const TextStyle(
                               fontWeight: FontWeight.bold,
                               fontSize: 13,
                             ),
@@ -1338,7 +1427,7 @@ class _CreateAssessmentFlowDialogState
                               borderRadius: BorderRadius.circular(6),
                             ),
                             child: const Text(
-                              'AI POWERED',
+                              'NEXT UPDATE',
                               style: TextStyle(
                                 fontSize: 9,
                                 fontWeight: FontWeight.bold,
@@ -1364,7 +1453,7 @@ class _CreateAssessmentFlowDialogState
                 const SizedBox(width: 12),
                 ElevatedButton.icon(
                   icon: const Icon(Icons.auto_awesome, size: 14),
-                  label: const Text('Generate with AI'),
+                  label: const Text('Generate with AI (Next Update)'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppTheme.catPurple,
                     foregroundColor: Colors.white,
@@ -1576,85 +1665,101 @@ class _CreateAssessmentFlowDialogState
                   ),
           const SizedBox(height: 16),
 
-          // 3. Sequential Slot Selector: ST1 -> ST2 -> TE
-          Text(
-            'Periodical Examination Slot *',
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: theme.colorScheme.onSurface,
-            ),
-          ),
-          const SizedBox(height: 8),
-          if (_isCheckingSlots)
-            const LinearProgressIndicator(minHeight: 2)
-          else
-            Row(
-              children: [
-                Expanded(
-                  child: _buildSlotButton(
-                    slot: 'ST1',
-                    label: 'Summative Test 1 (ST1)',
-                    isCreated: _st1Created,
-                    isEnabled: !_st1Created,
-                    tooltip: _st1Created ? 'ST1 is already created' : null,
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _buildSlotButton(
-                    slot: 'ST2',
-                    label: 'Summative Test 2 (ST2)',
-                    isCreated: _st2Created,
-                    isEnabled: _st1Created && !_st2Created,
-                    tooltip: !_st1Created
-                        ? 'Create ST1 first before ST2'
-                        : (_st2Created ? 'ST2 is already created' : null),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _buildSlotButton(
-                    slot: 'TE',
-                    label: 'Term Examination (TE)',
-                    isCreated: _teCreated,
-                    isEnabled: _st1Created && _st2Created && !_teCreated,
-                    tooltip: (!_st1Created || !_st2Created)
-                        ? 'Complete ST1 & ST2 first before TE'
-                        : (_teCreated ? 'TE is already created' : null),
-                  ),
-                ),
-              ],
-            ),
-          if (_areAllSlotsFilled) ...[
-            const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: Colors.amber.shade50,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.amber.shade300),
+          // 3. Slot Selector: ST1 -> ST2 -> TE for Exam, or WW Slots for Quiz
+          if (_isExam) ...[
+            Text(
+              'Periodical Examination Slot *',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: theme.colorScheme.onSurface,
               ),
-              child: Row(
+            ),
+            const SizedBox(height: 8),
+            if (_isCheckingSlots)
+              const LinearProgressIndicator(minHeight: 2)
+            else
+              Row(
                 children: [
-                  Icon(
-                    Icons.info_outline,
-                    size: 16,
-                    color: Colors.amber.shade800,
-                  ),
-                  const SizedBox(width: 8),
                   Expanded(
-                    child: Text(
-                      'All examination slots (ST1, ST2, TE) are already configured for this offering.',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.amber.shade900,
-                      ),
+                    child: _buildSlotButton(
+                      slot: 'ST1',
+                      label: 'Summative Test 1 (ST1)',
+                      isCreated: _st1Created,
+                      isEnabled: !_st1Created,
+                      tooltip: _st1Created ? 'ST1 is already created' : null,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _buildSlotButton(
+                      slot: 'ST2',
+                      label: 'Summative Test 2 (ST2)',
+                      isCreated: _st2Created,
+                      isEnabled: _st1Created && !_st2Created,
+                      tooltip: !_st1Created
+                          ? 'Create ST1 first before ST2'
+                          : (_st2Created ? 'ST2 is already created' : null),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _buildSlotButton(
+                      slot: 'TE',
+                      label: 'Term Examination (TE)',
+                      isCreated: _teCreated,
+                      isEnabled: _st1Created && _st2Created && !_teCreated,
+                      tooltip: (!_st1Created || !_st2Created)
+                          ? 'Complete ST1 & ST2 first before TE'
+                          : (_teCreated ? 'TE is already created' : null),
                     ),
                   ),
                 ],
               ),
+            if (_areAllSlotsFilled) ...[
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.amber.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.amber.shade300),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.info_outline,
+                      size: 16,
+                      color: Colors.amber.shade800,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'All examination slots (ST1, ST2, TE) are already configured for this offering.',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.amber.shade900,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ] else ...[
+            Text(
+              'Written Work Slot (Gradebook) *',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: theme.colorScheme.onSurface,
+              ),
             ),
+            const SizedBox(height: 8),
+            if (_isCheckingSlots)
+              const LinearProgressIndicator(minHeight: 2)
+            else
+              _buildQuizSlotSelector(theme),
           ],
           const SizedBox(height: 18),
 
@@ -1775,6 +1880,11 @@ class _CreateAssessmentFlowDialogState
                             vertical: 12,
                           ),
                           errorText: _durationError,
+                          errorStyle: const TextStyle(
+                            color: Color(0xFFDC2626),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                          ),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(10),
                           ),
@@ -1786,10 +1896,25 @@ class _CreateAssessmentFlowDialogState
                               ),
                             ),
                           ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: BorderSide(
+                              color: theme.colorScheme.primary,
+                              width: 1.5,
+                            ),
+                          ),
+                          focusedErrorBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: const BorderSide(
+                              color: Color(0xFFDC2626),
+                              width: 1.5,
+                            ),
+                          ),
                           errorBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(10),
                             borderSide: const BorderSide(
                               color: Color(0xFFDC2626),
+                              width: 1.5,
                             ),
                           ),
                         ),
@@ -2188,6 +2313,121 @@ class _CreateAssessmentFlowDialogState
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildQuizSlotSelector(ThemeData theme) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: List.generate(10, (idx) {
+            final slot = idx + 1;
+            final isOccupied = _occupiedWwSlots.contains(slot);
+            final isSelected = _quizSlotIndex == slot;
+
+            return Tooltip(
+              message: isOccupied
+                  ? 'WW $slot is already used in Gradebook/Classwork'
+                  : 'Select WW $slot for this Quiz',
+              child: InkWell(
+                onTap: isOccupied ? null : () => _setQuizSlot(slot),
+                borderRadius: BorderRadius.circular(8),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 150),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 10,
+                  ),
+                  decoration: BoxDecoration(
+                    color: isSelected
+                        ? theme.colorScheme.primary.withValues(alpha: 0.1)
+                        : (isOccupied
+                            ? Colors.grey.shade100
+                            : theme.colorScheme.surface),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: isSelected
+                          ? theme.colorScheme.primary
+                          : (isOccupied
+                              ? Colors.grey.shade300
+                              : theme.colorScheme.outline.withValues(
+                                  alpha: 0.3,
+                                )),
+                      width: isSelected ? 1.8 : 1.0,
+                    ),
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'WW $slot',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          color: isSelected
+                              ? theme.colorScheme.primary
+                              : (isOccupied
+                                  ? Colors.grey
+                                  : theme.colorScheme.onSurface),
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        isOccupied
+                            ? 'Occupied'
+                            : (isSelected ? 'Selected' : 'Available'),
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight:
+                              isSelected ? FontWeight.w600 : FontWeight.normal,
+                          color: isSelected
+                              ? theme.colorScheme.primary
+                              : (isOccupied
+                                  ? Colors.grey
+                                  : Colors.green.shade700),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          }),
+        ),
+        if (_areAllSlotsFilled) ...[
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.amber.shade50,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.amber.shade300),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.info_outline,
+                  size: 16,
+                  color: Colors.amber.shade800,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'All 10 Written Work (WW) slots are already configured for this offering.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.amber.shade900,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ],
     );
   }
 

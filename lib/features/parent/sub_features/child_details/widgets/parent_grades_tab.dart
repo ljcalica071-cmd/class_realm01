@@ -2,17 +2,247 @@ import 'package:flutter/material.dart';
 import 'package:class_realm/core/theme/app_theme.dart';
 import 'package:class_realm/core/services/app_data_cache.dart';
 import 'package:class_realm/core/services/supabase_service.dart';
-import 'package:class_realm/data/repositories/supabase_schedule_repository.dart';
+import 'package:class_realm/core/utils/deped_grading_engine.dart';
+import 'package:class_realm/data/repositories/supabase_parent_repository.dart';
+import 'package:class_realm/models/subject_catalog_model.dart';
 import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/models/academic_models.dart';
 import 'package:class_realm/features/parent/sub_features/child_details/widgets/parent_subject_details_sheet.dart';
 import 'package:class_realm/shared/widgets/shared_widgets.dart';
 import 'package:loading_animation_widget/loading_animation_widget.dart';
 
+/// Standalone screen wrapper for opening Report Card & Term Grades from the
+/// Parent Side Panel (Drawer) or Quick Actions on Home.
+class ParentGradesScreen extends StatefulWidget {
+  final UserModel? initialStudent;
+  final List<UserModel> allChildren;
+  final ValueChanged<UserModel>? onSelectChild;
+
+  const ParentGradesScreen({
+    super.key,
+    required this.initialStudent,
+    this.allChildren = const [],
+    this.onSelectChild,
+  });
+
+  @override
+  State<ParentGradesScreen> createState() => _ParentGradesScreenState();
+}
+
+class _ParentGradesScreenState extends State<ParentGradesScreen> {
+  late UserModel? _activeStudent;
+
+  @override
+  void initState() {
+    super.initState();
+    _activeStudent =
+        widget.initialStudent ??
+        (widget.allChildren.isNotEmpty ? widget.allChildren.first : null);
+  }
+
+  void _showChildSwitcherSheet() {
+    if (widget.allChildren.isEmpty) return;
+    final theme = Theme.of(context);
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: theme.scaffoldBackgroundColor,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      ),
+      builder: (sheetCtx) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 14, 20, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    margin: const EdgeInsets.only(bottom: 14),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(99),
+                    ),
+                  ),
+                ),
+                const Text(
+                  'Switch Linked Student',
+                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Select a linked student to view their Term & Final Grades.',
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                ...widget.allChildren.map((child) {
+                  final isSelected = child.id == _activeStudent?.id;
+                  final rel = child.parentGuardianRelationship ?? 'Guardian';
+                  final sec = child.departmentOrSection ?? 'Senior High School';
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    decoration: BoxDecoration(
+                      color: isSelected
+                          ? theme.colorScheme.primary.withValues(alpha: 0.08)
+                          : theme.colorScheme.surface,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: isSelected
+                            ? theme.colorScheme.primary
+                            : theme.colorScheme.onSurface.withValues(
+                                alpha: 0.12,
+                              ),
+                      ),
+                    ),
+                    child: ListTile(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      leading: CircleAvatar(
+                        backgroundColor: isSelected
+                            ? theme.colorScheme.primary
+                            : theme.colorScheme.primary.withValues(alpha: 0.14),
+                        child: Text(
+                          child.fullName.isNotEmpty
+                              ? child.fullName[0].toUpperCase()
+                              : 'S',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: isSelected
+                                ? Colors.white
+                                : theme.colorScheme.primary,
+                          ),
+                        ),
+                      ),
+                      title: Text(
+                        child.fullName,
+                        style: TextStyle(
+                          fontWeight: isSelected
+                              ? FontWeight.bold
+                              : FontWeight.w600,
+                          fontSize: 14,
+                        ),
+                      ),
+                      subtitle: Text(
+                        '$rel • $sec',
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                      trailing: isSelected
+                          ? Icon(
+                              Icons.check_circle_rounded,
+                              color: theme.colorScheme.primary,
+                            )
+                          : null,
+                      onTap: () {
+                        Navigator.pop(sheetCtx);
+                        setState(() => _activeStudent = child);
+                        widget.onSelectChild?.call(child);
+                      },
+                    ),
+                  );
+                }),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final student = _activeStudent;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text(
+          'Report Card & Term Grades',
+          style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+        ),
+        actions: [
+          if (student != null && widget.allChildren.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(right: 10),
+              child: Center(
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(999),
+                  onTap: _showChildSwitcherSheet,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 5,
+                    ),
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? theme.colorScheme.primary.withValues(alpha: 0.18)
+                          : Colors.white.withValues(alpha: 0.16),
+                      borderRadius: BorderRadius.circular(999),
+                      border: Border.all(
+                        color: isDark
+                            ? theme.colorScheme.primary.withValues(alpha: 0.4)
+                            : Colors.white.withValues(alpha: 0.28),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 110),
+                          child: Text(
+                            student.firstName?.isNotEmpty == true
+                                ? student.firstName!
+                                : student.fullName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: isDark
+                                  ? theme.colorScheme.primary
+                                  : Colors.white,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Icon(
+                          Icons.keyboard_arrow_down_rounded,
+                          size: 18,
+                          color: isDark
+                              ? theme.colorScheme.primary
+                              : Colors.white,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+      body: ParentGradesTab(student: student),
+    );
+  }
+}
+
 class ParentGradesTab extends StatefulWidget {
   final UserModel? student;
+  final List<Map<String, dynamic>>? initialOfferings;
+  final Map<String, Map<int, Map<String, dynamic>>>? initialTermGrades;
 
-  const ParentGradesTab({super.key, required this.student});
+  const ParentGradesTab({
+    super.key,
+    required this.student,
+    this.initialOfferings,
+    this.initialTermGrades,
+  });
 
   @override
   State<ParentGradesTab> createState() => _ParentGradesTabState();
@@ -27,14 +257,28 @@ class _ParentGradesTabState extends State<ParentGradesTab> {
   @override
   void initState() {
     super.initState();
-    _loadGrades();
+    if (widget.initialOfferings != null) {
+      _offerings = widget.initialOfferings!;
+      _termGrades = widget.initialTermGrades ?? const {};
+      _isLoading = false;
+    } else {
+      _loadGrades();
+    }
   }
 
   @override
   void didUpdateWidget(covariant ParentGradesTab oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.student?.id != widget.student?.id) {
-      _loadGrades();
+      if (widget.initialOfferings != null) {
+        setState(() {
+          _offerings = widget.initialOfferings!;
+          _termGrades = widget.initialTermGrades ?? const {};
+          _isLoading = false;
+        });
+      } else {
+        _loadGrades();
+      }
     }
   }
 
@@ -42,6 +286,34 @@ class _ParentGradesTabState extends State<ParentGradesTab> {
     if (value is Map<String, dynamic>) return value;
     if (value is Map) return Map<String, dynamic>.from(value);
     return const {};
+  }
+
+  static List<int> _activeTerms(int termsTaught, String? termBlock) {
+    try {
+      return DepEdSubjectCatalog.getActiveTermsForBlock(
+        termsTaught.clamp(1, 3),
+        termBlock ?? '1ST, 2ND, 3RD',
+      );
+    } on ArgumentError {
+      return switch (termsTaught) {
+        1 => const [1],
+        2 => const [1, 2],
+        _ => const [1, 2, 3],
+      };
+    }
+  }
+
+  /// Extracts a valid encoded transmuted grade (`> 0` and either finalized or
+  /// non-incomplete), avoiding unfinalized `0` placeholder rows from showing
+  /// as `0 / Needs Help`.
+  static int? _encodedTermGrade(Map<String, dynamic>? row) {
+    if (row == null) return null;
+    final raw = (row['transmuted_grade'] as num?)?.toInt();
+    if (raw == null || raw <= 0) return null;
+    final isFinalized = row['is_finalized'] == true;
+    final remarks = (row['remarks']?.toString() ?? '').trim().toLowerCase();
+    if (!isFinalized && remarks == 'incomplete') return null;
+    return raw;
   }
 
   Future<void> _loadGrades({bool silent = false}) async {
@@ -71,24 +343,10 @@ class _ParentGradesTabState extends State<ParentGradesTab> {
       final sec = widget.student?.departmentOrSection;
 
       final responses = await Future.wait<dynamic>([
-        // 1. Enrolled Offerings
-        client
-            .from('student_enrollments')
-            .select('''
-              subject_offerings!inner (
-                id,
-                ww_weight,
-                pt_weight,
-                ex_weight,
-                terms_taught,
-                term_block,
-                subjects ( id, subject_name, subject_code, grade_level ),
-                sections ( id, section_name, grade_level ),
-                teacher_profiles ( teacher_id, first_name, last_name, gender )
-              )
-            ''')
-            .eq('student_id', studentId)
-            .ilike('status', 'enrolled'),
+        // 1. Enrolled Offerings with full Teacher Public Profile & Settings
+        SupabaseParentRepository().getEnrolledOfferingsWithTeachersForStudent(
+          studentId,
+        ),
 
         // 2. Term Grades (Strictly 3 Terms)
         client
@@ -98,17 +356,14 @@ class _ParentGradesTabState extends State<ParentGradesTab> {
             )
             .eq('student_id', studentId),
 
-        // 3. Schedules
-        sec != null && sec.isNotEmpty
-            ? SupabaseScheduleRepository.instance.getSchedules(section: sec)
-            : Future.value(<ScheduleModel>[]),
+        // 3. Schedules (directly from student's enrolled offerings + section fallback)
+        SupabaseParentRepository().getSchedulesForStudent(
+          studentId,
+          fallbackSection: sec,
+        ),
       ]);
 
-      final offeringRows = (responses[0] as List)
-          .map((row) => Map<String, dynamic>.from(row as Map))
-          .map((row) => _asMap(row['subject_offerings']))
-          .where((offering) => offering.isNotEmpty)
-          .toList();
+      final offeringRows = (responses[0] as List<Map<String, dynamic>>);
 
       final gradesByOffering = <String, Map<int, Map<String, dynamic>>>{};
       for (final row in responses[1] as List) {
@@ -230,26 +485,43 @@ class _ParentGradesTabState extends State<ParentGradesTab> {
       );
     }
 
-    // Compute Overall General Weighted Average (GWA) from finalized term grades
+    final hideTermGrades = student.effectiveHideTermGradesFromParent;
+    final hideFinalGrades = student.effectiveHideFinalGradesFromParent;
+
+    // Compute Overall General Weighted Average (GWA) from active encoded term grades
     double totalGrades = 0;
     int gradedSubjectsCount = 0;
     for (final off in _offerings) {
       final offId = off['id']?.toString() ?? '';
-      final terms = _termGrades[offId];
-      if (terms != null && terms.isNotEmpty) {
-        final finalizedGrades = terms.values
-            .map((g) => (g['transmuted_grade'] as num?)?.toDouble())
-            .whereType<double>()
+      final termsTaught = (off['terms_taught'] as num?)?.toInt() ?? 3;
+      final termBlock = off['term_block']?.toString();
+      final activeTerms = _activeTerms(termsTaught, termBlock);
+      final terms = _termGrades[offId] ?? const {};
+      final encodedMap = <int, int?>{
+        for (final t in activeTerms) t: _encodedTermGrade(terms[t]),
+      };
+      final finalSubjGrade = DepEdGradingEngine.computeFinalGrade(
+        termsTaught: activeTerms.length,
+        activeTerms: activeTerms,
+        termGrades: encodedMap,
+      );
+      if (finalSubjGrade != null) {
+        totalGrades += finalSubjGrade;
+        gradedSubjectsCount++;
+      } else {
+        // Fallback: average of currently encoded active terms
+        final encodedActive = activeTerms
+            .map((t) => _encodedTermGrade(terms[t]))
+            .whereType<int>()
             .toList();
-        if (finalizedGrades.isNotEmpty) {
-          final avg =
-              finalizedGrades.reduce((a, b) => a + b) / finalizedGrades.length;
-          totalGrades += avg;
+        if (encodedActive.isNotEmpty) {
+          totalGrades +=
+              encodedActive.reduce((a, b) => a + b) / encodedActive.length;
           gradedSubjectsCount++;
         }
       }
     }
-    final generalAverage = gradedSubjectsCount > 0
+    final generalAverage = (!hideFinalGrades && gradedSubjectsCount > 0)
         ? (totalGrades / gradedSubjectsCount).round()
         : null;
 
@@ -259,6 +531,18 @@ class _ParentGradesTabState extends State<ParentGradesTab> {
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.all(16),
         children: [
+          // ── 18+ Student Grade Privacy Notice (Only if student hid grades) ──
+          if (hideTermGrades || hideFinalGrades) ...[
+            _buildAdultPrivacyBanner(
+              theme,
+              isDark,
+              student,
+              hideTermGrades: hideTermGrades,
+              hideFinalGrades: hideFinalGrades,
+            ),
+            const SizedBox(height: 14),
+          ],
+
           // ── GWA & Summary Banner Card ──
           Container(
             padding: const EdgeInsets.all(18),
@@ -284,7 +568,9 @@ class _ParentGradesTabState extends State<ParentGradesTab> {
                   width: 58,
                   height: 58,
                   decoration: BoxDecoration(
-                    color: generalAverage != null
+                    color: hideFinalGrades
+                        ? AppTheme.catSlate.withValues(alpha: 0.14)
+                        : generalAverage != null
                         ? (generalAverage >= 75
                               ? AppTheme.catGreen.withValues(alpha: 0.15)
                               : AppTheme.catRed.withValues(alpha: 0.15))
@@ -292,18 +578,24 @@ class _ParentGradesTabState extends State<ParentGradesTab> {
                     borderRadius: BorderRadius.circular(14),
                   ),
                   child: Center(
-                    child: Text(
-                      generalAverage != null ? '$generalAverage' : '—',
-                      style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                        color: generalAverage != null
-                            ? (generalAverage >= 75
-                                  ? AppTheme.catGreen
-                                  : AppTheme.catRed)
-                            : theme.colorScheme.primary,
-                      ),
-                    ),
+                    child: hideFinalGrades
+                        ? Icon(
+                            Icons.lock_outline_rounded,
+                            color: AppTheme.catSlate,
+                            size: 24,
+                          )
+                        : Text(
+                            generalAverage != null ? '$generalAverage' : '—',
+                            style: TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.bold,
+                              color: generalAverage != null
+                                  ? (generalAverage >= 75
+                                        ? AppTheme.catGreen
+                                        : AppTheme.catRed)
+                                  : theme.colorScheme.primary,
+                            ),
+                          ),
                   ),
                 ),
                 const SizedBox(width: 16),
@@ -312,7 +604,7 @@ class _ParentGradesTabState extends State<ParentGradesTab> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'SSHS Report Card (${_offerings.length} Subjects)',
+                        'SSHS Report Card (${_offerings.length} ${_offerings.length == 1 ? "Subject" : "Subjects"})',
                         style: const TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 15,
@@ -320,9 +612,11 @@ class _ParentGradesTabState extends State<ParentGradesTab> {
                       ),
                       const SizedBox(height: 3),
                       Text(
-                        generalAverage != null
-                            ? 'General Weighted Average (GWA) computed across finalized 3-terms.'
-                            : 'Senior High School standing for ${student.firstName ?? student.fullName}.',
+                        hideFinalGrades
+                            ? 'Final Subject Grades & GWA are protected under 18+ student privacy settings.'
+                            : generalAverage != null
+                            ? 'General Weighted Average (GWA) computed across active terms.'
+                            : 'Grades will be computed once term grades are finalized by teachers.',
                         style: TextStyle(
                           fontSize: 12,
                           color: theme.colorScheme.onSurface.withValues(
@@ -348,6 +642,7 @@ class _ParentGradesTabState extends State<ParentGradesTab> {
             final termsTaught =
                 (offering['terms_taught'] as num?)?.toInt() ?? 3;
             final termBlock = offering['term_block']?.toString();
+            final activeTerms = _activeTerms(termsTaught, termBlock);
 
             final teacherMap = _asMap(offering['teacher_profiles']);
             final teacherFirstName = teacherMap['first_name']?.toString() ?? '';
@@ -357,17 +652,23 @@ class _ParentGradesTabState extends State<ParentGradesTab> {
               teacherFirstName,
               teacherLastName,
             ].where((s) => s.isNotEmpty).join(' ');
-            final teacherTitle = teacherGender.toLowerCase() == 'female'
-                ? 'Ms.'
-                : 'Mr.';
+            final gLower = teacherGender.toLowerCase();
+            final teacherTitle = (gLower == 'female' || gLower == 'f')
+                ? "Ma'am"
+                : 'Sir';
             final teacherDisplayName = teacherName.isNotEmpty
                 ? '$teacherTitle $teacherName'
                 : 'Assigned Teacher';
 
             final terms = _termGrades[offId] ?? {};
-            final t1 = terms[1]?['transmuted_grade']?.toString() ?? '—';
-            final t2 = terms[2]?['transmuted_grade']?.toString() ?? '—';
-            final t3 = terms[3]?['transmuted_grade']?.toString() ?? '—';
+            final t1Grade = _encodedTermGrade(terms[1]);
+            final t2Grade = _encodedTermGrade(terms[2]);
+            final t3Grade = _encodedTermGrade(terms[3]);
+            final finalSubjGrade = DepEdGradingEngine.computeFinalGrade(
+              termsTaught: activeTerms.length,
+              activeTerms: activeTerms,
+              termGrades: {1: t1Grade, 2: t2Grade, 3: t3Grade},
+            );
 
             return Container(
               margin: const EdgeInsets.only(bottom: 12),
@@ -397,6 +698,7 @@ class _ParentGradesTabState extends State<ParentGradesTab> {
                       offering: offering,
                       schedules: _schedules,
                       termGrades: terms,
+                      student: student,
                     );
                   },
                   child: Padding(
@@ -443,16 +745,20 @@ class _ParentGradesTabState extends State<ParentGradesTab> {
                         const SizedBox(height: 4),
                         Row(
                           children: [
-                            Text(
-                              'Teacher: $teacherDisplayName',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: theme.colorScheme.onSurface.withValues(
-                                  alpha: 0.65,
+                            Expanded(
+                              child: Text(
+                                'Teacher: $teacherDisplayName',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: theme.colorScheme.onSurface.withValues(
+                                    alpha: 0.65,
+                                  ),
                                 ),
                               ),
                             ),
-                            const Spacer(),
+                            const SizedBox(width: 8),
                             Text(
                               termsTaught == 1
                                   ? '1 Term${termBlock != null ? " ($termBlock)" : ""}'
@@ -470,11 +776,39 @@ class _ParentGradesTabState extends State<ParentGradesTab> {
                         const SizedBox(height: 12),
                         Row(
                           children: [
-                            _buildTermGradeBox(theme, isDark, 'Term 1', t1),
+                            _buildTermGradeBox(
+                              theme: theme,
+                              isDark: isDark,
+                              termLabel: 'Term 1',
+                              isActiveTerm: activeTerms.contains(1),
+                              isHiddenByStudent: hideTermGrades,
+                              encodedGrade: t1Grade,
+                            ),
                             const SizedBox(width: 8),
-                            _buildTermGradeBox(theme, isDark, 'Term 2', t2),
+                            _buildTermGradeBox(
+                              theme: theme,
+                              isDark: isDark,
+                              termLabel: 'Term 2',
+                              isActiveTerm: activeTerms.contains(2),
+                              isHiddenByStudent: hideTermGrades,
+                              encodedGrade: t2Grade,
+                            ),
                             const SizedBox(width: 8),
-                            _buildTermGradeBox(theme, isDark, 'Term 3', t3),
+                            _buildTermGradeBox(
+                              theme: theme,
+                              isDark: isDark,
+                              termLabel: 'Term 3',
+                              isActiveTerm: activeTerms.contains(3),
+                              isHiddenByStudent: hideTermGrades,
+                              encodedGrade: t3Grade,
+                            ),
+                            const SizedBox(width: 8),
+                            _buildFinalGradeBox(
+                              theme: theme,
+                              isDark: isDark,
+                              isHiddenByStudent: hideFinalGrades,
+                              finalGrade: finalSubjGrade,
+                            ),
                           ],
                         ),
                       ],
@@ -489,15 +823,163 @@ class _ParentGradesTabState extends State<ParentGradesTab> {
     );
   }
 
-  Widget _buildTermGradeBox(
+  Widget _buildAdultPrivacyBanner(
     ThemeData theme,
     bool isDark,
-    String termLabel,
-    String gradeValue,
-  ) {
-    final hasGrade = gradeValue != '—';
-    final numGrade = num.tryParse(gradeValue);
-    final isPassing = numGrade != null && numGrade >= 75;
+    UserModel student, {
+    required bool hideTermGrades,
+    required bool hideFinalGrades,
+  }) {
+    final String hiddenScope;
+    if (hideTermGrades && hideFinalGrades) {
+      hiddenScope = 'Term Grades and Final Subject Grades';
+    } else if (hideTermGrades) {
+      hiddenScope = 'Term Grades (Term 1, Term 2, Term 3)';
+    } else {
+      hiddenScope = 'Final Subject Grades and GWA';
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppTheme.catSlate.withValues(alpha: isDark ? 0.2 : 0.08),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: AppTheme.catSlate.withValues(alpha: isDark ? 0.4 : 0.24),
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            Icons.privacy_tip_outlined,
+            color: isDark ? const Color(0xFF94A3B8) : AppTheme.catSlate,
+            size: 20,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  '18+ Student Grade Privacy Active',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  '${student.fullName} (18+) has chosen to keep $hiddenScope private. Enrolled subjects, attendance records, class schedules, and subject teacher details remain accessible.',
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    height: 1.4,
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.72),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTermGradeBox({
+    required ThemeData theme,
+    required bool isDark,
+    required String termLabel,
+    required bool isActiveTerm,
+    required bool isHiddenByStudent,
+    required int? encodedGrade,
+  }) {
+    if (!isActiveTerm) {
+      return Expanded(
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surfaceContainerHighest.withValues(
+              alpha: 0.25,
+            ),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.06),
+            ),
+          ),
+          child: Column(
+            children: [
+              Text(
+                'N/A',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.35),
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                termLabel,
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
+                ),
+              ),
+              const SizedBox(height: 1),
+              Text(
+                'Inactive',
+                style: TextStyle(
+                  fontSize: 8.5,
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.35),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (isHiddenByStudent) {
+      return Expanded(
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+          decoration: BoxDecoration(
+            color: AppTheme.catSlate.withValues(alpha: isDark ? 0.18 : 0.08),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: AppTheme.catSlate.withValues(alpha: isDark ? 0.35 : 0.22),
+            ),
+          ),
+          child: Column(
+            children: [
+              Icon(
+                Icons.lock_outline_rounded,
+                size: 16,
+                color: isDark ? const Color(0xFF94A3B8) : AppTheme.catSlate,
+              ),
+              const SizedBox(height: 3),
+              Text(
+                termLabel,
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
+                ),
+              ),
+              const SizedBox(height: 1),
+              Text(
+                'Hidden (18+)',
+                style: TextStyle(
+                  fontSize: 8.5,
+                  fontWeight: FontWeight.w700,
+                  color: isDark ? const Color(0xFF94A3B8) : AppTheme.catSlate,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final hasGrade = encodedGrade != null;
+    final isPassing = encodedGrade != null && encodedGrade >= 75;
 
     final Color badgeColor = !hasGrade
         ? theme.colorScheme.onSurface.withValues(alpha: 0.45)
@@ -524,9 +1006,9 @@ class _ParentGradesTabState extends State<ParentGradesTab> {
         child: Column(
           children: [
             Text(
-              gradeValue,
+              hasGrade ? '$encodedGrade' : '—',
               style: TextStyle(
-                fontSize: 16,
+                fontSize: 15,
                 fontWeight: FontWeight.bold,
                 color: badgeColor,
               ),
@@ -535,22 +1017,128 @@ class _ParentGradesTabState extends State<ParentGradesTab> {
             Text(
               termLabel,
               style: TextStyle(
-                fontSize: 10.5,
+                fontSize: 10,
                 fontWeight: FontWeight.w600,
                 color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
               ),
             ),
-            if (hasGrade) ...[
+            const SizedBox(height: 1),
+            Text(
+              hasGrade ? (isPassing ? 'Passed' : 'Needs Help') : 'Ongoing',
+              style: TextStyle(
+                fontSize: 8.5,
+                fontWeight: FontWeight.w700,
+                color: hasGrade
+                    ? badgeColor
+                    : theme.colorScheme.onSurface.withValues(alpha: 0.45),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFinalGradeBox({
+    required ThemeData theme,
+    required bool isDark,
+    required bool isHiddenByStudent,
+    required int? finalGrade,
+  }) {
+    if (isHiddenByStudent) {
+      return Expanded(
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+          decoration: BoxDecoration(
+            color: AppTheme.catSlate.withValues(alpha: isDark ? 0.18 : 0.08),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: AppTheme.catSlate.withValues(alpha: isDark ? 0.35 : 0.22),
+            ),
+          ),
+          child: Column(
+            children: [
+              Icon(
+                Icons.lock_outline_rounded,
+                size: 16,
+                color: isDark ? const Color(0xFF94A3B8) : AppTheme.catSlate,
+              ),
+              const SizedBox(height: 3),
+              Text(
+                'Final',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                ),
+              ),
               const SizedBox(height: 1),
               Text(
-                isPassing ? 'Passed' : 'Needs Help',
+                'Protected',
                 style: TextStyle(
-                  fontSize: 9,
+                  fontSize: 8.5,
                   fontWeight: FontWeight.w700,
-                  color: badgeColor,
+                  color: isDark ? const Color(0xFF94A3B8) : AppTheme.catSlate,
                 ),
               ),
             ],
+          ),
+        ),
+      );
+    }
+
+    final hasGrade = finalGrade != null;
+    final isPassing = finalGrade != null && finalGrade >= 75;
+    final Color badgeColor = !hasGrade
+        ? theme.colorScheme.primary
+        : (isPassing ? AppTheme.catGreen : AppTheme.catRed);
+
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+        decoration: BoxDecoration(
+          color: hasGrade
+              ? badgeColor.withValues(alpha: isDark ? 0.16 : 0.1)
+              : theme.colorScheme.primary.withValues(alpha: 0.06),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: hasGrade
+                ? badgeColor.withValues(alpha: isDark ? 0.4 : 0.28)
+                : theme.colorScheme.primary.withValues(alpha: 0.18),
+          ),
+        ),
+        child: Column(
+          children: [
+            Text(
+              hasGrade ? '$finalGrade' : '—',
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.bold,
+                color: hasGrade
+                    ? badgeColor
+                    : theme.colorScheme.onSurface.withValues(alpha: 0.5),
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              'Final',
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+              ),
+            ),
+            const SizedBox(height: 1),
+            Text(
+              hasGrade ? (isPassing ? 'Passed' : 'Failed') : 'Pending',
+              style: TextStyle(
+                fontSize: 8.5,
+                fontWeight: FontWeight.w700,
+                color: hasGrade
+                    ? badgeColor
+                    : theme.colorScheme.onSurface.withValues(alpha: 0.45),
+              ),
+            ),
           ],
         ),
       ),

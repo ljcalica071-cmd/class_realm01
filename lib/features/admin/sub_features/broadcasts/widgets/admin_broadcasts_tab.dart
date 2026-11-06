@@ -268,6 +268,7 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
   }
 
   Future<bool?> _showDisableMaintenanceModal() {
+    final theme = Theme.of(context);
     return showDialog<bool>(
       context: context,
       builder: (ctx) {
@@ -275,15 +276,15 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
           ),
-          title: const Row(
+          title: Row(
             children: [
               Icon(
-                Icons.check_circle_outline_rounded,
-                color: AppTheme.catGreen,
-                size: 28,
+                Icons.lock_open_rounded,
+                color: theme.colorScheme.primary,
+                size: 26,
               ),
-              SizedBox(width: 12),
-              Text('Disable Maintenance Mode?'),
+              const SizedBox(width: 12),
+              const Text('Disable Maintenance Mode?'),
             ],
           ),
           content: const Text(
@@ -297,7 +298,7 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.catGreen,
+                backgroundColor: theme.colorScheme.primary,
                 foregroundColor: Colors.white,
               ),
               onPressed: () => Navigator.of(ctx).pop(true),
@@ -431,6 +432,7 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+    final titleCharCount = _titleController.text.length;
     final charCount = _messageController.text.length;
 
     return SingleChildScrollView(
@@ -458,43 +460,31 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
           const SizedBox(height: 24),
 
           // =================================================================
-          // SECTION 1: SYSTEM MAINTENANCE MODE CARD
+          // SECTION 1: SYSTEM MAINTENANCE MODE CARD (60-30-10, NO CHECK ICON)
           // =================================================================
           Container(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
             decoration: BoxDecoration(
               color: _isMaintenanceMode
-                  ? AppTheme.catRed.withValues(alpha: isDark ? 0.2 : 0.08)
+                  ? (isDark ? const Color(0xFF261919) : const Color(0xFFFFF5F5))
                   : (isDark ? theme.colorScheme.surface : Colors.white),
               borderRadius: BorderRadius.circular(16),
               border: Border.all(
                 color: _isMaintenanceMode
-                    ? AppTheme.catRed.withValues(alpha: 0.5)
-                    : (isDark ? Colors.white12 : Colors.grey.shade200),
-                width: 1.5,
+                    ? (isDark ? const Color(0xFF7F1D1D) : const Color(0xFFFECACA))
+                    : (isDark ? Colors.white10 : const Color(0xFFE5E7EB)),
+                width: 1.2,
               ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.03),
+                  blurRadius: 10,
+                  offset: const Offset(0, 2),
+                ),
+              ],
             ),
             child: Row(
               children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: _isMaintenanceMode
-                        ? AppTheme.catRed.withValues(alpha: 0.2)
-                        : AppTheme.catGreen.withValues(alpha: 0.15),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    _isMaintenanceMode
-                        ? Icons.build_circle_rounded
-                        : Icons.check_circle_outline_rounded,
-                    color: _isMaintenanceMode
-                        ? AppTheme.catRed
-                        : AppTheme.catGreen,
-                    size: 28,
-                  ),
-                ),
-                const SizedBox(width: 16),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -505,60 +495,105 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
                             'System Maintenance Mode',
                             style: TextStyle(
                               fontSize: 16,
-                              fontWeight: FontWeight.bold,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: -0.2,
                               color: theme.colorScheme.onSurface,
                             ),
                           ),
-                          const SizedBox(width: 8),
+                          const SizedBox(width: 10),
                           Container(
                             padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 2,
+                              horizontal: 10,
+                              vertical: 3.5,
                             ),
                             decoration: BoxDecoration(
                               color: _isMaintenanceMode
-                                  ? AppTheme.catRed
-                                  : AppTheme.catGreen,
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Text(
-                              _isMaintenanceMode
-                                  ? 'ACTIVE (LOCKED)'
-                                  : 'OPERATIONAL',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
+                                  ? (isDark
+                                      ? const Color(0xFF7F1D1D).withValues(alpha: 0.4)
+                                      : const Color(0xFFFEE2E2))
+                                  : (isDark
+                                      ? const Color(0xFF064E3B).withValues(alpha: 0.4)
+                                      : const Color(0xFFDCFCE7)),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                color: _isMaintenanceMode
+                                    ? const Color(0xFFEF4444).withValues(alpha: 0.4)
+                                    : const Color(0xFF22C55E).withValues(alpha: 0.4),
+                                width: 1,
                               ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(
+                                  width: 7,
+                                  height: 7,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: _isMaintenanceMode
+                                        ? const Color(0xFFEF4444)
+                                        : const Color(0xFF16A34A),
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  _isMaintenanceMode
+                                      ? 'ACTIVE (LOCKED)'
+                                      : 'OPERATIONAL',
+                                  style: TextStyle(
+                                    color: _isMaintenanceMode
+                                        ? (isDark
+                                            ? const Color(0xFFFCA5A5)
+                                            : const Color(0xFFB91C1C))
+                                        : (isDark
+                                            ? const Color(0xFF86EFAC)
+                                            : const Color(0xFF15803D)),
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 5),
                       Text(
                         _isMaintenanceMode
-                            ? 'Non-admin users cannot log in. Active sessions were terminated.'
+                            ? 'Non-admin users cannot log in. Active sessions are locked out.'
                             : 'All users (Teachers, Students, Parents) can log in and use the system normally.',
                         style: TextStyle(
                           fontSize: 13,
                           color: theme.colorScheme.onSurface.withValues(
-                            alpha: 0.7,
+                            alpha: 0.65,
                           ),
+                          height: 1.35,
                         ),
                       ),
                     ],
                   ),
                 ),
+                const SizedBox(width: 20),
                 if (_isTogglingMaintenance)
                   LoadingAnimationWidget.staggeredDotsWave(
                     color: theme.colorScheme.primary,
-                    size: 20,
+                    size: 22,
                   )
                 else
-                  Switch(
-                    value: _isMaintenanceMode,
-                    activeThumbColor: AppTheme.catRed,
-                    onChanged: (val) => _handleMaintenanceToggle(val),
+                  Transform.scale(
+                    scale: 0.95,
+                    child: Switch(
+                      value: _isMaintenanceMode,
+                      activeTrackColor: const Color(0xFFEF4444),
+                      activeThumbColor: Colors.white,
+                      inactiveThumbColor:
+                          isDark ? Colors.grey.shade400 : Colors.white,
+                      inactiveTrackColor: isDark
+                          ? Colors.grey.shade700
+                          : const Color(0xFFCBD5E1),
+                      onChanged: (val) => _handleMaintenanceToggle(val),
+                    ),
                   ),
               ],
             ),
@@ -566,7 +601,7 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
           const SizedBox(height: 28),
 
           // =================================================================
-          // SECTION 2: GLOBAL ANNOUNCEMENT COMPOSER
+          // SECTION 2: GLOBAL ANNOUNCEMENT COMPOSER (60-30-10 PALETTE)
           // =================================================================
           if (_isInitialLoading)
             const ShimmerComposeCard()
@@ -577,105 +612,171 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
                 color: isDark ? theme.colorScheme.surface : Colors.white,
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(
-                  color: isDark ? Colors.white12 : Colors.grey.shade200,
+                  color: isDark ? Colors.white10 : const Color(0xFFE5E7EB),
                   width: 1,
                 ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.03),
+                    blurRadius: 10,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     children: [
-                      const Icon(
-                        Icons.campaign_outlined,
-                        color: AppTheme.catPurple,
-                        size: 24,
-                      ),
-                      const SizedBox(width: 10),
-                      Text(
-                        'Compose Global Push Announcement',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: theme.colorScheme.onSurface,
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.primary.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(10),
                         ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 18),
-
-                  // Target Audience Dropdown
-                  Row(
-                    children: [
-                      Text(
-                        'Target Audience:',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: theme.colorScheme.onSurface,
+                        child: Icon(
+                          Icons.campaign_rounded,
+                          color: theme.colorScheme.primary,
+                          size: 22,
                         ),
                       ),
                       const SizedBox(width: 12),
-                      DropdownButton<String>(
-                        value: _selectedAudience,
-                        underline: Container(),
-                        items: [
-                          DropdownMenuItem(
-                            value: 'all',
-                            enabled: (_userCounts['total'] ?? 0) > 0,
-                            child: Text(
-                              'All Users (${_userCounts['total'] ?? 0} active${(_userCounts['total'] ?? 0) == 0 ? ' - No users' : ''})',
-                              style: TextStyle(
-                                color: (_userCounts['total'] ?? 0) == 0
-                                    ? Colors.grey
-                                    : null,
-                              ),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Compose Global Push Announcement',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: theme.colorScheme.onSurface,
                             ),
                           ),
-                          DropdownMenuItem(
-                            value: 'teachers',
-                            enabled: (_userCounts['teachers'] ?? 0) > 0,
-                            child: Text(
-                              'Teachers (${_userCounts['teachers'] ?? 0} active${(_userCounts['teachers'] ?? 0) == 0 ? ' - No users' : ''})',
-                              style: TextStyle(
-                                color: (_userCounts['teachers'] ?? 0) == 0
-                                    ? Colors.grey
-                                    : null,
-                              ),
-                            ),
-                          ),
-                          DropdownMenuItem(
-                            value: 'students',
-                            enabled: (_userCounts['students'] ?? 0) > 0,
-                            child: Text(
-                              'Students (${_userCounts['students'] ?? 0} active${(_userCounts['students'] ?? 0) == 0 ? ' - No users' : ''})',
-                              style: TextStyle(
-                                color: (_userCounts['students'] ?? 0) == 0
-                                    ? Colors.grey
-                                    : null,
-                              ),
-                            ),
-                          ),
-                          DropdownMenuItem(
-                            value: 'parents',
-                            enabled: (_userCounts['parents'] ?? 0) > 0,
-                            child: Text(
-                              'Parents (${_userCounts['parents'] ?? 0} active${(_userCounts['parents'] ?? 0) == 0 ? ' - No users' : ''})',
-                              style: TextStyle(
-                                color: (_userCounts['parents'] ?? 0) == 0
-                                    ? Colors.grey
-                                    : null,
+                          const SizedBox(height: 2),
+                          Text(
+                            'Broadcast instant notifications to active institutional accounts.',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: theme.colorScheme.onSurface.withValues(
+                                alpha: 0.55,
                               ),
                             ),
                           ),
                         ],
-                        onChanged: (v) {
-                          if (v != null) setState(() => _selectedAudience = v);
-                        },
                       ),
                     ],
                   ),
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 20),
+
+                  // Target Audience Dropdown Card
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? Colors.white.withValues(alpha: 0.04)
+                          : const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: isDark
+                            ? Colors.white12
+                            : const Color(0xFFE2E8F0),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.groups_outlined,
+                          size: 20,
+                          color: theme.colorScheme.primary,
+                        ),
+                        const SizedBox(width: 10),
+                        Text(
+                          'Target Audience:',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: theme.colorScheme.onSurface,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: DropdownButtonHideUnderline(
+                            child: DropdownButton<String>(
+                              value: _selectedAudience,
+                              isDense: true,
+                              items: [
+                                DropdownMenuItem(
+                                  value: 'all',
+                                  enabled: (_userCounts['total'] ?? 0) > 0,
+                                  child: Text(
+                                    'All Users (${_userCounts['total'] ?? 0} active${(_userCounts['total'] ?? 0) == 0 ? ' - No users' : ''})',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w500,
+                                      color: (_userCounts['total'] ?? 0) == 0
+                                          ? Colors.grey
+                                          : null,
+                                    ),
+                                  ),
+                                ),
+                                DropdownMenuItem(
+                                  value: 'teachers',
+                                  enabled: (_userCounts['teachers'] ?? 0) > 0,
+                                  child: Text(
+                                    'Teachers (${_userCounts['teachers'] ?? 0} active${(_userCounts['teachers'] ?? 0) == 0 ? ' - No users' : ''})',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w500,
+                                      color: (_userCounts['teachers'] ?? 0) == 0
+                                          ? Colors.grey
+                                          : null,
+                                    ),
+                                  ),
+                                ),
+                                DropdownMenuItem(
+                                  value: 'students',
+                                  enabled: (_userCounts['students'] ?? 0) > 0,
+                                  child: Text(
+                                    'Students (${_userCounts['students'] ?? 0} active${(_userCounts['students'] ?? 0) == 0 ? ' - No users' : ''})',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w500,
+                                      color: (_userCounts['students'] ?? 0) == 0
+                                          ? Colors.grey
+                                          : null,
+                                    ),
+                                  ),
+                                ),
+                                DropdownMenuItem(
+                                  value: 'parents',
+                                  enabled: (_userCounts['parents'] ?? 0) > 0,
+                                  child: Text(
+                                    'Parents (${_userCounts['parents'] ?? 0} active${(_userCounts['parents'] ?? 0) == 0 ? ' - No users' : ''})',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w500,
+                                      color: (_userCounts['parents'] ?? 0) == 0
+                                          ? Colors.grey
+                                          : null,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                              onChanged: (v) {
+                                if (v != null) {
+                                  setState(() => _selectedAudience = v);
+                                }
+                              },
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
 
                   // Title Input with Inline Error Outline
                   TextField(
@@ -687,13 +788,17 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
                           'e.g., Campus Schedule Advisory or System Update',
                       counterText: '',
                       errorText: _titleError,
+                      filled: true,
+                      fillColor: isDark
+                          ? Colors.white.withValues(alpha: 0.03)
+                          : const Color(0xFFFAFAFA),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(10),
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(10),
                         borderSide: BorderSide(
-                          color: isDark ? Colors.white24 : Colors.grey.shade300,
+                          color: isDark ? Colors.white24 : const Color(0xFFE5E7EB),
                         ),
                       ),
                       focusedBorder: OutlineInputBorder(
@@ -724,7 +829,38 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 14),
+                  // Title Live Character Counter (Real Max Limit 100)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 5, bottom: 14),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          '3 – 100 characters required',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: theme.colorScheme.onSurface.withValues(
+                              alpha: 0.45,
+                            ),
+                          ),
+                        ),
+                        Text(
+                          '$titleCharCount / 100 characters',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: titleCharCount > 90
+                                ? AppTheme.catRed
+                                : theme.colorScheme.onSurface.withValues(
+                                    alpha: 0.5,
+                                  ),
+                            fontWeight: titleCharCount > 90
+                                ? FontWeight.bold
+                                : FontWeight.normal,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
 
                   // Message Input with Inline Error Outline
                   TextField(
@@ -737,13 +873,17 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
                           'Type your message here (up to 1,000 characters)...',
                       counterText: '',
                       errorText: _messageError,
+                      filled: true,
+                      fillColor: isDark
+                          ? Colors.white.withValues(alpha: 0.03)
+                          : const Color(0xFFFAFAFA),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(10),
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(10),
                         borderSide: BorderSide(
-                          color: isDark ? Colors.white24 : Colors.grey.shade300,
+                          color: isDark ? Colors.white24 : const Color(0xFFE5E7EB),
                         ),
                       ),
                       focusedBorder: OutlineInputBorder(
@@ -774,69 +914,75 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 6),
 
-                  // Live Character Counter & Submit Button
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        '$charCount / 1000 characters',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: charCount > 950
-                              ? AppTheme.catRed
-                              : theme.colorScheme.onSurface.withValues(
-                                  alpha: 0.5,
-                                ),
-                          fontWeight: charCount > 950
-                              ? FontWeight.bold
-                              : FontWeight.normal,
-                        ),
-                      ),
-                      ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: theme.colorScheme.primary,
-                          foregroundColor: Colors.white,
-                          disabledBackgroundColor: isDark
-                              ? Colors.white12
-                              : Colors.grey.shade300,
-                          disabledForegroundColor: Colors.grey.shade500,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 20,
-                            vertical: 12,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
+                  // Message Live Character Counter & Submit Button
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Text(
+                          '$charCount / 1000 characters',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: charCount > 950
+                                ? AppTheme.catRed
+                                : theme.colorScheme.onSurface.withValues(
+                                    alpha: 0.5,
+                                  ),
+                            fontWeight: charCount > 950
+                                ? FontWeight.bold
+                                : FontWeight.normal,
                           ),
                         ),
-                        onPressed:
-                            (_isSubmittingAnnouncement ||
-                                _selectedAudienceCount == 0)
-                            ? null
-                            : _handleSendAnnouncement,
-                        icon: _isSubmittingAnnouncement
-                            ? LoadingAnimationWidget.staggeredDotsWave(
-                                color: Colors.white,
-                                size: 16,
-                              )
-                            : const Icon(Icons.send_rounded, size: 18),
-                        label: Text(
-                          _isSubmittingAnnouncement
-                              ? 'Sending...'
-                              : 'Send Broadcast',
-                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: theme.colorScheme.primary,
+                            foregroundColor: Colors.white,
+                            disabledBackgroundColor: isDark
+                                ? Colors.white12
+                                : Colors.grey.shade300,
+                            disabledForegroundColor: Colors.grey.shade500,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 22,
+                              vertical: 14,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            elevation: 0,
+                          ),
+                          onPressed: (_isSubmittingAnnouncement ||
+                                  _selectedAudienceCount == 0)
+                              ? null
+                              : _handleSendAnnouncement,
+                          icon: _isSubmittingAnnouncement
+                              ? LoadingAnimationWidget.staggeredDotsWave(
+                                  color: Colors.white,
+                                  size: 16,
+                                )
+                              : const Icon(Icons.send_rounded, size: 18),
+                          label: Text(
+                            _isSubmittingAnnouncement
+                                ? 'Sending...'
+                                : 'Send Broadcast',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 14,
+                            ),
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                   if (_selectedAudienceCount == 0)
                     Padding(
-                      padding: const EdgeInsets.only(top: 10),
+                      padding: const EdgeInsets.only(top: 12),
                       child: Container(
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 8,
+                          horizontal: 14,
+                          vertical: 10,
                         ),
                         decoration: BoxDecoration(
                           color: Colors.orange.withValues(alpha: 0.1),

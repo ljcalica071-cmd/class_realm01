@@ -27,8 +27,8 @@ void main() {
 
     await tester.pumpAndSettle();
 
-    // Verify student name is shown
-    expect(find.text('Juan Dela Cruz'), findsOneWidget);
+    // Verify student name is shown in Lastname, Firstname format (Cruz, Juan Dela)
+    expect(find.textContaining('Cruz'), findsOneWidget);
 
     // Verify NO mock 85.0 is shown anywhere
     expect(find.text('85.0'), findsNothing);

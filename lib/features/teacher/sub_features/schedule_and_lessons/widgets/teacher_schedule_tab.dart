@@ -308,7 +308,14 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
                     child: AppButton.primary(
                       label: 'Add Schedule Entry',
                       icon: Icons.add,
-                      onPressed: () {},
+                      onPressed: () {
+                        AppModals.showWarningDialog(
+                          context: context,
+                          title: 'Classroom Setup Required',
+                          message:
+                              'Please set up your sections and subjects in Classroom Setup before adding a schedule entry.',
+                        );
+                      },
                     ),
                   ),
                 )

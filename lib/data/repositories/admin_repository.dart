@@ -1,7 +1,10 @@
 import 'dart:async';
 
+import 'package:firebase_auth/firebase_auth.dart' as firebase;
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:class_realm/core/services/app_data_cache.dart';
+import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/models/admin_portal_models.dart';
 import 'package:class_realm/models/academic_models.dart';
 
@@ -146,14 +149,71 @@ class AdminRepository {
     }
   }
 
-  Future<void> setMaintenanceMode(bool isMaintenance, String adminId) async {
-    final now = DateTime.now().toIso8601String();
-    await _client.from('system_settings').upsert({
-      'id': true,
+  Future<void> setMaintenanceMode(bool isMaintenance, [String? adminId]) async {
+    final firebaseUser = firebase.FirebaseAuth.instance.currentUser;
+    final authUser = AuthRepository.instance.currentUser;
+    final currentUid = adminId ?? firebaseUser?.uid ?? authUser?.id;
+
+    if (currentUid == null || currentUid.isEmpty) {
+      throw StateError('Your login session has expired. Please log in again.');
+    }
+
+    final updateData = <String, dynamic>{
       'is_maintenance_mode': isMaintenance,
-      'maintenance_updated_at': now,
-      'maintenance_updated_by': adminId,
-    });
+      'maintenance_updated_at': DateTime.now().toIso8601String(),
+    };
+
+    // If current admin user exists in public.users, associate the update with their ID
+    try {
+      final userRow = await _client
+          .from('users')
+          .select('id')
+          .eq('id', currentUid)
+          .maybeSingle();
+      if (userRow != null) {
+        updateData['maintenance_updated_by'] = currentUid;
+      }
+    } catch (e) {
+      debugPrint('AdminRepository setMaintenanceMode user check error: $e');
+    }
+
+    try {
+      final existing = await _client
+          .from('system_settings')
+          .select('id')
+          .eq('id', true)
+          .maybeSingle();
+
+      if (existing == null) {
+        await _client.from('system_settings').insert({
+          'id': true,
+          ...updateData,
+        });
+      } else {
+        await _client
+            .from('system_settings')
+            .update(updateData)
+            .eq('id', true);
+      }
+    } catch (e) {
+      debugPrint('AdminRepository setMaintenanceMode error: $e');
+      rethrow;
+    }
+
+    // Record into audit_logs if admin user exists in users table
+    if (updateData.containsKey('maintenance_updated_by')) {
+      try {
+        await _client.from('audit_logs').insert({
+          'user_id': updateData['maintenance_updated_by'],
+          'action_type': 'admin_maintenance_toggle',
+          'description':
+              'System maintenance mode was switched to ${isMaintenance ? "ACTIVE (Lockdown)" : "OPERATIONAL"}.',
+          'logged_at': DateTime.now().toIso8601String(),
+        });
+      } catch (e) {
+        debugPrint('AdminRepository setMaintenanceMode audit_logs error: $e');
+      }
+    }
   }
 
   Future<List<String>> getActiveUserEmails() async {
@@ -328,22 +388,7 @@ class AdminRepository {
   /// Returns real counts of active (non-archived) users grouped by role
   Future<Map<String, int>> getActiveUserCountsByRole() async {
     try {
-      // 1. Try dedicated RPC function first (accurate DB-level aggregate)
-      try {
-        final rpcRes = await _client.rpc('get_active_audience_counts');
-        if (rpcRes is Map) {
-          return {
-            'teachers': (rpcRes['teachers'] as num?)?.toInt() ?? 0,
-            'students': (rpcRes['students'] as num?)?.toInt() ?? 0,
-            'parents': (rpcRes['parents'] as num?)?.toInt() ?? 0,
-            'total': (rpcRes['total'] as num?)?.toInt() ?? 0,
-          };
-        }
-      } catch (rpcErr) {
-        debugPrint('getActiveUserCountsByRole RPC notice: $rpcErr');
-      }
-
-      // 2. Fallback queries strictly filtering by status == 'active'
+      // Strictly count active users that have a valid profile/settings record
       final teacherRes = await _client
           .from('teacher_settings')
           .select('teacher_id')
@@ -536,15 +581,29 @@ class AdminRepository {
           .eq('role', 'teacher');
 
       if (startDate != null) {
+        final localStart = DateTime(
+          startDate.year,
+          startDate.month,
+          startDate.day,
+        );
         filterQuery = filterQuery.gte(
-          'session_date',
-          startDate.toIso8601String().split('T').first,
+          'login_at',
+          localStart.toUtc().toIso8601String(),
         );
       }
       if (endDate != null) {
+        final localEnd = DateTime(
+          endDate.year,
+          endDate.month,
+          endDate.day,
+          23,
+          59,
+          59,
+          999,
+        );
         filterQuery = filterQuery.lte(
-          'session_date',
-          endDate.toIso8601String().split('T').first,
+          'login_at',
+          localEnd.toUtc().toIso8601String(),
         );
       }
 
@@ -590,8 +649,11 @@ class AdminRepository {
             );
           })
           .where(
-            (log) => log.isActive || log.durationSeconds > 30,
-          ) // Hide micro/ghost sessions under 30 seconds
+            (log) =>
+                log.isActive ||
+                log.durationSeconds >= 1 ||
+                log.logoutReason == 'manual',
+          )
           .toList();
 
       // Deduplicate overlapping or parallel twin sessions for the same user within 60 seconds
@@ -686,7 +748,7 @@ class AdminRepository {
           .from('user_session_logs')
           .select()
           .eq('role', 'teacher')
-          .gte('session_date', weekStart.toIso8601String().split('T').first)
+          .gte('login_at', weekStart.toUtc().toIso8601String())
           .order('login_at', ascending: false);
 
       final sessions = (sessionsRes as List)
@@ -812,45 +874,62 @@ class AdminRepository {
           pp['parent_id']?.toString(): pp['status']?.toString(),
       };
 
+      // Only count users that actually have a corresponding profile/settings row in the database
+      // so orphaned or leftover test rows in `users` never inflate dashboard totals.
+      final validTeacherUsers = teacherUsers.where((t) {
+        final id = t['id']?.toString();
+        return id != null && teacherSettingsMap.containsKey(id);
+      }).toList();
+
+      final validStudentUsers = studentUsers.where((s) {
+        final id = s['id']?.toString();
+        return id != null && studentSettingsMap.containsKey(id);
+      }).toList();
+
+      final validParentUsers = parentUsers.where((p) {
+        final id = p['id']?.toString();
+        return id != null && parentStatusMap.containsKey(id);
+      }).toList();
+
       // 1. Teachers: active / total
-      final totalTeachers = teacherUsers.length;
-      final activeTeachers = teacherUsers.where((t) {
+      final totalTeachers = validTeacherUsers.length;
+      final activeTeachers = validTeacherUsers.where((t) {
         final id = t['id']?.toString();
         final isArchived = t['is_archived'] == true;
-        final status = teacherSettingsMap[id] ?? 'active';
+        final status = teacherSettingsMap[id];
         return !isArchived && status == 'active';
       }).length;
 
       // 2. Students: active / total
-      final totalStudents = studentUsers.length;
-      final activeStudents = studentUsers.where((s) {
+      final totalStudents = validStudentUsers.length;
+      final activeStudents = validStudentUsers.where((s) {
         final id = s['id']?.toString();
         final isArchived = s['is_archived'] == true;
-        final status = studentSettingsMap[id] ?? 'active';
+        final status = studentSettingsMap[id];
         return !isArchived && status == 'active';
       }).length;
 
       // 3. Parents: active / total
-      final totalParents = parentUsers.length;
-      final activeParents = parentUsers.where((p) {
+      final totalParents = validParentUsers.length;
+      final activeParents = validParentUsers.where((p) {
         final id = p['id']?.toString();
         final isArchived = p['is_archived'] == true;
-        final status = parentStatusMap[id] ?? 'active';
+        final status = parentStatusMap[id];
         return !isArchived && status == 'active';
       }).length;
 
       // 4. Pending first login breakdown
-      final pendingTeachers = teacherUsers.where((t) {
+      final pendingTeachers = validTeacherUsers.where((t) {
         final id = t['id']?.toString();
         return teacherSettingsMap[id] == 'pending_first_login';
       }).length;
 
-      final pendingStudents = studentUsers.where((s) {
+      final pendingStudents = validStudentUsers.where((s) {
         final id = s['id']?.toString();
         return studentSettingsMap[id] == 'pending_first_login';
       }).length;
 
-      final pendingParents = parentUsers.where((p) {
+      final pendingParents = validParentUsers.where((p) {
         final id = p['id']?.toString();
         return parentStatusMap[id] == 'pending_first_login';
       }).length;
@@ -858,7 +937,7 @@ class AdminRepository {
       final totalPendingFirstLogin =
           pendingTeachers + pendingStudents + pendingParents;
 
-      return {
+      final result = {
         'totalTeachers': totalTeachers,
         'activeTeachers': activeTeachers,
         'totalStudents': totalStudents,
@@ -870,6 +949,8 @@ class AdminRepository {
         'pendingStudents': pendingStudents,
         'pendingParents': pendingParents,
       };
+      AppDataCache.instance.set('admin_kpi_metrics', result);
+      return result;
     } catch (e) {
       debugPrint('AdminRepository getDashboardKpiMetrics error: $e');
       return {

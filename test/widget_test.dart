@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:class_realm/main.dart';
 import 'package:class_realm/features/teacher/screens/teacher_dashboard_screen.dart';
-import 'package:class_realm/features/teacher/sub_features/profile_and_reports/widgets/teacher_reports_tab.dart';
 import 'package:class_realm/models/user_model.dart';
 
 void main() {
@@ -36,12 +35,5 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Item Analysis'), findsNothing);
-
-    await tester.pumpWidget(
-      const MaterialApp(home: Scaffold(body: TeacherReportsTab())),
-    );
-    await tester.pumpAndSettle();
-
-    expect(find.text('Item Analysis Summary'), findsNothing);
   });
 }

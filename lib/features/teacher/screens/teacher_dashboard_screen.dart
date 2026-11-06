@@ -369,12 +369,18 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                     LucideIcons.checkSquare,
                     theme,
                   ),
-                  _buildNavItem(9, 'Grades', LucideIcons.award, theme),
+                  _buildNavItem(
+                    9,
+                    'Performance Analytics',
+                    LucideIcons.barChart3,
+                    theme,
+                  ),
                   const SizedBox(height: 8),
                   _buildSectionHeader('INSIGHTS & MANAGEMENT', theme),
                   _buildNavItem(14, 'My Schedule', LucideIcons.calendar, theme),
                   _buildNavItem(15, 'Notifications', LucideIcons.bell, theme),
                   _buildNavItem(16, 'Profile', LucideIcons.user, theme),
+                  _buildNavItem(10, 'Settings', LucideIcons.settings, theme),
                 ],
               ),
             ),
@@ -639,7 +645,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
       case 8:
         return 'Grading Weights';
       case 9:
-        return 'Student Achievement Records';
+        return 'Performance Analytics';
       case 12:
         return 'Manage Students';
       case 13:
@@ -650,6 +656,8 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         return 'Message & Alert Center';
       case 16:
         return 'Faculty Profile';
+      case 10:
+        return 'Settings & Privacy';
       default:
         return 'Teacher Portal';
     }
@@ -801,9 +809,10 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
       case 8:
         return TeacherGradingSystemTab(criteria: criteria);
       case 9:
-        return TeacherGradesTab(students: activeStudents);
-      case 10:
-        return const TeacherReportsTab();
+        return TeacherGradesTab(
+          students: activeStudents,
+          onNavigateToGradebook: () => _onSelectTab(18),
+        );
       case 11:
         return const TeacherAcademicSetupTab();
       case 17:
@@ -822,8 +831,15 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         return const TeacherNotificationsTab();
       case 16:
         return const TeacherProfileTab();
+      case 10:
+        return const TeacherSettingsTab();
       default:
-        return const Center(child: Text('Feature coming up'));
+        return TeacherDashboardOverviewTab(
+          activeStudents: activeStudents,
+          quizzesAndExams: quizzesAndExams,
+          onNavigateTo: (idx) => _onSelectTab(idx),
+          onCreateChooser: () => _showUnifiedCreateChooser(context),
+        );
     }
   }
 

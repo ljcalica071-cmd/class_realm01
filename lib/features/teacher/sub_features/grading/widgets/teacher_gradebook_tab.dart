@@ -14,6 +14,8 @@ import 'package:class_realm/data/repositories/supabase_student_repository.dart';
 import 'package:class_realm/features/teacher/sub_features/grading/widgets/gradebook_grid_cell.dart';
 import 'package:class_realm/models/subject_catalog_model.dart';
 import 'package:class_realm/shared/widgets/shimmer_loading.dart';
+import 'package:class_realm/core/services/supabase_service.dart';
+import 'package:class_realm/widgets/common/app_modals.dart';
 
 /// DepEd-style Strengthened SHS Class Record (Gradebook).
 /// Mirrors the official DepEd grading spreadsheet layout with
@@ -54,6 +56,7 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
   Timer? _filterTransitionTimer;
   final Set<String> _loadedOfferingIds = <String>{};
   final Set<String> _visitedFilterKeys = <String>{};
+  Set<String> _classworkOccupiedSlots = <String>{};
 
   int _selectedTerm = 1;
   final ScrollController _termHeaderHorizontalController = ScrollController();
@@ -511,10 +514,48 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
   void _setHps(String category, int col, double? value) {
     final term = _selectedTerm;
     final current = _termHps[term]?[category]?[col];
-    // Prevent deleting/blanking an already-set HPS; teacher can replace it with 1..100.
+
+    // Deleting/clearing an already-set HPS
     if (value == null && current != null) {
+      final slotKey = '$term-$category-$col';
+      if (_classworkOccupiedSlots.contains(slotKey)) {
+        AppModals.showWarningDialog(
+          context: context,
+          title: 'Linked to Classwork',
+          message:
+              'This Highest Possible Score (HPS) was set by a Classwork item and cannot be deleted directly from the Gradebook. To remove it, delete the activity from the Classwork tab.',
+        );
+        _hpsRevision.value++;
+        return;
+      }
+
+      bool hasScores = false;
+      for (final student in _students) {
+        final score = _getScore(student.id, category, col);
+        if (score != null) {
+          hasScores = true;
+          break;
+        }
+      }
+
+      if (hasScores) {
+        AppModals.showWarningDialog(
+          context: context,
+          title: 'Cannot Delete HPS',
+          message:
+              'Cannot delete this Highest Possible Score (HPS) because one or more students already have recorded scores in this column. Clear the student scores first before removing the HPS.',
+        );
+        _hpsRevision.value++;
+        return;
+      }
+
+      // Safe to delete HPS
+      _termHps[term]?[category]?.remove(col);
+      _hpsRevision.value++;
+      _scheduleSheetSave();
       return;
     }
+
     if (current == value) return;
     _termHps[term]![category]![col] = value;
     _hpsRevision.value++;
@@ -678,11 +719,41 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
       }
     }
     try {
-      final sheets = await Future.wait([
-        for (final term in const [1, 2, 3])
-          SubjectRepository.instance.getGradebookTermSheet(offeringId, term),
+      final client = SupabaseService().client;
+      final classworkFuture = client
+          .from('classwork_items')
+          .select('grading_category, term_number, gradebook_column_index')
+          .eq('subject_offering_id', offeringId)
+          .eq('is_archived', false);
+
+      final results = await Future.wait([
+        Future.wait([
+          for (final term in const [1, 2, 3])
+            SubjectRepository.instance.getGradebookTermSheet(offeringId, term),
+        ]),
+        classworkFuture.catchError((_) => []),
       ]);
+
       if (!mounted || request != _sheetLoadRequest) return;
+      final sheets = results[0];
+      final classworkData = results[1] as List? ?? [];
+
+      final occupied = <String>{};
+      for (final item in classworkData) {
+        if (item is Map) {
+          final cat = item['grading_category']?.toString().toLowerCase();
+          final term = (item['term_number'] as num?)?.toInt() ?? 1;
+          final colIdx = (item['gradebook_column_index'] as num?)?.toInt();
+          if (cat != null && colIdx != null) {
+            final zeroCol = (cat == 'ex')
+                ? (colIdx == 1 ? 0 : (colIdx == 2 ? 1 : 2))
+                : (colIdx - 1);
+            occupied.add('$term-$cat-$zeroCol');
+          }
+        }
+      }
+      _classworkOccupiedSlots = occupied;
+
       _wwColumns = defaultCategoryColumns;
       _ptColumns = defaultCategoryColumns;
       for (final term in const [1, 2, 3]) {
@@ -2926,7 +2997,9 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
     final hasStudents = _students.isNotEmpty;
     final enabled = isEnabled && hasStudents;
     return GradebookGridCell(
-      key: ValueKey('hps-$offeringId-$_selectedTerm-$category-$col'),
+      key: ValueKey(
+        'hps-$offeringId-$_selectedTerm-$category-$col-${val?.toStringAsFixed(0) ?? ''}',
+      ),
       value: val?.toStringAsFixed(0) ?? '',
       onChanged: (value) =>
           _setHps(category, col, value.isEmpty ? null : double.parse(value)),

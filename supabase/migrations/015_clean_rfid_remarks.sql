@@ -220,8 +220,7 @@ BEGIN
             SET status = v_calculated_status,
                 recording_method = 'RFID',
                 time_in = v_scan_time,
-                device_id = v_effective_device,
-                updated_at = now()
+                device_id = v_effective_device
             WHERE id = v_existing.id;
 
             RETURN jsonb_build_object(
@@ -241,8 +240,7 @@ BEGIN
             SET status = v_calculated_status,
                 recording_method = 'RFID',
                 time_in = v_scan_time,
-                device_id = v_effective_device,
-                updated_at = now()
+                device_id = v_effective_device
             WHERE id = v_existing.id;
 
             RETURN jsonb_build_object(
@@ -262,8 +260,7 @@ BEGIN
            AND v_scan_time < v_existing.time_in THEN
             UPDATE public.attendance_records
             SET time_in = v_scan_time,
-                device_id = v_effective_device,
-                updated_at = now()
+                device_id = v_effective_device
             WHERE id = v_existing.id;
 
             RETURN jsonb_build_object(
@@ -302,8 +299,7 @@ BEGIN
         time_in,
         device_id,
         remarks,
-        created_at,
-        updated_at
+        created_at
     ) VALUES (
         v_student_id,
         p_subject_offering_id,
@@ -313,7 +309,6 @@ BEGIN
         v_scan_time,
         v_effective_device,
         NULL,
-        now(),
         now()
     )
     ON CONFLICT (student_id, subject_offering_id, attendance_date) DO NOTHING;
@@ -377,8 +372,7 @@ BEGIN
             status,
             recording_method,
             remarks,
-            created_at,
-            updated_at
+            created_at
         )
         SELECT
             se.student_id,
@@ -387,7 +381,6 @@ BEGIN
             'absent',
             'System',
             NULL,
-            now(),
             now()
         FROM public.student_enrollments se
         JOIN scheduled_offerings sched

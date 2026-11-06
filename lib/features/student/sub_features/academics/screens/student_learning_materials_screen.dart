@@ -287,19 +287,11 @@ class _StudentLearningMaterialsScreenState
         return;
       }
 
-      // Storage download attempt
-      if (material.storagePathUrl.isEmpty ||
-          !material.storagePathUrl.startsWith('http')) {
-        throw Exception('Cloud storage address is not currently reachable.');
-      }
-
-      // Simulate client-side safe stream / download check
-      await Future.delayed(const Duration(milliseconds: 600));
-
+      // Offline file download is scheduled for the next update
       if (!mounted) return;
-      _showToast(
-        'Offline copy prepared! You can access it anytime.',
-        isError: false,
+      await AppModals.showUpcomingFeatureDialog(
+        context,
+        featureName: 'Offline Material Download',
       );
     } on FileSystemException {
       // Edge Case #26: Storage full / Disk error
@@ -332,17 +324,6 @@ class _StudentLearningMaterialsScreenState
             child: const Text('OK'),
           ),
         ],
-      ),
-    );
-  }
-
-  void _showToast(String msg, {required bool isError}) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(msg),
-        backgroundColor: isError ? Colors.red.shade700 : Colors.teal.shade700,
-        behavior: SnackBarBehavior.floating,
       ),
     );
   }

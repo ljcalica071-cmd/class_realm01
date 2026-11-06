@@ -796,7 +796,7 @@ class _TeacherUnifiedAssessmentsTabState
             },
       actionLabel: 'View Submissions',
       onEdit: () => _showEditActivityModal(item),
-      onDelete: category == 'EX' ? null : () => _confirmDeleteActivity(item),
+      onDelete: () => _confirmDeleteActivity(item),
     );
   }
 
@@ -808,16 +808,19 @@ class _TeacherUnifiedAssessmentsTabState
       details:
           '${item.section} • ${item.totalPoints.toInt()} pts • Start ${_monthName(item.scheduleDate.month)} ${item.scheduleDate.day}, ${_formatTime(item.scheduleDate)}',
       icon: item.isExam ? Icons.description_outlined : Icons.quiz_outlined,
-      onPressed: () {},
-      actionLabel: 'View Scores',
+      onPressed: () {
+        AppModals.showUpcomingFeatureDialog(
+          context,
+          featureName: 'Assessment Score Summary',
+        );
+      },
+      actionLabel: 'View Scores (Next Update)',
       onEdit: () => EditAssessmentFlowDialog.show(
         context,
         assessment: item,
         onAssessmentUpdated: () => setState(() {}),
       ),
-      onDelete: (item.isExam || category == 'EX')
-          ? null
-          : () => _confirmDeleteAssessment(item),
+      onDelete: () => _confirmDeleteAssessment(item),
       onReschedule: () => _showRescheduleAssessmentDialog(item),
       onProctor: () => LiveProctorMonitorModal.show(
         context: context,
@@ -1113,7 +1116,70 @@ class _TeacherUnifiedAssessmentsTabState
     );
   }
 
-  void _confirmDeleteActivity(ActivityModel item) {
+  Future<void> _confirmDeleteActivity(ActivityModel item) async {
+    bool hasRecords = false;
+    try {
+      final client = SupabaseService().client;
+      // 1. Check student submissions for existing scores or submitted work
+      final submissions = await client
+          .from('student_classwork_submissions')
+          .select('id, score, status')
+          .eq('classwork_id', item.id);
+      final subList = List<Map<String, dynamic>>.from(
+        submissions as List? ?? [],
+      );
+      for (final s in subList) {
+        if (s['score'] != null ||
+            s['status'] == 'graded' ||
+            s['status'] == 'submitted') {
+          hasRecords = true;
+          break;
+        }
+      }
+
+      // 2. Also check Gradebook sheet if subjectOfferingId and gradebookColumnIndex exist
+      if (!hasRecords &&
+          item.subjectOfferingId != null &&
+          item.gradebookColumnIndex != null) {
+        final term = item.termNumber > 0 ? item.termNumber : 1;
+        final termSheet =
+            await SubjectRepository.instance.getGradebookTermSheet(
+              item.subjectOfferingId!,
+              term,
+            );
+        if (termSheet != null && termSheet['scores'] is Map) {
+          final scoresMap = termSheet['scores'] as Map;
+          final catKey = item.isRequirement ? 'pt' : 'ww';
+          final colKey = item.gradebookColumnIndex.toString();
+          for (final studentVal in scoresMap.values) {
+            if (studentVal is Map && studentVal[catKey] is Map) {
+              final catScores = studentVal[catKey] as Map;
+              if (catScores[colKey] != null ||
+                  catScores[(item.gradebookColumnIndex! - 1).toString()] !=
+                      null) {
+                hasRecords = true;
+                break;
+              }
+            }
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('Notice checking activity score records: $e');
+    }
+
+    if (!mounted) return;
+
+    if (hasRecords) {
+      AppModals.showWarningDialog(
+        context: context,
+        title: 'Cannot Delete Item',
+        message:
+            'This classwork activity already has recorded student scores or submissions. Items with existing student records cannot be deleted.',
+      );
+      return;
+    }
+
     _showDeleteConfirmation(
       title: item.title,
       onDelete: () async {
@@ -1128,14 +1194,119 @@ class _TeacherUnifiedAssessmentsTabState
     );
   }
 
-  void _confirmDeleteAssessment(QuizOrExamModel item) {
+  Future<void> _confirmDeleteAssessment(QuizOrExamModel item) async {
+    bool hasRecords = false;
+    try {
+      final client = SupabaseService().client;
+      // 1. Check assessment_attempts for submitted or scored attempts
+      final attempts = await client
+          .from('assessment_attempts')
+          .select('id, score, status')
+          .eq('assessment_id', item.id);
+      final attemptList = List<Map<String, dynamic>>.from(
+        attempts as List? ?? [],
+      );
+      for (final a in attemptList) {
+        if (a['score'] != null || a['status'] == 'submitted') {
+          hasRecords = true;
+          break;
+        }
+      }
+
+      // 2. Check classwork submissions if item exists in classwork_items
+      if (!hasRecords) {
+        final classworkRow = await client
+            .from('classwork_items')
+            .select(
+              'id, subject_offering_id, term_number, gradebook_column_index, grading_category',
+            )
+            .eq('id', item.id)
+            .maybeSingle();
+
+        if (classworkRow != null) {
+          final subs = await client
+              .from('student_classwork_submissions')
+              .select('id, score, status')
+              .eq('classwork_id', item.id);
+          final subList = List<Map<String, dynamic>>.from(subs as List? ?? []);
+          for (final s in subList) {
+            if (s['score'] != null ||
+                s['status'] == 'graded' ||
+                s['status'] == 'submitted') {
+              hasRecords = true;
+              break;
+            }
+          }
+
+          final offeringId = classworkRow['subject_offering_id']?.toString();
+          final termNumber =
+              (classworkRow['term_number'] as num?)?.toInt() ?? 1;
+          final colIdx =
+              (classworkRow['gradebook_column_index'] as num?)?.toInt();
+          final category =
+              classworkRow['grading_category']?.toString().toLowerCase() ??
+              (item.isExam ? 'ex' : 'ww');
+          if (!hasRecords && offeringId != null && colIdx != null) {
+            final termSheet =
+                await SubjectRepository.instance.getGradebookTermSheet(
+                  offeringId,
+                  termNumber,
+                );
+            if (termSheet != null && termSheet['scores'] is Map) {
+              final scoresMap = termSheet['scores'] as Map;
+              final colKey = category == 'ex'
+                  ? (colIdx == 1 ? 'st1' : (colIdx == 2 ? 'st2' : 'te'))
+                  : colIdx.toString();
+              for (final studentVal in scoresMap.values) {
+                if (studentVal is Map && studentVal[category] is Map) {
+                  final catScores = studentVal[category] as Map;
+                  if (catScores[colKey] != null) {
+                    hasRecords = true;
+                    break;
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('Notice checking assessment records: $e');
+    }
+
+    if (!mounted) return;
+
+    if (hasRecords) {
+      AppModals.showWarningDialog(
+        context: context,
+        title: 'Cannot Delete ${item.isExam ? 'Examination' : 'Quiz'}',
+        message:
+            'This ${item.isExam ? 'examination' : 'quiz'} already has recorded student attempts or scores. Items with existing student records cannot be deleted.',
+      );
+      return;
+    }
+
     _showDeleteConfirmation(
       title: item.title,
-      onDelete: () {
-        setState(() {
-          widget.assessments.removeWhere((q) => q.id == item.id);
-        });
-        widget.onRefresh?.call();
+      onDelete: () async {
+        try {
+          final client = SupabaseService().client;
+          await client
+              .from('classwork_items')
+              .update({'is_archived': true})
+              .eq('id', item.id);
+          await client
+              .from('digital_assessments')
+              .delete()
+              .eq('id', item.id);
+        } catch (_) {}
+
+        if (mounted) {
+          setState(() {
+            widget.assessments.removeWhere((q) => q.id == item.id);
+          });
+          widget.onRefresh?.call();
+        }
       },
     );
   }
@@ -1147,7 +1318,7 @@ class _TeacherUnifiedAssessmentsTabState
     showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
-        builder: (context, setModalState) => AlertDialog(
+        builder: (modalCtx, setModalState) => AlertDialog(
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
           ),
@@ -1156,13 +1327,13 @@ class _TeacherUnifiedAssessmentsTabState
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.primary
+                  color: Theme.of(modalCtx).colorScheme.primary
                       .withValues(alpha: 0.1),
                   shape: BoxShape.circle,
                 ),
                 child: Icon(
                   Icons.schedule,
-                  color: Theme.of(context).colorScheme.primary,
+                  color: Theme.of(modalCtx).colorScheme.primary,
                   size: 20,
                 ),
               ),
@@ -1208,6 +1379,7 @@ class _TeacherUnifiedAssessmentsTabState
                     lastDate: DateTime.now().add(const Duration(days: 90)),
                   );
                   if (pickedDate != null) {
+                    if (!mounted) return;
                     final pickedTime = await showTimePicker(
                       context: context,
                       initialTime: TimeOfDay.fromDateTime(newDate),

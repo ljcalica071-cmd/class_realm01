@@ -415,7 +415,7 @@ class AuthRepository {
           _supabaseClient
               .from('student_settings')
               .select(
-                'student_id, status, student_profiles!inner(student_id, lrn, first_name, middle_name, last_name, birthday, gender)',
+                '*, student_profiles!inner(student_id, lrn, first_name, middle_name, last_name, birthday, gender)',
               )
               .eq('student_id', uid)
               .single(),
@@ -444,6 +444,16 @@ class AuthRepository {
             ? (sectionRaw.isNotEmpty ? sectionRaw.first : null)
             : sectionRaw;
 
+        final localPrivacy = LocalStorageService.getStudentGradePrivacy(uid);
+        final hideTerm =
+            infoResp?['hide_term_grades_from_parent'] == true ||
+            (infoResp?['hide_term_grades_from_parent'] == null &&
+                localPrivacy?['hideTermGrades'] == true);
+        final hideFinal =
+            infoResp?['hide_final_grades_from_parent'] == true ||
+            (infoResp?['hide_final_grades_from_parent'] == null &&
+                localPrivacy?['hideFinalGrades'] == true);
+
         return custom.UserModel(
           id: uid,
           username: profile['lrn']?.toString() ?? userResp['email'],
@@ -469,6 +479,8 @@ class AuthRepository {
           gradeLevel: section is Map
               ? section['grade_level']?.toString()
               : null,
+          hideTermGradesFromParent: hideTerm,
+          hideFinalGradesFromParent: hideFinal,
           status: _parseStatus(infoResp?['status']?.toString() ?? 'active'),
           isArchived: isArchived,
         );

@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -206,7 +205,9 @@ class _LoginScreenState extends State<LoginScreen> {
       // Save Remember Me state (email only, never plaintext password) and trigger browser autofill
       if (user != null) {
         final email = _emailController.text.trim();
-        final isFirstLogin = user.status == AccountStatus.pendingFirstLogin || user.status == AccountStatus.pending;
+        final isFirstLogin =
+            user.status == AccountStatus.pendingFirstLogin ||
+            user.status == AccountStatus.pending;
         // Only commit the autofill context on a successful normal login
         // (screen is about to be replaced, so no DOM input is left detached).
         if (!isFirstLogin) {
@@ -370,7 +371,8 @@ class _LoginScreenState extends State<LoginScreen> {
       AppModals.showErrorDialog(
         context: context,
         title: 'Account Unavailable',
-        message: 'This account cannot access ClassRealm. Please contact the school administrator.',
+        message:
+            'This account cannot access ClassRealm. Please contact the school administrator.',
       );
       return;
     }
@@ -519,8 +521,9 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     inputFormatters: AppValidators.passwordFormatters,
                     validator: (v) {
-                      if (v == null || v.trim().isEmpty)
+                      if (v == null || v.trim().isEmpty) {
                         return 'Password is required';
+                      }
                       return null;
                     },
                     decoration: AuthResponsiveScaffold.inputDecoration(
@@ -635,7 +638,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
             const SizedBox(height: 16),
 
-            // Terms and Conditions / Privacy Policy footer
+            // Terms of Service / Privacy Policy footer
             Wrap(
               alignment: WrapAlignment.center,
               crossAxisAlignment: WrapCrossAlignment.center,
@@ -647,7 +650,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 InkWell(
                   onTap: _showTermsDialog,
                   child: const Text(
-                    'Terms and Conditions',
+                    'Terms of Service',
                     style: TextStyle(
                       fontSize: 11.5,
                       fontWeight: FontWeight.bold,
@@ -683,275 +686,10 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _showTermsDialog() {
-    return _showConsentDocumentDialog(
-      title: 'Terms and Conditions',
-      content: [
-        _buildSubSection(
-          '1. Acceptance of Terms',
-          'By accessing or using ClassRealm, an Integrated Senior High School Academic Management System for Eduardo Barretto Senior Integrated School, you agree to be bound by these terms. If you do not agree, please do not use the system.',
-        ),
-        _buildSubSection(
-          '2. User Responsibilities',
-          'â€¢ Teachers: Responsible for accurate input of grades, assessments, and securing their authentication credentials.\n'
-              'â€¢ Students: Must maintain academic integrity, provide accurate personal details, and ensure their RFID tags are only used by them.\n'
-              'â€¢ Parents: Granted access strictly for monitoring their child\'s academic progress and attendance.',
-        ),
-        _buildSubSection(
-          '3. Acceptable Use',
-          'The system is provided solely for educational and administrative purposes. Users must interact with the platform securely and respect the privacy of other users.',
-        ),
-        _buildSubSection(
-          '4. Prohibited Conduct & Anti-Cheating',
-          'ClassRealm actively monitors "suspicious session events" (e.g., leaving the active quiz tab) during assessments. Any form of cheating, sharing of credentials, or bypassing monitoring mechanisms is strictly prohibited and will be logged for disciplinary review.',
-        ),
-        _buildSubSection(
-          '5. Limitation of Liability',
-          'The developers and the school are not liable for any temporary service interruptions or data loss caused by unauthorized user actions or hardware failures.',
-        ),
-      ],
-    );
+    return LegalDocumentsModal.showTermsOfService(context);
   }
 
   Future<void> _showPrivacyDialog() {
-    return _showConsentDocumentDialog(
-      title: 'Privacy Policy',
-      subtitle: 'RA 10173 - Data Privacy Act of 2012',
-      content: [
-        Text(
-          'We protect your personal information in compliance with the Philippine Data Privacy Act of 2012 (RA 10173).',
-          textAlign: TextAlign.justify,
-          style: TextStyle(
-            fontSize: 13,
-            height: 1.5,
-            fontWeight: FontWeight.w600,
-            color: Theme.of(context).colorScheme.onSurface,
-          ),
-        ),
-        const SizedBox(height: 14),
-        _buildSubSection(
-          '1. Information We Collect',
-          'â€¢ Personal Information: Names, Student IDs (LRN), Emails, Contact Numbers, Birthdays, and Gender.\n'
-              'â€¢ Academic Data: Submissions, quiz/exam scores, calculated grades, and attendance records.\n'
-              'â€¢ RFID & Hardware Data: Attendance scan records from RFID cards read by the ESP32 scanner.\n'
-              'â€¢ Technical Data: Suspicious session events during assessments.',
-        ),
-        _buildSubSection(
-          '2. How We Use the Information',
-          'Collected data is used strictly for academic evaluation, generating student progress reports, tracking attendance, and ensuring academic integrity during examinations.',
-        ),
-        _buildSubSection(
-          '3. Offline & Cloud Storage Syncing',
-          'ClassRealm uses an offline-first architecture. Data is temporarily stored locally on your device when offline, and automatically synced to our secure cloud databases once an internet connection is established.',
-        ),
-        _buildSubSection(
-          '4. Third-Party Services',
-          'We utilize secure, industry-standard third-party services including Firebase and Supabase for authentication and cloud database management. They comply with strict data security standards.',
-        ),
-        _buildSubSection(
-          '5. Data Retention & User Rights',
-          'Your data is retained only as long as necessary for educational records. Under RA 10173, you have the right to access, rectify, or object to the processing of your personal information by contacting the system administrator.',
-        ),
-      ],
-    );
-  }
-
-  Future<void> _showConsentDocumentDialog({
-    required String title,
-    String? subtitle,
-    required List<Widget> content,
-  }) {
-    return showGeneralDialog<void>(
-      context: context,
-      barrierDismissible: true,
-      barrierLabel: 'Close',
-      barrierColor: Colors.black.withValues(alpha: 0.55),
-      transitionDuration: const Duration(milliseconds: 250),
-      pageBuilder: (dialogContext, animation, secondaryAnimation) {
-        final size = MediaQuery.sizeOf(dialogContext);
-        final dialogWidth = (size.width - 40).clamp(320.0, 560.0);
-        final dialogMaxHeight = size.height * 0.80;
-
-        return Center(
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 4, sigmaY: 4),
-            child: Material(
-              color: Colors.transparent,
-              child: Container(
-                width: dialogWidth,
-                constraints: BoxConstraints(maxHeight: dialogMaxHeight),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(24),
-                  border: Border.all(
-                    color: const Color(0xFFE2E8F0),
-                    width: 1.5,
-                  ),
-                  boxShadow: const [
-                    BoxShadow(
-                      color: Color(0x1F0F172A),
-                      blurRadius: 32,
-                      offset: Offset(0, 12),
-                    ),
-                  ],
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    // --- HEADER ---
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(24, 20, 16, 16),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  title,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w800,
-                                    fontSize: 20,
-                                    color: Color(0xFF0F172A),
-                                  ),
-                                ),
-                                if (subtitle != null) ...[
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    subtitle,
-                                    style: const TextStyle(
-                                      color: Color(0xFF2563EB),
-                                      fontWeight: FontWeight.w700,
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                ],
-                              ],
-                            ),
-                          ),
-                          IconButton(
-                            icon: const Icon(
-                              LucideIcons.x,
-                              size: 20,
-                              color: Color(0xFF64748B),
-                            ),
-                            onPressed: () => Navigator.of(dialogContext).pop(),
-                            tooltip: 'Close',
-                            style: IconButton.styleFrom(
-                              backgroundColor: const Color(0xFFF1F5F9),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const Divider(
-                      height: 1,
-                      thickness: 1,
-                      color: Color(0xFFE2E8F0),
-                    ),
-
-                    // --- SCROLLABLE BODY ---
-                    Flexible(
-                      child: SingleChildScrollView(
-                        padding: const EdgeInsets.fromLTRB(24, 20, 24, 20),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: content,
-                        ),
-                      ),
-                    ),
-
-                    // --- SEPARATE FOOTER ACTION BAR ---
-                    const Divider(
-                      height: 1,
-                      thickness: 1,
-                      color: Color(0xFFE2E8F0),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 24,
-                        vertical: 14,
-                      ),
-                      decoration: const BoxDecoration(
-                        color: Color(0xFFF8FAFC),
-                        borderRadius: BorderRadius.only(
-                          bottomLeft: Radius.circular(24),
-                          bottomRight: Radius.circular(24),
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        children: [
-                          FilledButton(
-                            onPressed: () => Navigator.of(dialogContext).pop(),
-                            style: FilledButton.styleFrom(
-                              backgroundColor: const Color(0xFF2563EB),
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 24,
-                                vertical: 12,
-                              ),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                            child: const Text(
-                              'Close',
-                              style: TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-      transitionBuilder: (context, animation, secondaryAnimation, child) {
-        return FadeTransition(
-          opacity: animation,
-          child: ScaleTransition(
-            scale: Tween<double>(begin: 0.95, end: 1.0).animate(
-              CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
-            ),
-            child: child,
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildSubSection(String title, String content) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 18.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.bold,
-              letterSpacing: -0.2,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            content,
-            textAlign: TextAlign.justify,
-            style: TextStyle(
-              fontSize: 13,
-              height: 1.55,
-              color: Theme.of(context).colorScheme.onSurface
-                  .withValues(alpha: 0.85),
-            ),
-          ),
-        ],
-      ),
-    );
+    return LegalDocumentsModal.showPrivacyPolicy(context);
   }
 }

@@ -3,7 +3,9 @@ export 'buttons/app_buttons.dart'; // AppButton, AppButtonType, AppPrimaryButton
 export 'inputs/app_text_field.dart';
 export 'inputs/password_requirements_checklist.dart'; // PasswordRequirementsChecklist
 export 'modals/app_modals.dart';
+export 'modals/legal_documents_modal.dart';
 export 'modals/password_otp_dialog.dart'; // PasswordOtpDialog
+export 'portal_settings_content.dart';
 export 'badges/status_badge.dart'; // StatusBadge, AppSectionBanner, AppTableHeader, AppTableColumn
 export 'badges/sync_status_badge.dart'; // SyncStatusBadge
 export 'animations/staggered_entrance.dart'; // StaggeredEntrance

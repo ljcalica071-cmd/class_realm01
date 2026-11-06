@@ -432,6 +432,103 @@ class AppModals {
     );
   }
 
+  static Future<void> showUpcomingFeatureDialog(
+    BuildContext context, {
+    required String featureName,
+    String? customMessage,
+  }) {
+    final theme = Theme.of(context);
+    final accentColor = theme.colorScheme.primary;
+    final message =
+        customMessage ??
+        'The $featureName feature is currently being finalized and will be available in the next ClassRealm system update.';
+
+    return showDialog(
+      context: context,
+      builder: (ctx) => Theme(
+        data: theme,
+        child: Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          elevation: 16,
+          backgroundColor: theme.colorScheme.surface,
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 440),
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: accentColor.withValues(alpha: 0.12),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.upcoming_rounded,
+                        color: accentColor,
+                        size: 24,
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Available in Next System Update',
+                            style: TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.bold,
+                              color: theme.colorScheme.onSurface,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Module Update In Progress',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: accentColor,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  message,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
+                    height: 1.5,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: AppPrimaryButton(
+                    label: 'Got It',
+                    backgroundColor: accentColor,
+                    onPressed: () => Navigator.of(ctx).pop(),
+                    width: 120,
+                    height: 40,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   static Future<void> showWarningDialog({
     required BuildContext context,
     required String title,

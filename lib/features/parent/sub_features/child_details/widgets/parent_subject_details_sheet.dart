@@ -2,19 +2,24 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:class_realm/core/theme/app_theme.dart';
+import 'package:class_realm/core/utils/deped_grading_engine.dart';
 import 'package:class_realm/models/academic_models.dart';
+import 'package:class_realm/models/subject_catalog_model.dart';
+import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/widgets/common/app_modals.dart';
 
 class ParentSubjectDetailsSheet extends StatelessWidget {
   final Map<String, dynamic> offering;
   final List<ScheduleModel> schedules;
   final Map<int, Map<String, dynamic>> termGrades;
+  final UserModel? student;
 
   const ParentSubjectDetailsSheet({
     super.key,
     required this.offering,
     this.schedules = const [],
     this.termGrades = const {},
+    this.student,
   });
 
   static void show(
@@ -22,6 +27,7 @@ class ParentSubjectDetailsSheet extends StatelessWidget {
     required Map<String, dynamic> offering,
     List<ScheduleModel> schedules = const [],
     Map<int, Map<String, dynamic>> termGrades = const {},
+    UserModel? student,
   }) {
     showModalBottomSheet(
       context: context,
@@ -31,6 +37,7 @@ class ParentSubjectDetailsSheet extends StatelessWidget {
         offering: offering,
         schedules: schedules,
         termGrades: termGrades,
+        student: student,
       ),
     );
   }
@@ -38,7 +45,37 @@ class ParentSubjectDetailsSheet extends StatelessWidget {
   static Map<String, dynamic> _asMap(dynamic value) {
     if (value is Map<String, dynamic>) return value;
     if (value is Map) return Map<String, dynamic>.from(value);
+    if (value is List && value.isNotEmpty && value.first is Map) {
+      return Map<String, dynamic>.from(value.first as Map);
+    }
     return const {};
+  }
+
+  static List<int> _activeTerms(int termsTaught, String termBlock) {
+    try {
+      return DepEdSubjectCatalog.getActiveTermsForBlock(termsTaught, termBlock);
+    } on ArgumentError {
+      return switch (termsTaught) {
+        1 => const [1],
+        2 => const [1, 2],
+        _ => const [1, 2, 3],
+      };
+    }
+  }
+
+  static int? _encodedTermGrade(Map<String, dynamic>? row) {
+    if (row == null) return null;
+    final grade = row['transmuted_grade'];
+    final parsed = grade is num ? grade.toDouble() : double.tryParse('$grade');
+    final remarks = row['remarks']?.toString().toLowerCase();
+    final isFinalized = row['is_finalized'] == true;
+    if (parsed == null ||
+        (!isFinalized &&
+            parsed == 0 &&
+            (remarks == null || remarks == 'incomplete'))) {
+      return null;
+    }
+    return parsed.round();
   }
 
   @override
@@ -55,34 +92,76 @@ class ParentSubjectDetailsSheet extends StatelessWidget {
     final sectionName = sectionsMap['section_name']?.toString() ?? '';
 
     final teacherMap = _asMap(offering['teacher_profiles']);
-    final teacherFirstName = teacherMap['first_name']?.toString() ?? '';
-    final teacherLastName = teacherMap['last_name']?.toString() ?? '';
-    final teacherGender = teacherMap['gender']?.toString() ?? '';
+    final teacherFirstName =
+        teacherMap['first_name']?.toString().trim() ?? '';
+    final teacherMiddleName =
+        teacherMap['middle_name']?.toString().trim() ?? '';
+    final teacherLastName = teacherMap['last_name']?.toString().trim() ?? '';
+    final teacherGender = teacherMap['gender']?.toString().trim() ?? '';
     final teacherName = [
       teacherFirstName,
+      if (teacherMiddleName.isNotEmpty) teacherMiddleName,
       teacherLastName,
     ].where((s) => s.isNotEmpty).join(' ');
-    final teacherTitle = teacherGender.toLowerCase() == 'female'
-        ? 'Ms.'
-        : 'Mr.';
+    final gLower = teacherGender.toLowerCase();
+    final teacherTitle = (gLower == 'female' || gLower == 'f')
+        ? "Ma'am"
+        : (gLower == 'male' || gLower == 'm')
+        ? 'Sir'
+        : 'Teacher';
     final teacherDisplayName = teacherName.isNotEmpty
         ? '$teacherTitle $teacherName'
         : 'Assigned Subject Teacher';
 
-    final teacherEmail =
-        teacherMap['email']?.toString() ??
-        (teacherLastName.isNotEmpty
-            ? '${teacherLastName.toLowerCase()}@classrealm.edu'
-            : '');
+    final nestedSettings = _asMap(teacherMap['teacher_settings']);
+    final teacherEmail = teacherMap['email']?.toString().trim() ?? '';
+    final consultationHours =
+        (teacherMap['consultation_hours'] ??
+                nestedSettings['consultation_hours'])
+            ?.toString()
+            .trim() ??
+        '';
+    final specialization =
+        teacherMap['subject_specialization']?.toString().trim() ?? '';
+    final isPhonePublic =
+        teacherMap['is_phone_public'] == true ||
+        nestedSettings['is_phone_public'] == true;
+    final contactNumber = isPhonePublic
+        ? (teacherMap['contact_number']?.toString().trim() ?? '')
+        : '';
+    final isFacebookPublic =
+        teacherMap['is_facebook_public'] == true ||
+        nestedSettings['is_facebook_public'] == true;
+    final facebookLink = isFacebookPublic
+        ? ((teacherMap['facebook_link'] ?? nestedSettings['facebook_link'])
+                  ?.toString()
+                  .trim() ??
+              '')
+        : '';
 
-    final termsTaught = (offering['terms_taught'] as num?)?.toInt() ?? 3;
-    final termBlock = offering['term_block']?.toString();
+    final termsTaught = ((offering['terms_taught'] as num?)?.toInt() ?? 3)
+        .clamp(1, 3);
+    final termBlock = offering['term_block']?.toString() ?? '1ST, 2ND, 3RD';
+    final activeTerms = _activeTerms(termsTaught, termBlock);
 
     final wwWeight = (offering['ww_weight'] as num?)?.toInt() ?? 25;
     final ptWeight = (offering['pt_weight'] as num?)?.toInt() ?? 50;
     final exWeight = (offering['ex_weight'] as num?)?.toInt() ?? 25;
 
-    // Filter schedules for this subject
+    final hideTermGrades = student?.effectiveHideTermGradesFromParent ?? false;
+    final hideFinalGrades =
+        student?.effectiveHideFinalGradesFromParent ?? false;
+
+    final encodedGradesMap = <int, int?>{
+      for (final term in activeTerms)
+        term: _encodedTermGrade(termGrades[term]),
+    };
+    final computedFinalGrade = DepEdGradingEngine.computeFinalGrade(
+      termsTaught: activeTerms.length,
+      activeTerms: activeTerms,
+      termGrades: encodedGradesMap,
+    );
+
     final relevantSchedules = schedules.where((s) {
       final sSubject = s.subject.toLowerCase();
       if (subjectCode.isNotEmpty &&
@@ -94,7 +173,7 @@ class ParentSubjectDetailsSheet extends StatelessWidget {
     }).toList();
 
     return DraggableScrollableSheet(
-      initialChildSize: 0.82,
+      initialChildSize: 0.84,
       minChildSize: 0.5,
       maxChildSize: 0.94,
       builder: (context, scrollController) {
@@ -112,7 +191,6 @@ class ParentSubjectDetailsSheet extends StatelessWidget {
           ),
           child: Column(
             children: [
-              // Drag handle
               Center(
                 child: Container(
                   width: 44,
@@ -124,8 +202,6 @@ class ParentSubjectDetailsSheet extends StatelessWidget {
                   ),
                 ),
               ),
-
-              // Header
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 8, 12, 12),
                 child: Row(
@@ -135,7 +211,9 @@ class ParentSubjectDetailsSheet extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Row(
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 6,
                             children: [
                               if (subjectCode.isNotEmpty)
                                 Container(
@@ -143,7 +221,6 @@ class ParentSubjectDetailsSheet extends StatelessWidget {
                                     horizontal: 8,
                                     vertical: 2.5,
                                   ),
-                                  margin: const EdgeInsets.only(right: 8),
                                   decoration: BoxDecoration(
                                     color: theme.colorScheme.primary.withValues(
                                       alpha: 0.12,
@@ -171,8 +248,8 @@ class ParentSubjectDetailsSheet extends StatelessWidget {
                                 ),
                                 child: Text(
                                   termsTaught == 1
-                                      ? '1 Term${termBlock != null ? " ($termBlock)" : ""}'
-                                      : '3 Terms Full Year',
+                                      ? '1 Term ($termBlock)'
+                                      : '$termsTaught Terms ($termBlock)',
                                   style: TextStyle(
                                     fontSize: 10.5,
                                     fontWeight: FontWeight.w600,
@@ -193,7 +270,7 @@ class ParentSubjectDetailsSheet extends StatelessWidget {
                           if (sectionName.isNotEmpty) ...[
                             const SizedBox(height: 2),
                             Text(
-                              'Enrolled in $sectionName ($gradeLevel)',
+                              'Enrolled in $sectionName (Grade $gradeLevel)',
                               style: TextStyle(
                                 fontSize: 12,
                                 color: theme.colorScheme.onSurface.withValues(
@@ -213,17 +290,14 @@ class ParentSubjectDetailsSheet extends StatelessWidget {
                   ],
                 ),
               ),
-
               const Divider(height: 1),
-
-              // Content List
               Expanded(
                 child: ListView(
                   controller: scrollController,
                   padding: const EdgeInsets.all(20),
                   children: [
-                    // ── 1. SUBJECT TEACHER PROFILE & CONTACT ──
-                    _buildSectionTitle(theme, 'SUBJECT TEACHER & CONTACT'),
+                    // ── 1. SUBJECT TEACHER PROFILE & PUBLIC CONTACT ──
+                    _buildSectionTitle(theme, 'SUBJECT TEACHER INFORMATION'),
                     Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
@@ -269,7 +343,9 @@ class ParentSubjectDetailsSheet extends StatelessWidget {
                                     ),
                                     const SizedBox(height: 2),
                                     Text(
-                                      'Senior High School Faculty',
+                                      specialization.isNotEmpty
+                                          ? 'Specialization: $specialization'
+                                          : 'Subject Faculty · $subjectName',
                                       style: TextStyle(
                                         fontSize: 12,
                                         color: theme.colorScheme.onSurface
@@ -296,12 +372,14 @@ class ParentSubjectDetailsSheet extends StatelessWidget {
                               const SizedBox(width: 8),
                               Expanded(
                                 child: Text(
-                                  'Consultation Hours: Mon - Fri · 3:00 PM - 4:30 PM',
+                                  consultationHours.isNotEmpty
+                                      ? 'Consultation Hours: $consultationHours'
+                                      : 'Consultation Hours: By appointment',
                                   style: TextStyle(
                                     fontSize: 12,
                                     fontWeight: FontWeight.w600,
                                     color: theme.colorScheme.onSurface
-                                        .withValues(alpha: 0.8),
+                                        .withValues(alpha: 0.82),
                                   ),
                                 ),
                               ),
@@ -324,7 +402,7 @@ class ParentSubjectDetailsSheet extends StatelessWidget {
                                     style: TextStyle(
                                       fontSize: 12,
                                       color: theme.colorScheme.onSurface
-                                          .withValues(alpha: 0.8),
+                                          .withValues(alpha: 0.82),
                                     ),
                                     overflow: TextOverflow.ellipsis,
                                   ),
@@ -357,7 +435,120 @@ class ParentSubjectDetailsSheet extends StatelessWidget {
                                     Icons.send_rounded,
                                     size: 14,
                                   ),
-                                  label: const Text('Contact'),
+                                  label: const Text('Email'),
+                                  style: TextButton.styleFrom(
+                                    visualDensity: VisualDensity.compact,
+                                    textStyle: const TextStyle(
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+
+                          if (contactNumber.isNotEmpty) ...[
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                Icon(
+                                  Icons.phone_outlined,
+                                  size: 16,
+                                  color: theme.colorScheme.primary,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'Contact Number: $contactNumber',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: theme.colorScheme.onSurface
+                                          .withValues(alpha: 0.82),
+                                    ),
+                                  ),
+                                ),
+                                TextButton.icon(
+                                  onPressed: () async {
+                                    await Clipboard.setData(
+                                      ClipboardData(text: contactNumber),
+                                    );
+                                    if (context.mounted) {
+                                      AppModals.showSuccessDialog(
+                                        context: context,
+                                        title: 'Phone Copied',
+                                        message:
+                                            'Contact number copied: $contactNumber',
+                                      );
+                                    }
+                                  },
+                                  icon: const Icon(
+                                    Icons.copy_rounded,
+                                    size: 14,
+                                  ),
+                                  label: const Text('Copy'),
+                                  style: TextButton.styleFrom(
+                                    visualDensity: VisualDensity.compact,
+                                    textStyle: const TextStyle(
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+
+                          if (facebookLink.isNotEmpty) ...[
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                Icon(
+                                  Icons.public_rounded,
+                                  size: 16,
+                                  color: theme.colorScheme.primary,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    facebookLink,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: theme.colorScheme.onSurface
+                                          .withValues(alpha: 0.82),
+                                    ),
+                                  ),
+                                ),
+                                TextButton.icon(
+                                  onPressed: () async {
+                                    final raw = facebookLink.startsWith('http')
+                                        ? facebookLink
+                                        : 'https://$facebookLink';
+                                    final uri = Uri.tryParse(raw);
+                                    if (uri != null &&
+                                        await canLaunchUrl(uri)) {
+                                      await launchUrl(uri);
+                                    } else {
+                                      await Clipboard.setData(
+                                        ClipboardData(text: facebookLink),
+                                      );
+                                      if (context.mounted) {
+                                        AppModals.showSuccessDialog(
+                                          context: context,
+                                          title: 'Link Copied',
+                                          message:
+                                              'Facebook link copied: $facebookLink',
+                                        );
+                                      }
+                                    }
+                                  },
+                                  icon: const Icon(
+                                    Icons.open_in_new_rounded,
+                                    size: 14,
+                                  ),
+                                  label: const Text('Open'),
                                   style: TextButton.styleFrom(
                                     visualDensity: VisualDensity.compact,
                                     textStyle: const TextStyle(
@@ -399,7 +590,7 @@ class ParentSubjectDetailsSheet extends StatelessWidget {
                             const SizedBox(width: 10),
                             Expanded(
                               child: Text(
-                                'Schedule plotted in class timetable.',
+                                'No specific schedule slot plotted yet for this subject.',
                                 style: TextStyle(
                                   fontSize: 12.5,
                                   color: theme.colorScheme.onSurfaceVariant,
@@ -411,6 +602,7 @@ class ParentSubjectDetailsSheet extends StatelessWidget {
                       )
                     else
                       ...relevantSchedules.map((s) {
+                        final cleanRoom = s.room.trim();
                         return Container(
                           margin: const EdgeInsets.only(bottom: 8),
                           padding: const EdgeInsets.all(14),
@@ -453,7 +645,7 @@ class ParentSubjectDetailsSheet extends StatelessWidget {
                                     ),
                                     const SizedBox(height: 2),
                                     Text(
-                                      '${s.startTime} - ${s.endTime}${s.room.isNotEmpty ? " · ${s.room}" : ""}',
+                                      '${s.startTime} - ${s.endTime}${cleanRoom.isNotEmpty ? " · Room $cleanRoom" : ""}',
                                       style: TextStyle(
                                         fontSize: 12,
                                         color: theme.colorScheme.onSurface
@@ -471,7 +663,7 @@ class ParentSubjectDetailsSheet extends StatelessWidget {
                     const SizedBox(height: 20),
 
                     // ── 3. SSHS 3-TERM GRADES & WEIGHTS ──
-                    _buildSectionTitle(theme, 'SSHS 3-TERM GRADES & WEIGHTS'),
+                    _buildSectionTitle(theme, 'SSHS TERM GRADES & WEIGHTS'),
                     Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
@@ -486,7 +678,6 @@ class ParentSubjectDetailsSheet extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // DepEd Component Weights
                           Row(
                             children: [
                               _buildWeightBadge(
@@ -505,7 +696,7 @@ class ParentSubjectDetailsSheet extends StatelessWidget {
                               const SizedBox(width: 8),
                               _buildWeightBadge(
                                 theme,
-                                'ST-TE (Term Exam)',
+                                'EX (Term Exam)',
                                 '$exWeight%',
                                 AppTheme.catOrange,
                               ),
@@ -514,29 +705,97 @@ class ParentSubjectDetailsSheet extends StatelessWidget {
                           const SizedBox(height: 16),
                           const Divider(height: 1),
                           const SizedBox(height: 14),
-
-                          // Term 1, 2, 3 Scores
                           Row(
                             children: [
-                              _buildTermScoreTile(
-                                theme,
-                                isDark,
-                                'Term 1',
-                                termGrades[1],
+                              for (int term = 1; term <= 3; term++) ...[
+                                if (term > 1) const SizedBox(width: 8),
+                                _buildTermScoreTile(
+                                  theme: theme,
+                                  isDark: isDark,
+                                  termLabel: 'Term $term',
+                                  isActive: activeTerms.contains(term),
+                                  encodedGrade: encodedGradesMap[term],
+                                  isHiddenBy18Plus: hideTermGrades,
+                                ),
+                              ],
+                            ],
+                          ),
+                          const SizedBox(height: 14),
+                          const Divider(height: 1),
+                          const SizedBox(height: 12),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text(
+                                'FINAL SUBJECT GRADE',
+                                style: TextStyle(
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 0.5,
+                                ),
                               ),
                               const SizedBox(width: 8),
-                              _buildTermScoreTile(
-                                theme,
-                                isDark,
-                                'Term 2',
-                                termGrades[2],
-                              ),
-                              const SizedBox(width: 8),
-                              _buildTermScoreTile(
-                                theme,
-                                isDark,
-                                'Term 3',
-                                termGrades[3],
+                              Flexible(
+                                child: hideFinalGrades
+                                    ? Align(
+                                        alignment: Alignment.centerRight,
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 10,
+                                            vertical: 4,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: AppTheme.catOrange
+                                                .withValues(alpha: 0.14),
+                                            borderRadius: BorderRadius.circular(
+                                              999,
+                                            ),
+                                          ),
+                                          child: const Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(
+                                                Icons.lock_outline_rounded,
+                                                size: 13,
+                                                color: AppTheme.catOrange,
+                                              ),
+                                              SizedBox(width: 4),
+                                              Flexible(
+                                                child: Text(
+                                                  'Protected (18+ Privacy)',
+                                                  maxLines: 1,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                  style: TextStyle(
+                                                    fontSize: 11,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: AppTheme.catOrange,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      )
+                                    : Text(
+                                        computedFinalGrade != null
+                                            ? '$computedFinalGrade (${DepEdGradingEngine.getRemarks(computedFinalGrade)})'
+                                            : 'Ongoing / Awaiting Finalization',
+                                        textAlign: TextAlign.right,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          fontSize: 12.5,
+                                          fontWeight: FontWeight.bold,
+                                          color: computedFinalGrade != null
+                                              ? (computedFinalGrade >= 75
+                                                    ? AppTheme.catGreen
+                                                    : AppTheme.catRed)
+                                              : theme
+                                                    .colorScheme
+                                                    .onSurfaceVariant,
+                                        ),
+                                      ),
                               ),
                             ],
                           ),
@@ -611,19 +870,61 @@ class ParentSubjectDetailsSheet extends StatelessWidget {
     );
   }
 
-  Widget _buildTermScoreTile(
-    ThemeData theme,
-    bool isDark,
-    String termLabel,
-    Map<String, dynamic>? gradeData,
-  ) {
-    final transmuted = gradeData?['transmuted_grade']?.toString();
-    final hasGrade = transmuted != null && transmuted.isNotEmpty;
-    final numGrade = num.tryParse(transmuted ?? '');
-    final isPassing = numGrade != null && numGrade >= 75;
+  Widget _buildTermScoreTile({
+    required ThemeData theme,
+    required bool isDark,
+    required String termLabel,
+    required bool isActive,
+    required int? encodedGrade,
+    required bool isHiddenBy18Plus,
+  }) {
+    if (isHiddenBy18Plus) {
+      return Expanded(
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 6),
+          decoration: BoxDecoration(
+            color: AppTheme.catOrange.withValues(alpha: isDark ? 0.14 : 0.08),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: AppTheme.catOrange.withValues(alpha: 0.3),
+            ),
+          ),
+          child: Column(
+            children: [
+              const Icon(
+                Icons.lock_outline_rounded,
+                size: 18,
+                color: AppTheme.catOrange,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                termLabel,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.75),
+                ),
+              ),
+              const SizedBox(height: 2),
+              const Text(
+                'Hidden (18+)',
+                style: TextStyle(
+                  fontSize: 9.5,
+                  fontWeight: FontWeight.w700,
+                  color: AppTheme.catOrange,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final hasGrade = isActive && encodedGrade != null;
+    final isPassing = hasGrade && encodedGrade >= 75;
 
     final Color badgeColor = !hasGrade
-        ? theme.colorScheme.onSurface.withValues(alpha: 0.4)
+        ? theme.colorScheme.onSurface.withValues(alpha: 0.45)
         : (isPassing
               ? (isDark ? const Color(0xFF2DD4BF) : AppTheme.catTeal)
               : AppTheme.catRed);
@@ -647,7 +948,7 @@ class ParentSubjectDetailsSheet extends StatelessWidget {
         child: Column(
           children: [
             Text(
-              hasGrade ? transmuted : '—',
+              !isActive ? 'N/A' : (hasGrade ? '$encodedGrade' : '—'),
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
@@ -665,7 +966,11 @@ class ParentSubjectDetailsSheet extends StatelessWidget {
             ),
             const SizedBox(height: 2),
             Text(
-              !hasGrade ? 'Ongoing' : (isPassing ? 'Passed' : 'Needs Help'),
+              !isActive
+                  ? 'Inactive'
+                  : (!hasGrade
+                        ? 'Ongoing'
+                        : (isPassing ? 'Passed' : 'Needs Help')),
               style: TextStyle(
                 fontSize: 9.5,
                 fontWeight: FontWeight.w600,

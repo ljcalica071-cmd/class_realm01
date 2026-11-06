@@ -10,6 +10,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'package:class_realm/core/services/app_data_cache.dart';
 import 'package:class_realm/core/services/local_storage_service.dart';
 
 import 'package:class_realm/core/services/phone_nfc_service.dart';
@@ -885,15 +886,70 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
 
       final scheduleStatus = results[1] as AttendanceScheduleStatus;
 
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      final targetDay = DateTime(date.year, date.month, date.day);
+      final isPastDay = targetDay.isBefore(today);
+
+      var effectiveRecords = List<AttendanceWorkspaceRecord>.from(
+        rosterResult.records,
+      );
+
+      if (isPastDay &&
+          !scheduleStatus.isHoliday &&
+          (!scheduleStatus.isLockedByDefault || effectiveRecords.isNotEmpty)) {
+        final recordedIds = effectiveRecords.map((r) => r.studentId).toSet();
+        final autoAbsentList = <AttendanceWorkspaceRecord>[];
+        for (final student in rosterResult.students) {
+          if (!recordedIds.contains(student.studentId)) {
+            autoAbsentList.add(
+              AttendanceWorkspaceRecord(
+                id: null,
+                studentId: student.studentId,
+                subjectOfferingId: subjectOfferingId,
+                attendanceDate: date,
+                status: AttendanceStatus.absent,
+                source: AttendanceSource.system,
+              ),
+            );
+          }
+        }
+        if (autoAbsentList.isNotEmpty) {
+          effectiveRecords = [...effectiveRecords, ...autoAbsentList];
+          unawaited(
+            _repository
+                .saveAttendanceBatch(
+                  subjectOfferingId: subjectOfferingId,
+                  date: date,
+                  records: effectiveRecords,
+                )
+                .catchError((_) {}),
+          );
+        }
+      } else if (!isPastDay) {
+        unawaited(
+          _autoFinalizePastDayIfNeeded(
+            subjectOfferingId,
+            today.subtract(const Duration(days: 1)),
+          ),
+        );
+      }
+
       setState(() {
         _scheduleStatus = scheduleStatus;
+        if (isPastDay &&
+            !scheduleStatus.isHoliday &&
+            scheduleStatus.isLockedByDefault &&
+            effectiveRecords.isNotEmpty) {
+          _manualMakeupOverride = true;
+        }
 
         _isOffline = false;
 
         _rosterLoadError = null;
       });
 
-      _applyLoadedRecords(rosterResult.students, rosterResult.records);
+      _applyLoadedRecords(rosterResult.students, effectiveRecords);
 
       // Flush any offline queued scans silently when back online
 
@@ -919,21 +975,72 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
     }
   }
 
+  Future<void> _autoFinalizePastDayIfNeeded(
+    String subjectOfferingId,
+    DateTime pastDate,
+  ) async {
+    try {
+      final results = await Future.wait([
+        _repository.getAttendanceRosterAndDateRecords(
+          subjectOfferingId: subjectOfferingId,
+          date: pastDate,
+        ),
+        _repository.getScheduleAndCutoffStatus(
+          subjectOfferingId: subjectOfferingId,
+          date: pastDate,
+        ),
+      ]);
+      final rosterResult = results[0] as AttendanceRosterResult;
+      final scheduleStatus = results[1] as AttendanceScheduleStatus;
+      if (scheduleStatus.isHoliday) return;
+      if (scheduleStatus.isLockedByDefault && rosterResult.records.isEmpty) {
+        return;
+      }
+
+      final recordedIds = rosterResult.records.map((r) => r.studentId).toSet();
+      final autoAbsentList = <AttendanceWorkspaceRecord>[];
+      for (final student in rosterResult.students) {
+        if (!recordedIds.contains(student.studentId)) {
+          autoAbsentList.add(
+            AttendanceWorkspaceRecord(
+              id: null,
+              studentId: student.studentId,
+              subjectOfferingId: subjectOfferingId,
+              attendanceDate: pastDate,
+              status: AttendanceStatus.absent,
+              source: AttendanceSource.system,
+            ),
+          );
+        }
+      }
+      if (autoAbsentList.isNotEmpty) {
+        await _repository.saveAttendanceBatch(
+          subjectOfferingId: subjectOfferingId,
+          date: pastDate,
+          records: [...rosterResult.records, ...autoAbsentList],
+        );
+      }
+    } catch (_) {}
+  }
+
   Future<void> _silentSyncAttendanceRecords() async {
     if (_isSilentlySyncing ||
         !mounted ||
         _isSavingBatch ||
         _isLoadingRoster ||
-        _isDirty)
+        _isDirty) {
       return;
+    }
     if (_selectedSubjectId == null ||
-        _selectedAttendanceView != 'Take Attendance')
+        _selectedAttendanceView != 'Take Attendance') {
       return;
+    }
 
     _isSilentlySyncing = true;
     try {
       final offeringId = _selectedSubjectId!;
       final date = _attendanceSelectedDate;
+      AppDataCache.instance.invalidatePrefix('attendance_workspace_');
       final res = await _repository.getAttendanceRosterAndDateRecords(
         subjectOfferingId: offeringId,
         date: date,

@@ -11,7 +11,7 @@ export 'package:class_realm/features/teacher/sub_features/schedule_and_lessons/w
 export 'package:class_realm/features/teacher/sub_features/profile_and_reports/widgets/teacher_notifications_tab.dart';
 export 'package:class_realm/features/teacher/sub_features/class_management/widgets/teacher_parent_management_tab.dart';
 export 'package:class_realm/features/teacher/sub_features/profile_and_reports/widgets/teacher_profile_tab.dart';
-export 'package:class_realm/features/teacher/sub_features/profile_and_reports/widgets/teacher_reports_tab.dart';
+export 'package:class_realm/features/teacher/sub_features/profile_and_reports/widgets/teacher_settings_tab.dart';
 export 'package:class_realm/features/teacher/sub_features/schedule_and_lessons/widgets/teacher_schedule_tab.dart';
 export 'package:class_realm/features/teacher/sub_features/class_management/widgets/teacher_student_management_tab.dart';
 export 'package:class_realm/features/teacher/sub_features/assessments/widgets/teacher_unified_assessments_tab.dart';

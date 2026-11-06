@@ -24,9 +24,18 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
   int _currentIndex = 0;
   int _selectedChildIndex = 0;
   bool _isLoadingStudents = true;
+  UserModel? _parentProfile;
   List<UserModel> _linkedStudents = [];
   List<AttendanceRecord> _childAttendance = [];
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+
+  static const List<String> _tabTitles = [
+    'Parent Portal',
+    'Attendance',
+    'Schedule',
+    'Alerts',
+    'Profile',
+  ];
 
   @override
   void initState() {
@@ -51,8 +60,19 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
     );
     if (cached != null && cached.isNotEmpty) {
       _linkedStudents = cached;
+      final savedChildId = LocalStorageService.getSelectedParentChildId(
+        parent.id,
+      );
+      if (savedChildId != null && savedChildId.isNotEmpty) {
+        final idx = cached.indexWhere((s) => s.id == savedChildId);
+        if (idx != -1) {
+          _selectedChildIndex = idx;
+        }
+      }
       _isLoadingStudents = false;
-      _hydrateAttendanceFromCache(cached.first.id);
+      final activeStudent =
+          _linkedStudents[_selectedChildIndex % _linkedStudents.length];
+      _hydrateAttendanceFromCache(activeStudent.id);
     }
   }
 
@@ -85,24 +105,48 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
 
     try {
       final repo = SupabaseParentRepository();
-      final students = await repo.getLinkedStudentsForParent(parent.id);
+      final results = await Future.wait<dynamic>([
+        repo.getLinkedStudentsForParent(parent.id),
+        repo.getParentProfile(parent.id),
+      ]);
+      final students = results[0] as List<UserModel>;
+      final freshParent = results[1] as UserModel?;
       if (!mounted) return;
-      setState(() {
-        _linkedStudents = students;
-        if (!silent) {
-          _isLoadingStudents = false;
-        } else {
-          _isLoadingStudents = false;
+
+      final savedChildId = LocalStorageService.getSelectedParentChildId(
+        parent.id,
+      );
+      int resolvedIndex = _selectedChildIndex;
+      if (students.isNotEmpty) {
+        if (savedChildId != null && savedChildId.isNotEmpty) {
+          final savedIdx = students.indexWhere((s) => s.id == savedChildId);
+          if (savedIdx != -1) {
+            resolvedIndex = savedIdx;
+          }
         }
+        resolvedIndex = resolvedIndex % students.length;
+      } else {
+        resolvedIndex = 0;
+      }
+
+      setState(() {
+        if (freshParent != null) {
+          _parentProfile = freshParent;
+        }
+        _linkedStudents = students;
+        _selectedChildIndex = resolvedIndex;
+        _isLoadingStudents = false;
       });
+      if (freshParent != null) {
+        await LocalStorageService.saveUser(freshParent);
+      }
       AppDataCache.instance.set(
         'parent_linked_students_${parent.id}',
         students.map((s) => s.toJson()).toList(),
       );
 
       if (students.isNotEmpty) {
-        final safeIndex = _selectedChildIndex % students.length;
-        await _loadChildAttendance(students[safeIndex].id, silent: silent);
+        await _loadChildAttendance(students[resolvedIndex].id, silent: silent);
       }
     } catch (e) {
       debugPrint('Error loading linked students: $e');
@@ -144,25 +188,299 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
   void _switchChild(int targetIndex) {
     if (_linkedStudents.isEmpty) return;
     final safeIndex = targetIndex % _linkedStudents.length;
+    final targetChild = _linkedStudents[safeIndex];
+    final parent = AuthRepository.instance.currentUser;
+    if (parent != null) {
+      LocalStorageService.saveSelectedParentChildId(parent.id, targetChild.id);
+    }
+
     if (safeIndex == _selectedChildIndex && _childAttendance.isNotEmpty) return;
 
     setState(() {
       _selectedChildIndex = safeIndex;
     });
 
-    final targetChild = _linkedStudents[safeIndex];
     _loadChildAttendance(targetChild.id);
+  }
+
+  void _switchChildByModel(UserModel child) {
+    final idx = _linkedStudents.indexWhere((c) => c.id == child.id);
+    if (idx != -1) {
+      _switchChild(idx);
+    }
+  }
+
+  void _openReportCardScreen(UserModel? activeChild) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ParentGradesScreen(
+          initialStudent: activeChild,
+          allChildren: _linkedStudents,
+          onSelectChild: _switchChildByModel,
+        ),
+      ),
+    );
+  }
+
+  void _openTeachersDirectoryScreen(UserModel? activeChild) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ParentTeacherContactView(
+          student: activeChild,
+          allChildren: _linkedStudents,
+          onSelectChild: _switchChildByModel,
+        ),
+      ),
+    );
+  }
+
+  void _showChildSwitcherBottomSheet() {
+    if (_linkedStudents.isEmpty) return;
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final activeChild =
+        _linkedStudents[_selectedChildIndex % _linkedStudents.length];
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: theme.scaffoldBackgroundColor,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      ),
+      builder: (sheetCtx) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 14, 20, 22),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    margin: const EdgeInsets.only(bottom: 14),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(99),
+                    ),
+                  ),
+                ),
+                Row(
+                  children: [
+                    Icon(
+                      Icons.family_restroom_rounded,
+                      color: theme.colorScheme.primary,
+                      size: 22,
+                    ),
+                    const SizedBox(width: 10),
+                    const Expanded(
+                      child: Text(
+                        'Linked Students',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.primary.withValues(
+                          alpha: 0.12,
+                        ),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text(
+                        '${_linkedStudents.length} Linked',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: theme.colorScheme.primary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Tap a student below to switch the active portal view.',
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxHeight: MediaQuery.of(context).size.height * 0.5,
+                  ),
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: _linkedStudents.length,
+                    separatorBuilder: (_, _) => const SizedBox(height: 10),
+                    itemBuilder: (_, index) {
+                      final child = _linkedStudents[index];
+                      final isSelected = child.id == activeChild.id;
+                      final relationship =
+                          (child.parentGuardianRelationship ?? 'Guardian')
+                              .trim();
+                      final section =
+                          child.departmentOrSection?.trim().isNotEmpty == true
+                          ? child.departmentOrSection!.trim()
+                          : 'Senior High School';
+                      final lrn = child.lrn?.trim().isNotEmpty == true
+                          ? 'LRN: ${child.lrn!.trim()}'
+                          : null;
+
+                      return Container(
+                        decoration: BoxDecoration(
+                          color: isSelected
+                              ? theme.colorScheme.primary.withValues(
+                                  alpha: isDark ? 0.18 : 0.08,
+                                )
+                              : theme.colorScheme.surface,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: isSelected
+                                ? theme.colorScheme.primary
+                                : theme.colorScheme.onSurface.withValues(
+                                    alpha: isDark ? 0.14 : 0.1,
+                                  ),
+                            width: isSelected ? 1.5 : 1,
+                          ),
+                        ),
+                        child: ListTile(
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 6,
+                          ),
+                          leading: CircleAvatar(
+                            radius: 21,
+                            backgroundColor: isSelected
+                                ? theme.colorScheme.primary
+                                : theme.colorScheme.primary.withValues(
+                                    alpha: 0.14,
+                                  ),
+                            child: Text(
+                              child.fullName.trim().isNotEmpty
+                                  ? child.fullName.trim()[0].toUpperCase()
+                                  : 'S',
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.bold,
+                                color: isSelected
+                                    ? Colors.white
+                                    : theme.colorScheme.primary,
+                              ),
+                            ),
+                          ),
+                          title: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  child.fullName,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 14.5,
+                                    fontWeight: isSelected
+                                        ? FontWeight.w800
+                                        : FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: theme.colorScheme.primary.withValues(
+                                    alpha: 0.12,
+                                  ),
+                                  borderRadius: BorderRadius.circular(999),
+                                ),
+                                child: Text(
+                                  relationship,
+                                  style: TextStyle(
+                                    fontSize: 10.5,
+                                    fontWeight: FontWeight.bold,
+                                    color: theme.colorScheme.primary,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          subtitle: Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Text(
+                              [section, ?lrn].join(' • '),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: theme.colorScheme.onSurface.withValues(
+                                  alpha: 0.65,
+                                ),
+                              ),
+                            ),
+                          ),
+                          trailing: isSelected
+                              ? Icon(
+                                  Icons.check_circle_rounded,
+                                  color: theme.colorScheme.primary,
+                                  size: 22,
+                                )
+                              : Icon(
+                                  Icons.chevron_right_rounded,
+                                  color: theme.colorScheme.onSurface.withValues(
+                                    alpha: 0.4,
+                                  ),
+                                ),
+                          onTap: () {
+                            Navigator.pop(sheetCtx);
+                            _switchChild(index);
+                          },
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _selectBottomTab(int index) {
+    if (index < 0 || index >= 5) return;
+    setState(() => _currentIndex = index);
+    LocalStorageService.saveActiveDashboardTab('parent', index);
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final parent =
+        _parentProfile ??
         AuthRepository.instance.currentUser ??
         UserModel(
-          id: 'parent',
-          username: 'parent',
-          fullName: 'Parent User',
+          id: '',
+          username: '',
+          fullName: 'Parent / Guardian',
           email: '',
           role: UserRole.parent,
         );
@@ -174,29 +492,38 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
 
     final List<Widget> pages = linkedStudent != null
         ? [
+            // 0: Home
             ParentStudentOverviewTab(
               linkedStudent: linkedStudent,
               allChildren: linkedStudents,
               attendance: _childAttendance,
               onRefresh: _refreshParentPortal,
-              onSelectChild: (child) {
-                final idx = linkedStudents.indexWhere((c) => c.id == child.id);
-                if (idx != -1) {
-                  _switchChild(idx);
-                }
-              },
-              onOpenAttendance: () => setState(() => _currentIndex = 1),
-              onOpenGrades: () => setState(() => _currentIndex = 2),
+              onSwitchChildTap: _showChildSwitcherBottomSheet,
+              onSelectChild: _switchChildByModel,
+              onOpenAttendance: () => _selectBottomTab(1),
+              onOpenSchedule: () => _selectBottomTab(2),
+              onOpenGrades: () => _openReportCardScreen(linkedStudent),
+              onOpenTeachers: () => _openTeachersDirectoryScreen(linkedStudent),
             ),
+            // 1: Attendance
             ParentAttendanceTab(
               attendance: _childAttendance,
               onRefresh: _refreshParentPortal,
             ),
-            ParentGradesTab(student: linkedStudent),
+            // 2: Schedule
+            ParentScheduleView(
+              linkedStudent: linkedStudent,
+              embedded: true,
+              onSwitchChildTap: _showChildSwitcherBottomSheet,
+            ),
+            // 3: Alerts
             const ParentNotificationsTab(),
+            // 4: Profile
             ParentProfileTab(
               parent: parent,
               linkedStudent: linkedStudent,
+              allChildren: linkedStudents,
+              onSelectChild: _switchChildByModel,
               onRefresh: _refreshParentPortal,
             ),
           ]
@@ -208,25 +535,32 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
             ParentProfileTab(
               parent: parent,
               linkedStudent: null,
+              allChildren: const [],
               onRefresh: _refreshParentPortal,
             ),
           ];
+
+    final appBarTitle = _tabTitles[_currentIndex.clamp(0, 4)];
 
     return SessionActivityTracker(
       child: Scaffold(
         key: _scaffoldKey,
         appBar: AppBar(
-          title: const Text(
-            'Parent Portal',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          titleSpacing: 4,
+          title: Text(
+            appBarTitle,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
           ),
           leading: IconButton(
             icon: const Icon(Icons.menu),
+            tooltip: 'Open Menu',
             onPressed: () => _scaffoldKey.currentState?.openDrawer(),
           ),
           actions: [
-            _buildTopRightChildSwitcher(theme, linkedStudents, linkedStudent),
             IconButton(
+              visualDensity: VisualDensity.compact,
               icon: Icon(
                 theme.brightness == Brightness.dark
                     ? Icons.light_mode_outlined
@@ -247,13 +581,23 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
             ),
             const Center(
               child: Padding(
-                padding: EdgeInsets.symmetric(horizontal: 12),
+                padding: EdgeInsets.only(right: 10, left: 4),
                 child: SyncStatusBadge(),
               ),
             ),
           ],
         ),
-        drawer: ParentDrawer(parent: parent, linkedStudent: linkedStudent),
+        drawer: ParentDrawer(
+          parent: parent,
+          linkedStudent: linkedStudent,
+          allChildren: linkedStudents,
+          currentBottomTabIndex: _currentIndex,
+          onSelectBottomTab: _selectBottomTab,
+          onSwitchChildTap: _showChildSwitcherBottomSheet,
+          onSelectChild: _switchChildByModel,
+          onOpenGrades: () => _openReportCardScreen(linkedStudent),
+          onOpenTeachers: () => _openTeachersDirectoryScreen(linkedStudent),
+        ),
         body: LayoutBuilder(
           builder: (context, constraints) {
             final content = Column(
@@ -267,7 +611,9 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
                           ),
                         )
                       : StaggeredEntrance(
-                          key: ValueKey(_currentIndex),
+                          key: ValueKey(
+                            '${_currentIndex}_${linkedStudent?.id ?? "none"}',
+                          ),
                           index: 0,
                           duration: const Duration(milliseconds: 280),
                           child: pages[_currentIndex],
@@ -284,276 +630,63 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
             );
           },
         ),
-        bottomNavigationBar: BottomNavigationBar(
-          currentIndex: _currentIndex,
-          onTap: (index) {
-            setState(() => _currentIndex = index);
-            LocalStorageService.saveActiveDashboardTab('parent', index);
-          },
-          type: BottomNavigationBarType.fixed,
-          items: const [
-            BottomNavigationBarItem(
-              icon: Icon(Icons.dashboard_outlined),
-              activeIcon: Icon(Icons.dashboard),
-              label: 'Overview',
+        bottomNavigationBar: Container(
+          decoration: BoxDecoration(
+            border: Border(
+              top: BorderSide(
+                color: theme.colorScheme.onSurface.withValues(
+                  alpha: theme.brightness == Brightness.dark ? 0.14 : 0.08,
+                ),
+              ),
             ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.calendar_today_outlined),
-              activeIcon: Icon(Icons.calendar_today),
-              label: 'Attendance',
+          ),
+          child: BottomNavigationBar(
+            currentIndex: _currentIndex,
+            onTap: _selectBottomTab,
+            type: BottomNavigationBarType.fixed,
+            backgroundColor: theme.colorScheme.surface,
+            selectedItemColor: theme.colorScheme.primary,
+            unselectedItemColor: theme.brightness == Brightness.dark
+                ? const Color(0xFF94A3B8)
+                : const Color(0xFF64748B),
+            selectedLabelStyle: const TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w700,
             ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.grade_outlined),
-              activeIcon: Icon(Icons.grade),
-              label: 'Grades',
+            unselectedLabelStyle: const TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w500,
             ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.notifications_outlined),
-              activeIcon: Icon(Icons.notifications),
-              label: 'Alerts',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.person_outline),
-              activeIcon: Icon(Icons.person),
-              label: 'Profile',
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTopRightChildSwitcher(
-    ThemeData theme,
-    List<UserModel> students,
-    UserModel? activeChild,
-  ) {
-    if (students.isEmpty) return const SizedBox.shrink();
-
-    // If only 1 child is linked, show a clean, non-intrusive badge
-    if (students.length == 1) {
-      return Container(
-        margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-        decoration: BoxDecoration(
-          color: theme.colorScheme.primary.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: theme.colorScheme.primary.withValues(alpha: 0.25),
+            items: const [
+              BottomNavigationBarItem(
+                icon: Icon(Icons.home_outlined),
+                activeIcon: Icon(Icons.home_rounded),
+                label: 'Home',
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(Icons.fact_check_outlined),
+                activeIcon: Icon(Icons.fact_check_rounded),
+                label: 'Attendance',
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(Icons.calendar_month_outlined),
+                activeIcon: Icon(Icons.calendar_month_rounded),
+                label: 'Schedule',
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(Icons.notifications_outlined),
+                activeIcon: Icon(Icons.notifications_rounded),
+                label: 'Alerts',
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(Icons.person_outline_rounded),
+                activeIcon: Icon(Icons.person_rounded),
+                label: 'Profile',
+              ),
+            ],
           ),
         ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            CircleAvatar(
-              radius: 11,
-              backgroundColor: theme.colorScheme.primary,
-              child: Text(
-                (activeChild?.firstName?.isNotEmpty ?? false)
-                    ? activeChild!.firstName![0].toUpperCase()
-                    : 'C',
-                style: const TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                ),
-              ),
-            ),
-            const SizedBox(width: 6),
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 130),
-              child: Text(
-                activeChild?.fullName ?? 'Child',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: theme.colorScheme.primary,
-                ),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    // Multiple children linked (2, 3, or more): Elegant Dropdown Menu
-    return PopupMenuButton<int>(
-      tooltip: 'Switch Active Child',
-      offset: const Offset(0, 48),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-      color: theme.colorScheme.surface,
-      elevation: 6,
-      onSelected: (int targetIndex) {
-        _switchChild(targetIndex);
-      },
-      child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-        decoration: BoxDecoration(
-          color: theme.colorScheme.primary.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: theme.colorScheme.primary.withValues(alpha: 0.35),
-            width: 1.2,
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            CircleAvatar(
-              radius: 12,
-              backgroundColor: theme.colorScheme.primary,
-              child: Text(
-                (activeChild?.firstName?.isNotEmpty ?? false)
-                    ? activeChild!.firstName![0].toUpperCase()
-                    : 'C',
-                style: const TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                ),
-              ),
-            ),
-            const SizedBox(width: 7),
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 140),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    activeChild?.fullName ?? 'Select Child',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      color: theme.colorScheme.primary,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  if (activeChild?.departmentOrSection != null)
-                    Text(
-                      activeChild!.departmentOrSection!,
-                      style: TextStyle(
-                        fontSize: 10,
-                        color: theme.colorScheme.onSurface.withValues(
-                          alpha: 0.6,
-                        ),
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 4),
-            Icon(
-              Icons.keyboard_arrow_down_rounded,
-              size: 18,
-              color: theme.colorScheme.primary,
-            ),
-          ],
-        ),
       ),
-      itemBuilder: (BuildContext context) {
-        return List<PopupMenuEntry<int>>.generate(students.length, (index) {
-          final child = students[index];
-          final isSelected = index == (_selectedChildIndex % students.length);
-
-          return PopupMenuItem<int>(
-            value: index,
-            child: Container(
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              child: Row(
-                children: [
-                  CircleAvatar(
-                    radius: 14,
-                    backgroundColor: isSelected
-                        ? theme.colorScheme.primary
-                        : theme.colorScheme.surfaceContainerHighest,
-                    child: Text(
-                      (child.firstName?.isNotEmpty ?? false)
-                          ? child.firstName![0].toUpperCase()
-                          : 'C',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        color: isSelected
-                            ? Colors.white
-                            : theme.colorScheme.onSurface,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          child.fullName,
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: isSelected
-                                ? FontWeight.bold
-                                : FontWeight.w500,
-                            color: isSelected
-                                ? theme.colorScheme.primary
-                                : theme.colorScheme.onSurface,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        Row(
-                          children: [
-                            if (child.lrn != null && child.lrn!.isNotEmpty) ...[
-                              Text(
-                                'LRN: ${child.lrn}',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: theme.colorScheme.onSurface.withValues(
-                                    alpha: 0.55,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 6),
-                            ],
-                            if (child.departmentOrSection != null)
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 6,
-                                  vertical: 1,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: theme.colorScheme.onSurface.withValues(
-                                    alpha: 0.08,
-                                  ),
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: Text(
-                                  child.departmentOrSection!,
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w600,
-                                    color: theme.colorScheme.onSurface
-                                        .withValues(alpha: 0.7),
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                  if (isSelected)
-                    Icon(
-                      Icons.check_circle_rounded,
-                      size: 18,
-                      color: theme.colorScheme.primary,
-                    ),
-                ],
-              ),
-            ),
-          );
-        });
-      },
     );
   }
 
@@ -601,7 +734,7 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
               ),
               const SizedBox(height: 8),
               Text(
-                "Your parent account has not been linked to a student yet. Contact the school administrator to connect your account to your child's LRN.",
+                "Your parent account has not been linked to a student yet. Contact the school administrator or class adviser to connect your account to your child's LRN.",
                 textAlign: TextAlign.center,
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,

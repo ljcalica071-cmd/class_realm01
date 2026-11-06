@@ -85,8 +85,9 @@ class StudentDashboardRepository {
     final client = SupabaseService().client;
 
     try {
-      // 1. Fetch student profile directly via Pure Dart
+      // 1. Fetch student profile and settings directly via Pure Dart
       Map<String, dynamic>? profileRes;
+      Map<String, dynamic>? settingsRes;
       try {
         profileRes = await client
             .from('student_profiles')
@@ -97,6 +98,15 @@ class StudentDashboardRepository {
             .maybeSingle();
       } catch (e) {
         debugPrint('Student profile fetch notice: $e');
+      }
+      try {
+        settingsRes = await client
+            .from('student_settings')
+            .select('*')
+            .eq('student_id', uid)
+            .maybeSingle();
+      } catch (e) {
+        debugPrint('Student settings fetch notice: $e');
       }
 
       // 2. Fetch student enrollments directly via Pure Dart
@@ -338,6 +348,14 @@ class StudentDashboardRepository {
           'birthday':
               p['birthday']?.toString() ??
               currentUser?.birthday?.toIso8601String(),
+          'hide_term_grades_from_parent':
+              settingsRes?['hide_term_grades_from_parent'] ??
+              currentUser?.hideTermGradesFromParent ??
+              false,
+          'hide_final_grades_from_parent':
+              settingsRes?['hide_final_grades_from_parent'] ??
+              currentUser?.hideFinalGradesFromParent ??
+              false,
           'enrollments': enrollmentsList,
         },
         'classwork': classworkList,

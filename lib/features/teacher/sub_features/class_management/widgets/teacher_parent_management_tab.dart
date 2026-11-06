@@ -664,12 +664,11 @@ class _TeacherParentManagementTabState
                         height: 44,
                         child: AppButton.success(
                           icon: LucideIcons.upload,
-                          label: 'Import Excel',
+                          label: 'Import Excel (Next Update)',
                           onPressed: () {
-                            AppModals.showSuccessDialog(
-                              context: context,
-                              title: 'Import Parents via Excel',
-                              message: 'Excel batch import template for parent accounts will be available shortly.',
+                            AppModals.showUpcomingFeatureDialog(
+                              context,
+                              featureName: 'Parent Excel Batch Import',
                             );
                           },
                         ),

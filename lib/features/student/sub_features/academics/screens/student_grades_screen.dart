@@ -5,6 +5,7 @@ import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/models/subject_catalog_model.dart';
 import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/features/student/sub_features/academics/screens/student_academic_performance_screen.dart';
+import 'package:class_realm/features/student/sub_features/profile/screens/student_settings_screen.dart';
 import 'package:class_realm/shared/widgets/shared_widgets.dart';
 import 'package:loading_animation_widget/loading_animation_widget.dart';
 
@@ -141,7 +142,11 @@ class _StudentGradesScreenState extends State<StudentGradesScreen> {
                     physics: const AlwaysScrollableScrollPhysics(),
                     padding: const EdgeInsets.all(16),
                     children: [
-                      if (student != null) _buildStudentHeader(theme, student),
+                      if (student != null) ...[
+                        _buildStudentHeader(theme, student),
+                        const SizedBox(height: 12),
+                        _buildParentVisibilityBanner(context, theme, student),
+                      ],
                       const SizedBox(height: 16),
                       for (final offering in _offerings) ...[
                         _StudentSubjectGradeCard(
@@ -260,6 +265,81 @@ class _StudentGradesScreenState extends State<StudentGradesScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildParentVisibilityBanner(
+    BuildContext context,
+    ThemeData theme,
+    UserModel student,
+  ) {
+    final isAdult = student.isLegalAdult;
+    final hideTerm = student.effectiveHideTermGradesFromParent;
+    final hideFinal = student.effectiveHideFinalGradesFromParent;
+    final anyHidden = hideTerm || hideFinal;
+
+    final String statusLabel;
+    if (!isAdult) {
+      statusLabel =
+          'Visible to Linked Parent/Guardian (18+ Privacy unlocks at age 18)';
+    } else if (hideTerm && hideFinal) {
+      statusLabel = 'Term & Final Grades Hidden from Parent/Guardian (18+)';
+    } else if (hideTerm) {
+      statusLabel = 'Term Grades Hidden from Parent/Guardian (18+)';
+    } else if (hideFinal) {
+      statusLabel = 'Final Grades & GWA Hidden from Parent/Guardian (18+)';
+    } else {
+      statusLabel = 'Grades Visible to Linked Parent/Guardian (Tap to manage)';
+    }
+
+    return Material(
+      color: theme.colorScheme.surface,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: () async {
+          await Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const StudentSettingsScreen()),
+          );
+          if (mounted) setState(() {});
+        },
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: theme.colorScheme.outlineVariant.withValues(alpha: 0.7),
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                anyHidden
+                    ? Icons.visibility_off_outlined
+                    : Icons.family_restroom_outlined,
+                size: 18,
+                color: theme.colorScheme.primary,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  statusLabel,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: theme.colorScheme.onSurface,
+                  ),
+                ),
+              ),
+              Icon(
+                Icons.chevron_right_rounded,
+                size: 18,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

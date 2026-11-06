@@ -38,6 +38,8 @@ class UserModel {
   final String? parentGuardianContact;
   final String? password; // mock only — not for production
   final bool isSetupComplete;
+  final bool hideTermGradesFromParent;
+  final bool hideFinalGradesFromParent;
 
   // Teacher-specific / Profile fields
   final String? subjectSpecialization;
@@ -64,6 +66,8 @@ class UserModel {
     this.contactNumber,
     this.isArchived = false,
     this.isSetupComplete = false,
+    this.hideTermGradesFromParent = false,
+    this.hideFinalGradesFromParent = false,
     this.firstName,
     this.middleName,
     this.lastName,
@@ -82,6 +86,32 @@ class UserModel {
   });
 
   bool get hasRfidAssigned => rfidUid != null && rfidUid!.trim().isNotEmpty;
+
+  /// Computes exact age in years as of [referenceDate] (defaults to [DateTime.now]).
+  int? ageAt([DateTime? referenceDate]) {
+    final bday = birthday;
+    if (bday == null) return null;
+    final now = referenceDate ?? DateTime.now();
+    int age = now.year - bday.year;
+    if (now.month < bday.month ||
+        (now.month == bday.month && now.day < bday.day)) {
+      age--;
+    }
+    return age < 0 ? 0 : age;
+  }
+
+  int? get ageInYears => ageAt();
+
+  /// True when the user is at least 18 years old based on their recorded birthday.
+  bool get isLegalAdult => (ageInYears ?? 0) >= 18;
+
+  /// True when the student is 18+ and has opted to hide term grades from linked parents.
+  bool get effectiveHideTermGradesFromParent =>
+      isLegalAdult && hideTermGradesFromParent;
+
+  /// True when the student is 18+ and has opted to hide final grades/GWA from linked parents.
+  bool get effectiveHideFinalGradesFromParent =>
+      isLegalAdult && hideFinalGradesFromParent;
 
   UserModel copyWith({
     String? id,
@@ -112,6 +142,8 @@ class UserModel {
     String? parentGuardianContact,
     String? password,
     bool? isSetupComplete,
+    bool? hideTermGradesFromParent,
+    bool? hideFinalGradesFromParent,
     String? subjectSpecialization,
     String? facebookLink,
     bool? isFacebookPublic,
@@ -136,6 +168,10 @@ class UserModel {
       contactNumber: contactNumber ?? this.contactNumber,
       isArchived: isArchived ?? this.isArchived,
       isSetupComplete: isSetupComplete ?? this.isSetupComplete,
+      hideTermGradesFromParent:
+          hideTermGradesFromParent ?? this.hideTermGradesFromParent,
+      hideFinalGradesFromParent:
+          hideFinalGradesFromParent ?? this.hideFinalGradesFromParent,
       firstName: firstName ?? this.firstName,
       middleName: middleName ?? this.middleName,
       lastName: lastName ?? this.lastName,
@@ -207,6 +243,8 @@ class UserModel {
       'parentGuardianContact': parentGuardianContact,
       'password': password,
       'isSetupComplete': isSetupComplete,
+      'hideTermGradesFromParent': hideTermGradesFromParent,
+      'hideFinalGradesFromParent': hideFinalGradesFromParent,
       'subjectSpecialization': subjectSpecialization,
       'facebookLink': facebookLink,
       'isFacebookPublic': isFacebookPublic,
@@ -252,6 +290,16 @@ class UserModel {
       parentGuardianContact: json['parentGuardianContact'] as String?,
       password: json['password'] as String?,
       isSetupComplete: json['isSetupComplete'] as bool? ?? false,
+      hideTermGradesFromParent:
+          (json['hideTermGradesFromParent'] ??
+                  json['hide_term_grades_from_parent'])
+              as bool? ??
+          false,
+      hideFinalGradesFromParent:
+          (json['hideFinalGradesFromParent'] ??
+                  json['hide_final_grades_from_parent'])
+              as bool? ??
+          false,
       subjectSpecialization: json['subjectSpecialization'] as String?,
       facebookLink: json['facebookLink'] as String?,
       isFacebookPublic: json['isFacebookPublic'] as bool? ?? false,

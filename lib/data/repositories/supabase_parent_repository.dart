@@ -1,9 +1,12 @@
 import 'package:flutter/foundation.dart';
+import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:class_realm/models/user_model.dart';
+import 'package:class_realm/models/academic_models.dart';
+import 'package:class_realm/data/repositories/supabase_schedule_repository.dart';
 import 'package:class_realm/core/utils/parent_credential_helper.dart';
 import 'package:class_realm/core/utils/validators.dart';
-import 'package:class_realm/data/repositories/supabase_learning_material_repository.dart';
+import 'package:class_realm/core/services/local_storage_service.dart';
 import 'package:class_realm/core/services/firebase_auth_admin_service.dart';
 import 'package:class_realm/core/services/app_data_cache.dart';
 
@@ -860,6 +863,39 @@ class SupabaseParentRepository {
         return [];
       }
 
+      final studentIds = (linksResp as List)
+          .map((row) {
+            final p = row['student_profiles'] as Map<String, dynamic>? ?? {};
+            return p['student_id']?.toString() ?? row['student_id']?.toString();
+          })
+          .whereType<String>()
+          .where((id) => id.isNotEmpty)
+          .toSet()
+          .toList();
+
+      final privacyByStudentId = <String, Map<String, bool>>{};
+      if (studentIds.isNotEmpty) {
+        try {
+          final settingsResp = await _client
+              .from('student_settings')
+              .select(
+                'student_id, hide_term_grades_from_parent, hide_final_grades_from_parent',
+              )
+              .filter('student_id', 'in', studentIds);
+          for (final sRow in (settingsResp as List)) {
+            final sid = sRow['student_id']?.toString();
+            if (sid != null) {
+              privacyByStudentId[sid] = {
+                'hideTerm': sRow['hide_term_grades_from_parent'] == true,
+                'hideFinal': sRow['hide_final_grades_from_parent'] == true,
+              };
+            }
+          }
+        } catch (e) {
+          debugPrint('Student settings privacy columns notice: $e');
+        }
+      }
+
       final results = <UserModel>[];
       for (final row in linksResp as List) {
         final profile = row['student_profiles'] as Map<String, dynamic>? ?? {};
@@ -881,7 +917,7 @@ class SupabaseParentRepository {
             .from('student_enrollments')
             .select('subject_offerings(sections(section_name, grade_level))')
             .eq('student_id', sId)
-            .eq('status', 'enrolled')
+            .ilike('status', 'enrolled')
             .limit(1)
             .maybeSingle();
 
@@ -893,6 +929,15 @@ class SupabaseParentRepository {
         final section = sectionRaw is List
             ? (sectionRaw.isNotEmpty ? sectionRaw.first : null)
             : sectionRaw;
+
+        final localPrivacy = LocalStorageService.getStudentGradePrivacy(sId);
+        final dbPrivacy = privacyByStudentId[sId];
+        final hideTerm =
+            dbPrivacy?['hideTerm'] ?? localPrivacy?['hideTermGrades'] ?? false;
+        final hideFinal =
+            dbPrivacy?['hideFinal'] ??
+            localPrivacy?['hideFinalGrades'] ??
+            false;
 
         results.add(
           UserModel(
@@ -917,6 +962,8 @@ class SupabaseParentRepository {
                 ? section['grade_level']?.toString()
                 : null,
             parentGuardianRelationship: row['relationship']?.toString(),
+            hideTermGradesFromParent: hideTerm,
+            hideFinalGradesFromParent: hideFinal,
             status: AccountStatus.active,
           ),
         );
@@ -1149,58 +1196,520 @@ class SupabaseParentRepository {
     } catch (_) {}
   }
 
-  /// Read-only helper: fetches learning materials for a parent's linked student,
-  /// ensuring enrollment isolation and hierarchical visibility.
-  Future<List<Map<String, dynamic>>> getStudentLearningMaterialsForParent({
-    required String parentId,
-    required String studentId,
-  }) async {
+  /// Fetches a student's enrolled subject offerings along with real teacher profile
+  /// and public contact settings from `teacher_profiles`, `users`, and `teacher_settings`.
+  Future<List<Map<String, dynamic>>> getEnrolledOfferingsWithTeachersForStudent(
+    String studentId,
+  ) async {
+    if (studentId.trim().isEmpty) return [];
     try {
-      // 1. Verify link between parent and student
-      final link = await _client
+      final rawEnrollments = await _client
+          .from('student_enrollments')
+          .select('''
+            subject_offerings!inner (
+              id,
+              teacher_id,
+              ww_weight,
+              pt_weight,
+              ex_weight,
+              terms_taught,
+              term_block,
+              subjects ( id, subject_name, subject_code, grade_level ),
+              sections ( id, section_name, grade_level ),
+              teacher_profiles ( teacher_id, first_name, middle_name, last_name, gender )
+            )
+          ''')
+          .eq('student_id', studentId)
+          .ilike('status', 'enrolled');
+
+      final offerings = (rawEnrollments as List)
+          .map((row) => Map<String, dynamic>.from(row as Map))
+          .map((row) {
+            final off = row['subject_offerings'];
+            if (off is Map<String, dynamic>) {
+              return Map<String, dynamic>.from(off);
+            }
+            if (off is Map) return Map<String, dynamic>.from(off);
+            return <String, dynamic>{};
+          })
+          .where((offering) => offering.isNotEmpty)
+          .toList();
+
+      if (offerings.isEmpty) return [];
+
+      final teacherIds = <String>{};
+      for (final off in offerings) {
+        final tid = off['teacher_id']?.toString().trim() ?? '';
+        if (tid.isNotEmpty) teacherIds.add(tid);
+        final tp = off['teacher_profiles'];
+        if (tp is Map) {
+          final tpId = tp['teacher_id']?.toString().trim() ?? '';
+          if (tpId.isNotEmpty) teacherIds.add(tpId);
+        }
+      }
+
+      final teacherEmails = <String, String>{};
+      final teacherSettingsMap = <String, Map<String, dynamic>>{};
+
+      if (teacherIds.isNotEmpty) {
+        final idList = teacherIds.toList();
+        try {
+          final usersResp = await _client
+              .from('users')
+              .select('id, email')
+              .filter('id', 'in', idList);
+          for (final u in (usersResp as List)) {
+            final uid = u['id']?.toString();
+            final em = u['email']?.toString();
+            if (uid != null && em != null) {
+              teacherEmails[uid] = em;
+            }
+          }
+        } catch (e) {
+          debugPrint('Teacher email lookup notice: $e');
+        }
+
+        try {
+          final settingsResp = await _client
+              .from('teacher_settings')
+              .select(
+                'teacher_id, contact_number, is_phone_public, facebook_link, is_facebook_public, consultation_hours, subject_specialization',
+              )
+              .filter('teacher_id', 'in', idList);
+          for (final ts in (settingsResp as List)) {
+            final tid = ts['teacher_id']?.toString();
+            if (tid != null) {
+              teacherSettingsMap[tid] = Map<String, dynamic>.from(ts as Map);
+            }
+          }
+        } catch (e) {
+          debugPrint('Teacher settings lookup notice: $e');
+        }
+      }
+
+      for (final off in offerings) {
+        final rawTp = off['teacher_profiles'];
+        final tp = rawTp is Map
+            ? Map<String, dynamic>.from(rawTp)
+            : <String, dynamic>{};
+        final tid =
+            tp['teacher_id']?.toString().trim() ??
+            off['teacher_id']?.toString().trim() ??
+            '';
+
+        if (tid.isNotEmpty) {
+          tp['teacher_id'] = tid;
+          if (teacherEmails.containsKey(tid)) {
+            tp['email'] = teacherEmails[tid];
+          }
+          final ts = teacherSettingsMap[tid];
+          if (ts != null) {
+            final isPhonePublic = ts['is_phone_public'] == true;
+            final isFacebookPublic = ts['is_facebook_public'] == true;
+            tp['is_phone_public'] = isPhonePublic;
+            tp['contact_number'] = isPhonePublic
+                ? ts['contact_number']?.toString()
+                : null;
+            tp['is_facebook_public'] = isFacebookPublic;
+            tp['facebook_link'] = isFacebookPublic
+                ? ts['facebook_link']?.toString()
+                : null;
+            tp['consultation_hours'] = ts['consultation_hours']?.toString();
+            tp['subject_specialization'] = ts['subject_specialization']
+                ?.toString();
+          }
+        }
+        off['teacher_profiles'] = tp;
+      }
+
+      return offerings;
+    } catch (e) {
+      debugPrint('Error fetching enrolled offerings with teachers: $e');
+      return [];
+    }
+  }
+
+  /// Fetches all linked parents/guardians for a given student so the student
+  /// can see who is linked to their account before toggling 18+ grade privacy.
+  Future<List<Map<String, dynamic>>> getLinkedParentsForStudent(
+    String studentId,
+  ) async {
+    if (studentId.trim().isEmpty) return [];
+    try {
+      final linksResp = await _client
           .from('parent_student_links')
-          .select('student_id')
-          .eq('parent_id', parentId)
+          .select('''
+            parent_id,
+            relationship,
+            parent_profiles!inner (
+              parent_id,
+              first_name,
+              middle_name,
+              last_name,
+              status
+            )
+          ''')
+          .eq('student_id', studentId);
+
+      if ((linksResp as List).isEmpty) return [];
+
+      final parentIds = (linksResp as List)
+          .map((r) => r['parent_id']?.toString())
+          .whereType<String>()
+          .toSet()
+          .toList();
+
+      final emailByParentId = <String, String>{};
+      if (parentIds.isNotEmpty) {
+        try {
+          final usersResp = await _client
+              .from('users')
+              .select('id, email, is_archived')
+              .filter('id', 'in', parentIds);
+          for (final u in (usersResp as List)) {
+            if (u['is_archived'] == true) continue;
+            final pid = u['id']?.toString();
+            final em = u['email']?.toString();
+            if (pid != null && em != null) {
+              emailByParentId[pid] = em;
+            }
+          }
+        } catch (_) {}
+      }
+
+      final parents = <Map<String, dynamic>>[];
+      for (final row in (linksResp as List)) {
+        final pid = row['parent_id']?.toString() ?? '';
+        final profile = row['parent_profiles'] as Map<String, dynamic>? ?? {};
+        final fullName = [
+          profile['first_name'],
+          profile['middle_name'],
+          profile['last_name'],
+        ].where((n) => n != null && n.toString().trim().isNotEmpty).join(' ');
+
+        parents.add({
+          'parentId': pid,
+          'fullName': fullName.isNotEmpty ? fullName : 'Parent / Guardian',
+          'relationship': row['relationship']?.toString() ?? 'Guardian',
+          'email': emailByParentId[pid] ?? '',
+        });
+      }
+      return parents;
+    } catch (e) {
+      debugPrint('Error fetching linked parents for student: $e');
+      return [];
+    }
+  }
+
+  /// Reads the student's 18+ grade privacy toggles from `student_settings` (with local cache fallback).
+  Future<Map<String, bool>> getStudentGradePrivacySettings(
+    String studentId,
+  ) async {
+    final local = LocalStorageService.getStudentGradePrivacy(studentId);
+    if (studentId.trim().isEmpty) {
+      return {'hideTermGrades': false, 'hideFinalGrades': false};
+    }
+
+    try {
+      final resp = await _client
+          .from('student_settings')
+          .select(
+            'hide_term_grades_from_parent, hide_final_grades_from_parent',
+          )
           .eq('student_id', studentId)
           .maybeSingle();
+      if (resp != null) {
+        final hideTerm = resp['hide_term_grades_from_parent'] == true;
+        final hideFinal = resp['hide_final_grades_from_parent'] == true;
+        await LocalStorageService.saveStudentGradePrivacy(
+          studentId,
+          hideTermGrades: hideTerm,
+          hideFinalGrades: hideFinal,
+        );
+        return {'hideTermGrades': hideTerm, 'hideFinalGrades': hideFinal};
+      }
+    } catch (e) {
+      debugPrint('Student grade privacy DB read fallback: $e');
+    }
 
-      if (link == null) return [];
+    return {
+      'hideTermGrades': local?['hideTermGrades'] ?? false,
+      'hideFinalGrades': local?['hideFinalGrades'] ?? false,
+    };
+  }
 
-      // 2. Fetch enrolled subject offerings
-      final enrollments = await _client
+  /// Updates the student's 18+ grade privacy toggles in `student_settings` and invalidates parent caches.
+  Future<void> updateStudentGradePrivacySettings({
+    required String studentId,
+    required bool hideTermGrades,
+    required bool hideFinalGrades,
+  }) async {
+    if (studentId.trim().isEmpty) return;
+
+    await LocalStorageService.saveStudentGradePrivacy(
+      studentId,
+      hideTermGrades: hideTermGrades,
+      hideFinalGrades: hideFinalGrades,
+    );
+
+    try {
+      await _client
+          .from('student_settings')
+          .update({
+            'hide_term_grades_from_parent': hideTermGrades,
+            'hide_final_grades_from_parent': hideFinalGrades,
+            'updated_at': DateTime.now().toUtc().toIso8601String(),
+          })
+          .eq('student_id', studentId);
+    } catch (e) {
+      debugPrint('Student grade privacy DB update notice: $e');
+    }
+
+    AppDataCache.instance.invalidatePrefix('parent_linked_students_');
+    AppDataCache.instance.invalidatePrefix('parent_child_grades_');
+    AppDataCache.instance.invalidatePrefix('parent_student_overview_data_');
+    AppDataCache.instance.invalidate('student_dashboard_$studentId');
+  }
+
+  /// Fetches the parent/guardian's own live profile from `public.parent_profiles`
+  /// and `public.users`.
+  Future<UserModel?> getParentProfile(String parentId) async {
+    if (parentId.trim().isEmpty) return null;
+    try {
+      final results = await Future.wait<dynamic>([
+        _client
+            .from('parent_profiles')
+            .select(
+              'parent_id, first_name, middle_name, last_name, birthday, status',
+            )
+            .eq('parent_id', parentId)
+            .maybeSingle(),
+        _client
+            .from('users')
+            .select('id, email, is_archived')
+            .eq('id', parentId)
+            .maybeSingle(),
+      ]);
+
+      final profile = results[0] as Map<String, dynamic>?;
+      final userRow = results[1] as Map<String, dynamic>?;
+      if (profile == null && userRow == null) return null;
+
+      final firstName = profile?['first_name']?.toString().trim() ?? '';
+      final middleName = profile?['middle_name']?.toString().trim();
+      final lastName = profile?['last_name']?.toString().trim() ?? '';
+      final email = userRow?['email']?.toString().trim() ?? '';
+      final birthdayStr = profile?['birthday']?.toString();
+      final statusStr = profile?['status']?.toString();
+      final isArchived = userRow?['is_archived'] == true;
+
+      final fullName = [
+        firstName,
+        if (middleName != null && middleName.isNotEmpty) middleName,
+        lastName,
+      ].where((s) => s.isNotEmpty).join(' ');
+
+      return UserModel(
+        id: parentId,
+        username: email.isNotEmpty ? email : parentId,
+        email: email,
+        fullName: fullName.isNotEmpty ? fullName : email,
+        firstName: firstName.isNotEmpty ? firstName : null,
+        middleName: (middleName != null && middleName.isNotEmpty)
+            ? middleName
+            : null,
+        lastName: lastName.isNotEmpty ? lastName : null,
+        birthday: birthdayStr != null ? DateTime.tryParse(birthdayStr) : null,
+        role: UserRole.parent,
+        status: _parseParentStatus(statusStr, isArchived: isArchived),
+        isArchived: isArchived,
+      );
+    } catch (e) {
+      debugPrint('Error fetching parent profile from Supabase: $e');
+      return null;
+    }
+  }
+
+  /// Fetches the student's real weekly schedules directly from their enrolled
+  /// `subject_offerings` in `public.student_enrollments` -> `public.teacher_schedule`,
+  /// falling back to `fallbackSection` if needed.
+  Future<List<ScheduleModel>> getSchedulesForStudent(
+    String studentId, {
+    String? fallbackSection,
+  }) async {
+    if (studentId.trim().isEmpty) {
+      if (fallbackSection != null && fallbackSection.trim().isNotEmpty) {
+        return SupabaseScheduleRepository.instance.getSchedules(
+          section: fallbackSection.trim(),
+        );
+      }
+      return [];
+    }
+
+    try {
+      final enrollResp = await _client
           .from('student_enrollments')
           .select('subject_offering_id')
           .eq('student_id', studentId)
-          .eq('status', 'enrolled');
+          .ilike('status', 'enrolled');
 
-      if ((enrollments as List).isEmpty) return [];
-
-      final offeringIds = (enrollments as List)
-          .map((e) => e['subject_offering_id']?.toString())
+      final offeringIds = (enrollResp as List)
+          .map((r) => r['subject_offering_id']?.toString())
           .whereType<String>()
+          .where((id) => id.isNotEmpty)
+          .toSet()
           .toList();
 
-      // 3. Fetch materials using hierarchical visibility
-      final materials = <Map<String, dynamic>>[];
-      for (final oId in offeringIds) {
-        final list = await SupabaseLearningMaterialRepository.instance
-            .getStudentMaterialsWithHierarchy(subjectOfferingId: oId);
-        for (final m in list) {
-          materials.add({
-            'id': m.id,
-            'title': m.displayName,
-            'fileName': m.fileName,
-            'format': m.fileExtension,
-            'size': m.formattedSize,
-            'description': m.description,
-            'createdAt': m.createdAt.toIso8601String(),
-          });
+      if (offeringIds.isNotEmpty) {
+        final schedResp = await _client
+            .from('teacher_schedule')
+            .select('''
+              id, day_of_week, start_time, end_time, room, is_active,
+              subject_offerings!inner (
+                id, teacher_id, ww_weight, pt_weight, ex_weight,
+                subjects ( id, subject_name, grade_level ),
+                sections ( id, section_name, grade_level )
+              )
+            ''')
+            .filter('subject_offering_id', 'in', offeringIds)
+            .order('day_of_week')
+            .order('start_time');
+
+        final list = <ScheduleModel>[];
+        for (final row in (schedResp as List)) {
+          final offering =
+              row['subject_offerings'] as Map<String, dynamic>? ?? {};
+          final sub = offering['subjects'] as Map<String, dynamic>? ?? {};
+          final sec = offering['sections'] as Map<String, dynamic>? ?? {};
+
+          final subName = sub['subject_name']?.toString() ?? 'Subject';
+          final secName = sec['section_name']?.toString() ?? 'Section';
+          final dayIndex = row['day_of_week'] is int
+              ? row['day_of_week'] as int
+              : int.tryParse(row['day_of_week']?.toString() ?? '1') ?? 1;
+
+          list.add(
+            ScheduleModel(
+              id: row['id'].toString(),
+              subject: subName,
+              section: secName,
+              room: row['room']?.toString() ?? '',
+              dayOfWeek: ScheduleModel.dayFromIndex(dayIndex),
+              startTime: ScheduleModel.formatTime24to12(
+                row['start_time']?.toString() ?? '08:00:00',
+              ),
+              endTime: ScheduleModel.formatTime24to12(
+                row['end_time']?.toString() ?? '09:00:00',
+              ),
+              sectionId: sec['id']?.toString() ?? secName,
+              subjectId: sub['id']?.toString(),
+              teacherId: offering['teacher_id']?.toString(),
+              gradeLevel: sub['grade_level'] is int
+                  ? sub['grade_level'] as int
+                  : null,
+              wwWeight: (offering['ww_weight'] as num?)?.toDouble() ?? 20.0,
+              ptWeight: (offering['pt_weight'] as num?)?.toDouble() ?? 50.0,
+              exWeight: (offering['ex_weight'] as num?)?.toDouble() ?? 30.0,
+            ),
+          );
+        }
+        if (list.isNotEmpty) return list;
+      }
+    } catch (e) {
+      debugPrint('Error fetching schedules by student enrollments: $e');
+    }
+
+    if (fallbackSection != null && fallbackSection.trim().isNotEmpty) {
+      return SupabaseScheduleRepository.instance.getSchedules(
+        section: fallbackSection.trim(),
+      );
+    }
+    return [];
+  }
+
+  /// Verifies the parent's current password and updates their password in
+  /// Firebase Authentication and local storage.
+  /// Returns `null` on success, or an error map `{'field': 'current'|'new', 'message': '...'}`.
+  Future<Map<String, String>?> changeParentPassword({
+    required UserModel parent,
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    try {
+      final fbUser = firebase_auth.FirebaseAuth.instance.currentUser;
+      final email = (fbUser?.email?.trim().isNotEmpty == true)
+          ? fbUser!.email!.trim()
+          : parent.email.trim();
+
+      if (email.isEmpty) {
+        return {
+          'field': 'current',
+          'message': 'Unable to verify parent account email. Please re-login.',
+        };
+      }
+
+      if (fbUser != null) {
+        try {
+          final cred = firebase_auth.EmailAuthProvider.credential(
+            email: email,
+            password: currentPassword,
+          );
+          await fbUser.reauthenticateWithCredential(cred);
+        } on firebase_auth.FirebaseAuthException catch (e) {
+          if (e.code == 'wrong-password' ||
+              e.code == 'invalid-credential' ||
+              e.code == 'user-mismatch') {
+            return {
+              'field': 'current',
+              'message': 'Current password is incorrect.',
+            };
+          }
+          return {
+            'field': 'current',
+            'message': e.message ?? 'Could not verify current password.',
+          };
         }
       }
-      return materials;
+
+      bool updated = false;
+      if (fbUser != null) {
+        try {
+          await fbUser.updatePassword(newPassword);
+          updated = true;
+        } catch (_) {}
+      }
+
+      if (!updated) {
+        updated = await FirebaseAuthAdminService.updateUserPassword(
+          uid: parent.id,
+          newPassword: newPassword,
+        );
+      }
+
+      if (!updated) {
+        return {
+          'field': 'new',
+          'message': 'Failed to update password. Please try again.',
+        };
+      }
+
+      try {
+        await _client
+            .from('parent_profiles')
+            .update({'status': 'active'})
+            .eq('parent_id', parent.id);
+      } catch (_) {}
+
+      await LocalStorageService.updateSavedPasswordIfRemembered(
+        newPassword,
+        forEmail: email,
+      );
+      return null;
     } catch (e) {
-      debugPrint('Error getting student materials for parent: $e');
-      return [];
+      return {
+        'field': 'new',
+        'message': e.toString().replaceFirst('Exception: ', ''),
+      };
     }
   }
 }

@@ -602,16 +602,6 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
                               .withValues(alpha: 0.6),
                         ),
                       ),
-                      const Spacer(),
-                      TextButton.icon(
-                        icon: const Icon(Icons.copy, size: 14),
-                        label: const Text(
-                          'Simulate: Copy attempt detected',
-                          style: TextStyle(fontSize: 10),
-                        ),
-                        onPressed: () =>
-                            _recordViolation('Copy attempt detected'),
-                      ),
                     ],
                   ),
                   const SizedBox(height: 16),

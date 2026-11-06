@@ -43,10 +43,6 @@ class _GradebookGridCellState extends State<GradebookGridCell> {
   void _onTextChanged(String text) {
     _debounceTimer?.cancel();
     if (widget.isHpsCell) {
-      // Prevent clearing an already-set HPS to blank; teacher can replace it with 1..100.
-      if (text.trim().isEmpty && widget.value.trim().isNotEmpty) {
-        return;
-      }
       _debounceTimer = Timer(const Duration(milliseconds: 220), () {
         if (mounted) {
           widget.onChanged(text);
@@ -64,11 +60,6 @@ class _GradebookGridCellState extends State<GradebookGridCell> {
   void _flushDebounce() {
     if (_debounceTimer?.isActive ?? false) {
       _debounceTimer?.cancel();
-      if (widget.isHpsCell &&
-          _controller.text.trim().isEmpty &&
-          widget.value.trim().isNotEmpty) {
-        return;
-      }
       widget.onChanged(_controller.text);
     }
   }
@@ -83,7 +74,8 @@ class _GradebookGridCellState extends State<GradebookGridCell> {
   @override
   void didUpdateWidget(covariant GradebookGridCell oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (!_focusNode.hasFocus && oldWidget.value != widget.value) {
+    if (!_focusNode.hasFocus &&
+        (_controller.text != widget.value || oldWidget.value != widget.value)) {
       _controller.value = TextEditingValue(
         text: widget.value,
         selection: TextSelection.collapsed(offset: widget.value.length),
@@ -104,36 +96,15 @@ class _GradebookGridCellState extends State<GradebookGridCell> {
 
   void _handleFocusChange() {
     if (!_focusNode.hasFocus) {
-      if (widget.isHpsCell &&
-          _controller.text.trim().isEmpty &&
-          widget.value.trim().isNotEmpty) {
-        _debounceTimer?.cancel();
+      _flushDebounce();
+      if (_controller.text != widget.value) {
         _controller.value = TextEditingValue(
           text: widget.value,
           selection: TextSelection.collapsed(offset: widget.value.length),
         );
-        _showBlankHpsWarning();
-      } else {
-        _flushDebounce();
       }
     }
     if (mounted) setState(() {});
-  }
-
-  void _showBlankHpsWarning() {
-    final messenger = ScaffoldMessenger.maybeOf(context);
-    if (messenger == null) return;
-    messenger
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Highest Possible Score (HPS) cannot be left blank once set. Enter 1–100 to replace it.',
-          ),
-          duration: Duration(seconds: 2),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
   }
 
   void _showRangeWarning() {

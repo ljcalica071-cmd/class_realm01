@@ -72,9 +72,11 @@ class _EditAssessmentFlowDialogState extends State<EditAssessmentFlowDialog> {
       return;
     }
 
-    final duration =
-        int.tryParse(_durationCtrl.text.trim()) ??
-        widget.assessment.durationMinutes;
+    final parsedDuration = int.tryParse(_durationCtrl.text.trim());
+    if (parsedDuration == null || parsedDuration < 1 || parsedDuration > 120) {
+      return;
+    }
+    final duration = parsedDuration;
 
     final updated = widget.assessment.copyWith(
       title: _titleCtrl.text.trim(),
@@ -174,6 +176,21 @@ class _EditAssessmentFlowDialogState extends State<EditAssessmentFlowDialog> {
                             label: 'Duration (Mins)',
                             controller: _durationCtrl,
                             keyboardType: TextInputType.number,
+                            autovalidateMode:
+                                AutovalidateMode.onUserInteraction,
+                            validator: (val) {
+                              if (val == null || val.trim().isEmpty) {
+                                return 'Required';
+                              }
+                              final d = int.tryParse(val.trim());
+                              if (d == null || d < 1) {
+                                return 'Min 1 min';
+                              }
+                              if (d > 120) {
+                                return 'Max 120 mins';
+                              }
+                              return null;
+                            },
                           ),
                         ),
                         const SizedBox(width: 16),

@@ -4,6 +4,7 @@ import 'package:class_realm/core/utils/validators.dart';
 import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/utils/formatters.dart';
+import 'package:class_realm/shared/widgets/shared_widgets.dart';
 import 'package:class_realm/shared/widgets/shimmer_loading.dart';
 import 'package:flutter/services.dart';
 
@@ -16,7 +17,7 @@ class TeacherProfileTab extends StatefulWidget {
 
 class _TeacherProfileTabState extends State<TeacherProfileTab> {
   late UserModel _teacher;
-  bool _isEditing = false;
+  final bool _isEditing = false;
   final bool _isLoading = false;
 
   late TextEditingController _subjectSpecializationCtrl;
@@ -74,26 +75,6 @@ class _TeacherProfileTabState extends State<TeacherProfileTab> {
       age--;
     }
     return age;
-  }
-
-  void _saveProfile() {
-    // Update local state and mock database
-    setState(() {
-      _teacher = _teacher.copyWith(
-        subjectSpecialization: _subjectSpecializationCtrl.text.trim(),
-        facebookLink: _facebookLinkCtrl.text.trim(),
-        contactNumber: _phoneCtrl.text.trim(),
-        consultationHours: _consultationHoursCtrl.text.trim(),
-        isFacebookPublic: _isFacebookPublic,
-        isPhonePublic: _isPhonePublic,
-      );
-      _isEditing = false;
-    });
-
-    // In a real application, you would call your repository here to update the Supabase 'teacher_profile' table.
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Profile updated successfully.')),
-    );
   }
 
   @override
@@ -203,23 +184,20 @@ class _TeacherProfileTabState extends State<TeacherProfileTab> {
                               ),
                               ElevatedButton.icon(
                                 onPressed: () {
-                                  if (_isEditing) {
-                                    _saveProfile();
-                                  } else {
-                                    setState(() => _isEditing = true);
-                                  }
+                                  AppModals.showUpcomingFeatureDialog(
+                                    context,
+                                    featureName: 'Teacher Profile Editing',
+                                  );
                                 },
-                                icon: Icon(
-                                  _isEditing ? Icons.save : Icons.edit,
+                                icon: const Icon(
+                                  Icons.edit,
                                   size: 18,
                                 ),
-                                label: Text(
-                                  _isEditing ? 'Save Changes' : 'Edit Profile',
+                                label: const Text(
+                                  'Edit Profile (Next Update)',
                                 ),
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: _isEditing
-                                      ? AppTheme.catGreen
-                                      : theme.colorScheme.primary,
+                                  backgroundColor: theme.colorScheme.primary,
                                   foregroundColor: Colors.white,
                                   elevation: 0,
                                   padding: const EdgeInsets.symmetric(
