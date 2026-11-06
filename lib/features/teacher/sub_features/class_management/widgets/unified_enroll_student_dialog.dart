@@ -115,8 +115,9 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
       if (!mounted ||
           _resumableBatch == null ||
           _isSubmitting ||
-          _isProcessingBatch)
+          _isProcessingBatch) {
         return;
+      }
       try {
         await Supabase.instance.client.from('users').select('id').limit(1);
         if (mounted &&
@@ -406,6 +407,7 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
         final suggestion = isGmail ? 'gmail.com' : 'yahoo.com';
         final suggestedEmail = rawEmail.replaceAll(typo!, suggestion);
 
+        if (!mounted) return;
         final useSuggestion = await showDialog<bool>(
           context: context,
           builder: (ctx) => AlertDialog(
@@ -455,11 +457,13 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
       ].join(' ');
 
       if (mounted) {
+        final rootNavContext = Navigator.of(context, rootNavigator: true).context;
         Navigator.of(context).pop();
         widget.onStudentCreated();
+        if (!rootNavContext.mounted) return;
 
         _showSuccessConfirmationDialog(
-          context: context,
+          context: rootNavContext,
           fullName: fullName,
           email: emailToUse,
           tempPassword: result.tempPassword,
@@ -810,6 +814,29 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
       return;
     }
 
+    if (kIsWeb) {
+      pickWebFile(
+        accept: '.xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv',
+        onFileSelected: (bytes, fileName, size) {
+          if (!mounted) return;
+          if (bytes is Uint8List) {
+            _handleBatchFileBytes(bytes, fileName, size);
+          } else if (bytes is List<int>) {
+            _handleBatchFileBytes(Uint8List.fromList(bytes), fileName, size);
+          }
+        },
+      );
+      return;
+    }
+    if (_selectedOfferingId == null) {
+      AppModals.showErrorDialog(
+        context: context,
+        title: 'Section Required',
+        message: 'Please choose Grade Level, Subject, and Section target first before importing students.',
+      );
+      return;
+    }
+
     try {
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
@@ -941,6 +968,7 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
 
       // Check 2: Blank File / No Data (Empty file)
       if (rows.isEmpty || rows.length <= 1) {
+        if (!mounted) return;
         setState(() {
           _isProcessingBatch = false;
           _batchProgress = 0.0;
@@ -1013,6 +1041,7 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
           birthdayIndex != -1;
 
       if (!hasRequiredHeaders) {
+        if (!mounted) return;
         setState(() {
           _isProcessingBatch = false;
           _batchProgress = 0.0;
@@ -1027,13 +1056,23 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
         return;
       }
 
-      final totalDataRows = rows.length - 1;
+      // Pre-filter non-empty data rows (preserving original 1-based Excel rowNumber)
+      final nonEmptyRows = <MapEntry<int, List<dynamic>>>[];
+      for (int i = 1; i < rows.length; i++) {
+        final row = rows[i];
+        if (row.isEmpty || row.every((c) => c.toString().trim().isEmpty)) {
+          continue;
+        }
+        nonEmptyRows.add(MapEntry(i + 1, row));
+      }
+
       if (mounted) {
         setState(() {
-          _batchProgress = 0.10;
-          _batchPhase = 'Found $totalDataRows records. Validating...';
+          _batchProgress = 0.25;
+          _batchPhase = 'Validating ${nonEmptyRows.length} record${nonEmptyRows.length == 1 ? "" : "s"}...';
         });
       }
+      await Future.delayed(Duration.zero);
 
       final candidateStudents = <_ParsedStudentRow>[];
       final invalidRows = <_InvalidStudentRow>[];
@@ -1054,13 +1093,9 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
         r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$',
       );
 
-      for (int i = 1; i < rows.length; i++) {
-        final row = rows[i];
-        final rowNum = i + 1;
-
-        if (row.isEmpty || row.every((c) => c.toString().trim().isEmpty)) {
-          continue;
-        }
+      for (int idx = 0; idx < nonEmptyRows.length; idx++) {
+        final rowNum = nonEmptyRows[idx].key;
+        final row = nonEmptyRows[idx].value;
 
         final rawLrn = (lrnIndex < row.length ? row[lrnIndex] : '')
             .toString()
@@ -1096,28 +1131,8 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
             .toLowerCase();
 
         final cleanLrn = rawLrn.replaceAll(RegExp(r'\D'), '');
-        final studentLabel = rawFirst.isNotEmpty
-            ? '$rawFirst $rawLast'
-            : (rawLrn.isNotEmpty ? 'LRN $rawLrn' : 'Row $rowNum');
 
-        // Live real-time in-card progress update
-        if (mounted) {
-          final rowProgress = ((i / totalDataRows) * 0.70).clamp(0.05, 0.70);
-          setState(() {
-            _batchProgress = rowProgress;
-            _batchPhase = 'Validating records... ($i of $totalDataRows)';
-            _batchActiveRecord = 'Row $rowNum: $studentLabel';
-          });
-        }
-
-        // Micro-delay for visual responsiveness
-        if (totalDataRows <= 40) {
-          await Future.delayed(const Duration(milliseconds: 25));
-        } else if (i % 2 == 0) {
-          await Future.delayed(const Duration(milliseconds: 10));
-        }
-
-        // Silently skip sample row (Row 2 in template)
+        // Silently skip sample row (Row 2 in official template)
         final isSampleRow =
             (cleanLrn == '123456789012' &&
                 (rawFirst.toLowerCase() == 'juana' ||
@@ -1125,7 +1140,10 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
                     rawLast.toLowerCase().contains('dela cruz') ||
                     rawEmail.contains('example@gmail.com') ||
                     rawEmail.contains('juana.rexsa@gmail.com'))) ||
-            (rowNum == 2 && cleanLrn == '123456789012');
+            (rowNum == 2 &&
+                (cleanLrn == '123456789012' ||
+                    rawEmail == 'juana.rexsa@gmail.com' ||
+                    rawEmail == 'example@gmail.com'));
 
         if (isSampleRow) {
           continue;
@@ -1400,11 +1418,11 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
 
       if (candidateStudents.isNotEmpty && mounted) {
         setState(() {
-          _batchProgress = 0.85;
+          _batchProgress = 0.75;
           _batchPhase = 'Verifying with database...';
           _batchActiveRecord = 'Checking accounts and enrollments in Supabase';
         });
-        await Future.delayed(const Duration(milliseconds: 80));
+        await Future.delayed(Duration.zero);
       }
 
       // Supabase Database Checks (Checks 6, 10, 11, 12)
@@ -1417,32 +1435,45 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
         final cleanLrns = candidateStudents.map((s) => s.lrn).toList();
         final cleanEmails = candidateStudents.map((s) => s.email).toList();
 
-        // Fetch matching student profiles
-        final List<dynamic> profilesRes = await client
-            .from('student_profiles')
-            .select('student_id, lrn, first_name, last_name')
-            .filter('lrn', 'in', cleanLrns);
+        // Execute initial verification queries in parallel for fast response
+        final parallelResults = await Future.wait<List<dynamic>>([
+          client
+              .from('student_profiles')
+              .select('student_id, lrn, first_name, last_name')
+              .inFilter('lrn', cleanLrns),
+          client
+              .from('users')
+              .select('id, email, role')
+              .inFilter('email', cleanEmails),
+          if (_selectedOfferingId != null)
+            client
+                .from('student_enrollments')
+                .select('student_profiles!inner(gender)')
+                .eq('subject_offering_id', _selectedOfferingId!)
+                .ilike('status', 'enrolled')
+                .catchError((_) => <dynamic>[])
+          else
+            Future.value(<dynamic>[]),
+        ]);
+
+        final profilesRes = parallelResults[0];
+        final usersRes = parallelResults[1];
+        final currentSectionStudents = parallelResults[2];
 
         final profileMap = <String, Map<String, dynamic>>{};
         final studentIds = <String>[];
         for (final p in profilesRes) {
-          final lrn = (p['lrn'] ?? '').toString();
+          final lrn = (p['lrn'] ?? '').toString().trim();
           if (lrn.isNotEmpty) {
             profileMap[lrn] = p as Map<String, dynamic>;
-            final sId = (p['student_id'] ?? '').toString();
+            final sId = (p['student_id'] ?? '').toString().trim();
             if (sId.isNotEmpty) studentIds.add(sId);
           }
         }
 
-        // Fetch users to detect email collisions
-        final List<dynamic> usersRes = await client
-            .from('users')
-            .select('id, email, role')
-            .filter('email', 'in', cleanEmails);
-
         final userEmailMap = <String, Map<String, dynamic>>{};
         for (final u in usersRes) {
-          final em = (u['email'] ?? '').toString().toLowerCase();
+          final em = (u['email'] ?? '').toString().trim().toLowerCase();
           if (em.isNotEmpty) userEmailMap[em] = u as Map<String, dynamic>;
         }
 
@@ -1453,36 +1484,26 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
               .from('student_enrollments')
               .select('student_id, status')
               .eq('subject_offering_id', _selectedOfferingId!)
-              .filter('student_id', 'in', studentIds);
+              .inFilter('student_id', studentIds);
 
           for (final e in enrollRes) {
-            final sId = (e['student_id'] ?? '').toString();
-            final st = (e['status'] ?? '').toString();
+            final sId = (e['student_id'] ?? '').toString().trim();
+            final st = (e['status'] ?? '').toString().trim().toLowerCase();
             if (sId.isNotEmpty) {
               enrollmentMap[sId] = st;
             }
           }
         }
 
-        // Fetch current enrolled counts by gender to enforce Section Capacity (Max 50 Male, Max 50 Female)
+        // Count current enrolled students by gender for Section Capacity (Max 50 Male, Max 50 Female)
         int currentMaleEnrolled = 0;
         int currentFemaleEnrolled = 0;
-        try {
-          if (_selectedOfferingId != null) {
-            final List<dynamic> currentSectionStudents = await client
-                .from('student_enrollments')
-                .select('student_profiles!inner(gender)')
-                .eq('subject_offering_id', _selectedOfferingId!)
-                .ilike('status', 'enrolled');
-
-            for (final item in currentSectionStudents) {
-              final profile = item['student_profiles'] as Map<String, dynamic>?;
-              final g = profile?['gender']?.toString().toLowerCase();
-              if (g == 'male') currentMaleEnrolled++;
-              if (g == 'female') currentFemaleEnrolled++;
-            }
-          }
-        } catch (_) {}
+        for (final item in currentSectionStudents) {
+          final profile = item['student_profiles'] as Map<String, dynamic>?;
+          final g = profile?['gender']?.toString().toLowerCase();
+          if (g == 'male') currentMaleEnrolled++;
+          if (g == 'female') currentFemaleEnrolled++;
+        }
 
         // Evaluate candidate rows against DB records
         for (final s in candidateStudents) {
@@ -1675,18 +1696,20 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
           fileName: _batchFileName ?? 'Spreadsheet',
         );
       } else if (alreadyEnrolledStudents.isNotEmpty) {
-        // All students were already enrolled
+        // All students in file were already enrolled in this class
         if (mounted) {
           setState(() {
             _batchPhase = 'Upload Complete';
             _batchActiveRecord =
-                'All ${alreadyEnrolledStudents.length} student(s) already enrolled.';
+                'All ${alreadyEnrolledStudents.length} student(s) already enrolled in this section.';
           });
-          AppModals.showSuccessDialog(
-            context: context,
-            title: 'Already Enrolled',
-            message:
-                'All ${alreadyEnrolledStudents.length} student(s) in this file are already enrolled in this class. No duplicate enrollments were made.',
+          _showBatchResultDialog(
+            successful: const [],
+            failed: const [],
+            credentialsRoster: const [],
+            emailStatusNotifier: ValueNotifier(
+              const _BatchEmailStatus(sent: 0, failed: 0, isSending: false),
+            ),
           );
         }
       }
@@ -2037,7 +2060,7 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
       for (final rm in rowMatches) {
         final rowXml = rm.group(1) ?? '';
         final cellTagMatches = RegExp(
-          r'<c\b([^>]*)(?:\/>|>(.*?)<\/c>)',
+          r'<c\b([^>\/]*)(?:\/>|>(.*?)<\/c>)',
           dotAll: true,
         ).allMatches(rowXml);
 
@@ -2062,10 +2085,14 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
           if (vMatch != null) {
             rawVal = vMatch.group(1) ?? '';
           } else {
-            final tMatchInBody = RegExp(r'<t\b[^>]*>([^<]*)<\/t>')
-                .firstMatch(body);
-            if (tMatchInBody != null) {
-              rawVal = tMatchInBody.group(1) ?? '';
+            final tMatchesInBody = RegExp(r'<t(?:\s[^>]*)?>([^<]*)<\/t>')
+                .allMatches(body);
+            if (tMatchesInBody.isNotEmpty) {
+              final buf = StringBuffer();
+              for (final tm in tMatchesInBody) {
+                buf.write(tm.group(1) ?? '');
+              }
+              rawVal = buf.toString();
             }
           }
 
@@ -2074,6 +2101,14 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
             final sIdx = int.parse(rawVal);
             if (sIdx >= 0 && sIdx < sharedStrings.length) {
               finalVal = sharedStrings[sIdx];
+            }
+          } else if ((cellType.isEmpty || cellType == 'n') &&
+              (rawVal.contains('E') ||
+                  rawVal.contains('e') ||
+                  rawVal.endsWith('.0'))) {
+            final numParsed = double.tryParse(rawVal);
+            if (numParsed != null && numParsed >= 100000000000) {
+              finalVal = numParsed.round().toString();
             }
           }
 
@@ -2209,6 +2244,7 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
       ),
     );
 
+    if (!mounted) return;
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -2302,97 +2338,111 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
       },
     );
 
-    // Phase A: Fast Database Enrollment Loop (Decoupled, skipEmail: true)
+    // Phase A: Fast Parallel Database Enrollment (skipEmail: true)
     bool isNetworkLoss = false;
+    int completedCount = 0;
+    const enrollChunkSize = 4;
 
-    for (int i = 0; i < students.length; i++) {
-      final s = students[i];
+    for (int start = 0; start < students.length; start += enrollChunkSize) {
+      if (isNetworkLoss) break;
+      final end = (start + enrollChunkSize < students.length)
+          ? start + enrollChunkSize
+          : students.length;
+      final batchChunk = students.sublist(start, end);
+
+      final firstInChunk = batchChunk.first;
       enrollProgressNotifier.value = _EnrollmentProgressData(
         phase: 'Enrolling in database',
-        currentIdx: i + 1,
+        currentIdx: (completedCount + 1).clamp(1, students.length),
         totalCount: students.length,
-        currentStudentName: '${s.firstName} ${s.lastName} (LRN: ${s.lrn})',
+        currentStudentName:
+            '${firstInChunk.firstName} ${firstInChunk.lastName} (LRN: ${firstInChunk.lrn})',
       );
 
-      try {
-        final result = await repo.enrollStudent(
-          lrn: s.lrn,
-          firstName: s.firstName,
-          middleName: s.middleName,
-          lastName: s.lastName,
-          birthday: s.birthday,
-          email: s.email,
-          gender: s.gender,
-          subjectId: _selectedOfferingId!,
-          skipEmail: true,
-        );
-
-        if (result.studentId.isNotEmpty) {
-          successful.add(s);
-          if (result.createdAccount && result.tempPassword != null) {
-            newlyCreatedStudents.add({
-              'email': s.email,
-              'name': '${s.firstName} ${s.lastName}',
-              'password': result.tempPassword!,
-              'lrn': s.lrn,
-            });
-            credentialsRoster.add({
-              'lrn': s.lrn,
-              'name': '${s.firstName} ${s.lastName}',
-              'email': s.email,
-              'password': result.tempPassword!,
-            });
-          }
-        }
-
-        // Update persisted pending batch session on each successful row
-        pendingJson.removeWhere((item) => item['lrn'] == s.lrn);
-        if (prefs != null && sessionKey != null) {
-          await prefs.setString(
-            sessionKey,
-            jsonEncode({
-              'fileName': fileName,
-              'offeringId': _selectedOfferingId,
-              'total': students.length,
-              'pending': pendingJson,
-            }),
-          );
-        }
-      } catch (e) {
-        final errLower = e.toString().toLowerCase();
-        final isNet =
-            errLower.contains('socketexception') ||
-            errLower.contains('clientexception') ||
-            errLower.contains('network') ||
-            errLower.contains('failed host lookup') ||
-            errLower.contains('connection refused') ||
-            errLower.contains('connection timed out') ||
-            errLower.contains('xmlhttprequest') ||
-            errLower.contains('handshakeexception') ||
-            errLower.contains('timeout');
-
-        if (isNet) {
-          isNetworkLoss = true;
-          break; // Stop loop immediately to protect remaining un-enrolled students
-        } else {
-          final errorMessage =
-              AppValidators.isMiddleInitialConstraintViolation(e)
-              ? 'Row ${s.rowNumber} ${AppValidators.invalidBulkMiddleInitialMessage}'
-              : e.toString().replaceAll('Exception: ', '').trim();
-          failed.add({'student': s, 'error': errorMessage});
-          pendingJson.removeWhere((item) => item['lrn'] == s.lrn);
-          if (prefs != null && sessionKey != null) {
-            await prefs.setString(
-              sessionKey,
-              jsonEncode({
-                'fileName': fileName,
-                'offeringId': _selectedOfferingId,
-                'total': students.length,
-                'pending': pendingJson,
-              }),
+      await Future.wait(
+        batchChunk.map((s) async {
+          if (isNetworkLoss) return;
+          try {
+            final result = await repo.enrollStudent(
+              lrn: s.lrn,
+              firstName: s.firstName,
+              middleName: s.middleName,
+              lastName: s.lastName,
+              birthday: s.birthday,
+              email: s.email,
+              gender: s.gender,
+              subjectId: _selectedOfferingId!,
+              skipEmail: true,
+              preResolvedExistingStudentId: s.isExistingGlobalStudent
+                  ? s.existingStudentId
+                  : null,
             );
+
+            completedCount++;
+            enrollProgressNotifier.value = _EnrollmentProgressData(
+              phase: 'Enrolling in database',
+              currentIdx: completedCount.clamp(1, students.length),
+              totalCount: students.length,
+              currentStudentName: '${s.firstName} ${s.lastName} (LRN: ${s.lrn})',
+            );
+
+            if (result.studentId.isNotEmpty) {
+              successful.add(s);
+              if (result.createdAccount && result.tempPassword != null) {
+                newlyCreatedStudents.add({
+                  'email': s.email,
+                  'name': '${s.firstName} ${s.lastName}',
+                  'password': result.tempPassword!,
+                  'lrn': s.lrn,
+                });
+                credentialsRoster.add({
+                  'lrn': s.lrn,
+                  'name': '${s.firstName} ${s.lastName}',
+                  'email': s.email,
+                  'password': result.tempPassword!,
+                });
+              }
+            }
+
+            pendingJson.removeWhere((item) => item['lrn'] == s.lrn);
+          } catch (e) {
+            final errLower = e.toString().toLowerCase();
+            final isNet =
+                errLower.contains('socketexception') ||
+                errLower.contains('clientexception') ||
+                errLower.contains('network') ||
+                errLower.contains('failed host lookup') ||
+                errLower.contains('connection refused') ||
+                errLower.contains('connection timed out') ||
+                errLower.contains('xmlhttprequest') ||
+                errLower.contains('handshakeexception') ||
+                errLower.contains('timeout');
+
+            if (isNet) {
+              isNetworkLoss = true;
+            } else {
+              completedCount++;
+              final errorMessage =
+                  AppValidators.isMiddleInitialConstraintViolation(e)
+                  ? 'Row ${s.rowNumber} ${AppValidators.invalidBulkMiddleInitialMessage}'
+                  : e.toString().replaceAll('Exception: ', '').trim();
+              failed.add({'student': s, 'error': errorMessage});
+              pendingJson.removeWhere((item) => item['lrn'] == s.lrn);
+            }
           }
-        }
+        }),
+      );
+
+      if (prefs != null && sessionKey != null) {
+        await prefs.setString(
+          sessionKey,
+          jsonEncode({
+            'fileName': fileName,
+            'offeringId': _selectedOfferingId,
+            'total': students.length,
+            'pending': pendingJson,
+          }),
+        );
       }
     }
 
@@ -2402,6 +2452,7 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
         enrollProgressNotifier.dispose();
         await _checkResumableBatch();
         widget.onStudentCreated(); // refresh dashboard roster with whatever succeeded
+        if (!mounted) return;
 
         await showDialog(
           context: context,
@@ -2466,80 +2517,113 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
       return;
     }
 
-    // Phase B: Throttled Credential Email Queue (Decoupled background dispatch)
-    int emailSentCount = 0;
-    int emailFailedCount = 0;
-
-    if (newlyCreatedStudents.isNotEmpty) {
-      enrollProgressNotifier.value = _EnrollmentProgressData(
-        phase: 'Sending welcome emails',
-        currentIdx: newlyCreatedStudents.length,
-        totalCount: newlyCreatedStudents.length,
-        currentStudentName: 'Dispatching credentials securely in background...',
-      );
-
-      const chunkSize = 4;
-      for (int i = 0; i < newlyCreatedStudents.length; i += chunkSize) {
-        final end = (i + chunkSize < newlyCreatedStudents.length)
-            ? i + chunkSize
-            : newlyCreatedStudents.length;
-        final chunk = newlyCreatedStudents.sublist(i, end);
-
-        await Future.wait(
-          chunk.map((item) async {
-            try {
-              final ok = await EmailService.instance.sendStudentWelcomeEmail(
-                recipientEmail: item['email'] as String,
-                studentName: item['name'] as String,
-                tempPassword: item['password'] as String,
-              );
-              if (ok) {
-                emailSentCount++;
-              } else {
-                emailFailedCount++;
-              }
-            } catch (_) {
-              emailFailedCount++;
-            }
-          }),
-        );
-
-        if (end < newlyCreatedStudents.length) {
-          await Future.delayed(const Duration(milliseconds: 1500));
-        }
-      }
-    }
-
     if (prefs != null && sessionKey != null) {
       await prefs.remove(sessionKey);
       if (mounted) setState(() => _resumableBatch = null);
     }
 
+    final emailStatusNotifier = ValueNotifier<_BatchEmailStatus>(
+      _BatchEmailStatus(
+        sent: 0,
+        failed: 0,
+        isSending: newlyCreatedStudents.isNotEmpty,
+      ),
+    );
+
     if (mounted) {
-      Navigator.of(context).pop(); // dismiss progress dialog
+      Navigator.of(context).pop(); // dismiss ONLY the progress dialog (keep UnifiedEnrollStudentDialog mounted!)
       enrollProgressNotifier.dispose();
-      Navigator.of(context).pop(); // dismiss unified dialog
-      widget.onStudentCreated(); // refresh dashboard roster
+      setState(() {
+        _isProcessingBatch = false;
+        _batchProgress = 1.0;
+        _batchPhase = 'Upload Complete';
+      });
+      widget.onStudentCreated(); // refresh dashboard roster immediately
 
       _showBatchResultDialog(
         successful: successful,
         failed: failed,
         credentialsRoster: credentialsRoster,
-        emailSentCount: emailSentCount,
-        emailFailedCount: emailFailedCount,
+        emailStatusNotifier: emailStatusNotifier,
       );
     }
+
+    // Phase B: Non-blocking Background Welcome Email Dispatch
+    if (newlyCreatedStudents.isNotEmpty) {
+      unawaited(
+        _dispatchWelcomeEmailsInBackground(
+          newlyCreatedStudents,
+          emailStatusNotifier,
+        ),
+      );
+    }
+  }
+
+  Future<void> _dispatchWelcomeEmailsInBackground(
+    List<Map<String, dynamic>> newlyCreatedStudents,
+    ValueNotifier<_BatchEmailStatus> emailStatusNotifier,
+  ) async {
+    int emailSentCount = 0;
+    int emailFailedCount = 0;
+    const chunkSize = 4;
+
+    for (int i = 0; i < newlyCreatedStudents.length; i += chunkSize) {
+      final end = (i + chunkSize < newlyCreatedStudents.length)
+          ? i + chunkSize
+          : newlyCreatedStudents.length;
+      final chunk = newlyCreatedStudents.sublist(i, end);
+
+      await Future.wait(
+        chunk.map((item) async {
+          try {
+            final ok = await EmailService.instance.sendStudentWelcomeEmail(
+              recipientEmail: item['email'] as String,
+              studentName: item['name'] as String,
+              tempPassword: item['password'] as String,
+            );
+            if (ok) {
+              emailSentCount++;
+            } else {
+              emailFailedCount++;
+            }
+          } catch (_) {
+            emailFailedCount++;
+          }
+          emailStatusNotifier.value = _BatchEmailStatus(
+            sent: emailSentCount,
+            failed: emailFailedCount,
+            isSending:
+                (emailSentCount + emailFailedCount) <
+                newlyCreatedStudents.length,
+          );
+        }),
+      );
+    }
+
+    emailStatusNotifier.value = _BatchEmailStatus(
+      sent: emailSentCount,
+      failed: emailFailedCount,
+      isSending: false,
+    );
   }
 
   void _showBatchResultDialog({
     required List<_ParsedStudentRow> successful,
     required List<Map<String, dynamic>> failed,
     required List<Map<String, String>> credentialsRoster,
-    required int emailSentCount,
-    required int emailFailedCount,
+    required ValueNotifier<_BatchEmailStatus> emailStatusNotifier,
   }) {
+    final newEnrolled = successful
+        .where((s) => !s.isExistingGlobalStudent)
+        .toList();
+    final existingEnrolled = successful
+        .where((s) => s.isExistingGlobalStudent)
+        .toList();
+    final skippedEnrolled = _alreadyEnrolledStudents;
+
     showDialog(
       context: context,
+      barrierDismissible: false,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Row(
@@ -2561,113 +2645,283 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
               ),
             ),
             const SizedBox(width: 12),
-            const Text(
-              'Batch Enrollment Result',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
+            Expanded(
+              child: Text(
+                failed.isEmpty
+                    ? 'Bulk Upload Complete'
+                    : 'Batch Enrollment Result',
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 17,
+                ),
+              ),
             ),
           ],
         ),
         content: SizedBox(
-          width: 500,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  _buildStatPill(
-                    'Enrolled',
-                    successful.length,
-                    const Color(0xFF0F8A48),
-                  ),
-                  const SizedBox(width: 8),
-                  _buildStatPill('Emails Sent', emailSentCount, Colors.blue),
-                  const SizedBox(width: 8),
-                  _buildStatPill(
-                    'Issues/Skipped',
-                    failed.length,
-                    failed.isEmpty ? Colors.grey : Colors.red,
-                  ),
-                ],
-              ),
-              if (emailFailedCount > 0) ...[
-                const SizedBox(height: 8),
+          width: 520,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
                 Container(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 6,
+                    horizontal: 14,
+                    vertical: 10,
                   ),
                   decoration: BoxDecoration(
-                    color: Colors.amber.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(6),
+                    color: Theme.of(context).colorScheme.primary
+                        .withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: Theme.of(context).colorScheme.primary
+                          .withValues(alpha: 0.2),
+                    ),
                   ),
                   child: Row(
                     children: [
-                      const Icon(
-                        LucideIcons.info,
-                        size: 14,
-                        color: Colors.amber,
+                      Icon(
+                        LucideIcons.graduationCap,
+                        size: 18,
+                        color: Theme.of(context).colorScheme.primary,
                       ),
-                      const SizedBox(width: 6),
-                      Text(
-                        '$emailFailedCount email${emailFailedCount > 1 ? "s" : ""} could not be delivered. You can copy the credentials below.',
-                        style: const TextStyle(
-                          fontSize: 11,
-                          color: Colors.amber,
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          _targetSummaryText,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
                         ),
                       ),
                     ],
                   ),
                 ),
-              ],
-              if (failed.isNotEmpty) ...[
                 const SizedBox(height: 14),
-                const Text(
-                  'Students Not Enrolled:',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
-                ),
-                const SizedBox(height: 6),
-                Container(
-                  constraints: const BoxConstraints(maxHeight: 130),
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.red.withValues(alpha: 0.05),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: Colors.red.withValues(alpha: 0.2),
+                Row(
+                  children: [
+                    _buildStatPill(
+                      'New Students',
+                      newEnrolled.length,
+                      const Color(0xFF0F8A48),
                     ),
-                  ),
-                  child: ListView.builder(
-                    shrinkWrap: true,
-                    itemCount: failed.length,
-                    itemBuilder: (_, idx) {
-                      final item = failed[idx];
-                      final s = item['student'] as _ParsedStudentRow;
-                      final err = item['error'] as String;
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 2),
-                        child: Text(
-                          err.startsWith('Row ')
-                              ? '• $err'
-                              : '• ${s.firstName} ${s.lastName} (${s.lrn}): $err',
-                          style: const TextStyle(
-                            fontSize: 11,
-                            color: Colors.red,
+                    const SizedBox(width: 6),
+                    _buildStatPill(
+                      'Existing',
+                      existingEnrolled.length,
+                      Colors.blue,
+                    ),
+                    const SizedBox(width: 6),
+                    _buildStatPill(
+                      'Already Enrolled',
+                      skippedEnrolled.length,
+                      Colors.grey,
+                    ),
+                    const SizedBox(width: 6),
+                    _buildStatPill(
+                      'Issues',
+                      failed.length,
+                      failed.isEmpty ? Colors.grey : Colors.red,
+                    ),
+                  ],
+                ),
+                if (newEnrolled.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  ValueListenableBuilder<_BatchEmailStatus>(
+                    valueListenable: emailStatusNotifier,
+                    builder: (context, emailStatus, _) {
+                      return Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF0F8A48).withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: const Color(0xFF0F8A48).withValues(alpha: 0.25),
                           ),
+                        ),
+                        child: Row(
+                          children: [
+                            if (emailStatus.isSending)
+                              const SizedBox(
+                                width: 14,
+                                height: 14,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Color(0xFF0F8A48),
+                                ),
+                              )
+                            else
+                              const Icon(
+                                LucideIcons.mailCheck,
+                                size: 15,
+                                color: Color(0xFF0F8A48),
+                              ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                emailStatus.isSending
+                                    ? 'Created ${newEnrolled.length} new student account${newEnrolled.length == 1 ? "" : "s"}. Sending welcome emails in background (${emailStatus.sent}/${newEnrolled.length})...'
+                                    : (emailStatus.failed > 0
+                                          ? 'Created ${newEnrolled.length} new student account${newEnrolled.length == 1 ? "" : "s"}. (${emailStatus.sent} email${emailStatus.sent == 1 ? "" : "s"} sent, ${emailStatus.failed} failed — you can copy credentials below).'
+                                          : 'Created ${newEnrolled.length} new student account${newEnrolled.length == 1 ? "" : "s"} and sent welcome emails.'),
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: Color(0xFF0F8A48),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       );
                     },
                   ),
+                ],
+                if (existingEnrolled.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  const Text(
+                    'Existing Students Linked from Another Section/Subject:',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                      color: Colors.blue,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Container(
+                    constraints: const BoxConstraints(maxHeight: 110),
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.withValues(alpha: 0.06),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: Colors.blue.withValues(alpha: 0.25),
+                      ),
+                    ),
+                    child: ListView.builder(
+                      shrinkWrap: true,
+                      itemCount: existingEnrolled.length,
+                      itemBuilder: (_, idx) {
+                        final s = existingEnrolled[idx];
+                        final mi = s.middleName.trim().isNotEmpty
+                            ? ' ${s.middleName.trim()}'
+                            : '';
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 2),
+                          child: Text(
+                            '• Row ${s.rowNumber}: ${s.firstName}$mi ${s.lastName} (LRN: ${s.lrn}) — Existing account reused and enrolled into this class.',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: Colors.blue,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+                if (skippedEnrolled.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  const Text(
+                    'Already Enrolled in This Class (Skipped):',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                      color: Colors.grey,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Container(
+                    constraints: const BoxConstraints(maxHeight: 100),
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: Colors.grey.withValues(alpha: 0.25),
+                      ),
+                    ),
+                    child: ListView.builder(
+                      shrinkWrap: true,
+                      itemCount: skippedEnrolled.length,
+                      itemBuilder: (_, idx) {
+                        final s = skippedEnrolled[idx];
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 2),
+                          child: Text(
+                            '• Row ${s.rowNumber}: ${s.firstName} ${s.lastName} (LRN: ${s.lrn}) — Already enrolled in this section.',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: Colors.grey,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+                if (failed.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  const Text(
+                    'Students Not Enrolled:',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                      color: Colors.red,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Container(
+                    constraints: const BoxConstraints(maxHeight: 130),
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.red.withValues(alpha: 0.05),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: Colors.red.withValues(alpha: 0.2),
+                      ),
+                    ),
+                    child: ListView.builder(
+                      shrinkWrap: true,
+                      itemCount: failed.length,
+                      itemBuilder: (_, idx) {
+                        final item = failed[idx];
+                        final s = item['student'] as _ParsedStudentRow;
+                        final err = item['error'] as String;
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 2),
+                          child: Text(
+                            err.startsWith('Row ')
+                                ? '• $err'
+                                : '• Row ${s.rowNumber} (${s.firstName} ${s.lastName}, LRN: ${s.lrn}): $err',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: Colors.red,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 14),
+                Text(
+                  successful.isNotEmpty
+                      ? 'Successfully enrolled ${successful.length} student${successful.length == 1 ? "" : "s"} (${newEnrolled.length} new, ${existingEnrolled.length} existing). They are now active in your class roster.'
+                      : (skippedEnrolled.isNotEmpty && failed.isEmpty
+                            ? 'All ${skippedEnrolled.length} student${skippedEnrolled.length == 1 ? "" : "s"} in the uploaded spreadsheet are already enrolled in this section.'
+                            : 'No students were enrolled due to the errors above.'),
+                  style: const TextStyle(fontSize: 12, height: 1.4),
                 ),
               ],
-              const SizedBox(height: 14),
-              Text(
-                successful.isNotEmpty
-                    ? 'The enrolled students are now active and visible in your class roster.'
-                    : 'No students were enrolled due to the errors above.',
-                style: const TextStyle(fontSize: 12),
-              ),
-            ],
+            ),
           ),
         ),
         actions: [
@@ -2695,8 +2949,24 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
                 );
               },
             ),
+          OutlinedButton.icon(
+            icon: const Icon(LucideIcons.upload, size: 15),
+            label: const Text('Upload Another File'),
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              _processBatchImport();
+            },
+          ),
           FilledButton(
-            onPressed: () => Navigator.pop(ctx),
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFF0F8A48),
+            ),
+            onPressed: () {
+              Navigator.of(ctx).pop(); // close result dialog
+              if (mounted) {
+                Navigator.of(context).pop(); // close unified enrollment dialog
+              }
+            },
             child: const Text('Done'),
           ),
         ],
@@ -3859,9 +4129,6 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
         );
       }
 
-      final totalEligible =
-          _eligibleNewStudents.length + _eligibleExistingStudents.length;
-
       // State 2A: Issues Detected
       if (_detectedInvalidRows.isNotEmpty) {
         return Column(
@@ -4016,49 +4283,21 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
             runSpacing: 6,
             alignment: WrapAlignment.center,
             children: [
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 5,
-                ),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF0F8A48).withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(
-                    color: const Color(0xFF0F8A48).withValues(alpha: 0.3),
-                  ),
-                ),
-                child: Text(
-                  '✓ $totalEligible Student${totalEligible > 1 ? "s" : ""} Enrolled',
-                  style: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF0F8A48),
-                  ),
-                ),
+              _buildCardBadge(
+                'New Students',
+                _eligibleNewStudents.length,
+                const Color(0xFF0F8A48),
               ),
-              if (_alreadyEnrolledStudents.isNotEmpty)
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 5,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.grey.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(
-                      color: Colors.grey.withValues(alpha: 0.3),
-                    ),
-                  ),
-                  child: Text(
-                    '• ${_alreadyEnrolledStudents.length} Already Enrolled (Skipped)',
-                    style: const TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.grey,
-                    ),
-                  ),
-                ),
+              _buildCardBadge(
+                'Existing',
+                _eligibleExistingStudents.length,
+                Colors.blue,
+              ),
+              _buildCardBadge(
+                'Already Enrolled',
+                _alreadyEnrolledStudents.length,
+                Colors.grey,
+              ),
             ],
           ),
           const SizedBox(height: 16),
@@ -4191,6 +4430,18 @@ class _InvalidStudentRow {
 
   String get formattedMessage =>
       'Row $rowNumber ($fieldTag: $identifier): $reason';
+}
+
+class _BatchEmailStatus {
+  final int sent;
+  final int failed;
+  final bool isSending;
+
+  const _BatchEmailStatus({
+    required this.sent,
+    required this.failed,
+    required this.isSending,
+  });
 }
 
 class _EnrollmentProgressData {

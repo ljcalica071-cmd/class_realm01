@@ -5,6 +5,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:class_realm/core/theme/app_theme.dart';
 import 'package:class_realm/core/services/app_data_cache.dart';
+import 'package:class_realm/core/services/supabase_service.dart';
+import 'package:class_realm/features/teacher/sub_features/grading/widgets/teacher_gradebook_tab.dart';
 import 'package:class_realm/core/utils/validators.dart';
 import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/models/academic_models.dart';
@@ -220,61 +222,112 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
     }
   }
 
+  
+  bool _isOpeningFile = false;
+
+  Future<String> _sanitizeAndSignClassworkUrl(String rawPath) async {
+    var cleanPath = rawPath.trim();
+    if (cleanPath.contains('/classwork-materials/')) {
+      cleanPath = cleanPath.split('/classwork-materials/').last;
+    } else if (cleanPath.contains('/classwork%20materials/')) {
+      cleanPath = cleanPath.split('/classwork%20materials/').last;
+    } else if (cleanPath.contains('/learning_materials/')) {
+      cleanPath = cleanPath.split('/learning_materials/').last;
+    }
+    if (cleanPath.contains('?')) {
+      cleanPath = cleanPath.split('?').first;
+    }
+    cleanPath = Uri.decodeComponent(cleanPath);
+    return SupabaseService().adminClient.storage.from('classwork-materials').createSignedUrl(cleanPath, 60 * 60);
+  }
+
   Future<void> _openStudentFile(Map<String, dynamic>? submission) async {
+    if (_isOpeningFile) return;
     final path = submission?['storage_path']?.toString();
     if (path == null || path.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Submission file is not available.')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).clearSnackBars();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Submission file is not available.')),
+        );
+      }
       return;
     }
 
+    _isOpeningFile = true;
     try {
-      final url = await _client.storage
-          .from('classwork-materials')
-          .createSignedUrl(path, 60 * 60); // 1 hour expiry
+      final url = await _sanitizeAndSignClassworkUrl(path); // 1 hour expiry
       final uri = Uri.parse(url);
       final launched = await launchUrl(
         uri,
         mode: LaunchMode.externalApplication,
       );
       if (!launched && mounted) {
+        ScaffoldMessenger.of(context).clearSnackBars();
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Unable to open document.')),
         );
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Error opening file: $e')));
+        ScaffoldMessenger.of(context).clearSnackBars();
+        final errStr = e.toString().toLowerCase();
+        final isNotFound = errStr.contains('404') ||
+            errStr.contains('not_found') ||
+            errStr.contains('object not found');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              isNotFound
+                  ? 'The submission file was not found in cloud storage. The student may need to re-submit.'
+                  : 'Unable to open file: $e',
+            ),
+          ),
+        );
       }
+    } finally {
+      _isOpeningFile = false;
     }
   }
 
   Future<void> _openTeacherAttachment() async {
+    if (_isOpeningFile) return;
     final path = _activity.storagePath;
     if (path == null || path.isEmpty) return;
 
+    _isOpeningFile = true;
     try {
-      final url = await _client.storage
-          .from('classwork-materials')
-          .createSignedUrl(path, 60 * 60); // 1 hour expiry
+      final url = await _sanitizeAndSignClassworkUrl(path); // 1 hour expiry
       final uri = Uri.parse(url);
       final launched = await launchUrl(
         uri,
         mode: LaunchMode.externalApplication,
       );
       if (!launched && mounted) {
+        ScaffoldMessenger.of(context).clearSnackBars();
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Unable to open attached material.')),
         );
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error opening material: $e')));
+        ScaffoldMessenger.of(context).clearSnackBars();
+        final errStr = e.toString().toLowerCase();
+        final isNotFound = errStr.contains('404') ||
+            errStr.contains('not_found') ||
+            errStr.contains('object not found');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              isNotFound
+                  ? 'The attached file is no longer available in cloud storage. Please re-upload it.'
+                  : 'Unable to open material: $e',
+            ),
+          ),
+        );
       }
+    } finally {
+      _isOpeningFile = false;
     }
   }
 
@@ -378,6 +431,7 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
             _activity.termNumber,
             termSheet,
           );
+          TeacherGradebookTab.gradebookRefreshNotifier.value++;
         } catch (gbSyncErr) {
           debugPrint('Gradebook term sheet sync notice: $gbSyncErr');
         }

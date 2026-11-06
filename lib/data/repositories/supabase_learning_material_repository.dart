@@ -1,10 +1,12 @@
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:class_realm/core/services/supabase_service.dart';
 
 import 'learning_material_repository.dart';
 
 class SupabaseLearningMaterialRepository implements LearningMaterialRepository {
   final SupabaseClient _client;
+  SupabaseStorageClient get _storage => SupabaseService().adminClient.storage;
 
   SupabaseLearningMaterialRepository({SupabaseClient? client})
     : _client = client ?? Supabase.instance.client;
@@ -331,7 +333,7 @@ class SupabaseLearningMaterialRepository implements LearningMaterialRepository {
       );
 
       // Atomic upload: if this throws, caller catches it, zero broken DB rows!
-      await _client.storage
+      await _storage
           .from(_bucket)
           .uploadBinary(
             storagePath,
@@ -477,7 +479,7 @@ class SupabaseLearningMaterialRepository implements LearningMaterialRepository {
       if (remainingCount == 0) {
         final relativePath = _extractStorageRelativePath(storagePathUrl);
         if (relativePath != null && relativePath.isNotEmpty) {
-          await _client.storage.from(_bucket).remove([relativePath]);
+          await _storage.from(_bucket).remove([relativePath]);
           debugPrint(
             'Physical storage file purged from Supabase: $relativePath',
           );
@@ -568,7 +570,7 @@ class SupabaseLearningMaterialRepository implements LearningMaterialRepository {
       originalFileName: sanitizedFileName,
     );
 
-    await _client.storage
+    await _storage
         .from(_bucket)
         .uploadBinary(
           newStoragePath,
@@ -579,7 +581,7 @@ class SupabaseLearningMaterialRepository implements LearningMaterialRepository {
           ),
         );
 
-    final newPublicUrl = _client.storage
+    final newPublicUrl = _storage
         .from(_bucket)
         .getPublicUrl(newStoragePath);
     final nowIso = DateTime.now().toIso8601String();
@@ -589,7 +591,7 @@ class SupabaseLearningMaterialRepository implements LearningMaterialRepository {
       await _client
           .from('learning_materials')
           .update({
-            'storage_path_url': newPublicUrl,
+            'storage_path_url': newStoragePath,
             'file_name': sanitizedFileName,
             'file_size_bytes': newFileSizeBytes,
             'mime_type': effectiveMimeType,
@@ -606,7 +608,7 @@ class SupabaseLearningMaterialRepository implements LearningMaterialRepository {
         );
         if (oldRelativePath != null) {
           try {
-            await _client.storage.from(_bucket).remove([oldRelativePath]);
+            await _storage.from(_bucket).remove([oldRelativePath]);
           } catch (e) {
             debugPrint('Cleanup old storage file error: $e');
           }
@@ -617,7 +619,7 @@ class SupabaseLearningMaterialRepository implements LearningMaterialRepository {
       await _client
           .from('learning_materials')
           .update({
-            'storage_path_url': newPublicUrl,
+            'storage_path_url': newStoragePath,
             'file_name': sanitizedFileName,
             'file_size_bytes': newFileSizeBytes,
             'mime_type': effectiveMimeType,
@@ -640,7 +642,7 @@ class SupabaseLearningMaterialRepository implements LearningMaterialRepository {
               currentStoragePathUrl,
             );
             if (oldRelativePath != null) {
-              await _client.storage.from(_bucket).remove([oldRelativePath]);
+              await _storage.from(_bucket).remove([oldRelativePath]);
             }
           }
         } catch (e) {

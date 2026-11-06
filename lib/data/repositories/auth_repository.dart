@@ -577,15 +577,35 @@ class AuthRepository {
 
   Future<String?> _doStartSessionLog(custom.UserModel user) async {
     try {
-      final now = DateTime.now().toUtc();
+      final nowLocal = DateTime.now();
+      final now = nowLocal.toUtc();
+      final localDateStr =
+          '${nowLocal.year.toString().padLeft(4, '0')}-${nowLocal.month.toString().padLeft(2, '0')}-${nowLocal.day.toString().padLeft(2, '0')}';
       final roleStr = user.role.name;
 
-      // Re-use active session if one already exists
+      // Re-use active session only if it still exists, belongs to this user, and is active in DB
       final existingSessionId =
           LocalStorageService.getActiveSessionId() ?? _activeSessionId;
       if (existingSessionId != null) {
-        _activeSessionId = existingSessionId;
-        return existingSessionId;
+        try {
+          final existingRow = await _supabaseClient
+              .from('user_session_logs')
+              .select('id, user_id, is_active')
+              .eq('id', existingSessionId)
+              .maybeSingle();
+          if (existingRow != null &&
+              existingRow['user_id']?.toString() == user.id &&
+              existingRow['is_active'] == true) {
+            _activeSessionId = existingSessionId;
+            await _supabaseClient
+                .from('user_session_logs')
+                .update({'last_active_at': now.toIso8601String()})
+                .eq('id', existingSessionId);
+            return existingSessionId;
+          }
+        } catch (_) {}
+        _activeSessionId = null;
+        await LocalStorageService.clearActiveSessionId();
       }
 
       // Close any previous open session for this user before starting new one
@@ -615,8 +635,7 @@ class AuthRepository {
               .inSeconds
               .abs();
 
-          if (computedDuration < 30) {
-            // Treat anything under 30 seconds as an accidental double-click / immediate refresh ghost session
+          if (computedDuration < 2) {
             await _supabaseClient
                 .from('user_session_logs')
                 .delete()
@@ -626,7 +645,7 @@ class AuthRepository {
                 .from('user_session_logs')
                 .update({
                   'is_active': false,
-                  'logout_at': lastActiveTime.toIso8601String(), // Use last known active time as logout
+                  'logout_at': lastActiveTime.toIso8601String(),
                   'logout_reason': 'terminated',
                   'duration_seconds': computedDuration,
                 })
@@ -640,7 +659,7 @@ class AuthRepository {
           .insert({
             'user_id': user.id,
             'role': roleStr,
-            'session_date': now.toIso8601String().split('T').first,
+            'session_date': localDateStr,
             'login_at': now.toIso8601String(),
             'last_active_at': now.toIso8601String(),
             'is_active': true,

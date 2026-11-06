@@ -3,10 +3,10 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:class_realm/core/services/supabase_service.dart';
 import 'package:class_realm/data/repositories/learning_material_repository.dart';
 import 'package:class_realm/data/repositories/supabase_learning_material_repository.dart';
 
@@ -64,11 +64,12 @@ class _TeacherMaterialViewerModalState
 
   bool _isSaving = false;
   bool _isReplacingFile = false;
+  bool _isOpeningMaterial = false;
   String? _draftRestoreedText;
   DateTime? _lastAutoSavedAt;
   Timer? _autoSaveTimer;
 
-  static const int _maxDescriptionLength = 50000;
+  static const int _maxDescriptionLength = 100;
 
   @override
   void initState() {
@@ -516,6 +517,7 @@ class _TeacherMaterialViewerModalState
 
   void _showToast(String msg, {required bool isError}) {
     if (!mounted) return;
+    ScaffoldMessenger.of(context).clearSnackBars();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(msg),
@@ -791,17 +793,37 @@ class _TeacherMaterialViewerModalState
               icon: const Icon(Icons.open_in_new, size: 18),
               label: const Text('View Material / Download'),
               onPressed: () async {
-                final path = _currentMaterial.storagePathUrl;
-                if (path == null || path.isEmpty) return;
+                if (_isOpeningMaterial) return;
+                final raw = _currentMaterial.storagePathUrl;
+                var path = raw.contains('/learning_materials/')
+                    ? raw.split('/learning_materials/').last
+                    : raw;
+                if (path.contains('?')) {
+                  path = path.split('?').first;
+                }
+                path = Uri.decodeComponent(path).trim();
+                if (path.isEmpty) return;
+
+                _isOpeningMaterial = true;
                 try {
-                  final client = Supabase.instance.client;
-                  final url = await client.storage
-                      .from('classwork-materials')
+                  final url = await SupabaseService().adminClient.storage
+                      .from('learning_materials')
                       .createSignedUrl(path, 60 * 60);
                   final uri = Uri.parse(url);
                   await launchUrl(uri, mode: LaunchMode.externalApplication);
                 } catch (e) {
-                  _showToast('Failed to open file: $e', isError: true);
+                  final errStr = e.toString().toLowerCase();
+                  final isNotFound = errStr.contains('404') ||
+                      errStr.contains('not_found') ||
+                      errStr.contains('object not found');
+                  _showToast(
+                    isNotFound
+                        ? 'Document file not found in cloud storage. Please use "Replace File" to re-upload.'
+                        : 'Failed to open file: $e',
+                    isError: true,
+                  );
+                } finally {
+                  _isOpeningMaterial = false;
                 }
               },
               style: ElevatedButton.styleFrom(

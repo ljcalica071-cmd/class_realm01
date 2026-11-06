@@ -9,6 +9,7 @@ import 'package:class_realm/data/repositories/supabase_teacher_classwork_reposit
 import 'package:class_realm/models/academic_models.dart';
 import 'package:class_realm/models/subject_catalog_model.dart';
 import 'package:class_realm/core/utils/validators.dart';
+import 'package:class_realm/features/teacher/sub_features/grading/widgets/teacher_gradebook_tab.dart';
 import 'package:class_realm/widgets/common/app_buttons.dart';
 import 'package:class_realm/widgets/common/app_text_field.dart';
 import 'package:class_realm/widgets/common/app_date_picker_field.dart';
@@ -651,6 +652,8 @@ class _CreateRequirementFlowDialogState
         debugPrint('Gradebook HPS sync notice: $gbErr');
       }
 
+      TeacherGradebookTab.gradebookRefreshNotifier.value++;
+
       widget.onRequirementCreated();
       if (mounted) Navigator.of(context).pop();
     } catch (err) {
@@ -1264,7 +1267,9 @@ class _CreateRequirementFlowDialogState
 
                       // F. Detailed Instructions
                       AppTextField(
-                        label: 'Detailed Instructions & Rubrics *',
+                        label: _completionMode == 'in_person'
+                            ? 'Detailed Instructions & Rubrics'
+                            : 'Detailed Instructions & Rubrics *',
                         hint:
                             'Provide step-by-step instructions for students...',
                         controller: _instructionsCtrl,
@@ -1276,7 +1281,9 @@ class _CreateRequirementFlowDialogState
                             AppValidators.maxClassworkInstructionsLength,
                           ),
                         ],
-                        validator: AppValidators.validateClassworkInstructions,
+                        validator: _completionMode == 'in_person'
+                            ? null
+                            : AppValidators.validateClassworkInstructions,
                       ),
                       const SizedBox(height: 16),
 

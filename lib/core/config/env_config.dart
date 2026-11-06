@@ -14,6 +14,8 @@ class EnvConfig {
 
   static String get supabaseUrl => dotenv.env['SUPABASE_URL'] ?? '';
   static String get supabaseAnonKey => dotenv.env['SUPABASE_ANON_KEY'] ?? '';
+  static String get supabaseServiceRoleKey =>
+      dotenv.env['SUPABASE_SERVICE_ROLE_KEY'] ?? '';
   static String get smtpEmail => dotenv.env['SMTP_EMAIL'] ?? '';
   static String get smtpPassword => dotenv.env['SMTP_PASSWORD'] ?? '';
 

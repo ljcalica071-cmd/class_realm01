@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:class_realm/core/services/app_data_cache.dart';
+import 'package:class_realm/core/services/supabase_service.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/models/student_dashboard_models.dart';
 
@@ -141,7 +142,7 @@ class _StudentSubmitWorkDialogState extends State<StudentSubmitWorkDialog> {
             'submissions/${widget.classwork.id}/${user.id}_${DateTime.now().millisecondsSinceEpoch}_$safeName';
 
         try {
-          await client.storage
+          await SupabaseService().adminClient.storage
               .from('classwork-materials')
               .uploadBinary(
                 storagePath,
@@ -149,7 +150,8 @@ class _StudentSubmitWorkDialogState extends State<StudentSubmitWorkDialog> {
                 fileOptions: const FileOptions(upsert: true),
               );
         } catch (uploadErr) {
-          debugPrint('Notice on storage upload: $uploadErr');
+          debugPrint('Storage upload error: $uploadErr');
+          throw Exception('Failed to upload file: $uploadErr');
         }
       }
 

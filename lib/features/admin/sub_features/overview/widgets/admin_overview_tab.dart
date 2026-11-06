@@ -6,6 +6,7 @@ import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/models/admin_portal_models.dart';
 import 'package:class_realm/data/repositories/admin_repository.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
+import 'package:class_realm/core/services/app_data_cache.dart';
 import 'package:class_realm/core/services/rate_limit_service.dart';
 import 'package:loading_animation_widget/loading_animation_widget.dart';
 import 'package:class_realm/shared/widgets/shimmer_loading.dart';
@@ -48,6 +49,27 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
   @override
   void initState() {
     super.initState();
+    final cachedKpi = AppDataCache.instance.get<Map<String, dynamic>>(
+      'admin_kpi_metrics',
+    );
+    if (cachedKpi != null) {
+      _kpiMetrics = Map<String, dynamic>.from(cachedKpi);
+      _isLoadingKpis = false;
+    }
+    final cachedSyList = AppDataCache.instance.get<List<SchoolYearRecord>>(
+      'admin_school_years_list',
+    );
+    final cachedActiveSy = AppDataCache.instance.get<SchoolYearRecord?>(
+      'admin_active_school_year',
+    );
+    if (cachedSyList != null) {
+      _allSchoolYears = List<SchoolYearRecord>.from(cachedSyList);
+      _activeSchoolYear = cachedActiveSy;
+      _selectedPreviewSchoolYearId =
+          cachedActiveSy?.id ??
+          (_allSchoolYears.isNotEmpty ? _allSchoolYears.first.id : null);
+      _isLoadingSchoolYears = false;
+    }
     _loadAllData();
   }
 
@@ -57,6 +79,7 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
 
   Future<void> _loadKpiMetrics() async {
     final metrics = await AdminRepository.instance.getDashboardKpiMetrics();
+    AppDataCache.instance.set('admin_kpi_metrics', metrics);
     if (mounted) {
       setState(() {
         _kpiMetrics = metrics;
@@ -68,6 +91,8 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
   Future<void> _loadSchoolYears() async {
     final list = await AdminRepository.instance.getAllSchoolYears();
     final current = await AdminRepository.instance.getActiveSchoolYear();
+    AppDataCache.instance.set('admin_school_years_list', list);
+    AppDataCache.instance.set('admin_active_school_year', current);
     if (mounted) {
       setState(() {
         _allSchoolYears = list;

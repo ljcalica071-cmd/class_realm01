@@ -137,7 +137,7 @@ class SupabaseTeacherClassworkRepository implements TeacherClassworkRepository {
           '$subjectOfferingId/${DateTime.now().millisecondsSinceEpoch}_$safeName';
 
       try {
-        await _client.storage
+        await SupabaseService().adminClient.storage
             .from('classwork-materials')
             .uploadBinary(
               storagePath,
@@ -148,7 +148,8 @@ class SupabaseTeacherClassworkRepository implements TeacherClassworkRepository {
               ),
             );
       } catch (e) {
-        debugPrint('Direct storage upload notice: $e');
+        debugPrint('Direct storage upload error: $e');
+        throw Exception('Failed to upload file attachment: $e');
       }
     }
 

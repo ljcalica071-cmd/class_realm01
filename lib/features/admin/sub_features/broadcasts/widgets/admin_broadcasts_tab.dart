@@ -7,6 +7,7 @@ import 'package:class_realm/data/repositories/admin_repository.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/models/academic_models.dart';
 import 'package:class_realm/core/theme/app_theme.dart';
+import 'package:class_realm/core/services/app_data_cache.dart';
 import 'package:class_realm/core/services/email_service.dart';
 import 'package:class_realm/core/services/rate_limit_service.dart';
 import 'package:class_realm/widgets/common/expandable_notification_card.dart';
@@ -51,6 +52,25 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
   @override
   void initState() {
     super.initState();
+    final cachedBroadcasts = AppDataCache.instance
+        .get<List<AppNotificationModel>>('admin_broadcasts_list');
+    final cachedCounts = AppDataCache.instance.get<Map<String, int>>(
+      'admin_broadcasts_counts',
+    );
+    final cachedMaint = AppDataCache.instance.get<bool>(
+      'admin_maintenance_mode',
+    );
+    if (cachedBroadcasts != null) {
+      _broadcasts = List<AppNotificationModel>.from(cachedBroadcasts);
+      _isLoadingBroadcasts = false;
+      _isInitialLoading = false;
+    }
+    if (cachedCounts != null) {
+      _userCounts = Map<String, int>.from(cachedCounts);
+    }
+    if (cachedMaint != null) {
+      _isMaintenanceMode = cachedMaint;
+    }
     _loadInitialData();
     _subscribeToRealtime();
     _messageController.addListener(() {
@@ -116,6 +136,7 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
 
   Future<void> _loadUserCounts() async {
     final counts = await AdminRepository.instance.getActiveUserCountsByRole();
+    AppDataCache.instance.set('admin_broadcasts_counts', counts);
     if (mounted) {
       setState(() {
         _userCounts = counts;
@@ -155,6 +176,10 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
 
   Future<void> _loadMaintenanceState() async {
     final settings = await AdminRepository.instance.getSystemSettings();
+    AppDataCache.instance.set(
+      'admin_maintenance_mode',
+      settings.isMaintenanceMode,
+    );
     if (mounted) {
       setState(() {
         _isMaintenanceMode = settings.isMaintenanceMode;
@@ -166,6 +191,7 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
     final list = await AdminRepository.instance.getBroadcastAnnouncements(
       limit: 50,
     );
+    AppDataCache.instance.set('admin_broadcasts_list', list);
     if (mounted) {
       setState(() {
         _broadcasts = list;
@@ -210,11 +236,8 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
 
     setState(() => _isTogglingMaintenance = true);
 
-    final adminUser = AuthRepository.instance.currentUser;
-    final adminId = adminUser?.id ?? 'admin';
-
     try {
-      await AdminRepository.instance.setMaintenanceMode(targetState, adminId);
+      await AdminRepository.instance.setMaintenanceMode(targetState);
       await RateLimitService.instance.recordAdminCooldown(
         actionKey: 'admin_maintenance_toggle',
         cooldownSeconds: 5,

@@ -114,7 +114,9 @@ class StudentAttachmentModel {
       fileName: json['file_name']?.toString() ?? '',
       mimeType: json['mime_type']?.toString(),
       fileSizeBytes: (json['file_size_bytes'] as num?)?.toInt(),
-      signedUrl: json['signed_url']?.toString(),
+      signedUrl: json['signed_url']?.toString() ??
+          json['storage_url']?.toString() ??
+          json['storage_path']?.toString(),
     );
   }
 }
@@ -122,6 +124,7 @@ class StudentAttachmentModel {
 class StudentClassworkModel {
   const StudentClassworkModel({
     required this.id,
+    this.subjectOfferingId,
     required this.type,
     required this.title,
     required this.description,
@@ -144,6 +147,7 @@ class StudentClassworkModel {
   });
 
   final String id;
+  final String? subjectOfferingId;
   final String type;
   final String title;
   final String description;
@@ -208,6 +212,7 @@ class StudentClassworkModel {
 
     return StudentClassworkModel(
       id: json['id'].toString(),
+      subjectOfferingId: json['subject_offering_id']?.toString(),
       type: (json['type'] ?? json['classwork_type'])?.toString() ?? 'activity',
       title: json['title']?.toString() ?? '',
       description: json['description']?.toString() ?? '',

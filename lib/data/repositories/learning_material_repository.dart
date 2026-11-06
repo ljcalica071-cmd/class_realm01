@@ -3,7 +3,7 @@ import 'dart:typed_data';
 /// Validator and utility for learning material files and uploads.
 class MaterialFileValidator {
   static const int maxFileSizeBytes =
-      15728640; // Strict 3 MB limit (15 * 1024 * 1024)
+      15 * 1024 * 1024; // Strict 15 MB limit (15,728,640 bytes)
   static const int maxFileNameLength = 100;
 
   // Allowed file extensions

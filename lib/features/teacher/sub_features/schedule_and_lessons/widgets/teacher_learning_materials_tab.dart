@@ -474,7 +474,7 @@ class _TeacherLearningMaterialsTabState
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
-                                'Target Class: Grade $gradeLevel â€¢ $subjectName â€” $sectionName',
+                                'Target Class: Grade $gradeLevel • $subjectName — $sectionName',
                                 style: TextStyle(
                                   fontSize: 12,
                                   fontWeight: FontWeight.bold,
@@ -597,7 +597,7 @@ class _TeacherLearningMaterialsTabState
                                   ),
                                   const SizedBox(height: 2),
                                   Text(
-                                    'Format: ${ext.toUpperCase()} â€¢ Size: ${_formatBytes(file.size)}',
+                                    'Format: ${ext.toUpperCase()} • Size: ${_formatBytes(file.size)}',
                                     style: TextStyle(
                                       fontSize: 11,
                                       color: theme.colorScheme.onSurface
@@ -617,7 +617,7 @@ class _TeacherLearningMaterialsTabState
                                 borderRadius: BorderRadius.circular(6),
                               ),
                               child: const Text(
-                                'â‰¤ 15MB Limit OK',
+                                '<= 15MB Limit OK',
                                 style: TextStyle(
                                   color: Colors.green,
                                   fontSize: 10,
@@ -657,60 +657,58 @@ class _TeacherLearningMaterialsTabState
                       ),
                       const SizedBox(height: 14),
 
-                      // Destination Folder with Inline Error
-                      Text(
-                        'Destination Folder *',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: theme.colorScheme.onSurface,
+                      // Direct Destination Folder indicator (No dropdown as requested)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
                         ),
-                      ),
-                      const SizedBox(height: 6),
-                      DropdownButtonFormField<ClassRealmFolder>(
-                        initialValue: targetFolder,
-                        isExpanded: true,
-                        autovalidateMode: AutovalidateMode.onUserInteraction,
-                        validator: (v) {
-                          if (v == null) {
-                            return 'Please select a destination folder.';
-                          }
-                          return null;
-                        },
-                        decoration: _buildInputDecoration(
-                          theme: theme,
-                          hint: 'Select destination folder',
-                        ),
-                        items: _folders.map((f) {
-                          return DropdownMenuItem(
-                            value: f,
-                            child: Row(
-                              children: [
-                                const Icon(
-                                  Icons.folder_outlined,
-                                  size: 18,
-                                  color: Colors.amber,
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    f.folderName,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              ],
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.surfaceContainerHighest
+                              .withValues(alpha: 0.3),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: theme.colorScheme.outline.withValues(
+                              alpha: 0.2,
                             ),
-                          );
-                        }).toList(),
-                        onChanged: isUploading
-                            ? null
-                            : (val) {
-                                setModalState(() => targetFolder = val);
-                              },
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.folder,
+                              size: 18,
+                              color: Colors.amber,
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Destination Folder',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: theme.colorScheme.onSurface
+                                          .withValues(alpha: 0.6),
+                                    ),
+                                  ),
+                                  Text(
+                                    targetFolder?.folderName ?? 'Current Folder',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                       const SizedBox(height: 14),
 
-                      // Description / Teacher notes
+                      // Description / Teacher notes (max 100 chars)
                       Text(
                         'Lesson Content / Study Notes (Optional)',
                         style: TextStyle(
@@ -724,10 +722,10 @@ class _TeacherLearningMaterialsTabState
                         controller: descController,
                         enabled: !isUploading,
                         maxLines: 3,
-                        maxLength: 50000,
+                        maxLength: 100,
                         decoration: _buildInputDecoration(
                           theme: theme,
-                          hint: 'Enter study guide or student notes...',
+                          hint: 'Enter study guide or student notes (max 100 characters)...',
                         ),
                       ),
                       const SizedBox(height: 8),
@@ -807,8 +805,25 @@ class _TeacherLearningMaterialsTabState
                         });
 
                         try {
+                          ClassRealmFolder? resolvedFolder = targetFolder;
+                          if (resolvedFolder == null) {
+                            await _materialRepo.ensureDefaultTermFolders(
+                              offeringId,
+                            );
+                            final refreshedFolders = await _materialRepo
+                                .getFolders(subjectOfferingId: offeringId);
+                            if (refreshedFolders.isNotEmpty) {
+                              resolvedFolder = refreshedFolders.first;
+                            } else {
+                              resolvedFolder = await _materialRepo.createFolder(
+                                subjectOfferingId: offeringId,
+                                folderName: 'General Materials',
+                              );
+                            }
+                          }
+
                           await _materialRepo.uploadMaterial(
-                            folderId: targetFolder!.id,
+                            folderId: resolvedFolder.id,
                             subjectOfferingId: offeringId,
                             fileName: sanitizedFileName,
                             fileBytes: nonNullBytes,
@@ -886,7 +901,7 @@ class _TeacherLearningMaterialsTabState
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Adding to: Grade $gradeLevel â€¢ $subjectName â€” $sectionName',
+                      'Adding to: Grade $gradeLevel • $subjectName — $sectionName',
                       style: TextStyle(
                         fontSize: 12,
                         color: theme.colorScheme.onSurface.withValues(
@@ -1761,7 +1776,7 @@ class _TeacherLearningMaterialsTabState
             const Icon(Icons.archive_outlined, size: 18, color: Colors.orange),
             const SizedBox(width: 8),
             Text(
-              'Archived Items â€” Grade $activeGrade â€¢ $activeSubject ($activeSection)',
+              'Archived Items — Grade $activeGrade • $activeSubject ($activeSection)',
               style: const TextStyle(
                 fontWeight: FontWeight.bold,
                 fontSize: 13,
@@ -2135,7 +2150,7 @@ class _TeacherLearningMaterialsTabState
                     style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
                   subtitle: Text(
-                    '${folder.fileCount} items â€¢ Archived (Hidden from students)',
+                    '${folder.fileCount} items • Archived (Hidden from students)',
                   ),
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -2212,7 +2227,7 @@ class _TeacherLearningMaterialsTabState
                     style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
                   subtitle: Text(
-                    '${mat.fileName} â€¢ ${mat.formattedSize} â€¢ Archived',
+                    '${mat.fileName} • ${mat.formattedSize} • Archived',
                   ),
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -2357,7 +2372,7 @@ class _TeacherLearningMaterialsTabState
           style: const TextStyle(fontWeight: FontWeight.bold),
         ),
         subtitle: Text(
-          '${folder.fileCount} items ${folder.isVisibleToStudents ? "" : "â€¢ Hidden from students"}',
+          '${folder.fileCount} items ${folder.isVisibleToStudents ? "" : "• Hidden from students"}',
         ),
         trailing: const Icon(Icons.chevron_right),
         onTap: () => _navigateToFolder(folder),
@@ -2467,7 +2482,7 @@ class _TeacherLearningMaterialsTabState
             Row(
               children: [
                 Text(
-                  '${material.formattedSize} â€¢ ${_formatDate(material.createdAt)}',
+                  '${material.formattedSize} • ${_formatDate(material.createdAt)}',
                   style: TextStyle(
                     fontSize: 10,
                     color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
@@ -2527,7 +2542,7 @@ class _TeacherLearningMaterialsTabState
           style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
         ),
         subtitle: Text(
-          '${material.fileName} â€¢ ${material.formattedSize} â€¢ ${_formatDate(material.createdAt)}',
+          '${material.fileName} • ${material.formattedSize} • ${_formatDate(material.createdAt)}',
           style: TextStyle(
             fontSize: 11,
             color: theme.colorScheme.onSurface.withValues(alpha: 0.6),

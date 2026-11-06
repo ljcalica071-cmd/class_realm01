@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:class_realm/core/utils/browser_url_helper.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -92,6 +93,11 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   }
 
   void _onSelectTab(int index) {
+    if (index == 18) {
+      TeacherGradebookTab.gradebookRefreshNotifier.value++;
+    } else if (index == 1) {
+      unawaited(_loadActivities(forceRefresh: true));
+    }
     setState(() {
       _selectedIndex = index;
       _loadedTabIndices.add(index);
@@ -102,9 +108,20 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     updateBrowserUrl(route);
   }
 
+  void _onClassworkSyncTriggered() {
+    if (!mounted) return;
+    unawaited(_loadActivities(forceRefresh: true));
+  }
+
   @override
   void initState() {
     super.initState();
+    TeacherGradebookTab.classworkSyncNotifier.addListener(
+      _onClassworkSyncTriggered,
+    );
+    SubjectRepository.classworkSyncedNotifier.addListener(
+      _onClassworkSyncTriggered,
+    );
     final savedTab = LocalStorageService.getActiveDashboardTab('teacher');
     _selectedIndex = (widget.initialSelectedIndex != 0)
         ? widget.initialSelectedIndex
@@ -116,6 +133,17 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     _loadData();
     _loadActivities();
     _checkGradebookLockStatus();
+  }
+
+  @override
+  void dispose() {
+    TeacherGradebookTab.classworkSyncNotifier.removeListener(
+      _onClassworkSyncTriggered,
+    );
+    SubjectRepository.classworkSyncedNotifier.removeListener(
+      _onClassworkSyncTriggered,
+    );
+    super.dispose();
   }
 
   Future<void> _checkGradebookLockStatus() async {

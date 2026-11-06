@@ -151,9 +151,6 @@ class AppLifecycleCoordinator with WidgetsBindingObserver {
       }
     }
 
-    // Refresh interaction timestamp
-    unawaited(LocalStorageService.saveLastInteraction(now));
-
     // Run silent background delta sync
     try {
       SyncCoordinator.instance.startBackgroundSync();
@@ -170,13 +167,10 @@ class AppLifecycleCoordinator with WidgetsBindingObserver {
   }
 
   /// onPause(): Window or app loses focus (AppLifecycleState.inactive or window.blur).
-  /// Saves exact lastInteractionAt and persists active state.
+  /// User interaction timestamps are updated only by SessionActivityTracker.
   void onPause() {
     stateNotifier.value = AppActivityLifecycleState.paused;
     debugPrint('[AppLifecycleCoordinator] onPause()');
-
-    final now = DateTime.now();
-    unawaited(LocalStorageService.saveLastInteraction(now));
 
     for (final listener in List<VoidCallback>.from(_pauseListeners)) {
       try {
@@ -192,9 +186,6 @@ class AppLifecycleCoordinator with WidgetsBindingObserver {
   void onStop() {
     stateNotifier.value = AppActivityLifecycleState.stopped;
     debugPrint('[AppLifecycleCoordinator] onStop()');
-
-    final now = DateTime.now();
-    unawaited(LocalStorageService.saveLastInteraction(now));
 
     // Flush session heartbeat to user_session_logs
     unawaited(AuthRepository.instance.recordHeartbeat());
@@ -216,8 +207,6 @@ class AppLifecycleCoordinator with WidgetsBindingObserver {
     stateNotifier.value = AppActivityLifecycleState.destroyed;
     debugPrint('[AppLifecycleCoordinator] onDestroy()');
 
-    final now = DateTime.now();
-    unawaited(LocalStorageService.saveLastInteraction(now));
     unawaited(AuthRepository.instance.recordHeartbeat());
   }
 

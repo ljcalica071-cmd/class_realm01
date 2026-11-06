@@ -25,6 +25,9 @@ class SubjectRepository {
 
   static final SubjectRepository instance = SubjectRepository();
 
+  static final ValueNotifier<int> classworkSyncedNotifier =
+      ValueNotifier<int>(0);
+
   bool _isMissingTermMetadata(PostgrestException error) {
     return error.code == '42703' ||
         error.code == 'PGRST204' ||
@@ -575,26 +578,58 @@ class SubjectRepository {
         'updated_at': DateTime.now().toUtc().toIso8601String(),
       }, onConflict: 'subject_offering_id,term_number');
 
-      // Sync scores to student_classwork_submissions for active classwork items
+      // Sync HPS and scores to classwork_items and student_classwork_submissions
       try {
         final activeClasswork = await _client
             .from('classwork_items')
-            .select('id, grading_category, gradebook_column_index')
+            .select(
+              'id, grading_category, classwork_type, gradebook_column_index, max_score',
+            )
             .eq('subject_offering_id', offeringId)
             .eq('term_number', termNumber)
             .eq('is_archived', false);
 
         final itemsList = activeClasswork as List? ?? [];
-        if (itemsList.isNotEmpty && scores.isNotEmpty) {
+        if (itemsList.isNotEmpty) {
+          bool didModifyClasswork = false;
           final submissionUpserts = <Map<String, dynamic>>[];
+          final classworkIds = <String>[];
+
           for (final item in itemsList) {
             final classworkId = item['id']?.toString();
-            final catKey = item['grading_category']?.toString();
+            var catKey = item['grading_category']?.toString();
+            if (catKey == null || catKey.isEmpty) {
+              final type = item['classwork_type']?.toString();
+              catKey = type == 'performance_task'
+                  ? 'pt'
+                  : (type == 'exam' ? 'ex' : 'ww');
+            }
             final colIdx = item['gradebook_column_index']?.toString();
-            if (classworkId == null || catKey == null || colIdx == null) {
+            if (classworkId == null || colIdx == null || colIdx.isEmpty) {
               continue;
             }
+            classworkIds.add(classworkId);
 
+            // 1. Sync HPS -> classwork_items.max_score
+            final catHps = hps[catKey];
+            if (catHps is Map) {
+              final rawNewHps = catHps[colIdx];
+              if (rawNewHps is num) {
+                final newMaxScore = rawNewHps.toInt();
+                final currentMaxScore = (item['max_score'] as num?)?.toInt();
+                if (newMaxScore >= 1 &&
+                    newMaxScore <= 100 &&
+                    currentMaxScore != newMaxScore) {
+                  await _client
+                      .from('classwork_items')
+                      .update({'max_score': newMaxScore})
+                      .eq('id', classworkId);
+                  didModifyClasswork = true;
+                }
+              }
+            }
+
+            // 2. Sync student scores -> student_classwork_submissions
             for (final studentEntry in scores.entries) {
               final studentId = studentEntry.key.toString();
               final studentScores = studentEntry.value;
@@ -614,6 +649,49 @@ class SubjectRepository {
             }
           }
 
+          // Also handle cleared scores in Gradebook so removed scores clear in submissions
+          if (classworkIds.isNotEmpty) {
+            final existingSubs = await _client
+                .from('student_classwork_submissions')
+                .select('id, classwork_id, student_id, score, status')
+                .inFilter('classwork_id', classworkIds);
+            for (final sub in (existingSubs as List? ?? [])) {
+              if (sub['score'] == null) continue;
+              final cwId = sub['classwork_id']?.toString();
+              final stuId = sub['student_id']?.toString();
+              if (cwId == null || stuId == null) continue;
+              final matchingItem = itemsList.firstWhere(
+                (it) => it['id']?.toString() == cwId,
+                orElse: () => null,
+              );
+              if (matchingItem == null) continue;
+              var catKey = matchingItem['grading_category']?.toString();
+              if (catKey == null || catKey.isEmpty) {
+                final type = matchingItem['classwork_type']?.toString();
+                catKey = type == 'performance_task'
+                    ? 'pt'
+                    : (type == 'exam' ? 'ex' : 'ww');
+              }
+              final colIdx = matchingItem['gradebook_column_index']?.toString();
+              if (colIdx == null) continue;
+              final stuMap = scores[stuId];
+              final catMap = stuMap is Map ? stuMap[catKey] : null;
+              final currentScore = catMap is Map ? catMap[colIdx] : null;
+              if (currentScore == null) {
+                await _client
+                    .from('student_classwork_submissions')
+                    .update({
+                      'score': null,
+                      'status': 'pending',
+                      'updated_at': DateTime.now().toUtc().toIso8601String(),
+                    })
+                    .eq('classwork_id', cwId)
+                    .eq('student_id', stuId);
+                didModifyClasswork = true;
+              }
+            }
+          }
+
           if (submissionUpserts.isNotEmpty) {
             await _client
                 .from('student_classwork_submissions')
@@ -621,8 +699,13 @@ class SubjectRepository {
                   submissionUpserts,
                   onConflict: 'classwork_id,student_id',
                 );
+            didModifyClasswork = true;
+          }
+
+          if (didModifyClasswork) {
             AppDataCache.instance.invalidatePrefix('student_dashboard_');
             AppDataCache.instance.invalidatePrefix('teacher_activities_');
+            classworkSyncedNotifier.value++;
           }
         }
       } catch (subErr) {
@@ -736,7 +819,7 @@ class SubjectRepository {
 
         final catHps = Map<String, dynamic>.from(hps[cat] as Map? ?? {});
         if (maxPts != null) {
-          catHps[col] ??= (maxPts as num).toInt();
+          catHps[col] = (maxPts as num).toInt();
         }
         hps[cat] = catHps;
       }
@@ -763,7 +846,7 @@ class SubjectRepository {
           final catScores = Map<String, dynamic>.from(
             studentMap[cat] as Map? ?? {},
           );
-          catScores[col] ??= (scoreVal as num).toDouble();
+          catScores[col] = (scoreVal as num).toDouble();
           studentMap[cat] = catScores;
           scores[stuId] = studentMap;
         }

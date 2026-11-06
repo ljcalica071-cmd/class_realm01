@@ -106,3 +106,19 @@ void registerWebConnectivityListeners({
 bool getWebNavigatorOnlineStatus() {
   return getWebNavigatorOnlineStatusPlatform();
 }
+
+
+/// Opens a native browser file input dialog on Web and reads the selected file via FileReader.
+/// Immune to FilePicker's window.onfocus cancellation race condition on Windows browsers.
+void pickWebFile({
+  required String accept,
+  required void Function(dynamic bytes, String fileName, int size)
+  onFileSelected,
+}) {
+  pickWebFilePlatform(
+    accept: accept,
+    onFileSelected: (bytes, fileName, size) {
+      onFileSelected(bytes, fileName, size);
+    },
+  );
+}

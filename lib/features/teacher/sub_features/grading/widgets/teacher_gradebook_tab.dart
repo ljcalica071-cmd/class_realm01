@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import 'package:class_realm/core/theme/app_theme.dart';
 import 'package:class_realm/core/services/app_data_cache.dart';
+import 'package:class_realm/core/services/local_storage_service.dart';
 import 'package:class_realm/core/utils/validators.dart';
 import 'package:class_realm/core/utils/deped_grading_engine.dart';
 import 'package:class_realm/models/user_model.dart';
@@ -21,6 +22,15 @@ import 'package:class_realm/shared/widgets/shimmer_loading.dart';
 /// and term grade. Students are grouped by gender (Male / Female).
 class TeacherGradebookTab extends StatefulWidget {
   const TeacherGradebookTab({super.key});
+
+  /// Static refresh notifier allowing external screens (Classwork, Submissions, Dashboard Tab switch)
+  /// to request an immediate, cache-bypassed reload of the gradebook sheets.
+  static final ValueNotifier<int> gradebookRefreshNotifier =
+      ValueNotifier<int>(0);
+
+  /// Notifies Classwork (WW, PT, EX) when HPS or scores are modified in Gradebook.
+  static final ValueNotifier<int> classworkSyncNotifier =
+      ValueNotifier<int>(0);
 
   @override
   State<TeacherGradebookTab> createState() => _TeacherGradebookTabState();
@@ -65,6 +75,9 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
   @override
   void initState() {
     super.initState();
+    TeacherGradebookTab.gradebookRefreshNotifier.addListener(
+      _handleExternalGradebookRefresh,
+    );
     _setupScrollSync();
     _hydrateFromCache();
     _fetchSubjects();
@@ -279,8 +292,23 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
     }
   }
 
-  @override
+  
+  void _handleExternalGradebookRefresh() {
+    if (!mounted) return;
+    final offeringId = _currentSubjectData?['id']?.toString();
+    if (offeringId != null && offeringId.isNotEmpty) {
+      for (final term in const [1, 2, 3]) {
+        LocalStorageService.clearGradebookSheet(offeringId, term);
+      }
+      _loadOfferingSheets(offeringId);
+    }
+  }
+
+@override
   void dispose() {
+    TeacherGradebookTab.gradebookRefreshNotifier.removeListener(
+      _handleExternalGradebookRefresh,
+    );
     _sheetSaveTimer?.cancel();
     final offeringId = _currentSubjectData?['id']?.toString();
     if (offeringId != null && _selectedTerm > 0) {
@@ -360,6 +388,12 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
 
   void _setHps(String category, int col, double? value) {
     final term = _selectedTerm;
+    final current = _termHps[term]?[category]?[col];
+    // Prevent deleting/blanking an already-set HPS; teacher can replace it with 1..100.
+    if (value == null && current != null) {
+      return;
+    }
+    if (current == value) return;
     _termHps[term]![category]![col] = value;
     _hpsRevision.value++;
     _scheduleSheetSave();
@@ -370,7 +404,7 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
     final term = _selectedTerm;
     if (offeringId == null || term < 1 || term > 3) return;
     _sheetSaveTimer?.cancel();
-    _sheetSaveTimer = Timer(const Duration(milliseconds: 300), () {
+    _sheetSaveTimer = Timer(const Duration(milliseconds: 600), () {
       unawaited(
         _persistSheet(offeringId, term).catchError((Object error) {
           debugPrint('Gradebook local save failed: $error');
@@ -472,6 +506,7 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
       term,
       payload,
     );
+    TeacherGradebookTab.classworkSyncNotifier.value++;
   }
 
   Map<String, dynamic> _buildPersistedTermGrade(String studentId, int term) {
@@ -533,7 +568,7 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
       setState(() {
         _isLoadingSheets = false;
         _sheetLoadError =
-            'Could not load this offeringâ€™s saved gradebook data.';
+            'Could not load this offering\'s saved gradebook data.';
       });
     }
   }
@@ -1033,6 +1068,8 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
             child: DropdownButton<String>(
               value: _selectedSubject,
               isDense: true,
+              dropdownColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+              borderRadius: BorderRadius.circular(10),
               hint: Text(
                 _isLoadingSubjects ? 'Loading subjects...' : 'No subject yet',
                 style: TextStyle(
@@ -1079,6 +1116,8 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
             child: DropdownButton<String>(
               value: _selectedSection,
               isDense: true,
+              dropdownColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+              borderRadius: BorderRadius.circular(10),
               hint: Text(
                 'No section yet',
                 style: TextStyle(
@@ -1779,35 +1818,35 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
                 width: totalTermsW,
                 child: Column(
                   children: [
-                    Container(
-                      width: totalTermsW,
-                      height: 26,
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        color: subHeaderBg,
-                        border: Border(
-                          right: BorderSide(
-                            color: Colors.white.withValues(alpha: 0.2),
-                            width: 0.5,
-                          ),
-                          bottom: BorderSide(
-                            color: Colors.white.withValues(alpha: 0.2),
-                            width: 0.5,
+                    Expanded(
+                      child: Container(
+                        width: totalTermsW,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: subHeaderBg,
+                          border: Border(
+                            right: BorderSide(
+                              color: Colors.white.withValues(alpha: 0.2),
+                              width: 0.5,
+                            ),
+                            bottom: BorderSide(
+                              color: Colors.white.withValues(alpha: 0.2),
+                              width: 0.5,
+                            ),
                           ),
                         ),
-                      ),
-                      child: const Text(
-                        'TERM GRADES',
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                          letterSpacing: 0.5,
+                        child: const Text(
+                          'TERM GRADES',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                            letterSpacing: 0.5,
+                          ),
                         ),
                       ),
                     ),
-                    SizedBox(
-                      height: 26,
+                    Expanded(
                       child: Row(
                         children: [
                           for (final term in activeTermsList)
@@ -1816,7 +1855,7 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
                                   ? 'FIRST TERM'
                                   : (term == 2 ? 'SECOND TERM' : 'THIRD TERM'),
                               termW,
-                              26,
+                              25.5,
                               bg: subHeaderBg.withValues(alpha: 0.85),
                             ),
                         ],
@@ -2815,99 +2854,78 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
 
     return List.generate(students.length, (idx) {
       final s = students[idx];
-      return RepaintBoundary(
-        key: ValueKey(
-          'rb-gradebook-row-${s.gender ?? "U"}-${s.id}-${isLeft ? "left" : "right"}-$idx-$_selectedTerm',
-        ),
-        child: AnimatedBuilder(
-          key: ValueKey(
-            'gradebook-row-${s.gender ?? "U"}-${s.id}-${isLeft ? "left" : "right"}-$idx-$_selectedTerm',
-          ),
-          animation: Listenable.merge([_revisionFor(s.id), _hpsRevision]),
-          builder: (context, _) {
-            final rowBg = idx.isOdd ? altRowBg : cellBg;
+      final rowBg = idx.isOdd ? altRowBg : cellBg;
 
-            if (isLeft) {
-              return Container(
-                height: 32,
-                decoration: BoxDecoration(
-                  color: rowBg,
-                  border: Border(
-                    bottom: BorderSide(color: borderColor, width: 0.5),
+      if (isLeft) {
+        return RepaintBoundary(
+          key: ValueKey(
+            'rb-gradebook-row-${s.gender ?? "U"}-${s.id}-left-$idx-$_selectedTerm',
+          ),
+          child: Container(
+            height: 32,
+            decoration: BoxDecoration(
+              color: rowBg,
+              border: Border(
+                bottom: BorderSide(color: borderColor, width: 0.5),
+              ),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: numW,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    border: Border(
+                      right: BorderSide(color: borderColor, width: 0.5),
+                    ),
+                  ),
+                  child: Text(
+                    '${idx + 1}',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: cellText.withValues(alpha: 0.5),
+                    ),
                   ),
                 ),
-                child: Row(
-                  children: [
-                    Container(
-                      width: numW,
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        border: Border(
-                          right: BorderSide(color: borderColor, width: 0.5),
-                        ),
-                      ),
-                      child: Text(
-                        '${idx + 1}',
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          color: cellText.withValues(alpha: 0.5),
-                        ),
-                      ),
+                Container(
+                  width: nameW,
+                  alignment: Alignment.centerLeft,
+                  padding: const EdgeInsets.only(left: 8),
+                  decoration: BoxDecoration(
+                    border: Border(
+                      right: BorderSide(color: borderColor, width: 0.5),
                     ),
-                    Container(
-                      width: nameW,
-                      alignment: Alignment.centerLeft,
-                      padding: const EdgeInsets.only(left: 8),
-                      decoration: BoxDecoration(
-                        border: Border(
-                          right: BorderSide(color: borderColor, width: 0.5),
-                        ),
-                      ),
-                      child: Text(
-                        _displayName(s),
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: cellText,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                  ),
+                  child: Text(
+                    _displayName(s),
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: cellText,
                     ),
-                  ],
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
-              );
-            }
+              ],
+            ),
+          ),
+        );
+      }
 
-            // Right score cells: Compute metrics once per row (no redundant re-computations)
-            final wwMetrics = _componentMetrics(
-              s.id,
-              'ww',
-              _wwColumns,
-              wwWeight,
-              term: _selectedTerm,
-            );
-            final ptMetrics = _componentMetrics(
-              s.id,
-              'pt',
-              _ptColumns,
-              ptWeight,
-              term: _selectedTerm,
-            );
-            final examMetrics = _examMetrics(s.id, term: _selectedTerm);
-            final ig = DepEdGradingEngine.computeInitialGrade(
-              wwWs: wwMetrics.ws,
-              ptWs: ptMetrics.ws,
-              exWs: examMetrics.exWs,
-              exWeight: exWeight,
-            );
-            final tg = ig == null ? null : DepEdGradingEngine.transmuteDO15(ig);
+      final studentRev = _revisionFor(s.id);
 
-            List<Widget> buildScoreCells(
-              String category,
-              int count,
-              Color accent,
-            ) {
+      return RepaintBoundary(
+        key: ValueKey(
+          'rb-gradebook-row-${s.gender ?? "U"}-${s.id}-right-$idx-$_selectedTerm',
+        ),
+        child: ValueListenableBuilder<int>(
+          key: ValueKey(
+            'gradebook-row-${s.gender ?? "U"}-${s.id}-right-$idx-$_selectedTerm',
+          ),
+          valueListenable: _hpsRevision,
+          builder: (context, _, _) {
+            List<Widget> buildInputCells(String category, int count) {
               final cells = <Widget>[];
               for (var i = 0; i < count; i++) {
                 cells.add(
@@ -2925,77 +2943,6 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
               if (category != 'ex' && count < maxCategoryColumns) {
                 cells.add(_emptyGridCell(colW, rowBg, borderColor, cellText));
               }
-              if (category == 'ex') {
-                for (final score in [
-                  examMetrics.wsSt1,
-                  examMetrics.wsSt2,
-                  examMetrics.wsTe,
-                ]) {
-                  cells.add(
-                    _computedCell(
-                      computedW,
-                      score?.toStringAsFixed(2) ?? '',
-                      rowBg,
-                      accent,
-                      borderColor,
-                    ),
-                  );
-                }
-                cells.add(
-                  _computedCell(
-                    computedW,
-                    examMetrics.exPs?.toStringAsFixed(2) ?? '',
-                    rowBg,
-                    accent,
-                    borderColor,
-                    isBold: true,
-                  ),
-                );
-                cells.add(
-                  _computedCell(
-                    computedW,
-                    examMetrics.exWs?.toStringAsFixed(2) ?? '',
-                    rowBg,
-                    accent,
-                    borderColor,
-                    isBold: true,
-                  ),
-                );
-                return cells;
-              }
-
-              final metrics = category == 'ww' ? wwMetrics : ptMetrics;
-              cells
-                ..add(
-                  _computedCell(
-                    computedW,
-                    metrics.totalRaw?.toStringAsFixed(0) ?? '',
-                    rowBg,
-                    cellText,
-                    borderColor,
-                    isBold: true,
-                  ),
-                )
-                ..add(
-                  _computedCell(
-                    computedW,
-                    metrics.ps?.toStringAsFixed(2) ?? '',
-                    rowBg,
-                    accent,
-                    borderColor,
-                    isBold: true,
-                  ),
-                )
-                ..add(
-                  _computedCell(
-                    computedW,
-                    metrics.ws?.toStringAsFixed(2) ?? '',
-                    rowBg,
-                    accent,
-                    borderColor,
-                    isBold: true,
-                  ),
-                );
               return cells;
             }
 
@@ -3009,27 +2956,173 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
               ),
               child: Row(
                 children: [
-                  ...buildScoreCells('ww', _wwColumns, AppTheme.catBlue),
-                  ...buildScoreCells('pt', _ptColumns, AppTheme.catGreen),
-                  ...buildScoreCells('ex', exColumns, AppTheme.catOrange),
-                  _computedCell(
-                    computedW,
-                    ig?.toStringAsFixed(2) ?? '',
-                    rowBg,
-                    cellText,
-                    borderColor,
-                    isBold: true,
+                  ...buildInputCells('ww', _wwColumns),
+                  ValueListenableBuilder<int>(
+                    valueListenable: studentRev,
+                    builder: (context, _, _) {
+                      final m = _componentMetrics(
+                        s.id,
+                        'ww',
+                        _wwColumns,
+                        wwWeight,
+                        term: _selectedTerm,
+                      );
+                      return Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _computedCell(
+                            computedW,
+                            m.totalRaw?.toStringAsFixed(0) ?? '',
+                            rowBg,
+                            cellText,
+                            borderColor,
+                            isBold: true,
+                          ),
+                          _computedCell(
+                            computedW,
+                            m.ps?.toStringAsFixed(2) ?? '',
+                            rowBg,
+                            AppTheme.catBlue,
+                            borderColor,
+                            isBold: true,
+                          ),
+                          _computedCell(
+                            computedW,
+                            m.ws?.toStringAsFixed(2) ?? '',
+                            rowBg,
+                            AppTheme.catBlue,
+                            borderColor,
+                            isBold: true,
+                          ),
+                        ],
+                      );
+                    },
                   ),
-                  _computedCell(
-                    computedW,
-                    tg?.toString() ?? '',
-                    rowBg,
-                    tg != null
-                        ? (tg >= 75 ? AppTheme.catGreen : AppTheme.catRed)
-                        : cellText,
-                    borderColor,
-                    isBold: true,
-                    fontSize: 13,
+                  ...buildInputCells('pt', _ptColumns),
+                  ValueListenableBuilder<int>(
+                    valueListenable: studentRev,
+                    builder: (context, _, _) {
+                      final m = _componentMetrics(
+                        s.id,
+                        'pt',
+                        _ptColumns,
+                        ptWeight,
+                        term: _selectedTerm,
+                      );
+                      return Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _computedCell(
+                            computedW,
+                            m.totalRaw?.toStringAsFixed(0) ?? '',
+                            rowBg,
+                            cellText,
+                            borderColor,
+                            isBold: true,
+                          ),
+                          _computedCell(
+                            computedW,
+                            m.ps?.toStringAsFixed(2) ?? '',
+                            rowBg,
+                            AppTheme.catGreen,
+                            borderColor,
+                            isBold: true,
+                          ),
+                          _computedCell(
+                            computedW,
+                            m.ws?.toStringAsFixed(2) ?? '',
+                            rowBg,
+                            AppTheme.catGreen,
+                            borderColor,
+                            isBold: true,
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                  ...buildInputCells('ex', exColumns),
+                  ValueListenableBuilder<int>(
+                    valueListenable: studentRev,
+                    builder: (context, _, _) {
+                      final wwM = _componentMetrics(
+                        s.id,
+                        'ww',
+                        _wwColumns,
+                        wwWeight,
+                        term: _selectedTerm,
+                      );
+                      final ptM = _componentMetrics(
+                        s.id,
+                        'pt',
+                        _ptColumns,
+                        ptWeight,
+                        term: _selectedTerm,
+                      );
+                      final exM = _examMetrics(s.id, term: _selectedTerm);
+                      final ig = DepEdGradingEngine.computeInitialGrade(
+                        wwWs: wwM.ws,
+                        ptWs: ptM.ws,
+                        exWs: exM.exWs,
+                        exWeight: exWeight,
+                      );
+                      final tg = ig == null
+                          ? null
+                          : DepEdGradingEngine.transmuteDO15(ig);
+                      return Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          for (final score in [
+                            exM.wsSt1,
+                            exM.wsSt2,
+                            exM.wsTe,
+                          ])
+                            _computedCell(
+                              computedW,
+                              score?.toStringAsFixed(2) ?? '',
+                              rowBg,
+                              AppTheme.catOrange,
+                              borderColor,
+                            ),
+                          _computedCell(
+                            computedW,
+                            exM.exPs?.toStringAsFixed(2) ?? '',
+                            rowBg,
+                            AppTheme.catOrange,
+                            borderColor,
+                            isBold: true,
+                          ),
+                          _computedCell(
+                            computedW,
+                            exM.exWs?.toStringAsFixed(2) ?? '',
+                            rowBg,
+                            AppTheme.catOrange,
+                            borderColor,
+                            isBold: true,
+                          ),
+                          _computedCell(
+                            computedW,
+                            ig?.toStringAsFixed(2) ?? '',
+                            rowBg,
+                            cellText,
+                            borderColor,
+                            isBold: true,
+                          ),
+                          _computedCell(
+                            computedW,
+                            tg?.toString() ?? '',
+                            rowBg,
+                            tg != null
+                                ? (tg >= 75
+                                      ? AppTheme.catGreen
+                                      : AppTheme.catRed)
+                                : cellText,
+                            borderColor,
+                            isBold: true,
+                            fontSize: 13,
+                          ),
+                        ],
+                      );
+                    },
                   ),
                 ],
               ),

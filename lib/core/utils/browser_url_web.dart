@@ -247,3 +247,51 @@ bool getWebNavigatorOnlineStatusPlatform() {
     return true;
   }
 }
+
+
+html.FileUploadInputElement? _activeWebFileInput;
+
+void pickWebFilePlatform({
+  required String accept,
+  required void Function(Uint8List bytes, String fileName, int size)
+  onFileSelected,
+}) {
+  try {
+    _activeWebFileInput?.remove();
+    final input = html.FileUploadInputElement()
+      ..accept = accept
+      ..style.display = 'none';
+    _activeWebFileInput = input;
+    html.document.body?.append(input);
+
+    input.onChange.listen((_) {
+      final files = input.files;
+      if (files != null && files.isNotEmpty) {
+        final file = files[0];
+        final reader = html.FileReader();
+        reader.readAsArrayBuffer(file);
+        reader.onLoadEnd.listen((_) {
+          final res = reader.result;
+          if (res is Uint8List) {
+            onFileSelected(res, file.name, file.size);
+          } else if (res is ByteBuffer) {
+            onFileSelected(res.asUint8List(), file.name, file.size);
+          } else if (res is List<int>) {
+            onFileSelected(Uint8List.fromList(res), file.name, file.size);
+          }
+          try {
+            input.remove();
+            if (_activeWebFileInput == input) _activeWebFileInput = null;
+          } catch (_) {}
+        });
+      } else {
+        try {
+          input.remove();
+          if (_activeWebFileInput == input) _activeWebFileInput = null;
+        } catch (_) {}
+      }
+    });
+
+    input.click();
+  } catch (_) {}
+}

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:class_realm/core/services/supabase_service.dart';
 import 'package:class_realm/models/academic_models.dart';
 import 'package:class_realm/models/student_dashboard_models.dart';
@@ -19,8 +18,12 @@ class StudentClassworkCard extends StatelessWidget {
   final Future<bool> Function(String url)? urlLauncher;
   final VoidCallback? onRefresh;
 
+  static bool _isOpeningAttachment = false;
+
   Future<void> _openAttachment(BuildContext context, String? signedUrl) async {
+    if (_isOpeningAttachment) return;
     if (signedUrl == null || signedUrl.isEmpty) {
+      ScaffoldMessenger.of(context).clearSnackBars();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Attachment link is expired or unavailable.'),
@@ -29,16 +32,24 @@ class StudentClassworkCard extends StatelessWidget {
       return;
     }
 
+    _isOpeningAttachment = true;
     try {
-      String resolvedUrl = signedUrl;
-      if (!resolvedUrl.startsWith('http://') &&
-          !resolvedUrl.startsWith('https://')) {
-        try {
-          resolvedUrl = Supabase.instance.client.storage
-              .from('classwork-materials')
-              .getPublicUrl(resolvedUrl);
-        } catch (_) {}
+      String cleanPath = signedUrl.trim();
+      if (cleanPath.contains('/classwork-materials/')) {
+        cleanPath = cleanPath.split('/classwork-materials/').last;
+      } else if (cleanPath.contains('/classwork%20materials/')) {
+        cleanPath = cleanPath.split('/classwork%20materials/').last;
+      } else if (cleanPath.contains('/learning_materials/')) {
+        cleanPath = cleanPath.split('/learning_materials/').last;
       }
+      if (cleanPath.contains('?')) {
+        cleanPath = cleanPath.split('?').first;
+      }
+      cleanPath = Uri.decodeComponent(cleanPath);
+
+      final resolvedUrl = await SupabaseService().adminClient.storage
+          .from('classwork-materials')
+          .createSignedUrl(cleanPath, 60 * 60);
 
       bool launched = false;
       if (urlLauncher != null) {
@@ -49,16 +60,30 @@ class StudentClassworkCard extends StatelessWidget {
       }
 
       if (!launched && context.mounted) {
+        ScaffoldMessenger.of(context).clearSnackBars();
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Unable to open attachment.')),
         );
       }
-    } catch (_) {
+    } catch (e) {
       if (context.mounted) {
+        ScaffoldMessenger.of(context).clearSnackBars();
+        final errStr = e.toString().toLowerCase();
+        final isNotFound = errStr.contains('404') ||
+            errStr.contains('not_found') ||
+            errStr.contains('object not found');
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Unable to open attachment.')),
+          SnackBar(
+            content: Text(
+              isNotFound
+                  ? 'The attached file is no longer available on cloud storage. Please ask your teacher to re-upload it.'
+                  : 'Unable to open attachment.',
+            ),
+          ),
         );
       }
+    } finally {
+      _isOpeningAttachment = false;
     }
   }
 

@@ -763,7 +763,7 @@ class _TeacherUnifiedAssessmentsTabState
                   emptyTitle: emptyTitle,
                   emptyMessage: emptyMessage,
                   icon: icon,
-                  pageSize: 20,
+                  pageSize: 5,
                 ),
         ),
       ],
@@ -1370,7 +1370,7 @@ class _PaginatedUnifiedItemList extends StatefulWidget {
     required this.emptyTitle,
     required this.emptyMessage,
     required this.icon,
-    this.pageSize = 20,
+    this.pageSize = 5,
   });
 
   @override
@@ -1379,7 +1379,7 @@ class _PaginatedUnifiedItemList extends StatefulWidget {
 }
 
 class _PaginatedUnifiedItemListState extends State<_PaginatedUnifiedItemList> {
-  int _visibleCount = 20;
+  int _visibleCount = 5;
 
   @override
   void initState() {

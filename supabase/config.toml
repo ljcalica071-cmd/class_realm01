@@ -1,2 +1,4 @@
 # ClassRealm Supabase Configuration
-# All backend logic, CRUD operations, caching, and emails have been migrated to 100% Pure Dart in lib/.
+
+[functions.admin-maintenance-mode]
+verify_jwt = false

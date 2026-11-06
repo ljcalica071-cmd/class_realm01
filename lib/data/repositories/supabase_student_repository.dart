@@ -514,6 +514,7 @@ class SupabaseStudentRepository implements StudentRepository {
     required String gender,
     required String subjectId,
     bool skipEmail = false,
+    String? preResolvedExistingStudentId,
   }) async {
     final cleanMiddleName =
         AppValidators.normalizeMiddleInitial(middleName) ?? '';
@@ -533,73 +534,83 @@ class SupabaseStudentRepository implements StudentRepository {
     ].where((s) => s.isNotEmpty).join(' ');
 
     // 0. Check if student already exists globally by LRN (ClassRealm Cross-Teacher Reuse)
-    String? existingStudentId;
+    String? existingStudentId =
+        (preResolvedExistingStudentId != null &&
+            preResolvedExistingStudentId.trim().isNotEmpty)
+        ? preResolvedExistingStudentId.trim()
+        : null;
     String? existingRfidUid;
-    try {
-      Map<String, dynamic>? existingProfile;
+    if (existingStudentId == null) {
       try {
-        existingProfile = await _client
-            .from('student_profiles')
-            .select('student_id, first_name, last_name, lrn, rfid_uid')
-            .eq('lrn', lrn)
-            .maybeSingle();
-      } catch (err) {
-        if (_isMissingRfidColumnError(err)) {
+        Map<String, dynamic>? existingProfile;
+        try {
           existingProfile = await _client
               .from('student_profiles')
-              .select('student_id, first_name, last_name, lrn')
+              .select('student_id, first_name, last_name, lrn, rfid_uid')
               .eq('lrn', lrn)
               .maybeSingle();
-        } else {
-          rethrow;
+        } catch (err) {
+          if (_isMissingRfidColumnError(err)) {
+            existingProfile = await _client
+                .from('student_profiles')
+                .select('student_id, first_name, last_name, lrn')
+                .eq('lrn', lrn)
+                .maybeSingle();
+          } else {
+            rethrow;
+          }
         }
+
+        if (existingProfile != null && existingProfile['student_id'] != null) {
+          final existingFirst = (existingProfile['first_name'] ?? '')
+              .toString()
+              .trim()
+              .toLowerCase();
+          final existingLast = (existingProfile['last_name'] ?? '')
+              .toString()
+              .trim()
+              .toLowerCase();
+          final inputFirst = firstName.trim().toLowerCase();
+          final inputLast = lastName.trim().toLowerCase();
+
+          // Security / Data Integrity: If LRN exists but name does not match, reject as conflict
+          if (existingFirst != inputFirst || existingLast != inputLast) {
+            final registeredName =
+                '${existingProfile['first_name']} ${existingProfile['last_name']}'
+                    .trim();
+            throw Exception(
+              'LRN Conflict: LRN $lrn is already registered to "$registeredName". '
+              'You cannot register this LRN with a different name ("$studentFullName"). '
+              'Please verify the student\'s LRN with the school registrar or previous teacher.',
+            );
+          }
+
+          existingStudentId = existingProfile['student_id'].toString();
+          final rawRfid = existingProfile['rfid_uid']?.toString().trim();
+          if (rawRfid != null && rawRfid.isNotEmpty) {
+            existingRfidUid = rawRfid.toUpperCase();
+          }
+        }
+      } catch (e) {
+        if (e.toString().contains('LRN Conflict')) rethrow;
+        debugPrint('LRN lookup notice: $e');
       }
-
-      if (existingProfile != null && existingProfile['student_id'] != null) {
-        final existingFirst = (existingProfile['first_name'] ?? '')
-            .toString()
-            .trim()
-            .toLowerCase();
-        final existingLast = (existingProfile['last_name'] ?? '')
-            .toString()
-            .trim()
-            .toLowerCase();
-        final inputFirst = firstName.trim().toLowerCase();
-        final inputLast = lastName.trim().toLowerCase();
-
-        // Security / Data Integrity: If LRN exists but name does not match, reject as conflict
-        if (existingFirst != inputFirst || existingLast != inputLast) {
-          final registeredName =
-              '${existingProfile['first_name']} ${existingProfile['last_name']}'
-                  .trim();
-          throw Exception(
-            'LRN Conflict: LRN $lrn is already registered to "$registeredName". '
-            'You cannot register this LRN with a different name ("$studentFullName"). '
-            'Please verify the student\'s LRN with the school registrar or previous teacher.',
-          );
-        }
-
-        existingStudentId = existingProfile['student_id'].toString();
-        final rawRfid = existingProfile['rfid_uid']?.toString().trim();
-        if (rawRfid != null && rawRfid.isNotEmpty) {
-          existingRfidUid = rawRfid.toUpperCase();
-        }
-      }
-    } catch (e) {
-      if (e.toString().contains('LRN Conflict')) rethrow;
-      debugPrint('LRN lookup notice: $e');
     }
 
     if (existingStudentId != null && existingStudentId.isNotEmpty) {
       // Re-use global identity without touching credentials or recreating auth
       try {
-        await _client.from('student_enrollments').upsert({
-          'student_id': existingStudentId,
-          'subject_offering_id': subjectId,
-          'status': 'enrolled',
-        });
+        await _client.from('student_enrollments').upsert(
+          {
+            'student_id': existingStudentId,
+            'subject_offering_id': subjectId,
+            'status': 'enrolled',
+          },
+          onConflict: 'student_id,subject_offering_id',
+        );
       } catch (e) {
         debugPrint('Cross-teacher enrollment error: $e');
+        rethrow;
       }
 
       // Persist locally to Drift SQLite
@@ -642,10 +653,10 @@ class SupabaseStudentRepository implements StudentRepository {
       debugPrint('Firebase student creation error: $e');
     }
 
-    final studentId = fbUid ?? 'std_${DateTime.now().millisecondsSinceEpoch}';
+    final studentId = fbUid ?? 'std_$lrn';
 
     try {
-      // 1. Direct Pure Dart insert into Supabase users, profiles, and settings
+      // 1. Direct Pure Dart insert into Supabase users, profiles, settings, and enrollments
       await _client.from('users').upsert({
         'id': studentId,
         'email': cleanEmail,
@@ -663,16 +674,20 @@ class SupabaseStudentRepository implements StudentRepository {
         'birthday': bdayStr,
       });
 
-      await _client.from('student_settings').upsert({
-        'student_id': studentId,
-        'status': 'pending_first_login',
-      });
-
-      await _client.from('student_enrollments').upsert({
-        'student_id': studentId,
-        'subject_offering_id': subjectId,
-        'status': 'enrolled',
-      });
+      await Future.wait([
+        _client.from('student_settings').upsert({
+          'student_id': studentId,
+          'status': 'pending_first_login',
+        }),
+        _client.from('student_enrollments').upsert(
+          {
+            'student_id': studentId,
+            'subject_offering_id': subjectId,
+            'status': 'enrolled',
+          },
+          onConflict: 'student_id,subject_offering_id',
+        ),
+      ]);
     } catch (e) {
       debugPrint('Pure Dart enroll notice: $e');
       try {
@@ -683,11 +698,14 @@ class SupabaseStudentRepository implements StudentRepository {
             .maybeSingle();
         if (doubleCheck != null && doubleCheck['student_id'] != null) {
           final winnerId = doubleCheck['student_id'].toString();
-          await _client.from('student_enrollments').upsert({
-            'student_id': winnerId,
-            'subject_offering_id': subjectId,
-            'status': 'enrolled',
-          });
+          await _client.from('student_enrollments').upsert(
+            {
+              'student_id': winnerId,
+              'subject_offering_id': subjectId,
+              'status': 'enrolled',
+            },
+            onConflict: 'student_id,subject_offering_id',
+          );
           AppDataCache.instance.invalidatePrefix('teacher_students_');
           AppDataCache.instance.invalidatePrefix('attendance_');
           return StudentEnrollmentResult(
@@ -699,6 +717,7 @@ class SupabaseStudentRepository implements StudentRepository {
       } catch (raceErr) {
         debugPrint('Race condition resolution error: $raceErr');
       }
+      rethrow;
     }
 
     // 2. Persist locally to Drift SQLite

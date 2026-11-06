@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -35,8 +36,42 @@ class GradebookGridCell extends StatefulWidget {
 }
 
 class _GradebookGridCellState extends State<GradebookGridCell> {
-  late final TextEditingController _controller;
+    late final TextEditingController _controller;
   late final FocusNode _focusNode;
+  Timer? _debounceTimer;
+
+  void _onTextChanged(String text) {
+    _debounceTimer?.cancel();
+    if (widget.isHpsCell) {
+      // Prevent clearing an already-set HPS to blank; teacher can replace it with 1..100.
+      if (text.trim().isEmpty && widget.value.trim().isNotEmpty) {
+        return;
+      }
+      _debounceTimer = Timer(const Duration(milliseconds: 220), () {
+        if (mounted) {
+          widget.onChanged(text);
+        }
+      });
+      return;
+    }
+    // Student score cell: update local calculations immediately (0ms delay).
+    if (mounted) {
+      setState(() {});
+      widget.onChanged(text);
+    }
+  }
+
+  void _flushDebounce() {
+    if (_debounceTimer?.isActive ?? false) {
+      _debounceTimer?.cancel();
+      if (widget.isHpsCell &&
+          _controller.text.trim().isEmpty &&
+          widget.value.trim().isNotEmpty) {
+        return;
+      }
+      widget.onChanged(_controller.text);
+    }
+  }
 
   @override
   void initState() {
@@ -58,6 +93,8 @@ class _GradebookGridCellState extends State<GradebookGridCell> {
 
   @override
   void dispose() {
+    _flushDebounce();
+    _debounceTimer?.cancel();
     _focusNode
       ..removeListener(_handleFocusChange)
       ..dispose();
@@ -66,7 +103,37 @@ class _GradebookGridCellState extends State<GradebookGridCell> {
   }
 
   void _handleFocusChange() {
+    if (!_focusNode.hasFocus) {
+      if (widget.isHpsCell &&
+          _controller.text.trim().isEmpty &&
+          widget.value.trim().isNotEmpty) {
+        _debounceTimer?.cancel();
+        _controller.value = TextEditingValue(
+          text: widget.value,
+          selection: TextSelection.collapsed(offset: widget.value.length),
+        );
+        _showBlankHpsWarning();
+      } else {
+        _flushDebounce();
+      }
+    }
     if (mounted) setState(() {});
+  }
+
+  void _showBlankHpsWarning() {
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    if (messenger == null) return;
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Highest Possible Score (HPS) cannot be left blank once set. Enter 1–100 to replace it.',
+          ),
+          duration: Duration(seconds: 2),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
   }
 
   void _showRangeWarning() {
@@ -91,10 +158,18 @@ class _GradebookGridCellState extends State<GradebookGridCell> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final focused = _focusNode.hasFocus;
+    final parsedNum = double.tryParse(_controller.text.trim());
+    final effectiveInvalid = widget.isHpsCell
+        ? widget.isInvalidValue
+        : (parsedNum != null &&
+              (widget.columnHps == null || parsedNum > widget.columnHps!));
+    final effectiveTextColor = (!widget.isHpsCell && parsedNum == 0)
+        ? const Color(0xFFEF4444)
+        : widget.textColor;
     final disabledBackground = theme.brightness == Brightness.dark
         ? const Color(0xFF1E293B)
         : const Color(0xFFE2E8F0);
-    final backgroundColor = widget.isInvalidValue
+    final backgroundColor = effectiveInvalid
         ? theme.colorScheme.error.withValues(alpha: 0.12)
         : !widget.isEnabled
         ? disabledBackground
@@ -105,13 +180,13 @@ class _GradebookGridCellState extends State<GradebookGridCell> {
         ? Border.all(color: theme.colorScheme.primary, width: 1.5)
         : Border(
             right: BorderSide(
-              color: widget.isInvalidValue
+              color: effectiveInvalid
                   ? theme.colorScheme.error
                   : widget.borderColor,
-              width: widget.isInvalidValue ? 1 : 0.5,
+              width: effectiveInvalid ? 1 : 0.5,
             ),
           );
-    final tooltip = widget.isInvalidValue
+    final tooltip = effectiveInvalid
         ? 'Invalid entry: reduce the score or restore the column HPS.'
         : widget.isEnabled
         ? ''
@@ -134,7 +209,7 @@ class _GradebookGridCellState extends State<GradebookGridCell> {
               controller: _controller,
               focusNode: _focusNode,
               enabled: widget.isEnabled,
-              onChanged: widget.onChanged,
+              onChanged: _onTextChanged,
               textAlign: TextAlign.center,
               textAlignVertical: TextAlignVertical.center,
               keyboardType: TextInputType.number,
@@ -150,9 +225,9 @@ class _GradebookGridCellState extends State<GradebookGridCell> {
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
-                color: widget.isInvalidValue
+                color: effectiveInvalid
                     ? theme.colorScheme.error
-                    : widget.textColor,
+                    : effectiveTextColor,
               ),
               decoration: const InputDecoration(
                 border: InputBorder.none,

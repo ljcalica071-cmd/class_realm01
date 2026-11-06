@@ -65,3 +65,11 @@ void registerWebConnectivityListenersPlatform({
 }) {}
 
 bool getWebNavigatorOnlineStatusPlatform() => true;
+
+void pickWebFilePlatform({
+  required String accept,
+  required void Function(Uint8List bytes, String fileName, int size)
+  onFileSelected,
+}) {
+  // No-op on non-web platforms.
+}
