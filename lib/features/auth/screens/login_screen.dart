@@ -185,7 +185,6 @@ class _LoginScreenState extends State<LoginScreen> {
         if (!isAdmin) {
           if (!mounted) return;
           setState(() => _isLoading = false);
-          TextInput.finishAutofillContext(shouldSave: false);
           _passwordController.clear();
           _passwordFocusNode.unfocus();
           _showMaintenanceDialog();
@@ -208,14 +207,17 @@ class _LoginScreenState extends State<LoginScreen> {
       if (user != null) {
         final email = _emailController.text.trim();
         final isFirstLogin = user.status == AccountStatus.pendingFirstLogin || user.status == AccountStatus.pending;
-        TextInput.finishAutofillContext(shouldSave: !isFirstLogin);
+        // Only commit the autofill context on a successful normal login
+        // (screen is about to be replaced, so no DOM input is left detached).
+        if (!isFirstLogin) {
+          TextInput.finishAutofillContext(shouldSave: true);
+        }
         await LocalStorageService.saveRememberMe(_rememberMe, email);
         if (!mounted) return;
       }
 
       if (user == null) {
         setState(() => _isLoading = false);
-        TextInput.finishAutofillContext(shouldSave: false);
 
         if (_isRateLimited) return;
 
@@ -250,7 +252,6 @@ class _LoginScreenState extends State<LoginScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _isLoading = false);
-      TextInput.finishAutofillContext(shouldSave: false);
 
       if (e is LoginAttemptException) {
         if (e.providerRateLimited) {
@@ -335,26 +336,16 @@ class _LoginScreenState extends State<LoginScreen> {
         user.status == AccountStatus.pending) {
       // Must remain in default light theme for first-login and password setup
       AppTheme.themeModeNotifier.value = ThemeMode.light;
-      if (user.role == UserRole.teacher) {
-        Navigator.pushNamedAndRemoveUntil(
-          context,
-          AppRoutes.teacherFirstLogin,
-          (route) => false,
-        );
-      } else if (user.role == UserRole.parent) {
+      if (user.role == UserRole.parent) {
         SyncCoordinator.instance.syncParentData(user.id);
-        Navigator.pushNamedAndRemoveUntil(
-          context,
-          AppRoutes.studentFirstLogin,
-          (route) => false,
-        );
-      } else {
-        Navigator.pushNamedAndRemoveUntil(
-          context,
-          AppRoutes.studentFirstLogin,
-          (route) => false,
-        );
       }
+      final firstLoginRoute = AppRoutes.getFirstLoginRouteForRole(user.role);
+      updateBrowserUrl(firstLoginRoute);
+      Navigator.pushNamedAndRemoveUntil(
+        context,
+        firstLoginRoute,
+        (route) => false,
+      );
       return;
     }
 

@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:class_realm/core/theme/app_theme.dart';
 import 'package:class_realm/core/services/local_storage_service.dart';
@@ -43,7 +42,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   void initState() {
     super.initState();
     AppTheme.themeModeNotifier.value = ThemeMode.light;
-    TextInput.finishAutofillContext(shouldSave: false);
     _newPassController.addListener(_validatePasswordFields);
     _confirmPassController.addListener(_validatePasswordFields);
 
@@ -70,9 +68,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   }
 
   void _validatePasswordFields() {
-    _ensureValidSelection(_newPassController);
-    _ensureValidSelection(_confirmPassController);
-
     final password = _newPassController.text;
     final confirm = _confirmPassController.text;
 
@@ -105,7 +100,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
   @override
   void dispose() {
-    TextInput.finishAutofillContext(shouldSave: false);
     _newPassController.removeListener(_validatePasswordFields);
     _confirmPassController.removeListener(_validatePasswordFields);
     _emailController.dispose();
@@ -237,7 +231,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       setState(() => _isLoading = false);
 
       // 3. Open shared PasswordOtpDialog modal (suppress autofill before opening modal)
-      TextInput.finishAutofillContext(shouldSave: false);
       final verified = await showDialog<bool>(
         context: context,
         barrierDismissible: false,
@@ -261,7 +254,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       );
 
       if (verified != true || !mounted) {
-        TextInput.finishAutofillContext(shouldSave: false);
         return;
       }
 
@@ -276,7 +268,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       setState(() => _isLoading = false);
 
       if (updateError != null) {
-        TextInput.finishAutofillContext(shouldSave: false);
         AppModals.showErrorDialog(
           context: context,
           title: 'Password Reset Failed',
@@ -286,7 +277,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       }
 
       // 5. Success confirmation (saving/updating is handled cleanly upon actual login)
-      TextInput.finishAutofillContext(shouldSave: false);
       AppModals.showSuccessDialog(
         context: context,
         title: 'Password Reset Successful',
@@ -300,7 +290,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _isLoading = false);
-      TextInput.finishAutofillContext(shouldSave: false);
       AppModals.showErrorDialog(
         context: context,
         title: 'Reset Request Failed',

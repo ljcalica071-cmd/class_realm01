@@ -275,6 +275,10 @@ class _ClassRealmAppState extends State<ClassRealmApp> {
   String _determineInitialDestination() {
     final user = _bootstrappedUser ?? AuthRepository.instance.currentUser;
     if (user != null) {
+      if (user.status == AccountStatus.pendingFirstLogin ||
+          user.status == AccountStatus.pending) {
+        return AppRoutes.getFirstLoginRouteForRole(user.role);
+      }
       if (_targetRoute != null && _targetRoute!.isNotEmpty) {
         return _targetRoute!;
       }
@@ -299,7 +303,10 @@ class _ClassRealmAppState extends State<ClassRealmApp> {
     if (activeUser != null) {
       final String dest;
       final savedRoute = LocalStorageService.getLastActiveRoute();
-      if (_targetRoute != null &&
+      if (activeUser.status == AccountStatus.pendingFirstLogin ||
+          activeUser.status == AccountStatus.pending) {
+        dest = AppRoutes.getFirstLoginRouteForRole(activeUser.role);
+      } else if (_targetRoute != null &&
           _targetRoute!.isNotEmpty &&
           _targetRoute != '/') {
         dest = _targetRoute!;
@@ -372,11 +379,18 @@ class _ClassRealmAppState extends State<ClassRealmApp> {
       AppRoutes.login: (context) {
         final activeUser = AuthRepository.instance.currentUser;
         if (activeUser != null) {
+          final isFirstLoginPending =
+              activeUser.status == AccountStatus.pendingFirstLogin ||
+              activeUser.status == AccountStatus.pending;
+          final target = isFirstLoginPending
+              ? AppRoutes.getFirstLoginRouteForRole(activeUser.role)
+              : AppRoutes.getDashboardRouteForRole(activeUser.role);
           Future.microtask(() {
             if (context.mounted) {
+              updateBrowserUrl(target);
               Navigator.pushNamedAndRemoveUntil(
                 context,
-                AppRoutes.getDashboardRouteForRole(activeUser.role),
+                target,
                 (route) => false,
               );
             }
@@ -393,7 +407,11 @@ class _ClassRealmAppState extends State<ClassRealmApp> {
       ),
       AppRoutes.forgotPassword: (context) => const ForgotPasswordScreen(),
       AppRoutes.studentFirstLogin: (context) => const AuthGuard(
-        allowedRoles: [UserRole.student, UserRole.parent],
+        allowedRoles: [UserRole.student],
+        child: FirstLoginScreen(),
+      ),
+      AppRoutes.parentFirstLogin: (context) => const AuthGuard(
+        allowedRoles: [UserRole.parent],
         child: FirstLoginScreen(),
       ),
       AppRoutes.teacherFirstLogin: (context) => const AuthGuard(

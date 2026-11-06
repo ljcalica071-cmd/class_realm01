@@ -540,19 +540,21 @@ class AuthRepository {
     final userToLogOut = currentUser;
     final sessionId = activeSessionId;
     _isLoggingOut = true;
+    // Clear in-memory and local storage session state IMMEDIATELY so route guards
+    // and LoginScreen never see a stale activeUser while network cleanup runs.
+    _currentUser = null;
+    _activeSessionId = null;
+    clearWarmSession();
+    AppDataCache.instance.clearAll();
+    await LocalStorageService.clearAuth();
+    try {
+      await _firebaseAuth.signOut();
+    } catch (_) {}
     try {
       await endSession(reason ?? 'manual', userToLogOut, sessionId);
+    } catch (_) {
     } finally {
-      _currentUser = null;
-      _activeSessionId = null;
-      await LocalStorageService.clearAuth();
-      clearWarmSession();
-      AppDataCache.instance.clearAll();
       _isLoggingOut = false;
-      // Attempt to sign out of Firebase
-      try {
-        await _firebaseAuth.signOut();
-      } catch (_) {}
     }
   }
 

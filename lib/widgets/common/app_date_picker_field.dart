@@ -12,6 +12,7 @@ class AppDatePickerField extends FormField<DateTime> {
   final DateTime? lastDate;
   final ValueChanged<DateTime>? onDateSelected;
   final bool showAgeHeader;
+  final bool showCheckmark;
 
   AppDatePickerField({
     super.key,
@@ -22,6 +23,7 @@ class AppDatePickerField extends FormField<DateTime> {
     this.lastDate,
     this.onDateSelected,
     this.showAgeHeader = true,
+    this.showCheckmark = false,
     super.validator,
     super.autovalidateMode,
   }) : super(
@@ -168,7 +170,7 @@ class AppDatePickerField extends FormField<DateTime> {
                            ),
                          ),
                        ),
-                       if (hasDate)
+                       if (hasDate && showCheckmark)
                          const Icon(
                            Icons.check_circle,
                            size: 18,

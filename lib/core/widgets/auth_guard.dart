@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:class_realm/core/utils/browser_url_helper.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/routes/app_routes.dart';
@@ -53,22 +54,23 @@ class _AuthGuardState extends State<AuthGuard> {
         return;
       }
 
-      // 2. Role not allowed for this route (e.g., URL tampering)
-      // Redirect back to their respective dashboard instead of logging them out
+      final isFirstLoginPending =
+          user.status == AccountStatus.pendingFirstLogin ||
+          user.status == AccountStatus.pending;
+
+      // 2. Role not allowed for this route (e.g., URL tampering or wrong role first-login URL)
       if (!widget.allowedRoles.contains(user.role)) {
-        _redirect(AppRoutes.getDashboardRouteForRole(user.role));
+        final targetRoute = isFirstLoginPending
+            ? AppRoutes.getFirstLoginRouteForRole(user.role)
+            : AppRoutes.getDashboardRouteForRole(user.role);
+        _redirect(targetRoute);
         return;
       }
 
       // 3. Status checks
-      if ((user.status == AccountStatus.pendingFirstLogin ||
-              user.status == AccountStatus.pending) &&
+      if (isFirstLoginPending &&
           widget.child.runtimeType.toString() != 'FirstLoginScreen') {
-        _redirect(
-          user.role == UserRole.teacher
-              ? AppRoutes.teacherFirstLogin
-              : AppRoutes.studentFirstLogin,
-        );
+        _redirect(AppRoutes.getFirstLoginRouteForRole(user.role));
         return;
       }
 
@@ -83,6 +85,7 @@ class _AuthGuardState extends State<AuthGuard> {
 
   void _redirect(String route) {
     if (!mounted) return;
+    updateBrowserUrl(route);
     if (route == AppRoutes.login) {
       Navigator.pushNamedAndRemoveUntil(context, AppRoutes.login, (r) => false);
     } else if (ModalRoute.of(context)?.settings.name != route) {

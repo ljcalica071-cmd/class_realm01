@@ -22,12 +22,16 @@ class TeacherDashboardOverviewTab extends StatefulWidget {
   final ValueChanged<int> onNavigateTo;
   final VoidCallback onCreateChooser;
 
+  /// Optional pre-seeded schedules (used for instant render and widget tests).
+  final List<ScheduleModel>? initialSchedules;
+
   const TeacherDashboardOverviewTab({
     super.key,
     required this.activeStudents,
     required this.quizzesAndExams,
     required this.onNavigateTo,
     required this.onCreateChooser,
+    this.initialSchedules,
   });
 
   @override
@@ -47,6 +51,9 @@ class _TeacherDashboardOverviewTabState
   @override
   void initState() {
     super.initState();
+    if (widget.initialSchedules != null) {
+      _schedules = List<ScheduleModel>.of(widget.initialSchedules!);
+    }
     _hydrateOverviewStats();
     _loadDashboardStats();
     _autoClockTimer = Timer.periodic(const Duration(seconds: 30), (_) {

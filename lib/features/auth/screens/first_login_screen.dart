@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:class_realm/core/services/local_storage_service.dart';
 import 'package:class_realm/core/theme/app_theme.dart';
+import 'package:class_realm/core/utils/browser_url_helper.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/routes/app_routes.dart';
@@ -40,57 +42,72 @@ class _FirstLoginScreenState extends State<FirstLoginScreen>
   bool _hasLower = false;
   bool _hasNumber = false;
   bool _passwordsMatch = false;
+  UserRole? _userRole;
+  String? _displayName;
 
   @override
   void initState() {
     super.initState();
     AppTheme.themeModeNotifier.value = ThemeMode.light;
-    // Cancel any active browser autofill context from LoginScreen
-    TextInput.finishAutofillContext(shouldSave: false);
+
+    final activeUser = AuthRepository.instance.currentUser;
+    _userRole = activeUser?.role;
+    _displayName = activeUser == null
+        ? 'Faculty'
+        : activeUser.role == UserRole.teacher
+        ? 'Teacher ${activeUser.lastName ?? activeUser.fullName}'
+        : (activeUser.firstName ?? activeUser.fullName);
+
+    if (activeUser != null) {
+      updateBrowserUrl(AppRoutes.getFirstLoginRouteForRole(activeUser.role));
+    }
 
     _newPassCtrl.addListener(_validatePassword);
     _confirmPassCtrl.addListener(_validateMatch);
 
     _lrnFocusNode.addListener(() {
       if (_lrnFocusNode.hasFocus) {
-        _ensureValidSelection(_childLrnLast4Ctrl);
+        _repairSelectionIfInvalid(_childLrnLast4Ctrl);
       }
     });
     _newPassFocusNode.addListener(() {
       if (_newPassFocusNode.hasFocus) {
-        _ensureValidSelection(_newPassCtrl);
+        _repairSelectionIfInvalid(_newPassCtrl);
       }
     });
     _confirmPassFocusNode.addListener(() {
       if (_confirmPassFocusNode.hasFocus) {
-        _ensureValidSelection(_confirmPassCtrl);
-      }
-    });
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      TextInput.finishAutofillContext(shouldSave: false);
-      if (_newPassCtrl.text.isNotEmpty || _confirmPassCtrl.text.isNotEmpty) {
-        _newPassCtrl.clear();
-        _confirmPassCtrl.clear();
+        _repairSelectionIfInvalid(_confirmPassCtrl);
       }
     });
   }
 
-  /// Repairs invalid `TextSelection` (offset -1) on Flutter Web so typing and
-  /// Backspace always work immediately inside password fields.
-  void _ensureValidSelection(TextEditingController ctrl) {
+  /// Repairs invalid `TextSelection` (offset -1) without clobbering active
+  /// cursor movement or selection highlights on Flutter Web.
+  void _repairSelectionIfInvalid(TextEditingController ctrl) {
     final text = ctrl.text;
-    if (!ctrl.selection.isValid ||
-        ctrl.selection.start < 0 ||
-        ctrl.selection.end < 0 ||
-        ctrl.selection.end > text.length) {
+    final sel = ctrl.selection;
+    if (!sel.isValid ||
+        sel.start < 0 ||
+        sel.end < 0 ||
+        sel.start > text.length ||
+        sel.end > text.length) {
       ctrl.selection = TextSelection.collapsed(offset: text.length);
     }
   }
 
+  /// Ensures Flutter Web's hidden DOM `<input>` is awake when clicking inside
+  /// a text field.
+  void _handleFieldTap(TextEditingController ctrl, FocusNode focusNode) {
+    _repairSelectionIfInvalid(ctrl);
+    if (!focusNode.hasFocus) {
+      focusNode.requestFocus();
+    } else {
+      SystemChannels.textInput.invokeMethod<void>('TextInput.show');
+    }
+  }
+
   void _validatePassword() {
-    _ensureValidSelection(_newPassCtrl);
     final v = _newPassCtrl.text;
     final confirm = _confirmPassCtrl.text;
     final result = AppValidators.validatePasswordComplexity(
@@ -109,7 +126,6 @@ class _FirstLoginScreenState extends State<FirstLoginScreen>
   }
 
   void _validateMatch() {
-    _ensureValidSelection(_confirmPassCtrl);
     final matches = AppValidators.passwordsMatch(
       _newPassCtrl.text,
       _confirmPassCtrl.text,
@@ -126,7 +142,6 @@ class _FirstLoginScreenState extends State<FirstLoginScreen>
 
   @override
   void dispose() {
-    TextInput.finishAutofillContext(shouldSave: false);
     _newPassCtrl.removeListener(_validatePassword);
     _confirmPassCtrl.removeListener(_validateMatch);
     _newPassCtrl.dispose();
@@ -139,21 +154,25 @@ class _FirstLoginScreenState extends State<FirstLoginScreen>
   }
 
   void _submit() async {
-    TextInput.finishAutofillContext(shouldSave: false);
-    if (!_isValid) return;
+    if (!_isValid || _isLoading) return;
     setState(() => _isLoading = true);
     if (!mounted) return;
 
     final user = AuthRepository.instance.currentUser;
     if (user == null) {
       setState(() => _isLoading = false);
-      TextInput.finishAutofillContext(shouldSave: false);
       AppModals.showErrorDialog(
         context: context,
         title: 'Session Expired',
         message: 'No active session found. Please log in again.',
-        onConfirm: () =>
-            Navigator.pushReplacementNamed(context, AppRoutes.login),
+        onConfirm: () {
+          updateBrowserUrl(AppRoutes.login);
+          Navigator.pushNamedAndRemoveUntil(
+            context,
+            AppRoutes.login,
+            (route) => false,
+          );
+        },
       );
       return;
     }
@@ -163,7 +182,6 @@ class _FirstLoginScreenState extends State<FirstLoginScreen>
 
       if (_parentBirthday == null) {
         setState(() => _isLoading = false);
-        TextInput.finishAutofillContext(shouldSave: false);
         AppModals.showErrorDialog(
           context: context,
           title: 'Birthday Required',
@@ -174,7 +192,6 @@ class _FirstLoginScreenState extends State<FirstLoginScreen>
 
       if (lrn4.length != 4) {
         setState(() => _isLoading = false);
-        TextInput.finishAutofillContext(shouldSave: false);
         AppModals.showErrorDialog(
           context: context,
           title: 'LRN Required',
@@ -197,7 +214,6 @@ class _FirstLoginScreenState extends State<FirstLoginScreen>
       if (_newPassCtrl.text.trim().toLowerCase() ==
           tempPassword.toLowerCase()) {
         setState(() => _isLoading = false);
-        TextInput.finishAutofillContext(shouldSave: false);
         AppModals.showErrorDialog(
           context: context,
           title: 'Password Rule Violation',
@@ -217,7 +233,6 @@ class _FirstLoginScreenState extends State<FirstLoginScreen>
       if (!verified) {
         if (!mounted) return;
         setState(() => _isLoading = false);
-        TextInput.finishAutofillContext(shouldSave: false);
         AppModals.showErrorDialog(
           context: context,
           title: 'Identity Verification Failed',
@@ -231,7 +246,6 @@ class _FirstLoginScreenState extends State<FirstLoginScreen>
       if (lockout != null && lockout.inSeconds > 0) {
         final minutes = (lockout.inSeconds / 60).ceil();
         setState(() => _isLoading = false);
-        TextInput.finishAutofillContext(shouldSave: false);
         AppModals.showErrorDialog(
           context: context,
           title: 'Account Temporarily Locked',
@@ -247,7 +261,6 @@ class _FirstLoginScreenState extends State<FirstLoginScreen>
       } catch (error) {
         if (!mounted) return;
         setState(() => _isLoading = false);
-        TextInput.finishAutofillContext(shouldSave: false);
         AppModals.showErrorDialog(
           context: context,
           title: 'Verification Code Not Sent',
@@ -258,9 +271,6 @@ class _FirstLoginScreenState extends State<FirstLoginScreen>
 
       setState(() => _isLoading = false);
       if (!mounted) return;
-
-      // Ensure autofill context is cancelled before opening modal OTP dialog
-      TextInput.finishAutofillContext(shouldSave: false);
 
       final bool? verified = await showDialog<bool>(
         context: context,
@@ -282,7 +292,6 @@ class _FirstLoginScreenState extends State<FirstLoginScreen>
       );
 
       if (verified != true) {
-        TextInput.finishAutofillContext(shouldSave: false);
         return;
       }
     }
@@ -297,7 +306,6 @@ class _FirstLoginScreenState extends State<FirstLoginScreen>
     if (error != null) {
       if (mounted) {
         setState(() => _isLoading = false);
-        TextInput.finishAutofillContext(shouldSave: false);
         AppModals.showErrorDialog(
           context: context,
           title: 'Password Setup Failed',
@@ -307,9 +315,6 @@ class _FirstLoginScreenState extends State<FirstLoginScreen>
       return;
     }
 
-    // Suppress browser save pass prompt in first login as specified by user
-    TextInput.finishAutofillContext(shouldSave: false);
-
     if (!mounted) return;
     final isUserDark = LocalStorageService.isUserDarkMode(
       user.id,
@@ -318,13 +323,15 @@ class _FirstLoginScreenState extends State<FirstLoginScreen>
     AppTheme.themeModeNotifier.value = isUserDark
         ? ThemeMode.dark
         : ThemeMode.light;
-    if (user.role == UserRole.teacher) {
-      Navigator.pushReplacementNamed(context, AppRoutes.teacherDashboard);
-    } else if (user.role == UserRole.parent) {
-      Navigator.pushReplacementNamed(context, AppRoutes.parentHome);
-    } else {
-      Navigator.pushReplacementNamed(context, AppRoutes.studentHome);
-    }
+
+    final dashboardRoute = AppRoutes.getDashboardRouteForRole(user.role);
+    LocalStorageService.saveLastActiveRoute(dashboardRoute);
+    updateBrowserUrl(dashboardRoute);
+    Navigator.pushNamedAndRemoveUntil(
+      context,
+      dashboardRoute,
+      (route) => false,
+    );
   }
 
   Widget _buildParentIdentityVerificationSection(ThemeData theme) {
@@ -393,7 +400,7 @@ class _FirstLoginScreenState extends State<FirstLoginScreen>
             enableSuggestions: false,
             autocorrect: false,
             maxLength: 4,
-            onTap: () => _ensureValidSelection(_childLrnLast4Ctrl),
+            onTap: () => _handleFieldTap(_childLrnLast4Ctrl, _lrnFocusNode),
             onSubmitted: (_) {
               FocusScope.of(context).requestFocus(_newPassFocusNode);
             },
@@ -425,32 +432,25 @@ class _FirstLoginScreenState extends State<FirstLoginScreen>
 
   @override
   Widget build(BuildContext context) {
-    final user = AuthRepository.instance.currentUser;
-    final displayName = user == null
-        ? 'Faculty'
-        : user.role == UserRole.teacher
-        ? 'Teacher ${user.lastName ?? user.fullName}'
-        : (user.firstName ?? user.fullName);
-
     return PopScope(
       canPop: !_isLoading,
       child: AuthResponsiveScaffold(
         cardTitle: 'Set New Password',
         cardSubtitle:
-            'Welcome, $displayName! For security compliance, please set up your new personalized password.',
-        formChild: _buildFormContent(context, user),
+            'Welcome, ${_displayName ?? 'User'}! For security compliance, please set up your new personalized password.',
+        formChild: _buildFormContent(context),
       ),
     );
   }
 
-  Widget _buildFormContent(BuildContext context, UserModel? user) {
+  Widget _buildFormContent(BuildContext context) {
     final theme = Theme.of(context);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
-        if (user?.role == UserRole.parent) ...[
+        if (_userRole == UserRole.parent) ...[
           _buildParentIdentityVerificationSection(theme),
           const SizedBox(height: 20),
         ],
@@ -466,7 +466,7 @@ class _FirstLoginScreenState extends State<FirstLoginScreen>
           autocorrect: false,
           textInputAction: TextInputAction.next,
           maxLength: 50,
-          onTap: () => _ensureValidSelection(_newPassCtrl),
+          onTap: () => _handleFieldTap(_newPassCtrl, _newPassFocusNode),
           onSubmitted: (_) {
             FocusScope.of(context).requestFocus(_confirmPassFocusNode);
           },
@@ -516,7 +516,7 @@ class _FirstLoginScreenState extends State<FirstLoginScreen>
               onPressed: () {
                 setState(() {
                   _obscureNew = !_obscureNew;
-                  _ensureValidSelection(_newPassCtrl);
+                  _repairSelectionIfInvalid(_newPassCtrl);
                 });
               },
             ),
@@ -548,7 +548,7 @@ class _FirstLoginScreenState extends State<FirstLoginScreen>
           autocorrect: false,
           textInputAction: TextInputAction.done,
           maxLength: 50,
-          onTap: () => _ensureValidSelection(_confirmPassCtrl),
+          onTap: () => _handleFieldTap(_confirmPassCtrl, _confirmPassFocusNode),
           onSubmitted: (_) {
             if (_isValid && !_isLoading) {
               _submit();
@@ -600,7 +600,7 @@ class _FirstLoginScreenState extends State<FirstLoginScreen>
               onPressed: () {
                 setState(() {
                   _obscureConfirm = !_obscureConfirm;
-                  _ensureValidSelection(_confirmPassCtrl);
+                  _repairSelectionIfInvalid(_confirmPassCtrl);
                 });
               },
             ),
@@ -638,26 +638,25 @@ class _FirstLoginScreenState extends State<FirstLoginScreen>
         // Back to Login Link
         Center(
           child: TextButton.icon(
-            onPressed: _isLoading
-                ? null
-                : () {
-                    AuthRepository.instance.logout();
-                    AppTheme.themeModeNotifier.value = ThemeMode.light;
-                    Navigator.pushReplacementNamed(context, AppRoutes.login);
-                  },
-            icon: Icon(
+            onPressed: () {
+              AppTheme.themeModeNotifier.value = ThemeMode.light;
+              updateBrowserUrl(AppRoutes.login);
+              unawaited(AuthRepository.instance.logout('first_login_back'));
+              Navigator.pushNamedAndRemoveUntil(
+                context,
+                AppRoutes.login,
+                (route) => false,
+              );
+            },
+            icon: const Icon(
               Icons.arrow_back,
               size: 16,
-              color: _isLoading
-                  ? const Color(0xFF94A3B8)
-                  : const Color(0xFF487898),
+              color: Color(0xFF487898),
             ),
-            label: Text(
+            label: const Text(
               'Back to Login',
               style: TextStyle(
-                color: _isLoading
-                    ? const Color(0xFF94A3B8)
-                    : const Color(0xFF487898),
+                color: Color(0xFF487898),
                 fontWeight: FontWeight.bold,
               ),
             ),

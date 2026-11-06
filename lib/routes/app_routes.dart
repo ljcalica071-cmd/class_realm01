@@ -10,6 +10,7 @@ class AppRoutes {
   static const String adminAddTeacher = '/admin/add-teacher';
   static const String forgotPassword = '/forgot-password';
   static const String studentFirstLogin = '/student/first-login';
+  static const String parentFirstLogin = '/parent/first-login';
   static const String teacherFirstLogin = '/teacher/first-login';
 
   // Dashboards & Wizards
@@ -34,6 +35,19 @@ class AppRoutes {
   static const String teacherProfile = '/teacher/profile';
   static const String studentHome = '/student/home';
   static const String parentHome = '/parent/home';
+
+  static String getFirstLoginRouteForRole(UserRole role) {
+    switch (role) {
+      case UserRole.admin:
+        return adminDashboard;
+      case UserRole.teacher:
+        return teacherFirstLogin;
+      case UserRole.student:
+        return studentFirstLogin;
+      case UserRole.parent:
+        return parentFirstLogin;
+    }
+  }
 
   static String getDashboardRouteForRole(UserRole role) {
     switch (role) {
