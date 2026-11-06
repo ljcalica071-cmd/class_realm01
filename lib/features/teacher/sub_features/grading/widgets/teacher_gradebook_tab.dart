@@ -52,10 +52,7 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
   String? _sheetLoadError;
   bool _isLoadingSheets = false;
   bool _isRefreshingGradebookContent = false;
-  bool _isFilterTransitioning = false;
-  Timer? _filterTransitionTimer;
   final Set<String> _loadedOfferingIds = <String>{};
-  final Set<String> _visitedFilterKeys = <String>{};
   Set<String> _classworkOccupiedSlots = <String>{};
 
   int _selectedTerm = 1;
@@ -190,7 +187,6 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
         final hasCachedSheets = _hydrateSheetsFromLocalCache(subjectId);
         if (cached != null && cached.isNotEmpty && hasCachedSheets) {
           _loadedOfferingIds.add(subjectId);
-          _visitedFilterKeys.add('$subjectId:$_selectedGender');
         }
       }
     }
@@ -223,42 +219,11 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
     return foundAny;
   }
 
-  void _triggerFirstLoadFilterTransition(String filterKey) {
-    if (_visitedFilterKeys.contains(filterKey)) return;
-    _visitedFilterKeys.add(filterKey);
-    _filterTransitionTimer?.cancel();
-    setState(() {
-      _isFilterTransitioning = true;
-    });
-    _filterTransitionTimer = Timer(const Duration(milliseconds: 180), () {
-      if (mounted) {
-        setState(() {
-          _isFilterTransitioning = false;
-        });
-      }
-    });
-  }
-
   void _selectGenderFilter(String gender) {
     if (_selectedGender == gender) return;
-    final offeringId = _currentSubjectData?['id']?.toString() ?? 'default';
-    final filterKey = '$offeringId:$gender';
-    final isFirstVisit = !_visitedFilterKeys.contains(filterKey);
-    _visitedFilterKeys.add(filterKey);
-    _filterTransitionTimer?.cancel();
     setState(() {
       _selectedGender = gender;
-      _isFilterTransitioning = isFirstVisit;
     });
-    if (isFirstVisit) {
-      _filterTransitionTimer = Timer(const Duration(milliseconds: 160), () {
-        if (mounted) {
-          setState(() {
-            _isFilterTransitioning = false;
-          });
-        }
-      });
-    }
   }
 
   Future<void> _refreshGradebookContentOnly() async {
@@ -304,7 +269,6 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
         _loadOfferingSheets(offeringId, forceShowLoading: false),
       ]);
       _loadedOfferingIds.add(offeringId);
-      _visitedFilterKeys.add('$offeringId:$_selectedGender');
     } finally {
       if (mounted) {
         setState(() {
@@ -433,7 +397,6 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
     TeacherGradebookTab.gradebookRefreshNotifier.removeListener(
       _handleExternalGradebookRefresh,
     );
-    _filterTransitionTimer?.cancel();
     _sheetSaveTimer?.cancel();
     final offeringId = _currentSubjectData?['id']?.toString();
     if (offeringId != null && _selectedTerm > 0) {
@@ -767,7 +730,6 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
         if (sheet != null) _decodeSheet(index + 1, sheet);
       }
       _loadedOfferingIds.add(offeringId);
-      _visitedFilterKeys.add('$offeringId:$_selectedGender');
       _hpsRevision.value++;
       for (final studentId in _studentRevisions.keys) {
         _studentRevisions[studentId]!.value++;
@@ -898,8 +860,6 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
     final subjectName = offering['subject_name']?.toString();
     final sectionName = offering['section_name']?.toString();
     if (!mounted || subjectName == null || sectionName == null) return;
-    final isFirstOfferingVisit =
-        nextOfferingId != null && !_loadedOfferingIds.contains(nextOfferingId);
     setState(() {
       _selectedSubject = subjectName;
       _selectedSection = sectionName;
@@ -915,9 +875,6 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
         _selectedTerm = active.isNotEmpty ? active.first : 1;
       }
     });
-    if (nextOfferingId != null && isFirstOfferingVisit) {
-      _triggerFirstLoadFilterTransition('$nextOfferingId:$_selectedGender');
-    }
     final teacherId = AuthRepository.instance.currentUser?.id;
     final offeringId = nextOfferingId;
     if (teacherId != null && offeringId != null) {
@@ -1136,72 +1093,56 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
 
                   // Spreadsheet content
                   Expanded(
-                    child: AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 160),
-                      switchInCurve: Curves.easeOut,
-                      switchOutCurve: Curves.easeIn,
-                      child:
-                          (_isLoadingSubjects ||
-                              _isRefreshingGradebookContent ||
-                              _isFilterTransitioning ||
-                              ((_isLoadingStudents || _isLoadingSheets) &&
-                                  !_loadedOfferingIds.contains(
-                                    _currentSubjectData?['id']?.toString() ??
-                                        '',
-                                  )))
-                          ? KeyedSubtree(
-                              key: const ValueKey('gradebook-skeleton'),
-                              child: _buildGradebookSkeleton(
-                                theme,
-                                isDark,
-                                borderColor,
-                              ),
-                            )
-                          : KeyedSubtree(
-                              key: ValueKey(
-                                'gradebook-content-${_currentSubjectData?['id'] ?? 'none'}-$_selectedTerm-$_selectedGender',
-                              ),
-                              child: Stack(
-                                children: [
-                                  if (_selectedTerm == 0)
-                                    _buildFinalGradesView(
-                                      theme,
-                                      isDark,
-                                      borderColor,
-                                    )
-                                  else
-                                    _buildTermSpreadsheet(
-                                      theme,
-                                      isDark,
-                                      borderColor,
-                                      cellBg,
-                                      cellText,
-                                      headerBg,
-                                      subHeaderBg,
-                                      headerText,
-                                      genderHeaderBg,
-                                      altRowBg,
-                                      wwWeight,
-                                      ptWeight,
-                                      exWeight,
-                                    ),
-                                  if (_isLoadingSubjects ||
-                                      _isLoadingStudents ||
-                                      _isLoadingSheets)
-                                    Positioned(
-                                      top: 0,
-                                      left: 0,
-                                      right: 0,
-                                      child: LinearProgressIndicator(
-                                        minHeight: 3,
-                                        color: theme.colorScheme.primary,
-                                        backgroundColor: Colors.transparent,
-                                      ),
-                                    ),
-                                ],
-                              ),
-                            ),
-                    ),
+                    child: (_isLoadingSubjects ||
+                            _isRefreshingGradebookContent ||
+                            ((_isLoadingStudents || _isLoadingSheets) &&
+                                !_loadedOfferingIds.contains(
+                                  _currentSubjectData?['id']?.toString() ?? '',
+                                )))
+                        ? _buildGradebookSkeleton(
+                            theme,
+                            isDark,
+                            borderColor,
+                          )
+                        : Stack(
+                            children: [
+                              if (_selectedTerm == 0)
+                                _buildFinalGradesView(
+                                  theme,
+                                  isDark,
+                                  borderColor,
+                                )
+                              else
+                                _buildTermSpreadsheet(
+                                  theme,
+                                  isDark,
+                                  borderColor,
+                                  cellBg,
+                                  cellText,
+                                  headerBg,
+                                  subHeaderBg,
+                                  headerText,
+                                  genderHeaderBg,
+                                  altRowBg,
+                                  wwWeight,
+                                  ptWeight,
+                                  exWeight,
+                                ),
+                              if (_isLoadingSubjects ||
+                                  _isLoadingStudents ||
+                                  _isLoadingSheets)
+                                Positioned(
+                                  top: 0,
+                                  left: 0,
+                                  right: 0,
+                                  child: LinearProgressIndicator(
+                                    minHeight: 3,
+                                    color: theme.colorScheme.primary,
+                                    backgroundColor: Colors.transparent,
+                                  ),
+                                ),
+                            ],
+                          ),
                   ),
 
                   // Term Tabs at the bottom
@@ -2997,9 +2938,7 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
     final hasStudents = _students.isNotEmpty;
     final enabled = isEnabled && hasStudents;
     return GradebookGridCell(
-      key: ValueKey(
-        'hps-$offeringId-$_selectedTerm-$category-$col-${val?.toStringAsFixed(0) ?? ''}',
-      ),
+      key: ValueKey('hps-$offeringId-$_selectedTerm-$category-$col'),
       value: val?.toStringAsFixed(0) ?? '',
       onChanged: (value) =>
           _setHps(category, col, value.isEmpty ? null : double.parse(value)),
@@ -3222,12 +3161,12 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
         key: ValueKey(
           'rb-gradebook-row-${s.gender ?? "U"}-${s.id}-right-$idx-$_selectedTerm',
         ),
-        child: ValueListenableBuilder<int>(
+        child: AnimatedBuilder(
           key: ValueKey(
             'gradebook-row-${s.gender ?? "U"}-${s.id}-right-$idx-$_selectedTerm',
           ),
-          valueListenable: _hpsRevision,
-          builder: (context, _, _) {
+          animation: Listenable.merge([studentRev, _hpsRevision]),
+          builder: (context, _) {
             List<Widget> buildInputCells(String category, int count) {
               final cells = <Widget>[];
               for (var i = 0; i < count; i++) {

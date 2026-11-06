@@ -7,6 +7,7 @@ import 'package:class_realm/core/services/app_data_cache.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/models/admin_portal_models.dart';
 import 'package:class_realm/models/academic_models.dart';
+import 'package:class_realm/shared/services/in_app_notification_service.dart';
 
 class AdminRepository {
   static final AdminRepository instance = AdminRepository._internal();
@@ -214,24 +215,62 @@ class AdminRepository {
         debugPrint('AdminRepository setMaintenanceMode audit_logs error: $e');
       }
     }
+
+    // Broadcast in-app notification & heads-up banner to all active users (Teacher, Student, Parent)
+    try {
+      final nowIso = DateTime.now().toUtc().toIso8601String();
+      final notifTitle = isMaintenance
+          ? 'Scheduled System Maintenance Active'
+          : 'System Maintenance Complete — Back Online';
+      final notifMsg = isMaintenance
+          ? 'ClassRealm is currently undergoing scheduled maintenance to improve system performance. Portal access is temporarily paused while updates are being applied. All your grades, attendance records, and class activities are safely saved.'
+          : 'ClassRealm maintenance is now complete and all portal features are back online. You may now log in and continue viewing grades, attendance, and class activities as normal.';
+
+      await _client.from('notifications').insert({
+        'title': notifTitle,
+        'message': notifMsg,
+        'notification_type': 'general',
+        'target_audience': 'all',
+        'is_archived': false,
+        'created_at': nowIso,
+      });
+
+      InAppNotificationService.showBanner(
+        title: notifTitle,
+        message: notifMsg,
+        subtitle: isMaintenance
+            ? 'Maintenance Active • Access Paused'
+            : 'System Restored • All Portals Online',
+        severity: isMaintenance
+            ? InAppNotificationSeverity.warningLevel1
+            : InAppNotificationSeverity.info,
+      );
+    } catch (notifErr) {
+      debugPrint('AdminRepository maintenance notification broadcast notice: $notifErr');
+    }
   }
 
+  /// Fetch active Gmail/email addresses strictly for Teachers and Students
+  /// (Parents only receive in-app notifications & push popups when enabled).
   Future<List<String>> getActiveUserEmails() async {
     try {
-      // Exclude archived and purely mock accounts. Include active and pending_first_login
       final res = await _client
           .from('users')
-          .select('email')
+          .select('email, role')
           .eq('is_archived', false)
+          .inFilter('role', ['teacher', 'student'])
           .not('email', 'in', '("parent","student","teacher")');
 
       final List<String> emails = [];
       for (final row in res as List) {
-        if (row['email'] != null && row['email'].toString().isNotEmpty) {
-          emails.add(row['email'].toString());
+        final rawEmail = row['email']?.toString().trim() ?? '';
+        if (rawEmail.isNotEmpty &&
+            rawEmail.contains('@') &&
+            !rawEmail.endsWith('@classrealm.local')) {
+          emails.add(rawEmail);
         }
       }
-      return emails;
+      return emails.toSet().toList();
     } catch (e) {
       debugPrint('AdminRepository getActiveUserEmails error: $e');
       return [];

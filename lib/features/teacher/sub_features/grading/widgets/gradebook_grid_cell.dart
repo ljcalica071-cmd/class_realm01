@@ -57,11 +57,13 @@ class _GradebookGridCellState extends State<GradebookGridCell> {
     }
   }
 
-  void _flushDebounce() {
+  bool _flushDebounce() {
     if (_debounceTimer?.isActive ?? false) {
       _debounceTimer?.cancel();
       widget.onChanged(_controller.text);
+      return true;
     }
+    return false;
   }
 
   @override
@@ -74,7 +76,11 @@ class _GradebookGridCellState extends State<GradebookGridCell> {
   @override
   void didUpdateWidget(covariant GradebookGridCell oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (!_focusNode.hasFocus &&
+    final rejectedBlankHps =
+        widget.isHpsCell &&
+        _controller.text.trim().isEmpty &&
+        widget.value.trim().isNotEmpty;
+    if ((!_focusNode.hasFocus || rejectedBlankHps) &&
         (_controller.text != widget.value || oldWidget.value != widget.value)) {
       _controller.value = TextEditingValue(
         text: widget.value,
@@ -96,8 +102,8 @@ class _GradebookGridCellState extends State<GradebookGridCell> {
 
   void _handleFocusChange() {
     if (!_focusNode.hasFocus) {
-      _flushDebounce();
-      if (_controller.text != widget.value) {
+      final flushed = _flushDebounce();
+      if (!flushed && _controller.text != widget.value) {
         _controller.value = TextEditingValue(
           text: widget.value,
           selection: TextSelection.collapsed(offset: widget.value.length),
@@ -202,6 +208,12 @@ class _GradebookGridCellState extends State<GradebookGridCell> {
               ),
               decoration: const InputDecoration(
                 border: InputBorder.none,
+                enabledBorder: InputBorder.none,
+                focusedBorder: InputBorder.none,
+                disabledBorder: InputBorder.none,
+                errorBorder: InputBorder.none,
+                focusedErrorBorder: InputBorder.none,
+                filled: false,
                 isDense: true,
                 contentPadding: EdgeInsets.zero,
               ),

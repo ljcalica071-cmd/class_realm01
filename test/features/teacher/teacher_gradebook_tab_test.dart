@@ -139,7 +139,7 @@ void main() {
   );
 
   testWidgets(
-    'assessment score columns dynamically expand from 5 up to 10 slots with inline "+" button',
+    'assessment score columns dynamically expand from 3 up to 10 slots with inline "+" button',
     (tester) async {
       tester.view.physicalSize = const Size(1600, 900);
       tester.view.devicePixelRatio = 1.0;
@@ -148,16 +148,16 @@ void main() {
       await tester.pumpWidget(buildGradebook());
       await tester.pumpAndSettle();
 
-      // Verify initial 5 Written Works slots and '+' button
+      // Verify initial 3 Written Works slots and '+' button
       final addWwFinder = find.byKey(const ValueKey('add-slot-ww'));
       expect(addWwFinder, findsOneWidget);
       expect(find.byTooltip('Add Written Work slot'), findsOneWidget);
 
-      // Verify column '5' is present
-      expect(find.widgetWithText(Container, '5'), findsWidgets);
+      // Verify column '3' is present
+      expect(find.widgetWithText(Container, '3'), findsWidgets);
 
       // Increment WW slots one by one up to 10
-      for (int slot = 6; slot <= 10; slot++) {
+      for (int slot = 4; slot <= 10; slot++) {
         await tester.tap(addWwFinder);
         await tester.pumpAndSettle();
       }
@@ -171,7 +171,7 @@ void main() {
       expect(addPtFinder, findsOneWidget);
       expect(find.byTooltip('Add Performance Task slot'), findsOneWidget);
 
-      for (int slot = 6; slot <= 10; slot++) {
+      for (int slot = 4; slot <= 10; slot++) {
         await tester.tap(addPtFinder);
         await tester.pumpAndSettle();
       }

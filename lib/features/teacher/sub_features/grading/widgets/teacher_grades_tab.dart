@@ -377,6 +377,11 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
     };
 
     final activeTerms = _activeTerms;
+    if (activeTerms.length <= 1 &&
+        activeTerms.isNotEmpty &&
+        _selectedTermView != activeTerms.first) {
+      _selectedTermView = activeTerms.first;
+    }
 
     // Filter students by section if specified
     var studentsForComputation = _activeRoster.isNotEmpty ? _activeRoster : widget.students;
@@ -416,11 +421,11 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
             else
               const SizedBox(height: 16),
 
-            // 2. FILTER & CONTEXT STRIP
-            _buildFilterAndContextStrip(offering, activeTerms, isDark, theme),
+            // 2. UNIFIED FILTER & OVERVIEW ROW (5-col Filter + 7-col Class Summary Strip)
+            _buildFilterAndOverviewRow(offering, activeTerms, summary, isDark, theme),
             const SizedBox(height: 16),
 
-            // 3. KPI SUMMARY CARDS
+            // 3. FOUR KPI METRIC CARDS
             _buildKpiSummaryRow(summary, isDark, theme),
             const SizedBox(height: 20),
 
@@ -599,8 +604,52 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
     );
   }
 
-  // --- 2. FILTER & CONTEXT STRIP ---
-  Widget _buildFilterAndContextStrip(
+  // --- 2. UNIFIED FILTER & OVERVIEW ROW (5-col Filter + 7-col Summary Strip) ---
+  Widget _buildFilterAndOverviewRow(
+    Map<String, dynamic> offering,
+    List<int> activeTerms,
+    GradebookAnalyticsSummary summary,
+    bool isDark,
+    ThemeData theme,
+  ) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final filterCard = _buildFilterAndContextCard(
+          offering,
+          activeTerms,
+          isDark,
+          theme,
+        );
+        final summaryStripCard = _buildClassPerformanceSummaryCard(
+          offering,
+          summary,
+          isDark,
+          theme,
+        );
+
+        if (constraints.maxWidth > 980) {
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(flex: 5, child: filterCard),
+              const SizedBox(width: 16),
+              Expanded(flex: 7, child: summaryStripCard),
+            ],
+          );
+        } else {
+          return Column(
+            children: [
+              filterCard,
+              const SizedBox(height: 14),
+              summaryStripCard,
+            ],
+          );
+        }
+      },
+    );
+  }
+
+  Widget _buildFilterAndContextCard(
     Map<String, dynamic> offering,
     List<int> activeTerms,
     bool isDark,
@@ -641,13 +690,14 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
     }
 
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: isDark ? theme.colorScheme.surface : Colors.white,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: isDark ? Colors.white12 : crBorder),
       ),
       child: Column(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Row(
             children: [
@@ -702,7 +752,7 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                   ],
                 ),
               ),
-              const SizedBox(width: 14),
+              const SizedBox(width: 12),
 
               // Section Dropdown (Safe & synchronized with current subject)
               Expanded(
@@ -749,27 +799,6 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                   ],
                 ),
               ),
-              const SizedBox(width: 14),
-
-              // Open Gradebook action
-              if (widget.onNavigateToGradebook != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 18),
-                  child: ElevatedButton.icon(
-                    onPressed: widget.onNavigateToGradebook,
-                    icon: const Icon(LucideIcons.externalLink, size: 14),
-                    label: const Text('Open Gradebook', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: crSteelBlue,
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                  ),
-                ),
             ],
           ),
 
@@ -777,23 +806,23 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
           const Divider(height: 1, color: crBorder),
           const SizedBox(height: 10),
 
-          // Dynamic Term Tabs Bar
+          // Dynamic Term Tabs Bar / Single-Term Adaptation + Open Gradebook
           Wrap(
             alignment: WrapAlignment.spaceBetween,
             crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: 12,
+            spacing: 10,
             runSpacing: 8,
             children: [
               Wrap(
                 crossAxisAlignment: WrapCrossAlignment.center,
-                spacing: 8,
+                spacing: 6,
                 runSpacing: 6,
                 children: [
                   const Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(LucideIcons.calendarRange, size: 14, color: crSlateMuted),
-                      SizedBox(width: 6),
+                      Icon(LucideIcons.calendarRange, size: 13, color: crSlateMuted),
+                      SizedBox(width: 5),
                       Text(
                         'GRADING PERIOD:',
                         style: TextStyle(
@@ -805,21 +834,45 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                       ),
                     ],
                   ),
-                  for (final t in activeTerms)
+                  if (activeTerms.length <= 1)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: isDark ? Colors.white10 : const Color(0xFFF0F9FF),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: isDark ? Colors.white12 : const Color(0xFFBAE6FD)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(LucideIcons.calendarCheck, size: 13, color: crSteelBlue),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Single-Term • Term ${activeTerms.firstOrNull ?? 1}',
+                            style: const TextStyle(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w700,
+                              color: crSteelBlue,
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  else ...[
+                    for (final t in activeTerms)
+                      _buildTermPill(
+                        label: 'Term $t',
+                        isSelected: _selectedTermView == t,
+                        onTap: () {
+                          setState(() {
+                            _selectedTermView = t;
+                            _currentPage = 1;
+                          });
+                          _animController.forward(from: 0.0);
+                        },
+                      ),
                     _buildTermPill(
-                      label: 'Term $t',
-                      isSelected: _selectedTermView == t,
-                      onTap: () {
-                        setState(() {
-                          _selectedTermView = t;
-                          _currentPage = 1;
-                        });
-                        _animController.forward(from: 0.0);
-                      },
-                    ),
-                  if (activeTerms.length > 1)
-                    _buildTermPill(
-                      label: 'All Terms / Final',
+                      label: 'All Terms',
                       isSelected: _selectedTermView == 0,
                       onTap: () {
                         setState(() {
@@ -829,18 +882,84 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                         _animController.forward(from: 0.0);
                       },
                     ),
+                  ],
                 ],
               ),
-              // Weight indicator badge
+
+              if (widget.onNavigateToGradebook != null)
+                ElevatedButton.icon(
+                  onPressed: widget.onNavigateToGradebook,
+                  icon: const Icon(LucideIcons.externalLink, size: 13),
+                  label: const Text('Open Gradebook', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: crSteelBlue,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    minimumSize: const Size(0, 32),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(7),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildClassPerformanceSummaryCard(
+    Map<String, dynamic> offering,
+    GradebookAnalyticsSummary summary,
+    bool isDark,
+    ThemeData theme,
+  ) {
+    final wwWeight = (offering['ww_weight'] as num?)?.toInt() ?? 20;
+    final ptWeight = (offering['pt_weight'] as num?)?.toInt() ?? 50;
+    final exWeight = (offering['ex_weight'] as num?)?.toInt() ?? 30;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isDark ? theme.colorScheme.surface : Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: isDark ? Colors.white12 : crBorder),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          // Top Header Row: Title + Weights Badge
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 10,
+            runSpacing: 6,
+            children: [
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(LucideIcons.activity, size: 15, color: crSteelBlue),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Class Performance Summary',
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.bold,
+                      color: isDark ? Colors.white : crSlateDark,
+                    ),
+                  ),
+                ],
+              ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3.5),
                 decoration: BoxDecoration(
                   color: isDark ? Colors.white10 : const Color(0xFFF1F5F9),
                   borderRadius: BorderRadius.circular(6),
                   border: Border.all(color: isDark ? Colors.white12 : crBorder),
                 ),
                 child: Text(
-                  'Weights: WW ${(offering['ww_weight'] as num?)?.toInt() ?? 20}% • PT ${(offering['pt_weight'] as num?)?.toInt() ?? 50}% • EX ${(offering['ex_weight'] as num?)?.toInt() ?? 30}%',
+                  'Weights: WW $wwWeight% • PT $ptWeight% • EX $exWeight%',
                   style: const TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
@@ -849,6 +968,141 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                 ),
               ),
             ],
+          ),
+          const SizedBox(height: 12),
+
+          // 5-Column Full-Width Inner Metric Strip
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+            decoration: BoxDecoration(
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.03)
+                  : const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(9),
+              border: Border.all(color: isDark ? Colors.white10 : const Color(0xFFF1F5F9)),
+            ),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                if (constraints.maxWidth >= 460) {
+                  return Row(
+                    children: [
+                      Expanded(
+                        child: _buildStripItem(
+                          'Students',
+                          '${summary.totalCount}',
+                          'Active Roster',
+                          crSlateDark,
+                          isDark,
+                        ),
+                      ),
+                      _buildStripDivider(),
+                      Expanded(
+                        child: _buildStripItem(
+                          'Class Average',
+                          summary.classAverage != null ? '${summary.classAverage}' : '—',
+                          'DO 15 Transmuted',
+                          crSteelBlue,
+                          isDark,
+                        ),
+                      ),
+                      _buildStripDivider(),
+                      Expanded(
+                        child: _buildStripItem(
+                          'Written Works',
+                          summary.wwPsAvg != null ? '${summary.wwPsAvg}%' : '—',
+                          'PS Average',
+                          crSlateDark,
+                          isDark,
+                        ),
+                      ),
+                      _buildStripDivider(),
+                      Expanded(
+                        child: _buildStripItem(
+                          'Perf. Tasks',
+                          summary.ptPsAvg != null ? '${summary.ptPsAvg}%' : '—',
+                          'PS Average',
+                          crSlateDark,
+                          isDark,
+                        ),
+                      ),
+                      _buildStripDivider(),
+                      Expanded(
+                        child: _buildStripItem(
+                          'Examinations',
+                          summary.exPsAvg != null ? '${summary.exPsAvg}%' : '—',
+                          'PS Average',
+                          crSlateDark,
+                          isDark,
+                        ),
+                      ),
+                    ],
+                  );
+                } else {
+                  return Column(
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _buildStripItem(
+                              'Students',
+                              '${summary.totalCount}',
+                              'Active Roster',
+                              crSlateDark,
+                              isDark,
+                            ),
+                          ),
+                          _buildStripDivider(),
+                          Expanded(
+                            child: _buildStripItem(
+                              'Class Average',
+                              summary.classAverage != null ? '${summary.classAverage}' : '—',
+                              'DO 15 Transmuted',
+                              crSteelBlue,
+                              isDark,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const Divider(height: 16, color: crBorder),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _buildStripItem(
+                              'Written Works',
+                              summary.wwPsAvg != null ? '${summary.wwPsAvg}%' : '—',
+                              'PS Average',
+                              crSlateDark,
+                              isDark,
+                            ),
+                          ),
+                          _buildStripDivider(),
+                          Expanded(
+                            child: _buildStripItem(
+                              'Perf. Tasks',
+                              summary.ptPsAvg != null ? '${summary.ptPsAvg}%' : '—',
+                              'PS Average',
+                              crSlateDark,
+                              isDark,
+                            ),
+                          ),
+                          _buildStripDivider(),
+                          Expanded(
+                            child: _buildStripItem(
+                              'Examinations',
+                              summary.exPsAvg != null ? '${summary.exPsAvg}%' : '—',
+                              'PS Average',
+                              crSlateDark,
+                              isDark,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  );
+                }
+              },
+            ),
           ),
         ],
       ),
@@ -865,7 +1119,7 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
       borderRadius: BorderRadius.circular(6),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
         decoration: BoxDecoration(
           color: isSelected ? crSteelBlue : const Color(0xFFF1F5F9),
           borderRadius: BorderRadius.circular(6),
@@ -876,7 +1130,7 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
         child: Text(
           label,
           style: TextStyle(
-            fontSize: 12,
+            fontSize: 11.5,
             fontWeight: FontWeight.w600,
             color: isSelected ? Colors.white : crSlateDark,
           ),
@@ -885,183 +1139,103 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
     );
   }
 
-  // --- 3. KPI SUMMARY ROW ---
+  // --- 3. KPI SUMMARY ROW (4 Metric Cards) ---
   Widget _buildKpiSummaryRow(
     GradebookAnalyticsSummary summary,
     bool isDark,
     ThemeData theme,
   ) {
-    return Column(
-      children: [
-        // Class Performance Summary Strip
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          decoration: BoxDecoration(
-            color: isDark ? theme.colorScheme.surface : Colors.white,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: isDark ? Colors.white12 : crBorder),
-          ),
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(minWidth: 680),
-              child: Row(
-                children: [
-                  SizedBox(
-                    width: 120,
-                    child: _buildStripItem(
-                      'Students',
-                      '${summary.totalCount}',
-                      'Active Roster',
-                      crSlateDark,
-                      isDark,
-                    ),
-                  ),
-                  _buildStripDivider(),
-                  SizedBox(
-                    width: 130,
-                    child: _buildStripItem(
-                      'Class Average',
-                      summary.classAverage != null ? '${summary.classAverage}' : '—',
-                      'DO 15 Transmuted',
-                      crSteelBlue,
-                      isDark,
-                    ),
-                  ),
-                  _buildStripDivider(),
-                  SizedBox(
-                    width: 130,
-                    child: _buildStripItem(
-                      'Written Works',
-                      summary.wwPsAvg != null ? '${summary.wwPsAvg}%' : '—',
-                      'PS Average',
-                      crSlateDark,
-                      isDark,
-                    ),
-                  ),
-                  _buildStripDivider(),
-                  SizedBox(
-                    width: 130,
-                    child: _buildStripItem(
-                      'Perf. Tasks',
-                      summary.ptPsAvg != null ? '${summary.ptPsAvg}%' : '—',
-                      'PS Average',
-                      crSlateDark,
-                      isDark,
-                    ),
-                  ),
-                  _buildStripDivider(),
-                  SizedBox(
-                    width: 130,
-                    child: _buildStripItem(
-                      'Examinations',
-                      summary.exPsAvg != null ? '${summary.exPsAvg}%' : '—',
-                      'PS Average',
-                      crSlateDark,
-                      isDark,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(height: 14),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final card1 = _buildKpiCard(
+          title: 'Passing Rate (≥ 75)',
+          value: summary.passingRate != null ? '${summary.passingRate}%' : '—',
+          badgeText: '${summary.passingCount} / ${summary.encodedCount} Passed',
+          subText: 'Based on DO 15, s. 2026',
+          icon: LucideIcons.checkCircle2,
+          iconColor: crEmerald,
+          badgeBg: const Color(0xFFECFDF5),
+          badgeBorder: const Color(0xFFA7F3D0),
+          badgeTextColor: const Color(0xFF047857),
+          isDark: isDark,
+          theme: theme,
+        );
+        final card2 = _buildKpiCard(
+          title: 'Advancing (90–100)',
+          value: '${summary.advancingCount}',
+          badgeText: summary.encodedCount > 0
+              ? '${((summary.advancingCount / summary.encodedCount) * 100).toStringAsFixed(1)}%'
+              : '0%',
+          subText: 'Highest achievement tier',
+          icon: LucideIcons.award,
+          iconColor: crSteelBlue,
+          badgeBg: const Color(0xFFF0F9FF),
+          badgeBorder: const Color(0xFFBAE6FD),
+          badgeTextColor: crSteelBlue,
+          isDark: isDark,
+          theme: theme,
+        );
+        final card3 = _buildKpiCard(
+          title: 'Positive Trajectory',
+          value: '${summary.improvingCount}',
+          badgeText: 'Rising',
+          subText: 'Improving score trend',
+          icon: LucideIcons.trendingUp,
+          iconColor: crEmerald,
+          badgeBg: const Color(0xFFECFDF5),
+          badgeBorder: const Color(0xFFA7F3D0),
+          badgeTextColor: const Color(0xFF047857),
+          isDark: isDark,
+          theme: theme,
+        );
+        final card4 = _buildKpiCard(
+          title: 'Needs Attention',
+          value: '${summary.needsAttentionCount}',
+          badgeText: 'Action Required',
+          subText: '<75 or declining scores',
+          icon: LucideIcons.alertTriangle,
+          iconColor: crRed,
+          badgeBg: const Color(0xFFFEF2F2),
+          badgeBorder: const Color(0xFFFECACA),
+          badgeTextColor: crRed,
+          isDark: isDark,
+          theme: theme,
+        );
 
-        // 4 KPI Cards (Responsive: 4 in row on wide screens, 2x2 grid on standard screens)
-        LayoutBuilder(
-          builder: (context, constraints) {
-            final card1 = _buildKpiCard(
-              title: 'Passing Rate (≥ 75)',
-              value: summary.passingRate != null ? '${summary.passingRate}%' : '—',
-              badgeText: '${summary.passingCount} / ${summary.encodedCount} Passed',
-              subText: 'Based on DO 15, s. 2026',
-              icon: LucideIcons.checkCircle2,
-              iconColor: crEmerald,
-              badgeBg: const Color(0xFFECFDF5),
-              badgeBorder: const Color(0xFFA7F3D0),
-              badgeTextColor: const Color(0xFF047857),
-              isDark: isDark,
-              theme: theme,
-            );
-            final card2 = _buildKpiCard(
-              title: 'Advancing (90–100)',
-              value: '${summary.advancingCount}',
-              badgeText: summary.encodedCount > 0
-                  ? '${((summary.advancingCount / summary.encodedCount) * 100).toStringAsFixed(1)}%'
-                  : '0%',
-              subText: 'Highest achievement tier',
-              icon: LucideIcons.award,
-              iconColor: crSteelBlue,
-              badgeBg: const Color(0xFFF0F9FF),
-              badgeBorder: const Color(0xFFBAE6FD),
-              badgeTextColor: crSteelBlue,
-              isDark: isDark,
-              theme: theme,
-            );
-            final card3 = _buildKpiCard(
-              title: 'Positive Trajectory',
-              value: '${summary.improvingCount}',
-              badgeText: 'Rising',
-              subText: 'Improving score trend',
-              icon: LucideIcons.trendingUp,
-              iconColor: crEmerald,
-              badgeBg: const Color(0xFFECFDF5),
-              badgeBorder: const Color(0xFFA7F3D0),
-              badgeTextColor: const Color(0xFF047857),
-              isDark: isDark,
-              theme: theme,
-            );
-            final card4 = _buildKpiCard(
-              title: 'Needs Attention',
-              value: '${summary.needsAttentionCount}',
-              badgeText: 'Action Required',
-              subText: '<75 or declining scores',
-              icon: LucideIcons.alertTriangle,
-              iconColor: crRed,
-              badgeBg: const Color(0xFFFEF2F2),
-              badgeBorder: const Color(0xFFFECACA),
-              badgeTextColor: crRed,
-              isDark: isDark,
-              theme: theme,
-            );
-
-            if (constraints.maxWidth > 950) {
-              return Row(
+        if (constraints.maxWidth > 950) {
+          return Row(
+            children: [
+              Expanded(child: card1),
+              const SizedBox(width: 14),
+              Expanded(child: card2),
+              const SizedBox(width: 14),
+              Expanded(child: card3),
+              const SizedBox(width: 14),
+              Expanded(child: card4),
+            ],
+          );
+        } else {
+          return Column(
+            children: [
+              Row(
                 children: [
                   Expanded(child: card1),
                   const SizedBox(width: 14),
                   Expanded(child: card2),
-                  const SizedBox(width: 14),
+                ],
+              ),
+              const SizedBox(height: 14),
+              Row(
+                children: [
                   Expanded(child: card3),
                   const SizedBox(width: 14),
                   Expanded(child: card4),
                 ],
-              );
-            } else {
-              return Column(
-                children: [
-                  Row(
-                    children: [
-                      Expanded(child: card1),
-                      const SizedBox(width: 14),
-                      Expanded(child: card2),
-                    ],
-                  ),
-                  const SizedBox(height: 14),
-                  Row(
-                    children: [
-                      Expanded(child: card3),
-                      const SizedBox(width: 14),
-                      Expanded(child: card4),
-                    ],
-                  ),
-                ],
-              );
-            }
-          },
-        ),
-      ],
+              ),
+            ],
+          );
+        }
+      },
     );
   }
 

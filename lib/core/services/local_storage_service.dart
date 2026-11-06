@@ -548,6 +548,15 @@ class LocalStorageService {
     return null;
   }
 
+  static Future<void> setPushNotificationsEnabled(bool enabled) async {
+    final prefs = await _prefs;
+    await prefs.setBool('${_settingsPrefix}push_notifications_enabled', enabled);
+  }
+
+  static bool arePushNotificationsEnabled() {
+    return _preferences?.getBool('${_settingsPrefix}push_notifications_enabled') ?? true;
+  }
+
   static Future<void> _ensureSaved(bool saved) async {
     if (!saved) {
       throw StateError('Failed to persist local preference.');

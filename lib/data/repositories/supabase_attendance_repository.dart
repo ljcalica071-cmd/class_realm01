@@ -11,6 +11,7 @@ import 'package:drift/drift.dart' show Value;
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:class_realm/shared/services/in_app_notification_service.dart';
 
 class SupabaseAttendanceRepository implements AttendanceRepository {
   final SupabaseClient? _injectedClient;
@@ -897,6 +898,24 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
         .toSet();
     if (absentStudents.isEmpty) return;
 
+    // Load subject and section information once
+    String subjectName = 'Class';
+    String section = 'General';
+    try {
+      final offeringRes = await _client
+          .from('subject_offerings')
+          .select('section, subjects(name)')
+          .eq('id', subjectOfferingId)
+          .maybeSingle();
+      if (offeringRes != null) {
+        section = offeringRes['section']?.toString() ?? 'General';
+        final subMap = offeringRes['subjects'];
+        if (subMap is Map && subMap['name'] != null) {
+          subjectName = subMap['name'].toString();
+        }
+      }
+    } catch (_) {}
+
     for (final studentId in absentStudents) {
       try {
         final rows = await _client
@@ -907,41 +926,135 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
             .eq('status', 'absent');
         final totalAbsences = (rows as List).length;
 
-        if (totalAbsences == 3 || totalAbsences == 5 || totalAbsences >= 10) {
-          final profileRes = await _client
-              .from('student_profiles')
-              .select('first_name, last_name')
-              .eq('student_id', studentId)
-              .maybeSingle();
-          final sName = profileRes != null
-              ? '${profileRes['last_name']}, ${profileRes['first_name']}'
-              : 'Student';
-
-          final String title;
-          final String message;
-          if (totalAbsences >= 10) {
-            title = 'Critical Absence Warning (10 Absences)';
-            message =
-                '$sName has reached 10 absences. Student is at imminent risk of drop-out under DepEd SARDO rules. Immediate conference required.';
-          } else if (totalAbsences == 5) {
-            title = 'Attendance Alert (5 Absences)';
-            message =
-                '$sName has accumulated 5 absences. Parent-Teacher intervention required.';
-          } else {
-            title = 'Early Attendance Warning (3 Absences)';
-            message =
-                '$sName has reached 3 recorded absences. Please coordinate with the teacher.';
-          }
-
-          await _client.from('notifications').insert({
-            'title': title,
-            'message': message,
-            'notification_type': 'attendance',
-            'target_audience': 'students_parents',
-            'is_archived': false,
-            'created_at': DateTime.now().toUtc().toIso8601String(),
-          });
+        // Strict 3, 6, 10 Absences thresholds per term
+        int? threshold;
+        if (totalAbsences == 3) {
+          threshold = 3;
+        } else if (totalAbsences == 6) {
+          threshold = 6;
+        } else if (totalAbsences == 10 || totalAbsences > 10) {
+          threshold = 10;
         }
+
+        if (threshold == null) continue;
+
+        // Anti-Duplicate Check: Prevent sending multiple alerts for the same threshold
+        final existingCheck = await _client
+            .from('notifications')
+            .select('id')
+            .eq('notification_type', 'attendance')
+            .ilike('title', '%($threshold Absences)%')
+            .ilike('message', '%$subjectName%')
+            .limit(1);
+        if ((existingCheck as List).isNotEmpty) {
+          // Already notified for this threshold
+          continue;
+        }
+
+        final profileRes = await _client
+            .from('student_profiles')
+            .select('first_name, last_name')
+            .eq('student_id', studentId)
+            .maybeSingle();
+        final sName = profileRes != null
+            ? '${profileRes['last_name']}, ${profileRes['first_name']}'
+            : 'Student';
+
+        final nowIso = DateTime.now().toUtc().toIso8601String();
+
+        // 1. Teacher Notification
+        final String teacherTitle;
+        final String teacherMsg;
+        if (threshold == 10) {
+          teacherTitle = '$sName (10 Absences)';
+          teacherMsg =
+              '$sName has accumulated 10 absences in $subjectName ($section). Critical SARDO drop-out risk; immediate academic intervention required.';
+        } else if (threshold == 6) {
+          teacherTitle = '$sName (6 Absences)';
+          teacherMsg =
+              '$sName has accumulated 6 absences in $subjectName ($section). Parent-Teacher conference required to arrange remediation.';
+        } else {
+          teacherTitle = '$sName (3 Absences)';
+          teacherMsg =
+              '$sName has reached 3 recorded absences in $subjectName ($section). Please initiate an early attendance check-in.';
+        }
+
+        // 2. Student Notification
+        final String studentTitle;
+        final String studentMsg;
+        if (threshold == 10) {
+          studentTitle = '$subjectName (10 Absences)';
+          studentMsg =
+              'Critical notice: You have reached 10 absences in $subjectName ($section). Please report to your teacher and school administration immediately.';
+        } else if (threshold == 6) {
+          studentTitle = '$subjectName (6 Absences)';
+          studentMsg =
+              'You have accumulated 6 absences in $subjectName ($section). This significantly impacts your academic standing. Please consult your teacher.';
+        } else {
+          studentTitle = '$subjectName (3 Absences)';
+          studentMsg =
+              'You have reached 3 absences in $subjectName ($section). Please coordinate with your teacher and submit excuse letters for missed sessions.';
+        }
+
+        // 3. Parent Notification
+        final String parentTitle;
+        final String parentMsg;
+        if (threshold == 10) {
+          parentTitle = '$sName (10 Absences)';
+          parentMsg =
+              'Urgent: Your child $sName has reached 10 absences in $subjectName ($section) and is at imminent risk of dropping out. Immediate conference required.';
+        } else if (threshold == 6) {
+          parentTitle = '$sName (6 Absences)';
+          parentMsg =
+              'Your child $sName has accumulated 6 absences in $subjectName ($section). Please schedule a conference with the subject teacher.';
+        } else {
+          parentTitle = '$sName (3 Absences)';
+          parentMsg =
+              'Your child $sName has missed 3 sessions in $subjectName ($section). Please assist in ensuring regular and punctual class attendance.';
+        }
+
+        // Insert scoped notifications to database
+        await _client.from('notifications').insert([
+          {
+            'title': teacherTitle,
+            'message': teacherMsg,
+            'notification_type': 'attendance',
+            'target_audience': 'teachers',
+            'is_archived': false,
+            'created_at': nowIso,
+          },
+          {
+            'title': studentTitle,
+            'message': studentMsg,
+            'notification_type': 'attendance',
+            'target_audience': 'students',
+            'is_archived': false,
+            'created_at': nowIso,
+          },
+          {
+            'title': parentTitle,
+            'message': parentMsg,
+            'notification_type': 'attendance',
+            'target_audience': 'parents',
+            'is_archived': false,
+            'created_at': nowIso,
+          },
+        ]);
+
+        // Pop up the top in-app push banner on active screen if notifications enabled
+        InAppNotificationSeverity bannerSeverity = InAppNotificationSeverity.warningLevel1;
+        if (threshold == 10) {
+          bannerSeverity = InAppNotificationSeverity.warningCritical;
+        } else if (threshold == 6) {
+          bannerSeverity = InAppNotificationSeverity.warningLevel2;
+        }
+
+        InAppNotificationService.showBanner(
+          title: teacherTitle,
+          message: teacherMsg,
+          subtitle: '$subjectName • $section',
+          severity: bannerSeverity,
+        );
       } catch (e) {
         debugPrint('Absence notification trigger notice: $e');
       }

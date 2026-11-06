@@ -42,7 +42,7 @@ void main() {
   });
 
   group('Adversarial Stress Test: Slot Expansion Exhaustion & Boundary Limits', () {
-    testWidgets('Slots strictly expand from 5 to 10 and cannot exceed 10', (tester) async {
+    testWidgets('Slots strictly expand from 3 to 10 and cannot exceed 10', (tester) async {
       tester.view.physicalSize = const Size(1920, 1080);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() => tester.view.resetPhysicalSize());
@@ -53,12 +53,12 @@ void main() {
       final addWw = find.byKey(const ValueKey('add-slot-ww'));
       expect(addWw, findsOneWidget);
 
-      // Verify slot 5 exists, slot 6 does not exist initially
-      expect(find.widgetWithText(Container, '5'), findsWidgets);
-      expect(find.widgetWithText(Container, '6'), findsNothing);
+      // Verify slot 3 exists, slot 4 does not exist initially
+      expect(find.widgetWithText(Container, '3'), findsWidgets);
+      expect(find.widgetWithText(Container, '4'), findsNothing);
 
       // Expand to 10
-      for (int i = 6; i <= 10; i++) {
+      for (int i = 4; i <= 10; i++) {
         await tester.tap(addWw);
         await tester.pumpAndSettle();
         expect(find.widgetWithText(Container, '$i'), findsWidgets);

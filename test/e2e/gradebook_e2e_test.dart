@@ -24,7 +24,7 @@ void main() {
 
   group('Gradebook E2E — Tier 1: Feature Coverage (Happy Path)', () {
     testWidgets(
-      '[F1.1] Initial assessment column slots render 5 default slots per category',
+      '[F1.1] Initial assessment column slots render 3 default slots per category',
       (tester) async {
         tester.view.physicalSize = const Size(1400, 900);
         tester.view.devicePixelRatio = 1.0;
@@ -33,10 +33,10 @@ void main() {
         await tester.pumpWidget(buildGradebookFrame());
         await tester.pumpAndSettle();
 
-        // Gradebook renders with 5 initial score columns (1..5) for Written Works
+        // Gradebook renders with 3 initial score columns (1..3) for Written Works
         expect(find.byType(TeacherGradebookTab), findsOneWidget);
         expect(find.text('1'), findsWidgets);
-        expect(find.text('5'), findsWidgets);
+        expect(find.text('3'), findsWidgets);
       },
     );
 

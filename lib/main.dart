@@ -16,6 +16,7 @@ import 'package:class_realm/data/datasources/local/app_database.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
 
 import 'package:flutter_web_plugins/url_strategy.dart';
+import 'package:class_realm/shared/widgets/in_app_notification_banner.dart';
 
 import 'core/theme/app_theme.dart';
 import 'core/widgets/auth_guard.dart';
@@ -548,25 +549,27 @@ class _ClassRealmAppState extends State<ClassRealmApp> {
             ];
           },
           builder: (context, child) {
-            return Stack(
-              children: [
-                ?child,
-                if (!_isBootstrapped && !widget.isWarmBoot)
-                  Positioned.fill(
-                    child: AppLifecycleLoadingScreen(
-                      initializationTask: _bootstrapClassRealmServices,
-                      onComplete: (screenContext, user) {
-                        if (mounted) {
-                          setState(() {
-                            _bootstrappedUser = user;
-                            _isBootstrapped = true;
-                          });
-                          _onBootstrapComplete(user);
-                        }
-                      },
+            return InAppNotificationBannerOverlay(
+              child: Stack(
+                children: [
+                  ?child,
+                  if (!_isBootstrapped && !widget.isWarmBoot)
+                    Positioned.fill(
+                      child: AppLifecycleLoadingScreen(
+                        initializationTask: _bootstrapClassRealmServices,
+                        onComplete: (screenContext, user) {
+                          if (mounted) {
+                            setState(() {
+                              _bootstrappedUser = user;
+                              _isBootstrapped = true;
+                            });
+                            _onBootstrapComplete(user);
+                          }
+                        },
+                      ),
                     ),
-                  ),
-              ],
+                ],
+              ),
             );
           },
           routes: appRoutes,

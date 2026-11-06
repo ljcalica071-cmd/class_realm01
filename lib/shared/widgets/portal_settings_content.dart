@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:class_realm/core/services/local_storage_service.dart';
+import 'package:class_realm/shared/services/in_app_notification_service.dart';
 import 'package:class_realm/shared/widgets/buttons/app_buttons.dart';
 import 'package:class_realm/shared/widgets/modals/app_modals.dart';
 import 'package:class_realm/shared/widgets/modals/legal_documents_modal.dart';
@@ -24,7 +27,13 @@ class PortalSettingsContent extends StatefulWidget {
 }
 
 class _PortalSettingsContentState extends State<PortalSettingsContent> {
-  final bool _notificationsEnabled = true;
+  late bool _notificationsEnabled;
+
+  @override
+  void initState() {
+    super.initState();
+    _notificationsEnabled = LocalStorageService.arePushNotificationsEnabled();
+  }
 
   Widget _buildNextUpdateBadge(ThemeData theme) {
     final color = theme.colorScheme.primary;
@@ -81,8 +90,9 @@ class _PortalSettingsContentState extends State<PortalSettingsContent> {
               // 1. Enable Notifications
               SwitchListTile(
                 secondary: Icon(
-                  Icons.notifications_active_outlined,
+                  LucideIcons.bell,
                   color: theme.colorScheme.primary,
+                  size: 20,
                 ),
                 title: Wrap(
                   crossAxisAlignment: WrapCrossAlignment.center,
@@ -90,26 +100,56 @@ class _PortalSettingsContentState extends State<PortalSettingsContent> {
                   runSpacing: 4,
                   children: [
                     const Text(
-                      'Enable Notifications',
+                      'Enable Push Notifications',
                       style: TextStyle(
                         fontWeight: FontWeight.w600,
                         fontSize: 14,
                       ),
                     ),
-                    _buildNextUpdateBadge(theme),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: _notificationsEnabled
+                            ? const Color(0xFF10B981).withValues(alpha: 0.12)
+                            : const Color(0xFF64748B).withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(999),
+                        border: Border.all(
+                          color: _notificationsEnabled
+                              ? const Color(0xFF10B981).withValues(alpha: 0.3)
+                              : const Color(0xFF64748B).withValues(alpha: 0.3),
+                        ),
+                      ),
+                      child: Text(
+                        _notificationsEnabled ? 'Active' : 'Disabled',
+                        style: TextStyle(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w700,
+                          color: _notificationsEnabled
+                              ? const Color(0xFF047857)
+                              : const Color(0xFF64748B),
+                        ),
+                      ),
+                    ),
                   ],
                 ),
                 subtitle: const Text(
-                  'Receive alerts for classwork, schedules, attendance, and grades',
+                  'Receive instant heads-up popup alerts for 3/6/10 attendance warnings and school notices',
                   style: TextStyle(fontSize: 12),
                 ),
                 value: _notificationsEnabled,
                 activeThumbColor: theme.colorScheme.primary,
-                onChanged: (_) {
-                  AppModals.showUpcomingFeatureDialog(
-                    context,
-                    featureName: 'Push Notification Preferences',
-                  );
+                onChanged: (val) {
+                  setState(() => _notificationsEnabled = val);
+                  LocalStorageService.setPushNotificationsEnabled(val);
+                  if (val) {
+                    InAppNotificationService.showBanner(
+                      title: 'Push Notifications Enabled',
+                      message: 'You will now receive instant pop-up alerts on this device.',
+                      severity: InAppNotificationSeverity.info,
+                    );
+                  } else {
+                    InAppNotificationService.dismiss();
+                  }
                 },
               ),
               Divider(height: 1, color: borderColor),

@@ -408,15 +408,15 @@ class EmailService {
     );
   }
 
-  /// Send system maintenance alerts
+  /// Send system maintenance alerts (60-30-10 Minimalist UI/UX Design, Strictly Teacher & Student Gmail Accounts)
   Future<void> sendSystemMaintenanceAlertEmail({
     required List<String> recipientEmails,
     required bool isEnabled,
   }) async {
     final currentYear = DateTime.now().year;
     final String subject = isEnabled
-        ? '⚠️ ClassRealm Alert: System Maintenance in Progress'
-        : '✅ ClassRealm Alert: System Successfully Restored';
+        ? 'ClassRealm Advisory: Scheduled System Maintenance Active'
+        : 'ClassRealm Advisory: System Maintenance Complete — Back Online';
 
     final String htmlTemplate = isEnabled
         ? '''
@@ -425,48 +425,75 @@ class EmailService {
       <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>System Maintenance Enabled</title>
+        <title>Scheduled System Maintenance Active</title>
       </head>
-      <body style="margin: 0; padding: 0; background-color: #F3F4F6; font-family: Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased;">
-        <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #F3F4F6; padding: 40px 20px;">
+      <body style="margin: 0; padding: 0; background-color: #F8FAFC; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #0F172A; -webkit-font-smoothing: antialiased;">
+        <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #F8FAFC; padding: 36px 16px;">
           <tr>
             <td align="center">
-              <table width="100%" max-width="600" border="0" cellspacing="0" cellpadding="0" style="max-width: 600px; background-color: #FFFFFF; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
+              <table width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width: 580px; background-color: #FFFFFF; border-radius: 14px; border: 1px solid #E2E8F0; overflow: hidden; box-shadow: 0 4px 12px rgba(15, 23, 42, 0.04);">
+                <!-- 10% Accent Top Bar (Amber for Maintenance Active) -->
                 <tr>
-                  <td align="center" style="background-color: #1E3A8A; padding: 30px 20px;">
-                    <h1 style="color: #FFFFFF; margin: 0; font-size: 24px; font-weight: bold; letter-spacing: 1px;">ClassRealm</h1>
-                  </td>
+                  <td style="background-color: #F59E0B; height: 5px; line-height: 5px; font-size: 5px;">&nbsp;</td>
                 </tr>
+                <!-- 30% Brand Header (#3A6B88 Steel-Blue) -->
                 <tr>
-                  <td style="background-color: #F59E0B; height: 4px; line-height: 4px; font-size: 4px;">&nbsp;</td>
-                </tr>
-                <tr>
-                  <td style="padding: 40px 30px; color: #374151;">
-                    <h2 style="margin-top: 0; color: #111827; font-size: 20px;">System Maintenance Notice</h2>
-                    <p style="font-size: 16px; line-height: 1.5; margin-bottom: 20px;">Hello ClassRealm User,</p>
-                    <p style="font-size: 16px; line-height: 1.5; margin-bottom: 20px;">
-                      To ensure the continued reliability and security of our platform, ClassRealm is currently undergoing urgent system maintenance.
-                    </p>
-                    <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #FEF3C7; border-left: 4px solid #F59E0B; border-radius: 4px; margin-bottom: 20px;">
+                  <td style="background-color: #3A6B88; padding: 22px 28px;">
+                    <table width="100%" border="0" cellspacing="0" cellpadding="0">
                       <tr>
-                        <td style="padding: 15px; font-size: 15px; color: #92400E; line-height: 1.5;">
-                          <strong>Status:</strong> 🔒 System Locked / Offline<br>
+                        <td>
+                          <div style="color: #FFFFFF; font-size: 18px; font-weight: 800; letter-spacing: 0.4px;">CLASSREALM</div>
+                          <div style="color: #E0F2FE; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.8px; margin-top: 2px;">Teacher &amp; Student Portal Advisory</div>
+                        </td>
+                        <td align="right">
+                          <span style="display: inline-block; background-color: #FEF3C7; color: #92400E; border: 1px solid #FDE68A; font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 999px; letter-spacing: 0.3px;">
+                            MAINTENANCE ACTIVE
+                          </span>
                         </td>
                       </tr>
                     </table>
-                    <p style="font-size: 16px; line-height: 1.5; margin-bottom: 20px;">
-                      During this time, the platform will be temporarily inaccessible. You will be forcefully logged out of your account, and any pending offline data you have will be securely preserved.
+                  </td>
+                </tr>
+                <!-- Main Body Content -->
+                <tr>
+                  <td style="padding: 32px 28px; color: #334155;">
+                    <h2 style="margin: 0 0 12px 0; color: #0F172A; font-size: 20px; font-weight: 800; letter-spacing: -0.2px;">
+                      Scheduled System Maintenance Active
+                    </h2>
+                    <p style="font-size: 14px; line-height: 1.6; color: #475569; margin: 0 0 20px 0;">
+                      Hello Teacher / Student,
                     </p>
-                    <p style="font-size: 16px; line-height: 1.5; margin-bottom: 0;">
-                      We apologize for any inconvenience this may cause to your classes and schedule. We will send you another update as soon as the system is fully restored and back online.
+                    <p style="font-size: 14px; line-height: 1.65; color: #334155; margin: 0 0 20px 0;">
+                      ClassRealm is currently undergoing scheduled maintenance to improve system speed and reliability. While our team applies these updates, access to the Teacher and Student portals is temporarily paused.
+                    </p>
+
+                    <!-- Status Summary Box -->
+                    <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #FFFBEB; border: 1px solid #FDE68A; border-left: 4px solid #F59E0B; border-radius: 8px; margin-bottom: 22px;">
+                      <tr>
+                        <td style="padding: 14px 16px;">
+                          <div style="font-size: 12px; font-weight: 700; color: #92400E; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 6px;">
+                            What You Need to Know
+                          </div>
+                          <div style="font-size: 13px; color: #78350F; line-height: 1.55;">
+                            &bull; <strong>Portal Status:</strong> Temporarily paused for updates<br>
+                            &bull; <strong>Your Records:</strong> All grades, attendance logs, and classwork are safely saved<br>
+                            &bull; <strong>Next Update:</strong> You will receive an email as soon as the portal is back online
+                          </div>
+                        </td>
+                      </tr>
+                    </table>
+
+                    <p style="font-size: 13.5px; line-height: 1.6; color: #64748B; margin: 0;">
+                      Thank you for your patience while we keep ClassRealm running smoothly for your classes.
                     </p>
                   </td>
                 </tr>
+                <!-- Footer -->
                 <tr>
-                  <td align="center" style="background-color: #F9FAFB; padding: 20px; border-top: 1px solid #E5E7EB;">
-                    <p style="margin: 0; font-size: 12px; color: #6B7280; line-height: 1.5;">
-                      &copy; $currentYear ClassRealm Systems. All rights reserved.<br>
-                      Eduardo Barretto Sr. Integrated School
+                  <td style="background-color: #F8FAFC; padding: 18px 28px; border-top: 1px solid #E2E8F0; text-align: center;">
+                    <p style="margin: 0; font-size: 11.5px; color: #64748B; line-height: 1.5;">
+                      &copy; $currentYear ClassRealm Academic Portal &bull; Eduardo Barretto Sr. Integrated School<br>
+                      This is an automated system advisory sent to registered Teacher and Student accounts.
                     </p>
                   </td>
                 </tr>
@@ -485,47 +512,73 @@ class EmailService {
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>System Maintenance Complete</title>
       </head>
-      <body style="margin: 0; padding: 0; background-color: #F3F4F6; font-family: Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased;">
-        <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #F3F4F6; padding: 40px 20px;">
+      <body style="margin: 0; padding: 0; background-color: #F8FAFC; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #0F172A; -webkit-font-smoothing: antialiased;">
+        <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #F8FAFC; padding: 36px 16px;">
           <tr>
             <td align="center">
-              <table width="100%" max-width="600" border="0" cellspacing="0" cellpadding="0" style="max-width: 600px; background-color: #FFFFFF; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
+              <table width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width: 580px; background-color: #FFFFFF; border-radius: 14px; border: 1px solid #E2E8F0; overflow: hidden; box-shadow: 0 4px 12px rgba(15, 23, 42, 0.04);">
+                <!-- 10% Accent Top Bar (Emerald for System Online) -->
                 <tr>
-                  <td align="center" style="background-color: #1E3A8A; padding: 30px 20px;">
-                    <h1 style="color: #FFFFFF; margin: 0; font-size: 24px; font-weight: bold; letter-spacing: 1px;">ClassRealm</h1>
-                  </td>
+                  <td style="background-color: #059669; height: 5px; line-height: 5px; font-size: 5px;">&nbsp;</td>
                 </tr>
+                <!-- 30% Brand Header (#3A6B88 Steel-Blue) -->
                 <tr>
-                  <td style="background-color: #10B981; height: 4px; line-height: 4px; font-size: 4px;">&nbsp;</td>
-                </tr>
-                <tr>
-                  <td style="padding: 40px 30px; color: #374151;">
-                    <h2 style="margin-top: 0; color: #111827; font-size: 20px;">We're Back Online!</h2>
-                    <p style="font-size: 16px; line-height: 1.5; margin-bottom: 20px;">Hello ClassRealm User,</p>
-                    <p style="font-size: 16px; line-height: 1.5; margin-bottom: 25px;">
-                      Great news! The system maintenance has been successfully completed, and ClassRealm is now fully operational once again.
-                    </p>
-                    <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #D1FAE5; border-left: 4px solid #10B981; border-radius: 4px; margin-bottom: 20px;">
+                  <td style="background-color: #3A6B88; padding: 22px 28px;">
+                    <table width="100%" border="0" cellspacing="0" cellpadding="0">
                       <tr>
-                        <td style="padding: 15px; font-size: 15px; color: #065F46; line-height: 1.5;">
-                          <strong>Status:</strong> 🌐 System Online<br>
+                        <td>
+                          <div style="color: #FFFFFF; font-size: 18px; font-weight: 800; letter-spacing: 0.4px;">CLASSREALM</div>
+                          <div style="color: #E0F2FE; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.8px; margin-top: 2px;">Teacher &amp; Student Portal Advisory</div>
+                        </td>
+                        <td align="right">
+                          <span style="display: inline-block; background-color: #ECFDF5; color: #065F46; border: 1px solid #A7F3D0; font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 999px; letter-spacing: 0.3px;">
+                            SYSTEM ONLINE
+                          </span>
                         </td>
                       </tr>
                     </table>
-                    <p style="font-size: 16px; line-height: 1.5; margin-bottom: 20px;">
-                      Thank you for your patience and understanding while our technical team worked to implement these upgrades. You can now log in to the portal and continue your work without interruption.
+                  </td>
+                </tr>
+                <!-- Main Body Content -->
+                <tr>
+                  <td style="padding: 32px 28px; color: #334155;">
+                    <h2 style="margin: 0 0 12px 0; color: #0F172A; font-size: 20px; font-weight: 800; letter-spacing: -0.2px;">
+                      System Maintenance Complete — Back Online
+                    </h2>
+                    <p style="font-size: 14px; line-height: 1.6; color: #475569; margin: 0 0 20px 0;">
+                      Hello Teacher / Student,
                     </p>
-                    <p style="font-size: 16px; line-height: 1.5; margin-bottom: 0;">
-                      Best regards,<br>
-                      <strong>The ClassRealm Technical Team</strong>
+                    <p style="font-size: 14px; line-height: 1.65; color: #334155; margin: 0 0 20px 0;">
+                      Scheduled maintenance is now complete and ClassRealm is back online. All Teacher and Student portal features have been restored and are ready for use.
+                    </p>
+
+                    <!-- Status Summary Box -->
+                    <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #ECFDF5; border: 1px solid #A7F3D0; border-left: 4px solid #059669; border-radius: 8px; margin-bottom: 22px;">
+                      <tr>
+                        <td style="padding: 14px 16px;">
+                          <div style="font-size: 12px; font-weight: 700; color: #065F46; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 6px;">
+                            All Features Restored
+                          </div>
+                          <div style="font-size: 13px; color: #047857; line-height: 1.55;">
+                            &bull; <strong>Portal Status:</strong> Online and ready for login<br>
+                            &bull; <strong>Available Services:</strong> Gradebook, Performance Analytics, Attendance, and Classwork<br>
+                            &bull; <strong>Data Integrity:</strong> All records and recent updates are synced and intact
+                          </div>
+                        </td>
+                      </tr>
+                    </table>
+
+                    <p style="font-size: 13.5px; line-height: 1.6; color: #64748B; margin: 0;">
+                      Thank you for your patience. You may now sign in to ClassRealm and continue your activities as normal.
                     </p>
                   </td>
                 </tr>
+                <!-- Footer -->
                 <tr>
-                  <td align="center" style="background-color: #F9FAFB; padding: 20px; border-top: 1px solid #E5E7EB;">
-                    <p style="margin: 0; font-size: 12px; color: #6B7280; line-height: 1.5;">
-                      &copy; $currentYear ClassRealm Systems. All rights reserved.<br>
-                      Eduardo Barretto Sr. Integrated School
+                  <td style="background-color: #F8FAFC; padding: 18px 28px; border-top: 1px solid #E2E8F0; text-align: center;">
+                    <p style="margin: 0; font-size: 11.5px; color: #64748B; line-height: 1.5;">
+                      &copy; $currentYear ClassRealm Academic Portal &bull; Eduardo Barretto Sr. Integrated School<br>
+                      This is an automated system advisory sent to registered Teacher and Student accounts.
                     </p>
                   </td>
                 </tr>
@@ -537,9 +590,10 @@ class EmailService {
       </html>
     ''';
 
-    // Dispatch emails silently
+    // Dispatch emails silently to Teacher & Student Gmail accounts
     for (final email in recipientEmails) {
       if (email.trim().isNotEmpty &&
+          email.contains('@') &&
           email.trim().toLowerCase() != 'parent' &&
           email.trim().toLowerCase() != 'teacher' &&
           email.trim().toLowerCase() != 'student') {
