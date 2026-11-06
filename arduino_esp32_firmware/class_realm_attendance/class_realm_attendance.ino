@@ -29,14 +29,17 @@
 #define OLED_ADDR       0x3C
 
 // =========================================================================
-// SUPABASE CREDENTIALS
+// SUPABASE CREDENTIALS & DEFAULTS
 // =========================================================================
 const char* SUPABASE_URL = "https://wfilyatkfgqtybujmahf.supabase.co";
 const char* SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndmaWx5YXRrZmdxdHlidWptYWhmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA2NzQ0NjksImV4cCI6MjEwNjI1MDQ2OX0.YY6G7HJcXQX0PxrLC-IG__MT-ck8mSBzIX_8TvywkLM";
 
+// Active Class Offering Pairing (Default: Art Criticism & Creative Markets, Sec 1)
+String activeSubjectOfferingId = "d28fbca1-bbbe-478d-8c41-682391a37461";
+
 // Default Network credentials
-const char* DEFAULT_SSID = "Dim light";
-const char* DEFAULT_PASS = "012345678m";
+const char* DEFAULT_SSID = "JETWO";
+const char* DEFAULT_PASS = "Jethro103199";
 
 // Secure Setup AP Credentials
 const char* PORTAL_AP_NAME = "ClassRealm-Setup";
@@ -68,13 +71,13 @@ bool pendingSync = false;
 // =========================================================================
 // BUZZER PATTERNS
 // =========================================================================
-void buzzOnce() { // 1 Beep: PRESENT
+void buzzOnce() { // 1 Long Beep: PRESENT (On-time Success)
   digitalWrite(BUZZER_PIN, HIGH);
   delay(120);
   digitalWrite(BUZZER_PIN, LOW);
 }
 
-void buzzTwice() { // 2 Beeps: LATE / OFFLINE SAVED
+void buzzTwice() { // 2 Beeps: LATE / ALREADY MARKED / TEACHER EXCUSED / OFFLINE SAVED
   digitalWrite(BUZZER_PIN, HIGH);
   delay(100);
   digitalWrite(BUZZER_PIN, LOW);
@@ -84,7 +87,7 @@ void buzzTwice() { // 2 Beeps: LATE / OFFLINE SAVED
   digitalWrite(BUZZER_PIN, LOW);
 }
 
-void buzzDenied() { // 3 Fast Beeps: ACCESS DENIED / UNREGISTERED / ERROR
+void buzzDenied() { // 3 Fast Beeps: ACCESS DENIED / UNREGISTERED / WRONG SECTION / CLOSED
   for (int i = 0; i < 3; i++) {
     digitalWrite(BUZZER_PIN, HIGH);
     delay(70);
@@ -131,17 +134,28 @@ void showFeedbackScreen(String header, String bigTitle, String subText) {
   display.clearDisplay();
   display.setTextColor(SSD1306_WHITE);
 
+  // Line 1: Header category
   display.setTextSize(1);
   display.setCursor(4, 2);
   display.print(header);
   display.drawFastHLine(0, 13, 128, SSD1306_WHITE);
 
-  display.setTextSize(2);
-  display.setCursor(4, 22);
+  // Line 2: Big Title (auto-adjust size if text is long to prevent horizontal truncation)
+  if (bigTitle.length() > 10) {
+    display.setTextSize(1);
+    display.setCursor(4, 22);
+  } else {
+    display.setTextSize(2);
+    display.setCursor(4, 20);
+  }
   display.print(bigTitle);
 
+  // Line 3: SubText (Student Name, time, or instructional message)
   display.setTextSize(1);
-  display.setCursor(4, 48);
+  display.setCursor(4, 46);
+  if (subText.length() > 21) {
+    subText = subText.substring(0, 21);
+  }
   display.print(subText);
 
   display.display();
@@ -174,7 +188,7 @@ void configModeCallback(WiFiManager *myWiFiManager) {
 String getTimestampIso() {
   struct tm timeinfo;
   if (!getLocalTime(&timeinfo)) {
-    return "2026-11-02T08:00:00+08:00";
+    return "2026-11-05T08:00:00+08:00";
   }
   char buf[30];
   strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%S", &timeinfo);
@@ -199,14 +213,36 @@ void saveOfflineScan(String uid) {
   Serial.println("[OFFLINE QUEUE] Saved: " + record);
 }
 
+// Robust JSON Field Extractor supporting whitespace and non-string tokens
 String extractJsonField(String payload, String fieldName) {
-  String searchStr = "\"" + fieldName + "\":\"";
-  int startIdx = payload.indexOf(searchStr);
-  if (startIdx == -1) return "";
-  startIdx += searchStr.length();
-  int endIdx = payload.indexOf("\"", startIdx);
-  if (endIdx == -1) return "";
-  return payload.substring(startIdx, endIdx);
+  int keyIdx = payload.indexOf("\"" + fieldName + "\"");
+  if (keyIdx == -1) return "";
+  int colonIdx = payload.indexOf(":", keyIdx);
+  if (colonIdx == -1) return "";
+
+  int valStart = colonIdx + 1;
+  while (valStart < payload.length() && (payload[valStart] == ' ' || payload[valStart] == '\t')) {
+    valStart++;
+  }
+  if (valStart >= payload.length()) return "";
+
+  if (payload[valStart] == '\"') {
+    valStart++;
+    int valEnd = payload.indexOf("\"", valStart);
+    if (valEnd == -1) return "";
+    return payload.substring(valStart, valEnd);
+  } else {
+    int valEnd = valStart;
+    while (valEnd < payload.length() && 
+           payload[valEnd] != ',' && 
+           payload[valEnd] != '}' && 
+           payload[valEnd] != ' ' && 
+           payload[valEnd] != '\n' && 
+           payload[valEnd] != '\r') {
+      valEnd++;
+    }
+    return payload.substring(valStart, valEnd);
+  }
 }
 
 // Offline Whitelist Student Check
@@ -217,7 +253,7 @@ String getOfflineStudentName(String uid) {
   return name;
 }
 
-// Download list of enrolled RFID cards to Flash Memory for Offline Mode
+// Download list of registered RFID cards to Flash Memory for Offline Mode
 void syncRegisteredStudentsCache() {
   if (WiFi.status() != WL_CONNECTED) return;
 
@@ -263,6 +299,41 @@ void syncRegisteredStudentsCache() {
   http.end();
 }
 
+// Auto-detect and sync today's active schedule offering from Supabase
+void fetchActiveSchedule() {
+  if (WiFi.status() != WL_CONNECTED) return;
+
+  struct tm timeinfo;
+  if (!getLocalTime(&timeinfo)) return;
+
+  // ISO Day of Week: 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat, 7=Sun
+  int isoDow = (timeinfo.tm_wday == 0) ? 7 : timeinfo.tm_wday;
+
+  HTTPClient http;
+  String url = String(SUPABASE_URL) + "/rest/v1/teacher_schedule?is_active=eq.true&day_of_week=eq." + String(isoDow) + "&select=subject_offering_id,start_time,end_time&order=start_time.asc&limit=1";
+  http.begin(url);
+  http.addHeader("apikey", SUPABASE_ANON_KEY);
+  http.addHeader("Authorization", String("Bearer ") + SUPABASE_ANON_KEY);
+  http.setTimeout(3000);
+
+  int code = http.GET();
+  if (code == 200) {
+    String payload = http.getString();
+    if (payload.length() > 2 && payload != "[]") {
+      String foundOffering = extractJsonField(payload, "subject_offering_id");
+      if (foundOffering.length() > 0) {
+        activeSubjectOfferingId = foundOffering;
+        prefs.begin("class_config", false);
+        prefs.putString("active_offering", activeSubjectOfferingId);
+        prefs.end();
+        Serial.println("[SCHEDULE] Auto-assigned active offering: " + activeSubjectOfferingId);
+      }
+    }
+  }
+  http.end();
+}
+
+// Drain offline queue when WiFi reconnects by submitting true timestamps to record_rfid_attendance
 void syncOfflineQueue() {
   if (WiFi.status() != WL_CONNECTED || offlineQueueCount == 0) return;
 
@@ -279,22 +350,23 @@ void syncOfflineQueue() {
     int sepIndex = record.indexOf('|');
     if (sepIndex == -1) continue;
     String uid = record.substring(0, sepIndex);
+    String timestamp = record.substring(sepIndex + 1);
 
     HTTPClient http;
-    String url = String(SUPABASE_URL) + "/rest/v1/student_profiles?rfid_uid=eq." + uid + "&select=student_id";
+    String url = String(SUPABASE_URL) + "/rest/v1/rpc/record_rfid_attendance";
     http.begin(url);
     http.addHeader("apikey", SUPABASE_ANON_KEY);
     http.addHeader("Authorization", String("Bearer ") + SUPABASE_ANON_KEY);
-    http.setTimeout(2500);
-    int code = http.GET();
+    http.addHeader("Content-Type", "application/json");
+    http.setTimeout(3000);
+
+    String body = "{\"p_rfid_uid\":\"" + uid + "\",\"p_subject_offering_id\":\"" + activeSubjectOfferingId + "\",\"p_scan_timestamp\":\"" + timestamp + "\",\"p_device_id\":\"HARDWARE_ESP32\"}";
+    int code = http.POST(body);
     if (code == 200) {
-      String res = http.getString();
-      if (res.length() > 2 && res != "[]") {
-        successCount++;
-      }
+      successCount++;
     }
     http.end();
-    delay(30);
+    delay(40);
   }
 
   prefs.clear();
@@ -303,14 +375,10 @@ void syncOfflineQueue() {
   prefs.end();
 
   buzzOnce();
-  showFeedbackScreen("SYNC COMPLETE", "SUCCESS", "All uploaded");
+  showFeedbackScreen("SYNC COMPLETE", "SUCCESS", "Uploaded: " + String(successCount));
   delay(1500);
   showIdleScreen();
 }
-
-// =========================================================================
-// PROCESS RFID SCAN (GUARANTEED FEEDBACK FOR ALL CARDS)
-// =========================================================================
 
 // Broadcast an unregistered card tap to Supabase Realtime so Teacher app can link it instantly
 void broadcastPendingScan(String uid) {
@@ -334,12 +402,15 @@ void broadcastPendingScan(String uid) {
   http.end();
 }
 
+// =========================================================================
+// PROCESS RFID SCAN (100% PARITY WITH PHONE NFC & SCHEDULE VALIDATION)
+// =========================================================================
 void processRfidScan(String uid) {
   Serial.print("\n>>> [CARD SCANNED] UID: ");
   Serial.println(uid);
 
   // -------------------------------------------------------------
-  // SITUATION A: OFFLINE MODE (No Internet / Standalone / No Laptop)
+  // SITUATION A: OFFLINE MODE (No WiFi / Standalone / No Laptop)
   // -------------------------------------------------------------
   if (WiFi.status() != WL_CONNECTED) {
     String cachedName = getOfflineStudentName(uid);
@@ -360,42 +431,109 @@ void processRfidScan(String uid) {
   }
 
   // -------------------------------------------------------------
-  // SITUATION B: ONLINE MODE (Live Supabase Verification)
+  // SITUATION B: ONLINE MODE (Atomic Supabase RPC Validation)
   // -------------------------------------------------------------
   showFeedbackScreen("CHECKING...", uid, "Verifying card...");
 
   HTTPClient http;
-  String url = String(SUPABASE_URL) + "/rest/v1/student_profiles?rfid_uid=eq." + uid + "&select=student_id,first_name,last_name";
+  String url = String(SUPABASE_URL) + "/rest/v1/rpc/record_rfid_attendance";
   http.begin(url);
   http.addHeader("apikey", SUPABASE_ANON_KEY);
   http.addHeader("Authorization", String("Bearer ") + SUPABASE_ANON_KEY);
+  http.addHeader("Content-Type", "application/json");
   http.setTimeout(3500);
 
-  int httpCode = http.GET();
+  String timestamp = getTimestampIso();
+  String body = "{\"p_rfid_uid\":\"" + uid + "\",\"p_subject_offering_id\":\"" + activeSubjectOfferingId + "\",\"p_scan_timestamp\":\"" + timestamp + "\",\"p_device_id\":\"HARDWARE_ESP32\"}";
+
+  int httpCode = http.POST(body);
   if (httpCode == 200) {
     String payload = http.getString();
+    Serial.println("[RPC RESPONSE] " + payload);
 
-    if (payload.length() > 2 && payload != "[]") {
-      String firstName = extractJsonField(payload, "first_name");
-      String lastName = extractJsonField(payload, "last_name");
-      String shortName = firstName + " " + (lastName.length() > 0 ? lastName.substring(0, 1) + "." : "");
+    String code = extractJsonField(payload, "code");
+    String status = extractJsonField(payload, "status");
+    String studentName = extractJsonField(payload, "student_name");
+    String timeIn = extractJsonField(payload, "time_in");
 
-      // Save to local cache for future offline use
+    // Format display name (e.g. "Aguilar, Fiona" -> "Fiona A.")
+    String displayName = studentName;
+    if (displayName.indexOf(',') != -1) {
+      int commaIdx = displayName.indexOf(',');
+      String lastName = displayName.substring(0, commaIdx);
+      String firstName = displayName.substring(commaIdx + 1);
+      lastName.trim();
+      firstName.trim();
+      displayName = firstName + " " + (lastName.length() > 0 ? lastName.substring(0, 1) + "." : "");
+    }
+    if (displayName.length() == 0) {
+      displayName = uid;
+    }
+
+    // Cache verified student name for future offline use
+    if (studentName.length() > 0) {
       prefs.begin("card_cache", false);
-      prefs.putString(("c_" + uid).c_str(), shortName);
+      prefs.putString(("c_" + uid).c_str(), displayName);
       prefs.end();
+    }
 
-      // Registered Student -> 1 Beep
-      buzzOnce();
-      showFeedbackScreen("VERIFIED", "PRESENT", shortName);
-    } else {
-      // Unregistered Card: Broadcast to Teacher app for Linking Modal + Friendly Screen
+    // 1. Success Cases (On-Time Present, Late, or Absent Cutoff)
+    if (code == "RECORDED_SUCCESS" || code == "PROMOTED_FROM_AUTO_ABSENT" || code == "PROMOTED_TO_PRESENT") {
+      if (status == "late") {
+        buzzTwice();
+        showFeedbackScreen("ATTENDANCE OK", "LATE", displayName + " " + timeIn);
+      } else if (status == "absent") {
+        buzzDenied();
+        showFeedbackScreen("CUTOFF CLOSED", "TOO LATE", displayName);
+      } else {
+        buzzOnce();
+        showFeedbackScreen("ATTENDANCE OK", "PRESENT", displayName + " " + timeIn);
+      }
+    } 
+    // 2. Already Recorded Today: Confirmation Tap for Already Scanned Student
+    else if (code == "IDEMPOTENT_ALREADY_RECORDED" || code == "present_TIMESTAMP_PROMOTED" || code == "late_TIMESTAMP_PROMOTED") {
+      buzzTwice();
+      showFeedbackScreen("ALREADY SCANNED", "RECORDED NA!", displayName);
+    } 
+    // 3. Teacher Manual Override / Excused Protected
+    else if (code == "MANUAL_OVERRIDE_PRESERVED") {
+      buzzTwice();
+      showFeedbackScreen("EXCUSED", "TEACHER MARK", "Excused by Teacher");
+    } 
+    // 4. Cross-Section Protection: Student not enrolled in this subject offering
+    else if (code == "CROSS_SECTION_TAP") {
+      buzzDenied();
+      showFeedbackScreen("NOT ENROLLED", "WRONG SECTION", displayName);
+    } 
+    // 5. Unregistered Card: UID not in school database
+    else if (code == "UNREGISTERED_CARD") {
       broadcastPendingScan(uid);
       buzzDenied();
       showFeedbackScreen("LINK READY", "UNREGISTERED", "Ready to Link!");
+    } 
+    // 6. Schedule Lock / School Holiday
+    else if (code == "NO_SCHEDULE_TODAY" || code == "HOLIDAY_LOCKED") {
+      buzzDenied();
+      showFeedbackScreen("SCHEDULE LOCKED", "NO CLASS", "No Class Today");
+    } 
+    // 7. Window not yet open
+    else if (code == "BEFORE_WINDOW_OPENS") {
+      buzzDenied();
+      showFeedbackScreen("TOO EARLY", "WINDOW CLOSED", "Class not started");
+    } 
+    // 8. Session ended / scans closed
+    else if (code == "AFTER_CLASS_ENDS" || code == "SCANS_CLOSED") {
+      buzzDenied();
+      showFeedbackScreen("CUTOFF CLOSED", "SCANS CLOSED", "Session Ended");
+    } 
+    // 9. Generic Fallback
+    else {
+      buzzOnce();
+      showFeedbackScreen("ATTENDANCE", status.length() > 0 ? status : "OK", displayName);
     }
   } else {
-    // If Supabase timed out: check local offline cache
+    Serial.println("[RPC ERROR] HTTP Code: " + String(httpCode));
+    // Fallback to local offline cache when cloud RPC fails/times out
     String cachedName = getOfflineStudentName(uid);
     if (cachedName.length() > 0) {
       saveOfflineScan(uid);
@@ -403,7 +541,7 @@ void processRfidScan(String uid) {
       showFeedbackScreen("OFFLINE SCAN", "PRESENT", cachedName);
     } else {
       buzzDenied();
-      showFeedbackScreen("ERROR", "ACCESS DENIED", "Unregistered Card");
+      showFeedbackScreen("ERROR", "ACCESS DENIED", "Check Network");
     }
   }
   http.end();
@@ -455,7 +593,11 @@ void setup() {
   delay(60);
   digitalWrite(BUZZER_PIN, LOW);
 
-  // Read saved queue count from flash
+  // Load saved offering & queue count from flash
+  prefs.begin("class_config", true);
+  activeSubjectOfferingId = prefs.getString("active_offering", activeSubjectOfferingId);
+  prefs.end();
+
   prefs.begin("offline_queue", true);
   offlineQueueCount = prefs.getInt("count", 0);
   prefs.end();
@@ -503,6 +645,9 @@ void setup() {
     configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
     buzzOnce();
     
+    // Auto-detect today's active schedule offering from cloud
+    fetchActiveSchedule();
+
     // Set flag to sync students and queue in background without freezing boot
     if (offlineQueueCount > 0) {
       pendingSync = true;
@@ -580,7 +725,7 @@ void loop() {
   // Print to USB Serial (Laptop Web App receives this directly)
   Serial.println(uid);
 
-  // Process Attendance (Online to Supabase OR Offline to Flash Memory)
+  // Process Attendance (Online to Supabase RPC OR Offline to Flash Memory)
   processRfidScan(uid);
 
   // Clean halt for next card

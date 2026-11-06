@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:class_realm/core/services/app_data_cache.dart';
 import 'package:class_realm/core/theme/app_theme.dart';
 import 'package:class_realm/data/repositories/attendance_repository.dart';
 import 'package:class_realm/data/repositories/supabase_attendance_repository.dart';
@@ -33,12 +35,24 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
   bool _hasMore = false;
   bool _isLoadingMore = false;
   String? _loadMoreError;
+  Timer? _pollingTimer;
 
   @override
   void initState() {
     super.initState();
     _repo = widget.repository ?? SupabaseAttendanceRepository.instance;
     _loadInitialData();
+    _pollingTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+      if (mounted && !_isLoading && !_isLoadingMore) {
+        _loadInitialData(silent: true);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _pollingTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadInitialData({bool silent = false}) async {
@@ -51,6 +65,9 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
     });
 
     try {
+      if (silent) {
+        AppDataCache.instance.invalidatePrefix('my_attendance_summary_');
+      }
       final results = await Future.wait([
         _repo.getMyAttendanceSummary(),
         _repo.getMyAttendancePage(offset: 0, pageSize: 20),
@@ -318,7 +335,8 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
                                   const SizedBox(height: 8),
                                   _buildProvenancePill(theme, source),
                                   if (record.remarks != null &&
-                                      record.remarks!.trim().isNotEmpty) ...[
+                                      record.remarks!.trim().isNotEmpty &&
+                                      !_isSystemRemark(record.remarks)) ...[
                                     const SizedBox(height: 6),
                                     Text(
                                       record.remarks!.trim(),
@@ -535,6 +553,20 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
     } on FormatException {
       return AttendanceSource.manual;
     }
+  }
+
+  static bool _isSystemRemark(String? r) {
+    if (r == null) return false;
+    final t = r.trim().toLowerCase();
+    if (t.isEmpty) return false;
+    return t.startsWith('recorded via') ||
+        t.startsWith('promoted from') ||
+        t.startsWith('promoted to') ||
+        t.startsWith('timestamp updated') ||
+        t == 'hardware_esp32' ||
+        t == 'auto-absent' ||
+        t.startsWith('system auto-absent') ||
+        t.startsWith('esp32_');
   }
 
   static String _resolveClassLabel(AttendanceRecord record) {
