@@ -1,10 +1,8 @@
 import 'dart:io';
-import 'package:url_launcher/url_launcher.dart';
 
 import 'package:flutter/material.dart';
 import 'package:loading_animation_widget/loading_animation_widget.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:class_realm/core/services/supabase_service.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/data/repositories/learning_material_repository.dart';
 import 'package:class_realm/data/repositories/supabase_learning_material_repository.dart';
@@ -290,23 +288,13 @@ class _StudentLearningMaterialsScreenState
       }
 
       // Storage download attempt
-      if (material.storagePathUrl.isEmpty) {
-
+      if (material.storagePathUrl.isEmpty ||
+          !material.storagePathUrl.startsWith('http')) {
         throw Exception('Cloud storage address is not currently reachable.');
       }
 
       // Simulate client-side safe stream / download check
-      var cleanPath = material.storagePathUrl.contains('/learning_materials/')
-          ? material.storagePathUrl.split('/learning_materials/').last
-          : material.storagePathUrl;
-      if (cleanPath.contains('?')) {
-        cleanPath = cleanPath.split('?').first;
-      }
-      cleanPath = Uri.decodeComponent(cleanPath).trim();
-      final signedUrl = await SupabaseService().adminClient.storage
-          .from('learning_materials')
-          .createSignedUrl(cleanPath, 60 * 60);
-      await launchUrl(Uri.parse(signedUrl), mode: LaunchMode.externalApplication);
+      await Future.delayed(const Duration(milliseconds: 600));
 
       if (!mounted) return;
       _showToast(
@@ -350,7 +338,6 @@ class _StudentLearningMaterialsScreenState
 
   void _showToast(String msg, {required bool isError}) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).clearSnackBars();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(msg),

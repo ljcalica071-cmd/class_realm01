@@ -218,7 +218,7 @@ class _RfidAssignmentModalState extends State<RfidAssignmentModal> {
     // E1: Invalid / Empty Format
     if (!_hexUidRegex.hasMatch(newUid)) {
       setState(() {
-        _uidError = 'Invalid RFID card format.';
+        _uidError = 'Enter or scan a valid 8–14 character hexadecimal RFID UID (0–9, A–F).';
       });
       return;
     }
@@ -226,9 +226,23 @@ class _RfidAssignmentModalState extends State<RfidAssignmentModal> {
     final currentUid = _normalizedCurrentUid;
     if (currentUid != null && currentUid == newUid) {
       setState(() {
-        _uidError = 'Card already assigned to this student.';
+        _uidError =
+            'RFID card $newUid is already linked to ${widget.studentName}.';
       });
       return;
+    }
+
+    // E3: Student Already Has Card & Replacing
+    if (currentUid != null && currentUid != newUid) {
+      final replaceConfirmed = await AppModals.showConfirmDialog(
+        context: context,
+        title: 'Replace Linked RFID Card?',
+        message:
+            '${widget.studentName} currently has RFID card $currentUid linked. Replace it with $newUid?',
+        confirmLabel: 'Replace Card',
+        confirmColor: AppTheme.catOrange,
+      );
+      if (replaceConfirmed != true || !mounted) return;
     }
 
     setState(() {
@@ -237,24 +251,39 @@ class _RfidAssignmentModalState extends State<RfidAssignmentModal> {
     });
 
     try {
-      // E2: Card Already Linked to Another Student (Strict Block)
+      // E2: Card Already Linked to Another Student
       final conflict = await _repository.checkRfidUidConflict(
         rfidUid: newUid,
         excludeStudentId: widget.studentId,
       );
       if (!mounted) return;
 
+      bool forceReassign = false;
       if (conflict.isTaken) {
-        setState(() {
-          _isSubmitting = false;
-          _uidError = 'Card already assigned.';
-        });
-        return;
+        final ownerLabel =
+            (conflict.existingStudentName != null &&
+                conflict.existingStudentName!.trim().isNotEmpty)
+            ? conflict.existingStudentName!.trim()
+            : 'another student';
+        final reassignConfirmed = await AppModals.showConfirmDialog(
+          context: context,
+          title: 'Reassign RFID Card?',
+          message:
+              'RFID card $newUid is currently assigned to $ownerLabel. Reassign it to ${widget.studentName}?',
+          confirmLabel: 'Reassign Card',
+          confirmColor: AppTheme.catOrange,
+        );
+        if (reassignConfirmed != true || !mounted) {
+          setState(() => _isSubmitting = false);
+          return;
+        }
+        forceReassign = true;
       }
 
       await _repository.assignStudentRfid(
         studentId: widget.studentId,
         rfidUid: newUid,
+        forceReassign: forceReassign,
       );
       AppDataCache.instance.invalidatePrefix('teacher_students_');
 

@@ -296,7 +296,10 @@ class _AddParentDialogState extends State<AddParentDialog> {
       lastName,
       _birthday!,
     );
-    final parentEmail = ParentCredentialHelper.generateEmail(lastName);
+    final parentEmail = ParentCredentialHelper.generateEmail(
+      lastName,
+      rawFirstName: firstName,
+    );
 
     UserModel? createdUser;
     try {
@@ -351,7 +354,7 @@ class _AddParentDialogState extends State<AddParentDialog> {
     final credentialsText =
         '[CLASSREALM PARENT ACCESS SLIP]\n'
         'Parent Name: $fullName\n'
-        'Linked Student: $linkedStudentName\n'
+        'Linked Student(s): $linkedStudentName\n'
         'Login Email: $email\n'
         'Temporary Password: $tempPassword\n\n'
         'Instructions:\n'
@@ -363,12 +366,20 @@ class _AddParentDialogState extends State<AddParentDialog> {
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        contentPadding: const EdgeInsets.all(28),
+        contentPadding: const EdgeInsets.fromLTRB(28, 20, 28, 28),
         content: SizedBox(
           width: 480,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              Align(
+                alignment: Alignment.topRight,
+                child: IconButton(
+                  tooltip: 'Close',
+                  icon: const Icon(Icons.close_rounded, size: 22),
+                  onPressed: () => Navigator.of(ctx).pop(),
+                ),
+              ),
               Container(
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
@@ -411,6 +422,10 @@ class _AddParentDialogState extends State<AddParentDialog> {
                 ),
                 child: Column(
                   children: [
+                    _CredentialRow(
+                      label: 'Linked Student(s)',
+                      value: linkedStudentName,
+                    ),
                     _CredentialRow(label: 'Login Email', value: email),
                     _CredentialRow(
                       label: 'Temporary Password',
@@ -420,31 +435,21 @@ class _AddParentDialogState extends State<AddParentDialog> {
                 ),
               ),
               const SizedBox(height: 24),
-              Row(
-                children: [
-                  Expanded(
-                    child: AppSecondaryButton(
-                      label: 'Copy Credentials',
-                      icon: Icons.copy,
-                      onPressed: () {
-                        Clipboard.setData(ClipboardData(text: credentialsText));
-                        ScaffoldMessenger.of(ctx).showSnackBar(
-                          const SnackBar(
-                            content: Text('Access slip copied to clipboard!'),
-                            backgroundColor: AppTheme.catGreen,
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: AppPrimaryButton(
-                      label: 'Done',
-                      onPressed: () => Navigator.of(ctx).pop(),
-                    ),
-                  ),
-                ],
+              SizedBox(
+                width: double.infinity,
+                child: AppPrimaryButton(
+                  label: 'Copy Credentials',
+                  icon: Icons.copy,
+                  onPressed: () {
+                    Clipboard.setData(ClipboardData(text: credentialsText));
+                    ScaffoldMessenger.of(ctx).showSnackBar(
+                      const SnackBar(
+                        content: Text('Access slip copied to clipboard!'),
+                        backgroundColor: AppTheme.catGreen,
+                      ),
+                    );
+                  },
+                ),
               ),
             ],
           ),
@@ -1065,12 +1070,14 @@ class _AddParentDialogState extends State<AddParentDialog> {
   }
 
   Widget _buildCredentialPreviewCard(ThemeData theme) {
+    final rawFirstName = _firstNameCtrl.text.trim();
     final rawLastName = _lastNameCtrl.text.trim();
     final sanitizedLastName = rawLastName.isNotEmpty
         ? ParentCredentialHelper.sanitizeLastName(rawLastName)
         : 'lastname';
     final previewEmail = ParentCredentialHelper.generateEmail(
       rawLastName.isNotEmpty ? rawLastName : 'lastname',
+      rawFirstName: rawFirstName.isNotEmpty ? rawFirstName : 'firstname',
     );
     final previewPassword = _birthday != null
         ? ParentCredentialHelper.generateTempPassword(

@@ -1,6 +1,4 @@
 import 'package:flutter/foundation.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/core/utils/parent_credential_helper.dart';
@@ -31,6 +29,52 @@ class SupabaseParentRepository {
       default:
         return AccountStatus.active;
     }
+  }
+
+  /// Resolves a unique parent email in the format `firstname.lastname.cr@classrealm.com`
+  /// (or `firstname.lastname2.cr@classrealm.com` on collision), optionally excluding
+  /// `excludeParentId` when updating an existing parent.
+  Future<String> _resolveUniqueParentEmail({
+    required String firstName,
+    required String lastName,
+    String? excludeParentId,
+  }) async {
+    final baseFirst = ParentCredentialHelper.sanitizeNamePart(
+      firstName,
+      fallback: '',
+    );
+    final baseLast = ParentCredentialHelper.sanitizeLastName(lastName);
+    final prefix = baseFirst.isNotEmpty ? '$baseFirst.$baseLast' : baseLast;
+
+    final existingUsers = await _client
+        .from('users')
+        .select('id, email')
+        .ilike('email', '$prefix%@${ParentCredentialHelper.domain}');
+
+    final takenEmails = <String>{};
+    for (final u in existingUsers as List) {
+      final uid = u['id']?.toString();
+      if (excludeParentId != null && uid == excludeParentId) continue;
+      final em = u['email']?.toString().toLowerCase().trim();
+      if (em != null) takenEmails.add(em);
+    }
+
+    int collisionIndex = 1;
+    while (takenEmails.contains(
+      ParentCredentialHelper.generateEmail(
+        lastName,
+        rawFirstName: firstName,
+        collisionIndex: collisionIndex,
+      ).toLowerCase(),
+    )) {
+      collisionIndex++;
+    }
+
+    return ParentCredentialHelper.generateEmail(
+      lastName,
+      rawFirstName: firstName,
+      collisionIndex: collisionIndex,
+    );
   }
 
   Future<List<UserModel>> getParentsForTeacher(
@@ -175,6 +219,7 @@ class SupabaseParentRepository {
         final studentName =
             studentInfo['fullName']?.toString() ?? 'Enrolled Student';
         final sectionName = studentInfo['section']?.toString() ?? '';
+        final rel = row['relationship']?.toString() ?? 'Parent/Guardian';
 
         if (!parentGroupMap.containsKey(parentId)) {
           final fullName = [
@@ -195,8 +240,7 @@ class SupabaseParentRepository {
             'lastName': profile['last_name']?.toString() ?? '',
             'birthday': profile['birthday']?.toString(),
             'profileStatus': profile['status']?.toString(),
-            'relationship':
-                row['relationship']?.toString() ?? 'Parent/Guardian',
+            'relationships': <String>[rel],
             'isArchived': isArchived,
             'studentNames': <String>[studentName],
             'sections': <String>[if (sectionName.isNotEmpty) sectionName],
@@ -206,7 +250,14 @@ class SupabaseParentRepository {
           };
         } else {
           final existing = parentGroupMap[parentId]!;
-          (existing['studentNames'] as List<String>).add(studentName);
+          final studentNamesList = existing['studentNames'] as List<String>;
+          if (!studentNamesList.contains(studentName)) {
+            studentNamesList.add(studentName);
+          }
+          final relsList = existing['relationships'] as List<String>;
+          if (!relsList.contains(rel)) {
+            relsList.add(rel);
+          }
           if (sectionName.isNotEmpty &&
               !(existing['sections'] as List<String>).contains(sectionName)) {
             (existing['sections'] as List<String>).add(sectionName);
@@ -218,6 +269,9 @@ class SupabaseParentRepository {
       for (final entry in parentGroupMap.values) {
         final studentNames = (entry['studentNames'] as List<String>).join(', ');
         final sections = (entry['sections'] as List<String>).join(', ');
+        final relationships = (entry['relationships'] as List<String>).join(
+          ', ',
+        );
 
         results.add(
           UserModel(
@@ -230,7 +284,7 @@ class SupabaseParentRepository {
             lastName: entry['lastName'],
             role: UserRole.parent,
             birthday: DateTime.tryParse(entry['birthday']?.toString() ?? ''),
-            parentGuardianRelationship: entry['relationship'],
+            parentGuardianRelationship: relationships,
             linkedStudentId: entry['primaryStudentId'],
             departmentOrSection: sections.isNotEmpty ? sections : '—',
             enrolledSubjectName: entry['subjectName'],
@@ -297,10 +351,14 @@ class SupabaseParentRepository {
 
       final existingEmail =
           userRow?['email']?.toString() ??
-          ParentCredentialHelper.generateEmail(lastName);
+          ParentCredentialHelper.generateEmail(
+            lastName,
+            rawFirstName: firstName,
+          );
 
       final fullName = [firstName, ?cleanMiddleName, lastName].join(' ');
 
+      AppDataCache.instance.invalidatePrefix('teacher_parents_');
       return UserModel(
         id: existingParentId,
         username: existingEmail,
@@ -318,14 +376,18 @@ class SupabaseParentRepository {
       );
     }
 
-    // 2. New Parent: Surname Collision Handling
-    final baseLastName = ParentCredentialHelper.sanitizeLastName(lastName);
+    // 2. New Parent: Name Collision Handling (`firstname.lastname.cr@classrealm.com`)
+    final baseFirst = ParentCredentialHelper.sanitizeNamePart(
+      firstName,
+      fallback: '',
+    );
+    final baseLast = ParentCredentialHelper.sanitizeLastName(lastName);
+    final prefix = baseFirst.isNotEmpty ? '$baseFirst.$baseLast' : baseLast;
 
-    // Query public.users for existing emails matching baseLastName%@classrealm.com
     final existingUsers = await _client
         .from('users')
         .select('email')
-        .ilike('email', '$baseLastName%@${ParentCredentialHelper.domain}');
+        .ilike('email', '$prefix%@${ParentCredentialHelper.domain}');
 
     final takenEmails = <String>{};
     for (final u in existingUsers as List) {
@@ -336,7 +398,8 @@ class SupabaseParentRepository {
     int collisionIndex = 1;
     while (takenEmails.contains(
       ParentCredentialHelper.generateEmail(
-        baseLastName,
+        lastName,
+        rawFirstName: firstName,
         collisionIndex: collisionIndex,
       ).toLowerCase(),
     )) {
@@ -344,12 +407,13 @@ class SupabaseParentRepository {
     }
 
     String finalEmail = ParentCredentialHelper.generateEmail(
-      baseLastName,
+      lastName,
+      rawFirstName: firstName,
       collisionIndex: collisionIndex,
     );
     final finalTempPassword =
         tempPassword ??
-        ParentCredentialHelper.generateTempPassword(baseLastName, birthday);
+        ParentCredentialHelper.generateTempPassword(baseLast, birthday);
 
     final parentFullName = [firstName, ?cleanMiddleName, lastName].join(' ');
 
@@ -359,7 +423,8 @@ class SupabaseParentRepository {
       bool created = false;
       for (int attempt = 0; attempt < 20; attempt++) {
         final candidateEmail = ParentCredentialHelper.generateEmail(
-          baseLastName,
+          lastName,
+          rawFirstName: firstName,
           collisionIndex: collisionIndex,
         );
         final fbUid = await FirebaseAuthAdminService.createUser(
@@ -620,7 +685,7 @@ class SupabaseParentRepository {
     }
 
     AppDataCache.instance.invalidatePrefix('teacher_parents_');
-    AppDataCache.instance.invalidatePrefix('parent_linked_students_\$parentId');
+    AppDataCache.instance.invalidatePrefix('parent_linked_students_$parentId');
   }
 
   Future<bool> verifyParentIdentityForFirstLogin({
@@ -686,188 +751,90 @@ class SupabaseParentRepository {
     }
   }
 
-  /// Resets a parent's account back to default password and pending_first_login.
+  /// Resets a parent's account back to default temporary password (`lastnameYYYYMMDD`)
+  /// and `pending_first_login` status based on their current profile details.
   Future<UserModel> resetParentToDefaultPassword(UserModel parent) async {
-    final bday = parent.birthday ?? DateTime.now();
+    final profileRow = await _client
+        .from('parent_profiles')
+        .select('first_name, middle_name, last_name, birthday')
+        .eq('parent_id', parent.id)
+        .maybeSingle();
+
+    final firstName =
+        profileRow?['first_name']?.toString().trim().isNotEmpty == true
+        ? profileRow!['first_name'].toString().trim()
+        : (parent.firstName ?? parent.fullName.split(' ').first);
+    final middleName =
+        profileRow?['middle_name']?.toString() ?? parent.middleName;
+    final lastName =
+        profileRow?['last_name']?.toString().trim().isNotEmpty == true
+        ? profileRow!['last_name'].toString().trim()
+        : (parent.lastName ?? parent.fullName.split(' ').last);
+    final bday =
+        (profileRow?['birthday'] != null
+            ? DateTime.tryParse(profileRow!['birthday'].toString())
+            : null) ??
+        parent.birthday ??
+        DateTime(1970, 1, 1);
+
     final tempPassword = ParentCredentialHelper.generateTempPassword(
-      parent.lastName ?? parent.fullName.split(' ').last,
+      lastName,
       bday,
     );
 
-    // 1. Use secondary FirebaseApp instance to test if signInWithEmailAndPassword works
-    final secondaryAppName =
-        'TestReset_${DateTime.now().millisecondsSinceEpoch}';
-    FirebaseApp? secondaryApp;
-    bool tempPasswordWorked = false;
+    final expectedEmail = await _resolveUniqueParentEmail(
+      firstName: firstName,
+      lastName: lastName,
+      excludeParentId: parent.id,
+    );
 
-    try {
-      secondaryApp = await Firebase.initializeApp(
-        name: secondaryAppName,
-        options: Firebase.app().options,
+    // 1. Update password directly in Firebase Auth
+    final pwUpdated = await FirebaseAuthAdminService.updateUserPassword(
+      uid: parent.id,
+      newPassword: tempPassword,
+    );
+    if (!pwUpdated) {
+      throw Exception(
+        'Failed to reset password in Firebase Authentication. Please try again.',
       );
-      final auth = FirebaseAuth.instanceFor(app: secondaryApp);
-
-      try {
-        await auth.signInWithEmailAndPassword(
-          email: parent.email,
-          password: tempPassword,
-        );
-        tempPasswordWorked = true;
-      } catch (_) {
-        tempPasswordWorked = false;
-      }
-    } finally {
-      if (secondaryApp != null) {
-        try {
-          await secondaryApp.delete();
-        } catch (_) {}
-      }
     }
 
-    if (tempPasswordWorked) {
-      // If login with tempPassword succeeds, simply update status = 'pending_first_login'
+    // 2. Ensure email in Firebase Auth & Supabase matches the canonical format
+    if (parent.email.trim().toLowerCase() != expectedEmail.toLowerCase()) {
+      await FirebaseAuthAdminService.updateUserEmail(
+        uid: parent.id,
+        newEmail: expectedEmail,
+      );
       await _client
-          .from('parent_profiles')
-          .update({'status': 'pending_first_login'})
-          .eq('parent_id', parent.id);
-
-      return parent.copyWith(status: AccountStatus.pendingFirstLogin);
-    } else {
-      // Parent's password was changed on mobile. Provision a fresh Firebase Auth UID with the next available alias
-      final baseLastName = ParentCredentialHelper.sanitizeLastName(
-        parent.lastName ?? parent.fullName.split(' ').last,
-      );
-
-      final existingUsers = await _client
           .from('users')
-          .select('email')
-          .ilike('email', '$baseLastName%@${ParentCredentialHelper.domain}');
-
-      final takenEmails = <String>{};
-      for (final u in existingUsers as List) {
-        final em = u['email']?.toString().toLowerCase().trim();
-        if (em != null) takenEmails.add(em);
-      }
-
-      int collisionIndex = 1;
-      while (takenEmails.contains(
-        ParentCredentialHelper.generateEmail(
-          baseLastName,
-          collisionIndex: collisionIndex,
-        ).toLowerCase(),
-      )) {
-        collisionIndex++;
-      }
-
-      String newUid = 'prnt_${DateTime.now().millisecondsSinceEpoch}';
-      String newEmail = ParentCredentialHelper.generateEmail(
-        baseLastName,
-        collisionIndex: collisionIndex,
-      );
-
-      try {
-        bool created = false;
-        for (int i = 0; i < 20; i++) {
-          final candidate = ParentCredentialHelper.generateEmail(
-            baseLastName,
-            collisionIndex: collisionIndex,
-          );
-          final fbUid = await FirebaseAuthAdminService.createUser(
-            email: candidate,
-            password: tempPassword,
-            displayName: parent.fullName.isNotEmpty
-                ? parent.fullName
-                : 'Parent/Guardian',
-          );
-          if (fbUid != null && fbUid.isNotEmpty) {
-            newUid = fbUid;
-            newEmail = candidate;
-            created = true;
-            break;
-          } else {
-            collisionIndex++;
-          }
-        }
-        if (!created) {
-          throw Exception(
-            'Failed to provision reset credentials in Firebase Authentication.',
-          );
-        }
-      } catch (e) {
-        debugPrint('Firebase resetParentCredentials error: $e');
-        rethrow;
-      }
-
-      // Fetch existing profile and linked students
-      final oldProfile = await _client
-          .from('parent_profiles')
-          .select()
-          .eq('parent_id', parent.id)
-          .maybeSingle();
-
-      final oldLinks = await _client
-          .from('parent_student_links')
-          .select()
-          .eq('parent_id', parent.id);
-
-      // Insert into public.users with newUid and newEmail
-      await _client.from('users').insert({
-        'id': newUid,
-        'email': newEmail,
-        'role': 'parent',
-        'is_archived': false,
-      });
-
-      // Insert into public.parent_profiles with newUid, status = 'pending_first_login'
-      final bdayIso = parent.birthday != null
-          ? '${parent.birthday!.year}-${parent.birthday!.month.toString().padLeft(2, '0')}-${parent.birthday!.day.toString().padLeft(2, '0')}'
-          : oldProfile?['birthday'];
-
-      await _client.from('parent_profiles').insert({
-        'parent_id': newUid,
-        'first_name': oldProfile?['first_name'] ?? parent.firstName ?? '',
-        'middle_name': oldProfile?['middle_name'] ?? parent.middleName,
-        'last_name': oldProfile?['last_name'] ?? parent.lastName ?? '',
-        'birthday': bdayIso,
-        'status': 'pending_first_login',
-      });
-
-      // Insert into public.parent_student_links for all previously linked students
-      if ((oldLinks as List).isNotEmpty) {
-        for (final link in oldLinks as List) {
-          await _client.from('parent_student_links').insert({
-            'parent_id': newUid,
-            'student_id': link['student_id'],
-            'relationship':
-                link['relationship'] ??
-                parent.parentGuardianRelationship ??
-                'Parent/Guardian',
-          });
-        }
-      }
-
-      // Cleanup old rows safely
-      try {
-        await _client
-            .from('parent_student_links')
-            .delete()
-            .eq('parent_id', parent.id);
-        await _client
-            .from('parent_profiles')
-            .delete()
-            .eq('parent_id', parent.id);
-        await _client.from('users').delete().eq('id', parent.id);
-      } catch (e) {
-        debugPrint('Cleanup old parent error: $e');
-      }
-
-      return parent.copyWith(
-        id: newUid,
-        email: newEmail,
-        username: newEmail,
-        status: AccountStatus.pendingFirstLogin,
-      );
+          .update({'email': expectedEmail})
+          .eq('id', parent.id);
     }
+
+    // 3. Set status = 'pending_first_login' in public.parent_profiles
+    await _client
+        .from('parent_profiles')
+        .update({'status': 'pending_first_login'})
+        .eq('parent_id', parent.id);
+
+    AppDataCache.instance.invalidatePrefix('teacher_parents_');
+
+    final fullName = [
+      firstName,
+      if (middleName != null && middleName.trim().isNotEmpty) middleName.trim(),
+      lastName,
+    ].join(' ');
+
+    return parent.copyWith(
+      email: expectedEmail,
+      username: expectedEmail,
+      fullName: fullName,
+      firstName: firstName,
+      middleName: middleName,
+      lastName: lastName,
+      birthday: bday,
+      status: AccountStatus.pendingFirstLogin,
+    );
   }
 
   Future<List<UserModel>> getLinkedStudentsForParent(String parentId) async {
@@ -959,6 +926,127 @@ class SupabaseParentRepository {
       debugPrint('Error getting linked students for parent: $e');
       return [];
     }
+  }
+
+  /// Updates a parent's personal profile, synchronizes their login credentials if needed,
+  /// and synchronizes their multi-student relationship links (enforcing >= 1 linked student).
+  Future<UserModel> updateParentAccountAndLinks({
+    required UserModel currentParent,
+    required String firstName,
+    String? middleName,
+    required String lastName,
+    required DateTime birthday,
+    required List<Map<String, String>> studentLinks,
+  }) async {
+    if (studentLinks.isEmpty) {
+      throw Exception(
+        'At least 1 student must remain linked to this parent account.',
+      );
+    }
+
+    final cleanFirst = firstName.trim();
+    final cleanMiddle = AppValidators.normalizeMiddleInitial(middleName);
+    final cleanLast = lastName.trim();
+    final bdayIso =
+        '${birthday.year.toString().padLeft(4, '0')}-${birthday.month.toString().padLeft(2, '0')}-${birthday.day.toString().padLeft(2, '0')}';
+
+    // 1. Update public.parent_profiles
+    await _client
+        .from('parent_profiles')
+        .update({
+          'first_name': cleanFirst,
+          'middle_name': cleanMiddle,
+          'last_name': cleanLast,
+          'birthday': bdayIso,
+        })
+        .eq('parent_id', currentParent.id);
+
+    // 2. Resolve canonical email (`firstname.lastname.cr@classrealm.com`)
+    final newEmail = await _resolveUniqueParentEmail(
+      firstName: cleanFirst,
+      lastName: cleanLast,
+      excludeParentId: currentParent.id,
+    );
+
+    if (newEmail.toLowerCase() != currentParent.email.trim().toLowerCase()) {
+      await _client
+          .from('users')
+          .update({'email': newEmail})
+          .eq('id', currentParent.id);
+      await FirebaseAuthAdminService.updateUserEmail(
+        uid: currentParent.id,
+        newEmail: newEmail,
+      );
+    }
+
+    // 3. If account is still pending first login, keep temp password synced with updated lastName + birthday
+    if (currentParent.status == AccountStatus.pendingFirstLogin) {
+      final newTempPassword = ParentCredentialHelper.generateTempPassword(
+        cleanLast,
+        birthday,
+      );
+      await FirebaseAuthAdminService.updateUserPassword(
+        uid: currentParent.id,
+        newPassword: newTempPassword,
+      );
+    }
+
+    // 4. Synchronize parent_student_links
+    final existingLinksResp = await _client
+        .from('parent_student_links')
+        .select('student_id')
+        .eq('parent_id', currentParent.id);
+    final existingStudentIds = (existingLinksResp as List)
+        .map((r) => r['student_id']?.toString())
+        .whereType<String>()
+        .toSet();
+
+    final targetStudentIds = <String>{};
+    for (final link in studentLinks) {
+      final sId = link['studentId']?.trim() ?? '';
+      final rel = link['relationship']?.trim().isNotEmpty == true
+          ? link['relationship']!.trim()
+          : 'Guardian';
+      if (sId.isEmpty) continue;
+      targetStudentIds.add(sId);
+      await _client.from('parent_student_links').upsert({
+        'parent_id': currentParent.id,
+        'student_id': sId,
+        'relationship': rel,
+      }, onConflict: 'parent_id,student_id');
+    }
+
+    final toDelete = existingStudentIds.difference(targetStudentIds);
+    for (final delId in toDelete) {
+      await _client
+          .from('parent_student_links')
+          .delete()
+          .eq('parent_id', currentParent.id)
+          .eq('student_id', delId);
+    }
+
+    AppDataCache.instance.invalidatePrefix('teacher_parents_');
+    AppDataCache.instance.invalidatePrefix(
+      'parent_linked_students_${currentParent.id}',
+    );
+
+    final fullName = [cleanFirst, ?cleanMiddle, cleanLast].join(' ');
+    final relsSummary = studentLinks
+        .map((l) => l['relationship'] ?? 'Guardian')
+        .toSet()
+        .join(', ');
+
+    return currentParent.copyWith(
+      email: newEmail,
+      username: newEmail,
+      fullName: fullName,
+      firstName: cleanFirst,
+      middleName: cleanMiddle,
+      lastName: cleanLast,
+      birthday: birthday,
+      parentGuardianRelationship: relsSummary,
+      linkedStudentId: targetStudentIds.first,
+    );
   }
 
   Future<void> updateParent({

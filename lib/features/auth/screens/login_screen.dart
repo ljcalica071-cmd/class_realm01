@@ -207,7 +207,8 @@ class _LoginScreenState extends State<LoginScreen> {
       // Save Remember Me state (email only, never plaintext password) and trigger browser autofill
       if (user != null) {
         final email = _emailController.text.trim();
-        TextInput.finishAutofillContext(shouldSave: true);
+        final isFirstLogin = user.status == AccountStatus.pendingFirstLogin || user.status == AccountStatus.pending;
+        TextInput.finishAutofillContext(shouldSave: !isFirstLogin);
         await LocalStorageService.saveRememberMe(_rememberMe, email);
         if (!mounted) return;
       }

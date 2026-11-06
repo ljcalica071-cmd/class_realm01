@@ -17,7 +17,6 @@ import 'package:class_realm/core/services/firebase_auth_admin_service.dart';
 import 'package:class_realm/core/services/rate_limit_service.dart';
 import 'package:class_realm/core/services/app_data_cache.dart';
 import 'package:class_realm/core/utils/browser_url_helper.dart';
-import 'package:class_realm/data/repositories/student_dashboard_repository.dart';
 
 class FirstLoginOtpVerification {
   const FirstLoginOtpVerification({
@@ -414,17 +413,12 @@ class AuthRepository {
       } else if (role == 'student') {
         final results = await Future.wait<dynamic>(<Future<dynamic>>[
           _supabaseClient
-              .from('student_profiles')
+              .from('student_settings')
               .select(
-                'student_id, lrn, first_name, middle_name, last_name, birthday, gender',
+                'student_id, status, student_profiles!inner(student_id, lrn, first_name, middle_name, last_name, birthday, gender)',
               )
               .eq('student_id', uid)
-              .maybeSingle(),
-          _supabaseClient
-              .from('student_settings')
-              .select('student_id, status')
-              .eq('student_id', uid)
-              .maybeSingle(),
+              .single(),
           _supabaseClient
               .from('student_enrollments')
               .select('subject_offerings(sections(section_name, grade_level))')
@@ -433,10 +427,14 @@ class AuthRepository {
               .limit(1)
               .maybeSingle(),
         ]);
-        final profile =
-            results[0] as Map<String, dynamic>? ?? <String, dynamic>{};
-        final infoResp = results[1] as Map<String, dynamic>?;
-        final enrollment = results[2] as Map<String, dynamic>?;
+        final infoResp = results[0] as Map<String, dynamic>?;
+        final profileRaw = infoResp?['student_profiles'];
+        final Map<String, dynamic> profile = profileRaw is List
+            ? (profileRaw.isNotEmpty
+                  ? Map<String, dynamic>.from(profileRaw.first as Map)
+                  : <String, dynamic>{})
+            : Map<String, dynamic>.from(profileRaw as Map? ?? {});
+        final enrollment = results[1] as Map<String, dynamic>?;
         final offeringRaw = enrollment?['subject_offerings'];
         final offering = offeringRaw is List
             ? (offeringRaw.isNotEmpty ? offeringRaw.first : null)
@@ -550,7 +548,6 @@ class AuthRepository {
       await LocalStorageService.clearAuth();
       clearWarmSession();
       AppDataCache.instance.clearAll();
-      StudentDashboardRepository.instance.clearCache();
       _isLoggingOut = false;
       // Attempt to sign out of Firebase
       try {
@@ -577,35 +574,15 @@ class AuthRepository {
 
   Future<String?> _doStartSessionLog(custom.UserModel user) async {
     try {
-      final nowLocal = DateTime.now();
-      final now = nowLocal.toUtc();
-      final localDateStr =
-          '${nowLocal.year.toString().padLeft(4, '0')}-${nowLocal.month.toString().padLeft(2, '0')}-${nowLocal.day.toString().padLeft(2, '0')}';
+      final now = DateTime.now().toUtc();
       final roleStr = user.role.name;
 
-      // Re-use active session only if it still exists, belongs to this user, and is active in DB
+      // Re-use active session if one already exists
       final existingSessionId =
           LocalStorageService.getActiveSessionId() ?? _activeSessionId;
       if (existingSessionId != null) {
-        try {
-          final existingRow = await _supabaseClient
-              .from('user_session_logs')
-              .select('id, user_id, is_active')
-              .eq('id', existingSessionId)
-              .maybeSingle();
-          if (existingRow != null &&
-              existingRow['user_id']?.toString() == user.id &&
-              existingRow['is_active'] == true) {
-            _activeSessionId = existingSessionId;
-            await _supabaseClient
-                .from('user_session_logs')
-                .update({'last_active_at': now.toIso8601String()})
-                .eq('id', existingSessionId);
-            return existingSessionId;
-          }
-        } catch (_) {}
-        _activeSessionId = null;
-        await LocalStorageService.clearActiveSessionId();
+        _activeSessionId = existingSessionId;
+        return existingSessionId;
       }
 
       // Close any previous open session for this user before starting new one
@@ -635,7 +612,8 @@ class AuthRepository {
               .inSeconds
               .abs();
 
-          if (computedDuration < 2) {
+          if (computedDuration < 30) {
+            // Treat anything under 30 seconds as an accidental double-click / immediate refresh ghost session
             await _supabaseClient
                 .from('user_session_logs')
                 .delete()
@@ -645,7 +623,7 @@ class AuthRepository {
                 .from('user_session_logs')
                 .update({
                   'is_active': false,
-                  'logout_at': lastActiveTime.toIso8601String(),
+                  'logout_at': lastActiveTime.toIso8601String(), // Use last known active time as logout
                   'logout_reason': 'terminated',
                   'duration_seconds': computedDuration,
                 })
@@ -659,7 +637,7 @@ class AuthRepository {
           .insert({
             'user_id': user.id,
             'role': roleStr,
-            'session_date': localDateStr,
+            'session_date': now.toIso8601String().split('T').first,
             'login_at': now.toIso8601String(),
             'last_active_at': now.toIso8601String(),
             'is_active': true,

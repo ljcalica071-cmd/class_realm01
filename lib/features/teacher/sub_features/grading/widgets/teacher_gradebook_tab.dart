@@ -25,12 +25,12 @@ class TeacherGradebookTab extends StatefulWidget {
 
   /// Static refresh notifier allowing external screens (Classwork, Submissions, Dashboard Tab switch)
   /// to request an immediate, cache-bypassed reload of the gradebook sheets.
-  static final ValueNotifier<int> gradebookRefreshNotifier =
-      ValueNotifier<int>(0);
+  static final ValueNotifier<int> gradebookRefreshNotifier = ValueNotifier<int>(
+    0,
+  );
 
   /// Notifies Classwork (WW, PT, EX) when HPS or scores are modified in Gradebook.
-  static final ValueNotifier<int> classworkSyncNotifier =
-      ValueNotifier<int>(0);
+  static final ValueNotifier<int> classworkSyncNotifier = ValueNotifier<int>(0);
 
   @override
   State<TeacherGradebookTab> createState() => _TeacherGradebookTabState();
@@ -49,6 +49,11 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
   int _sheetLoadRequest = 0;
   String? _sheetLoadError;
   bool _isLoadingSheets = false;
+  bool _isRefreshingGradebookContent = false;
+  bool _isFilterTransitioning = false;
+  Timer? _filterTransitionTimer;
+  final Set<String> _loadedOfferingIds = <String>{};
+  final Set<String> _visitedFilterKeys = <String>{};
 
   int _selectedTerm = 1;
   final ScrollController _termHeaderHorizontalController = ScrollController();
@@ -179,6 +184,129 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
           _students = uniqueMap.values.toList();
           _isLoadingStudents = false;
         }
+        final hasCachedSheets = _hydrateSheetsFromLocalCache(subjectId);
+        if (cached != null && cached.isNotEmpty && hasCachedSheets) {
+          _loadedOfferingIds.add(subjectId);
+          _visitedFilterKeys.add('$subjectId:$_selectedGender');
+        }
+      }
+    }
+  }
+
+  bool _hydrateSheetsFromLocalCache(String offeringId) {
+    var foundAny = false;
+    _wwColumns = defaultCategoryColumns;
+    _ptColumns = defaultCategoryColumns;
+    for (final term in const [1, 2, 3]) {
+      for (final category in const ['ww', 'pt', 'ex']) {
+        _termHps[term]![category]!.clear();
+      }
+      _termScores[term]!.clear();
+      final cachedSheet = LocalStorageService.getGradebookSheet(
+        offeringId,
+        term,
+      );
+      if (cachedSheet != null) {
+        foundAny = true;
+        _decodeSheet(term, cachedSheet);
+      }
+    }
+    if (foundAny) {
+      _hpsRevision.value++;
+      for (final studentId in _studentRevisions.keys) {
+        _studentRevisions[studentId]!.value++;
+      }
+    }
+    return foundAny;
+  }
+
+  void _triggerFirstLoadFilterTransition(String filterKey) {
+    if (_visitedFilterKeys.contains(filterKey)) return;
+    _visitedFilterKeys.add(filterKey);
+    _filterTransitionTimer?.cancel();
+    setState(() {
+      _isFilterTransitioning = true;
+    });
+    _filterTransitionTimer = Timer(const Duration(milliseconds: 180), () {
+      if (mounted) {
+        setState(() {
+          _isFilterTransitioning = false;
+        });
+      }
+    });
+  }
+
+  void _selectGenderFilter(String gender) {
+    if (_selectedGender == gender) return;
+    final offeringId = _currentSubjectData?['id']?.toString() ?? 'default';
+    final filterKey = '$offeringId:$gender';
+    final isFirstVisit = !_visitedFilterKeys.contains(filterKey);
+    _visitedFilterKeys.add(filterKey);
+    _filterTransitionTimer?.cancel();
+    setState(() {
+      _selectedGender = gender;
+      _isFilterTransitioning = isFirstVisit;
+    });
+    if (isFirstVisit) {
+      _filterTransitionTimer = Timer(const Duration(milliseconds: 160), () {
+        if (mounted) {
+          setState(() {
+            _isFilterTransitioning = false;
+          });
+        }
+      });
+    }
+  }
+
+  Future<void> _refreshGradebookContentOnly() async {
+    if (_isRefreshingGradebookContent) return;
+    final offeringId = _currentSubjectData?['id']?.toString();
+    final teacherId = AuthRepository.instance.currentUser?.id;
+    if (offeringId == null || offeringId.isEmpty) return;
+
+    if (_sheetSaveTimer?.isActive ?? false) {
+      _sheetSaveTimer?.cancel();
+      if (_selectedTerm > 0) {
+        try {
+          await _persistSheet(offeringId, _selectedTerm);
+        } catch (_) {}
+      }
+    }
+
+    setState(() {
+      _isRefreshingGradebookContent = true;
+      _sheetLoadError = null;
+      _studentLoadError = null;
+    });
+
+    try {
+      for (final term in const [1, 2, 3]) {
+        await LocalStorageService.clearGradebookSheet(offeringId, term);
+      }
+      await Future.wait([
+        if (teacherId != null)
+          SupabaseStudentRepository()
+              .getStudentsForTeacher(
+                teacherId,
+                subjectId: offeringId,
+              )
+              .then((students) {
+                if (!mounted) return;
+                final uniqueMap = <String, UserModel>{};
+                for (final s in students) {
+                  uniqueMap[s.id] = s;
+                }
+                _students = uniqueMap.values.toList();
+              }),
+        _loadOfferingSheets(offeringId, forceShowLoading: false),
+      ]);
+      _loadedOfferingIds.add(offeringId);
+      _visitedFilterKeys.add('$offeringId:$_selectedGender');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isRefreshingGradebookContent = false;
+        });
       }
     }
   }
@@ -292,23 +420,17 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
     }
   }
 
-  
   void _handleExternalGradebookRefresh() {
     if (!mounted) return;
-    final offeringId = _currentSubjectData?['id']?.toString();
-    if (offeringId != null && offeringId.isNotEmpty) {
-      for (final term in const [1, 2, 3]) {
-        LocalStorageService.clearGradebookSheet(offeringId, term);
-      }
-      _loadOfferingSheets(offeringId);
-    }
+    unawaited(_refreshGradebookContentOnly());
   }
 
-@override
+  @override
   void dispose() {
     TeacherGradebookTab.gradebookRefreshNotifier.removeListener(
       _handleExternalGradebookRefresh,
     );
+    _filterTransitionTimer?.cancel();
     _sheetSaveTimer?.cancel();
     final offeringId = _currentSubjectData?['id']?.toString();
     if (offeringId != null && _selectedTerm > 0) {
@@ -530,19 +652,30 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
     };
   }
 
-  Future<void> _loadOfferingSheets(String offeringId) async {
+  Future<void> _loadOfferingSheets(
+    String offeringId, {
+    bool forceShowLoading = false,
+  }) async {
     final request = ++_sheetLoadRequest;
+    final hasLocalCache =
+        !forceShowLoading && _hydrateSheetsFromLocalCache(offeringId);
+    final isFirstLoad = !_loadedOfferingIds.contains(offeringId);
+
     setState(() {
-      _isLoadingSheets = true;
+      _isLoadingSheets = forceShowLoading || (!hasLocalCache && isFirstLoad);
       _sheetLoadError = null;
-      _wwColumns = defaultCategoryColumns;
-      _ptColumns = defaultCategoryColumns;
-    });
-    for (final term in const [1, 2, 3]) {
-      for (final category in const ['ww', 'pt', 'ex']) {
-        _termHps[term]![category]!.clear();
+      if (!hasLocalCache) {
+        _wwColumns = defaultCategoryColumns;
+        _ptColumns = defaultCategoryColumns;
       }
-      _termScores[term]!.clear();
+    });
+    if (!hasLocalCache) {
+      for (final term in const [1, 2, 3]) {
+        for (final category in const ['ww', 'pt', 'ex']) {
+          _termHps[term]![category]!.clear();
+        }
+        _termScores[term]!.clear();
+      }
     }
     try {
       final sheets = await Future.wait([
@@ -550,10 +683,20 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
           SubjectRepository.instance.getGradebookTermSheet(offeringId, term),
       ]);
       if (!mounted || request != _sheetLoadRequest) return;
+      _wwColumns = defaultCategoryColumns;
+      _ptColumns = defaultCategoryColumns;
+      for (final term in const [1, 2, 3]) {
+        for (final category in const ['ww', 'pt', 'ex']) {
+          _termHps[term]![category]!.clear();
+        }
+        _termScores[term]!.clear();
+      }
       for (var index = 0; index < sheets.length; index++) {
         final sheet = sheets[index];
         if (sheet != null) _decodeSheet(index + 1, sheet);
       }
+      _loadedOfferingIds.add(offeringId);
+      _visitedFilterKeys.add('$offeringId:$_selectedGender');
       _hpsRevision.value++;
       for (final studentId in _studentRevisions.keys) {
         _studentRevisions[studentId]!.value++;
@@ -567,8 +710,10 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
       if (!mounted || request != _sheetLoadRequest) return;
       setState(() {
         _isLoadingSheets = false;
-        _sheetLoadError =
-            'Could not load this offering\'s saved gradebook data.';
+        if (!hasLocalCache) {
+          _sheetLoadError =
+              'Could not load this offering\'s saved gradebook data.';
+        }
       });
     }
   }
@@ -638,10 +783,11 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
 
   Future<void> _changeTerm(int term) async {
     if (term == _selectedTerm) return;
+    final hasPendingSave = _sheetSaveTimer?.isActive ?? false;
     _sheetSaveTimer?.cancel();
     final offeringId = _currentSubjectData?['id']?.toString();
     try {
-      if (offeringId != null && _selectedTerm > 0) {
+      if (hasPendingSave && offeringId != null && _selectedTerm > 0) {
         await _persistSheet(offeringId, _selectedTerm);
       }
     } catch (error) {
@@ -657,10 +803,14 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
   }
 
   Future<void> _selectOffering(Map<String, dynamic> offering) async {
+    final hasPendingSave = _sheetSaveTimer?.isActive ?? false;
     _sheetSaveTimer?.cancel();
     final previousId = _currentSubjectData?['id']?.toString();
+    final nextOfferingId = offering['id']?.toString();
+    if (previousId != null && previousId == nextOfferingId) return;
+
     try {
-      if (previousId != null && _selectedTerm > 0) {
+      if (hasPendingSave && previousId != null && _selectedTerm > 0) {
         await _persistSheet(previousId, _selectedTerm);
       }
     } catch (error) {
@@ -677,6 +827,8 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
     final subjectName = offering['subject_name']?.toString();
     final sectionName = offering['section_name']?.toString();
     if (!mounted || subjectName == null || sectionName == null) return;
+    final isFirstOfferingVisit =
+        nextOfferingId != null && !_loadedOfferingIds.contains(nextOfferingId);
     setState(() {
       _selectedSubject = subjectName;
       _selectedSection = sectionName;
@@ -692,8 +844,11 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
         _selectedTerm = active.isNotEmpty ? active.first : 1;
       }
     });
+    if (nextOfferingId != null && isFirstOfferingVisit) {
+      _triggerFirstLoadFilterTransition('$nextOfferingId:$_selectedGender');
+    }
     final teacherId = AuthRepository.instance.currentUser?.id;
-    final offeringId = offering['id']?.toString();
+    final offeringId = nextOfferingId;
     if (teacherId != null && offeringId != null) {
       await Future.wait([
         _fetchStudents(teacherId, offeringId),
@@ -910,49 +1065,72 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
 
                   // Spreadsheet content
                   Expanded(
-                    child:
-                        (_isLoadingSubjects ||
-                            (_isLoadingStudents && _students.isEmpty))
-                        ? _buildGradebookSkeleton(theme, isDark, borderColor)
-                        : Stack(
-                            children: [
-                              if (_selectedTerm == 0)
-                                _buildFinalGradesView(
-                                  theme,
-                                  isDark,
-                                  borderColor,
-                                )
-                              else
-                                _buildTermSpreadsheet(
-                                  theme,
-                                  isDark,
-                                  borderColor,
-                                  cellBg,
-                                  cellText,
-                                  headerBg,
-                                  subHeaderBg,
-                                  headerText,
-                                  genderHeaderBg,
-                                  altRowBg,
-                                  wwWeight,
-                                  ptWeight,
-                                  exWeight,
-                                ),
-                              if (_isLoadingSubjects ||
-                                  _isLoadingStudents ||
-                                  _isLoadingSheets)
-                                Positioned(
-                                  top: 0,
-                                  left: 0,
-                                  right: 0,
-                                  child: LinearProgressIndicator(
-                                    minHeight: 3,
-                                    color: theme.colorScheme.primary,
-                                    backgroundColor: Colors.transparent,
-                                  ),
-                                ),
-                            ],
-                          ),
+                    child: AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 160),
+                      switchInCurve: Curves.easeOut,
+                      switchOutCurve: Curves.easeIn,
+                      child:
+                          (_isLoadingSubjects ||
+                              _isRefreshingGradebookContent ||
+                              _isFilterTransitioning ||
+                              ((_isLoadingStudents || _isLoadingSheets) &&
+                                  !_loadedOfferingIds.contains(
+                                    _currentSubjectData?['id']?.toString() ??
+                                        '',
+                                  )))
+                          ? KeyedSubtree(
+                              key: const ValueKey('gradebook-skeleton'),
+                              child: _buildGradebookSkeleton(
+                                theme,
+                                isDark,
+                                borderColor,
+                              ),
+                            )
+                          : KeyedSubtree(
+                              key: ValueKey(
+                                'gradebook-content-${_currentSubjectData?['id'] ?? 'none'}-$_selectedTerm-$_selectedGender',
+                              ),
+                              child: Stack(
+                                children: [
+                                  if (_selectedTerm == 0)
+                                    _buildFinalGradesView(
+                                      theme,
+                                      isDark,
+                                      borderColor,
+                                    )
+                                  else
+                                    _buildTermSpreadsheet(
+                                      theme,
+                                      isDark,
+                                      borderColor,
+                                      cellBg,
+                                      cellText,
+                                      headerBg,
+                                      subHeaderBg,
+                                      headerText,
+                                      genderHeaderBg,
+                                      altRowBg,
+                                      wwWeight,
+                                      ptWeight,
+                                      exWeight,
+                                    ),
+                                  if (_isLoadingSubjects ||
+                                      _isLoadingStudents ||
+                                      _isLoadingSheets)
+                                    Positioned(
+                                      top: 0,
+                                      left: 0,
+                                      right: 0,
+                                      child: LinearProgressIndicator(
+                                        minHeight: 3,
+                                        color: theme.colorScheme.primary,
+                                        backgroundColor: Colors.transparent,
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                    ),
                   ),
 
                   // Term Tabs at the bottom
@@ -1155,6 +1333,58 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
             ),
           ),
         ),
+        const SizedBox(width: 8),
+        // Refresh Gradebook Content Only button
+        Tooltip(
+          message: 'Refresh gradebook scores and HPS synced from Classwork submissions',
+          child: InkWell(
+            onTap: _isRefreshingGradebookContent
+                ? null
+                : () => unawaited(_refreshGradebookContentOnly()),
+            borderRadius: BorderRadius.circular(10),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: isDark
+                    ? theme.colorScheme.surfaceContainerHighest
+                    : Colors.white,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.15),
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (_isRefreshingGradebookContent)
+                    SizedBox(
+                      width: 15,
+                      height: 15,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: theme.colorScheme.primary,
+                      ),
+                    )
+                  else
+                    Icon(
+                      Icons.refresh_rounded,
+                      size: 16,
+                      color: theme.colorScheme.primary,
+                    ),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Refresh',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: theme.colorScheme.onSurface,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
         const Spacer(),
         // Gender filter controls (Male, Female, All with counts)
         Container(
@@ -1177,7 +1407,7 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
                 icon: Icons.male,
                 color: const Color(0xFF2563EB),
                 isSelected: _selectedGender == 'Male',
-                onTap: () => setState(() => _selectedGender = 'Male'),
+                onTap: () => _selectGenderFilter('Male'),
                 theme: theme,
               ),
               const SizedBox(width: 4),
@@ -1187,7 +1417,7 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
                 icon: Icons.female,
                 color: const Color(0xFFDB2777),
                 isSelected: _selectedGender == 'Female',
-                onTap: () => setState(() => _selectedGender = 'Female'),
+                onTap: () => _selectGenderFilter('Female'),
                 theme: theme,
               ),
               const SizedBox(width: 4),
@@ -1197,7 +1427,7 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
                 icon: Icons.groups_outlined,
                 color: const Color(0xFF475569),
                 isSelected: _selectedGender == 'All',
-                onTap: () => setState(() => _selectedGender = 'All'),
+                onTap: () => _selectGenderFilter('All'),
                 theme: theme,
               ),
             ],
@@ -3071,11 +3301,7 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
                       return Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          for (final score in [
-                            exM.wsSt1,
-                            exM.wsSt2,
-                            exM.wsTe,
-                          ])
+                          for (final score in [exM.wsSt1, exM.wsSt2, exM.wsTe])
                             _computedCell(
                               computedW,
                               score?.toStringAsFixed(2) ?? '',

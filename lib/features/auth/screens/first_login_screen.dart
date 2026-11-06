@@ -25,6 +25,11 @@ class _FirstLoginScreenState extends State<FirstLoginScreen>
   final _confirmPassCtrl = TextEditingController();
   DateTime? _parentBirthday;
   final _childLrnLast4Ctrl = TextEditingController();
+
+  final FocusNode _lrnFocusNode = FocusNode();
+  final FocusNode _newPassFocusNode = FocusNode();
+  final FocusNode _confirmPassFocusNode = FocusNode();
+
   bool _obscureNew = true;
   bool _obscureConfirm = true;
   bool _isLoading = false;
@@ -40,33 +45,80 @@ class _FirstLoginScreenState extends State<FirstLoginScreen>
   void initState() {
     super.initState();
     AppTheme.themeModeNotifier.value = ThemeMode.light;
+    // Cancel any active browser autofill context from LoginScreen
+    TextInput.finishAutofillContext(shouldSave: false);
+
     _newPassCtrl.addListener(_validatePassword);
     _confirmPassCtrl.addListener(_validateMatch);
+
+    _lrnFocusNode.addListener(() {
+      if (_lrnFocusNode.hasFocus) {
+        _ensureValidSelection(_childLrnLast4Ctrl);
+      }
+    });
+    _newPassFocusNode.addListener(() {
+      if (_newPassFocusNode.hasFocus) {
+        _ensureValidSelection(_newPassCtrl);
+      }
+    });
+    _confirmPassFocusNode.addListener(() {
+      if (_confirmPassFocusNode.hasFocus) {
+        _ensureValidSelection(_confirmPassCtrl);
+      }
+    });
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      TextInput.finishAutofillContext(shouldSave: false);
+      if (_newPassCtrl.text.isNotEmpty || _confirmPassCtrl.text.isNotEmpty) {
+        _newPassCtrl.clear();
+        _confirmPassCtrl.clear();
+      }
+    });
+  }
+
+  /// Repairs invalid `TextSelection` (offset -1) on Flutter Web so typing and
+  /// Backspace always work immediately inside password fields.
+  void _ensureValidSelection(TextEditingController ctrl) {
+    final text = ctrl.text;
+    if (!ctrl.selection.isValid ||
+        ctrl.selection.start < 0 ||
+        ctrl.selection.end < 0 ||
+        ctrl.selection.end > text.length) {
+      ctrl.selection = TextSelection.collapsed(offset: text.length);
+    }
   }
 
   void _validatePassword() {
+    _ensureValidSelection(_newPassCtrl);
     final v = _newPassCtrl.text;
     final confirm = _confirmPassCtrl.text;
     final result = AppValidators.validatePasswordComplexity(
       password: v,
       confirmPassword: confirm,
     );
-    setState(() {
-      _hasMinLength = result.hasMinLength;
-      _hasUpper = result.hasUpper;
-      _hasLower = result.hasLower;
-      _hasNumber = result.hasNumber;
-      _passwordsMatch = result.passwordsMatch;
-    });
+    if (mounted) {
+      setState(() {
+        _hasMinLength = result.hasMinLength;
+        _hasUpper = result.hasUpper;
+        _hasLower = result.hasLower;
+        _hasNumber = result.hasNumber;
+        _passwordsMatch = result.passwordsMatch;
+      });
+    }
   }
 
   void _validateMatch() {
-    setState(() {
-      _passwordsMatch = AppValidators.passwordsMatch(
-        _newPassCtrl.text,
-        _confirmPassCtrl.text,
-      );
-    });
+    _ensureValidSelection(_confirmPassCtrl);
+    final matches = AppValidators.passwordsMatch(
+      _newPassCtrl.text,
+      _confirmPassCtrl.text,
+    );
+    if (mounted) {
+      setState(() {
+        _passwordsMatch = matches;
+      });
+    }
   }
 
   bool get _isValid =>
@@ -75,9 +127,14 @@ class _FirstLoginScreenState extends State<FirstLoginScreen>
   @override
   void dispose() {
     TextInput.finishAutofillContext(shouldSave: false);
+    _newPassCtrl.removeListener(_validatePassword);
+    _confirmPassCtrl.removeListener(_validateMatch);
     _newPassCtrl.dispose();
     _confirmPassCtrl.dispose();
     _childLrnLast4Ctrl.dispose();
+    _lrnFocusNode.dispose();
+    _newPassFocusNode.dispose();
+    _confirmPassFocusNode.dispose();
     super.dispose();
   }
 
@@ -121,7 +178,8 @@ class _FirstLoginScreenState extends State<FirstLoginScreen>
         AppModals.showErrorDialog(
           context: context,
           title: 'LRN Required',
-          message: 'Please enter the last 4 digits of your linked child\'s 12-digit LRN.',
+          message:
+              'Please enter the last 4 digits of your linked child\'s 12-digit LRN.',
         );
         return;
       }
@@ -143,7 +201,8 @@ class _FirstLoginScreenState extends State<FirstLoginScreen>
         AppModals.showErrorDialog(
           context: context,
           title: 'Password Rule Violation',
-          message: 'Your new password cannot be the same as your temporary password. Please choose a different, secure password.',
+          message:
+              'Your new password cannot be the same as your temporary password. Please choose a different, secure password.',
         );
         return;
       }
@@ -162,7 +221,8 @@ class _FirstLoginScreenState extends State<FirstLoginScreen>
         AppModals.showErrorDialog(
           context: context,
           title: 'Identity Verification Failed',
-          message: 'Identity verification failed. Please enter the exact registered birthday and the last 4 digits of your child\'s LRN registered with the teacher.',
+          message:
+              'Identity verification failed. Please enter the exact registered birthday and the last 4 digits of your child\'s LRN registered with the teacher.',
         );
         return;
       }
@@ -326,8 +386,17 @@ class _FirstLoginScreenState extends State<FirstLoginScreen>
           const SizedBox(height: 12),
           TextField(
             controller: _childLrnLast4Ctrl,
+            focusNode: _lrnFocusNode,
             keyboardType: TextInputType.number,
+            textInputAction: TextInputAction.next,
+            autofillHints: const <String>[],
+            enableSuggestions: false,
+            autocorrect: false,
             maxLength: 4,
+            onTap: () => _ensureValidSelection(_childLrnLast4Ctrl),
+            onSubmitted: (_) {
+              FocusScope.of(context).requestFocus(_newPassFocusNode);
+            },
             inputFormatters: [
               FilteringTextInputFormatter.digitsOnly,
               LengthLimitingTextInputFormatter(4),
@@ -377,202 +446,224 @@ class _FirstLoginScreenState extends State<FirstLoginScreen>
   Widget _buildFormContent(BuildContext context, UserModel? user) {
     final theme = Theme.of(context);
 
-    return AutofillGroup(
-      onDisposeAction: AutofillContextAction.cancel,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (user?.role == UserRole.parent) ...[
-            _buildParentIdentityVerificationSection(theme),
-            const SizedBox(height: 20),
-          ],
-
-          // New Password
-          TextField(
-            controller: _newPassCtrl,
-            enabled: !_isLoading,
-            obscureText: _obscureNew,
-            enableSuggestions: false,
-            autocorrect: false,
-            maxLength: 50,
-            style: const TextStyle(
-              color: Color(0xFF0F172A),
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-            ),
-            inputFormatters: AppValidators.passwordFormatters,
-            buildCounter:
-                (
-                  context, {
-                  required currentLength,
-                  required isFocused,
-                  maxLength,
-                }) {
-                  return Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Text(
-                      '$currentLength/${maxLength ?? 50}',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: currentLength >= (maxLength ?? 50)
-                            ? const Color(0xFFDC2626)
-                            : const Color(0xFF64748B),
-                      ),
-                    ),
-                  );
-                },
-            decoration: AuthResponsiveScaffold.inputDecoration(
-              labelText: 'New Password',
-              hintText: '--------',
-              prefixIcon: const Icon(
-                Icons.lock_outline,
-                size: 20,
-                color: Color(0xFF475569),
-              ),
-              suffixIcon: IconButton(
-                icon: Icon(
-                  _obscureNew
-                      ? Icons.visibility_outlined
-                      : Icons.visibility_off_outlined,
-                  size: 20,
-                  color: const Color(0xFF64748B),
-                ),
-                onPressed: () => setState(() => _obscureNew = !_obscureNew),
-              ),
-            ),
-          ),
-
-          const SizedBox(height: 12),
-
-          // Real-time Validation Rules in Frosted Section
-          AuthResponsiveScaffold.frostedSection(
-            child: PasswordRequirementsChecklist(
-              hasMinLength: _hasMinLength,
-              hasUpper: _hasUpper,
-              hasLower: _hasLower,
-              hasNumber: _hasNumber,
-            ),
-          ),
-
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (user?.role == UserRole.parent) ...[
+          _buildParentIdentityVerificationSection(theme),
           const SizedBox(height: 20),
+        ],
 
-          // Confirm Password
-          TextField(
-            controller: _confirmPassCtrl,
-            enabled: !_isLoading,
-            obscureText: _obscureConfirm,
-            enableSuggestions: false,
-            autocorrect: false,
-            maxLength: 50,
-            style: const TextStyle(
-              color: Color(0xFF0F172A),
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-            ),
-            inputFormatters: AppValidators.passwordFormatters,
-            buildCounter:
-                (
-                  context, {
-                  required currentLength,
-                  required isFocused,
-                  maxLength,
-                }) {
-                  return Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Text(
-                      '$currentLength/${maxLength ?? 50}',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: currentLength >= (maxLength ?? 50)
-                            ? const Color(0xFFDC2626)
-                            : const Color(0xFF64748B),
-                      ),
+        // New Password
+        TextField(
+          controller: _newPassCtrl,
+          focusNode: _newPassFocusNode,
+          enabled: !_isLoading,
+          obscureText: _obscureNew,
+          autofillHints: const <String>[],
+          enableSuggestions: false,
+          autocorrect: false,
+          textInputAction: TextInputAction.next,
+          maxLength: 50,
+          onTap: () => _ensureValidSelection(_newPassCtrl),
+          onSubmitted: (_) {
+            FocusScope.of(context).requestFocus(_confirmPassFocusNode);
+          },
+          style: const TextStyle(
+            color: Color(0xFF0F172A),
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+          ),
+          inputFormatters: AppValidators.passwordFormatters,
+          buildCounter:
+              (
+                context, {
+                required currentLength,
+                required isFocused,
+                maxLength,
+              }) {
+                return Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    '$currentLength/${maxLength ?? 50}',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: currentLength >= (maxLength ?? 50)
+                          ? const Color(0xFFDC2626)
+                          : const Color(0xFF64748B),
                     ),
-                  );
-                },
-            decoration: AuthResponsiveScaffold.inputDecoration(
-              labelText: 'Confirm New Password',
-              hintText: '--------',
-              prefixIcon: const Icon(
-                Icons.lock_reset_outlined,
-                size: 20,
-                color: Color(0xFF475569),
-              ),
-              suffixIcon: IconButton(
-                icon: Icon(
-                  _obscureConfirm
-                      ? Icons.visibility_outlined
-                      : Icons.visibility_off_outlined,
-                  size: 20,
-                  color: const Color(0xFF64748B),
-                ),
-                onPressed: () =>
-                    setState(() => _obscureConfirm = !_obscureConfirm),
-              ),
-              focusedBorderColor: _confirmPassCtrl.text.isEmpty
-                  ? null
-                  : (_passwordsMatch
-                        ? const Color(0xFF16A34A)
-                        : const Color(0xFFDC2626)),
-              enabledBorderColor: _confirmPassCtrl.text.isEmpty
-                  ? null
-                  : (_passwordsMatch
-                        ? const Color(0xFF16A34A)
-                        : const Color(0xFFDC2626)),
+                  ),
+                );
+              },
+          decoration: AuthResponsiveScaffold.inputDecoration(
+            labelText: 'New Password',
+            hintText: '--------',
+            prefixIcon: const Icon(
+              Icons.lock_outline,
+              size: 20,
+              color: Color(0xFF475569),
             ),
-          ),
-          if (_confirmPassCtrl.text.isNotEmpty && !_passwordsMatch)
-            const Padding(
-              padding: EdgeInsets.only(top: 8, left: 4),
-              child: Text(
-                'Passwords do not match',
-                style: TextStyle(color: Color(0xFFDC2626), fontSize: 12),
-              ),
-            ),
-
-          const SizedBox(height: 28),
-
-          // Submit Button
-          AuthResponsiveScaffold.primaryButton(
-            label: 'SET NEW PASSWORD',
-            isLoading: _isLoading,
-            onPressed: _isValid ? _submit : null,
-          ),
-          const SizedBox(height: 14),
-
-          // Back to Login Link
-          Center(
-            child: TextButton.icon(
-              onPressed: _isLoading
-                  ? null
-                  : () {
-                      AuthRepository.instance.logout();
-                      AppTheme.themeModeNotifier.value = ThemeMode.light;
-                      Navigator.pushReplacementNamed(context, AppRoutes.login);
-                    },
+            suffixIcon: IconButton(
               icon: Icon(
-                Icons.arrow_back,
-                size: 16,
+                _obscureNew
+                    ? Icons.visibility_outlined
+                    : Icons.visibility_off_outlined,
+                size: 20,
+                color: const Color(0xFF64748B),
+              ),
+              onPressed: () {
+                setState(() {
+                  _obscureNew = !_obscureNew;
+                  _ensureValidSelection(_newPassCtrl);
+                });
+              },
+            ),
+          ),
+        ),
+
+        const SizedBox(height: 12),
+
+        // Real-time Validation Rules in Frosted Section
+        AuthResponsiveScaffold.frostedSection(
+          child: PasswordRequirementsChecklist(
+            hasMinLength: _hasMinLength,
+            hasUpper: _hasUpper,
+            hasLower: _hasLower,
+            hasNumber: _hasNumber,
+          ),
+        ),
+
+        const SizedBox(height: 20),
+
+        // Confirm Password
+        TextField(
+          controller: _confirmPassCtrl,
+          focusNode: _confirmPassFocusNode,
+          enabled: !_isLoading,
+          obscureText: _obscureConfirm,
+          autofillHints: const <String>[],
+          enableSuggestions: false,
+          autocorrect: false,
+          textInputAction: TextInputAction.done,
+          maxLength: 50,
+          onTap: () => _ensureValidSelection(_confirmPassCtrl),
+          onSubmitted: (_) {
+            if (_isValid && !_isLoading) {
+              _submit();
+            }
+          },
+          style: const TextStyle(
+            color: Color(0xFF0F172A),
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+          ),
+          inputFormatters: AppValidators.passwordFormatters,
+          buildCounter:
+              (
+                context, {
+                required currentLength,
+                required isFocused,
+                maxLength,
+              }) {
+                return Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    '$currentLength/${maxLength ?? 50}',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: currentLength >= (maxLength ?? 50)
+                          ? const Color(0xFFDC2626)
+                          : const Color(0xFF64748B),
+                    ),
+                  ),
+                );
+              },
+          decoration: AuthResponsiveScaffold.inputDecoration(
+            labelText: 'Confirm New Password',
+            hintText: '--------',
+            prefixIcon: const Icon(
+              Icons.lock_reset_outlined,
+              size: 20,
+              color: Color(0xFF475569),
+            ),
+            suffixIcon: IconButton(
+              icon: Icon(
+                _obscureConfirm
+                    ? Icons.visibility_outlined
+                    : Icons.visibility_off_outlined,
+                size: 20,
+                color: const Color(0xFF64748B),
+              ),
+              onPressed: () {
+                setState(() {
+                  _obscureConfirm = !_obscureConfirm;
+                  _ensureValidSelection(_confirmPassCtrl);
+                });
+              },
+            ),
+            focusedBorderColor: _confirmPassCtrl.text.isEmpty
+                ? null
+                : (_passwordsMatch
+                      ? const Color(0xFF16A34A)
+                      : const Color(0xFFDC2626)),
+            enabledBorderColor: _confirmPassCtrl.text.isEmpty
+                ? null
+                : (_passwordsMatch
+                      ? const Color(0xFF16A34A)
+                      : const Color(0xFFDC2626)),
+          ),
+        ),
+        if (_confirmPassCtrl.text.isNotEmpty && !_passwordsMatch)
+          const Padding(
+            padding: EdgeInsets.only(top: 8, left: 4),
+            child: Text(
+              'Passwords do not match',
+              style: TextStyle(color: Color(0xFFDC2626), fontSize: 12),
+            ),
+          ),
+
+        const SizedBox(height: 28),
+
+        // Submit Button
+        AuthResponsiveScaffold.primaryButton(
+          label: 'SET NEW PASSWORD',
+          isLoading: _isLoading,
+          onPressed: _isValid ? _submit : null,
+        ),
+        const SizedBox(height: 14),
+
+        // Back to Login Link
+        Center(
+          child: TextButton.icon(
+            onPressed: _isLoading
+                ? null
+                : () {
+                    AuthRepository.instance.logout();
+                    AppTheme.themeModeNotifier.value = ThemeMode.light;
+                    Navigator.pushReplacementNamed(context, AppRoutes.login);
+                  },
+            icon: Icon(
+              Icons.arrow_back,
+              size: 16,
+              color: _isLoading
+                  ? const Color(0xFF94A3B8)
+                  : const Color(0xFF487898),
+            ),
+            label: Text(
+              'Back to Login',
+              style: TextStyle(
                 color: _isLoading
                     ? const Color(0xFF94A3B8)
                     : const Color(0xFF487898),
-              ),
-              label: Text(
-                'Back to Login',
-                style: TextStyle(
-                  color: _isLoading
-                      ? const Color(0xFF94A3B8)
-                      : const Color(0xFF487898),
-                  fontWeight: FontWeight.bold,
-                ),
+                fontWeight: FontWeight.bold,
               ),
             ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

@@ -248,7 +248,6 @@ bool getWebNavigatorOnlineStatusPlatform() {
   }
 }
 
-
 html.FileUploadInputElement? _activeWebFileInput;
 
 void pickWebFilePlatform({

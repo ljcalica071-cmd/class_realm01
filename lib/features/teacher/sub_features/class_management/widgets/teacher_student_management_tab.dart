@@ -271,31 +271,6 @@ class _TeacherStudentManagementTabState
     });
   }
 
-  String? _resolveSelectedOfferingId() {
-    if (_teacherSubjectsData.isEmpty) return null;
-    if (_selectedSubjectFilter != '— All Subjects —') {
-      if (_selectedSectionFilter != '— All Sections —') {
-        final exact = _teacherSubjectsData.firstWhere(
-          (r) =>
-              r['subject_name']?.toString() == _selectedSubjectFilter &&
-              r['section_name']?.toString() == _selectedSectionFilter,
-          orElse: () => <String, dynamic>{},
-        );
-        if (exact.isNotEmpty && exact['id'] != null) {
-          return exact['id'].toString();
-        }
-      }
-      final bySub = _teacherSubjectsData.firstWhere(
-        (r) => r['subject_name']?.toString() == _selectedSubjectFilter,
-        orElse: () => <String, dynamic>{},
-      );
-      if (bySub.isNotEmpty && bySub['id'] != null) {
-        return bySub['id'].toString();
-      }
-    }
-    return null;
-  }
-
   int _calculateAge(DateTime birthday) {
     final today = DateTime.now();
     var age = today.year - birthday.year;
@@ -709,14 +684,8 @@ class _TeacherStudentManagementTabState
                           onPressed: () => UnifiedEnrollStudentDialog.show(
                             context,
                             teacherSubjects: _teacherSubjectsData,
-                            initialSubjectId: _resolveSelectedOfferingId(),
-                            initialSectionName:
-                                _selectedSectionFilter != '— All Sections —'
-                                ? _selectedSectionFilter
-                                : null,
                             initialTabIndex: 1, // File import tab
-                            onStudentCreated: () =>
-                                _loadData(forceRefresh: true),
+                            onStudentCreated: _loadData,
                           ),
                         ),
                       ),
@@ -728,14 +697,8 @@ class _TeacherStudentManagementTabState
                           onPressed: () => UnifiedEnrollStudentDialog.show(
                             context,
                             teacherSubjects: _teacherSubjectsData,
-                            initialSubjectId: _resolveSelectedOfferingId(),
-                            initialSectionName:
-                                _selectedSectionFilter != '— All Sections —'
-                                ? _selectedSectionFilter
-                                : null,
                             initialTabIndex: 0, // Manual add tab
-                            onStudentCreated: () =>
-                                _loadData(forceRefresh: true),
+                            onStudentCreated: _loadData,
                           ),
                         ),
                       ),

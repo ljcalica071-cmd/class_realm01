@@ -20,70 +20,51 @@ class StudentDashboardRepository {
   StudentDashboardData? _cachedDashboard;
   StudentDashboardData? get currentDashboard => _cachedDashboard;
 
-  /// Explicitly clears in-memory dashboard cache (called on user logout or session switch).
-  void clearCache() {
-    _cachedDashboard = null;
-  }
-
   Future<StudentDashboardData> loadDashboard({
     bool forceRefresh = false,
   }) async {
     final authUser = firebase_auth.FirebaseAuth.instance.currentUser;
-    if (authUser == null) {
-      _cachedDashboard = null;
-      throw StateError(
-        'A signed-in student session is required to load the dashboard.',
-      );
-    }
-
-    final uid = authUser.uid;
-
-    // Discard any in-memory cache that belongs to a different student account
-    if (_cachedDashboard != null && _cachedDashboard!.student.id != uid) {
-      _cachedDashboard = null;
-    }
-
     if (forceRefresh) {
       _cachedDashboard = null;
-      AppDataCache.instance.invalidate('student_dashboard_$uid');
+      if (authUser != null) {
+        AppDataCache.instance.invalidate('student_dashboard_${authUser.uid}');
+      }
     }
 
-    if (!forceRefresh &&
-        _cachedDashboard != null &&
-        _cachedDashboard!.student.id == uid) {
+    if (!forceRefresh && _cachedDashboard != null) {
       return _cachedDashboard!;
     }
 
     // 1. FAST LOCAL READ (0 milliseconds load, Web + Native parity)
-    if (!forceRefresh) {
+    if (!forceRefresh && authUser != null) {
       final cachedWeb = AppDataCache.instance.getCached<StudentDashboardData>(
-        'student_dashboard_$uid',
+        'student_dashboard_${authUser.uid}',
         (json) => StudentDashboardData.fromJson(
           Map<String, dynamic>.from(json as Map),
         ),
       );
-      if (cachedWeb != null && cachedWeb.student.id == uid) {
+      if (cachedWeb != null) {
         _cachedDashboard = cachedWeb;
-        if (!AppDataCache.instance.isFresh('student_dashboard_$uid')) {
+        if (!AppDataCache.instance.isFresh(
+          'student_dashboard_${authUser.uid}',
+        )) {
           unawaited(_fetchFromCloud());
         }
         return cachedWeb;
       }
 
-      // SQLite Native Fallback (Scoped strictly to this student's UID)
+      // SQLite Native Fallback
       try {
         final cachedJsonStr = await AppDatabase.instance.getSetting(
-          'cached_student_dashboard_$uid',
+          'cached_student_dashboard',
         );
         if (cachedJsonStr != null && cachedJsonStr.isNotEmpty) {
           final data = jsonDecode(cachedJsonStr) as Map<String, dynamic>;
-          final parsed = StudentDashboardData.fromJson(data);
-          if (parsed.student.id == uid) {
-            _cachedDashboard = parsed;
-            // Trigger background cloud refresh silently
-            unawaited(_fetchFromCloud());
-            return _cachedDashboard!;
-          }
+          _cachedDashboard = StudentDashboardData.fromJson(data);
+
+          // Trigger background cloud refresh silently
+          unawaited(_fetchFromCloud());
+          return _cachedDashboard!;
         }
       } catch (_) {}
     }
@@ -101,11 +82,6 @@ class StudentDashboardRepository {
     }
 
     final uid = authUser.uid;
-    // Guard against preserving stale data from a prior logged-in student
-    if (_cachedDashboard != null && _cachedDashboard!.student.id != uid) {
-      _cachedDashboard = null;
-    }
-
     final client = SupabaseService().client;
 
     try {
@@ -203,36 +179,12 @@ class StudentDashboardRepository {
       List<Map<String, dynamic>> classworkList = [];
       if (offeringIds.isNotEmpty) {
         try {
-          List<dynamic> submissionRows = [];
-          try {
-            final res = await client
-                .from('student_classwork_submissions')
-                .select('''
-                  classwork_id,
-                  status,
-                  score,
-                  feedback,
-                  submitted_at,
-                  submission_attachments (
-                    id,
-                    file_name,
-                    storage_url,
-                    mime_type,
-                    file_size_bytes
-                  )
-                ''')
-                .eq('student_id', uid);
-            submissionRows = res as List? ?? [];
-          } catch (_) {
-            final res = await client
-                .from('student_classwork_submissions')
-                .select('classwork_id, status, score, feedback, submitted_at')
-                .eq('student_id', uid);
-            submissionRows = res as List? ?? [];
-          }
-
+          final submissionRows = await client
+              .from('student_classwork_submissions')
+              .select('classwork_id, status, score, feedback, submitted_at')
+              .eq('student_id', uid);
           final submissionsByClassworkId = <String, Map<String, dynamic>>{};
-          for (final row in submissionRows) {
+          for (final row in submissionRows as List) {
             final submission = Map<String, dynamic>.from(row as Map);
             final classworkId = submission['classwork_id']?.toString();
             if (classworkId != null) {
@@ -240,104 +192,34 @@ class StudentDashboardRepository {
             }
           }
 
-          List<dynamic> items = [];
-          try {
-            final res = await client
-                .from('classwork_items')
-                .select('''
-                  id,
-                  subject_offering_id,
-                  classwork_type,
-                  grading_category,
-                  completion_mode,
-                  term_number,
-                  gradebook_column_index,
-                  title,
-                  description,
-                  instructions,
-                  assigned_at,
-                  deadline,
-                  max_score,
-                  storage_path,
-                  file_name,
-                  mime_type,
-                  file_size_bytes,
-                  subject_offerings (
-                    subjects ( subject_name ),
-                    sections ( section_name, grade_level )
-                  )
-                ''')
-                .filter('subject_offering_id', 'in', offeringIds)
-                .eq('is_published', true)
-                .eq('is_archived', false)
-                .order('deadline', ascending: true);
-            items = res as List? ?? [];
-          } catch (_) {
-            final res = await client
-                .from('classwork_items')
-                .select('''
-                  id,
-                  subject_offering_id,
-                  classwork_type,
-                  title,
-                  description,
-                  instructions,
-                  assigned_at,
-                  deadline,
-                  max_score,
-                  subject_offerings (
-                    subjects ( subject_name ),
-                    sections ( section_name, grade_level )
-                  )
-                ''')
-                .filter('subject_offering_id', 'in', offeringIds)
-                .eq('is_published', true)
-                .eq('is_archived', false)
-                .order('deadline', ascending: true);
-            items = res as List? ?? [];
-          }
+          final items = await client
+              .from('classwork_items')
+              .select('''
+                id,
+                subject_offering_id,
+                classwork_type,
+                title,
+                description,
+                instructions,
+                assigned_at,
+                deadline,
+                max_score,
+                subject_offerings (
+                  subjects ( subject_name ),
+                  sections ( section_name, grade_level )
+                )
+              ''')
+              .filter('subject_offering_id', 'in', offeringIds)
+              .eq('is_published', true)
+              .eq('is_archived', false)
+              .order('deadline', ascending: true);
 
-          classworkList = items.map<Map<String, dynamic>>((i) {
+          classworkList = (items as List? ?? []).map<Map<String, dynamic>>((i) {
             final m = Map<String, dynamic>.from(i as Map);
             final off = m['subject_offerings'] as Map<String, dynamic>? ?? {};
             final s = off['subjects'] as Map<String, dynamic>? ?? {};
             final sec = off['sections'] as Map<String, dynamic>? ?? {};
             final submission = submissionsByClassworkId[m['id']?.toString()];
-
-            Map<String, dynamic>? teacherAttachment;
-            final storagePath = m['storage_path']?.toString() ?? '';
-            final fileName = m['file_name']?.toString() ?? '';
-            if (storagePath.isNotEmpty || fileName.isNotEmpty) {
-              teacherAttachment = {
-                'id': m['id']?.toString() ?? '',
-                'file_name': fileName.isNotEmpty
-                    ? fileName
-                    : 'Reference Material',
-                'storage_url': storagePath,
-                'mime_type':
-                    m['mime_type']?.toString() ?? 'application/octet-stream',
-                'file_size_bytes': (m['file_size_bytes'] as num?)?.toInt() ?? 0,
-              };
-            }
-
-            Map<String, dynamic>? studentSubmissionMap;
-            final subAttachments =
-                submission?['submission_attachments'] as List? ?? [];
-            if (subAttachments.isNotEmpty) {
-              final att = Map<String, dynamic>.from(
-                subAttachments.first as Map,
-              );
-              studentSubmissionMap = {
-                'id': att['id']?.toString() ?? '',
-                'file_name': att['file_name']?.toString() ?? 'Submitted Work',
-                'storage_url': att['storage_url']?.toString() ?? '',
-                'mime_type':
-                    att['mime_type']?.toString() ?? 'application/octet-stream',
-                'file_size_bytes':
-                    (att['file_size_bytes'] as num?)?.toInt() ?? 0,
-              };
-            }
-
             return {
               'id': m['id']?.toString() ?? '',
               'subject_offering_id': m['subject_offering_id']?.toString() ?? '',
@@ -351,9 +233,6 @@ class StudentDashboardRepository {
               'deadline': m['deadline']?.toString(),
               'max_score': m['max_score'] is num ? m['max_score'] : 100,
               'completion_mode': m['completion_mode']?.toString() ?? 'online',
-              'term_number': (m['term_number'] as num?)?.toInt() ?? 1,
-              'gradebook_column_index': (m['gradebook_column_index'] as num?)
-                  ?.toInt(),
               'subject_name': s['subject_name']?.toString() ?? '',
               'section_name': sec['section_name']?.toString() ?? '',
               'grade_level': sec['grade_level']?.toString() ?? '',
@@ -361,8 +240,6 @@ class StudentDashboardRepository {
               'score': submission?['score'],
               'feedback': submission?['feedback'],
               'submitted_at': submission?['submitted_at'],
-              'attachment': teacherAttachment,
-              'student_submission': studentSubmissionMap,
             };
           }).toList();
 
@@ -445,24 +322,22 @@ class StudentDashboardRepository {
       }
 
       final currentUser = AuthRepository.instance.currentUser;
-      // Guard against taking stale fallback fields from another user
-      final safeUser = (currentUser != null && currentUser.id == uid)
-          ? currentUser
-          : null;
       final p = profileRes ?? <String, dynamic>{};
       final data = <String, dynamic>{
         'student': {
           'id': uid,
-          'email': authUser.email ?? safeUser?.email ?? '',
-          'lrn': p['lrn']?.toString() ?? safeUser?.lrn ?? '',
+          'email': authUser.email ?? currentUser?.email ?? '',
+          'lrn': p['lrn']?.toString() ?? currentUser?.lrn ?? '',
           'first_name':
-              p['first_name']?.toString() ?? safeUser?.firstName ?? '',
-          'middle_name': p['middle_name']?.toString() ?? safeUser?.middleName,
-          'last_name': p['last_name']?.toString() ?? safeUser?.lastName ?? '',
-          'gender': p['gender']?.toString() ?? safeUser?.gender,
+              p['first_name']?.toString() ?? currentUser?.firstName ?? '',
+          'middle_name':
+              p['middle_name']?.toString() ?? currentUser?.middleName,
+          'last_name':
+              p['last_name']?.toString() ?? currentUser?.lastName ?? '',
+          'gender': p['gender']?.toString() ?? currentUser?.gender,
           'birthday':
               p['birthday']?.toString() ??
-              safeUser?.birthday?.toIso8601String(),
+              currentUser?.birthday?.toIso8601String(),
           'enrollments': enrollmentsList,
         },
         'classwork': classworkList,
@@ -470,21 +345,22 @@ class StudentDashboardRepository {
 
       try {
         await AppDatabase.instance.setSetting(
-          'cached_student_dashboard_$uid',
+          'cached_student_dashboard',
           jsonEncode(data),
         );
       } catch (_) {}
 
-      final freshDashboard = StudentDashboardData.fromJson(data);
-      _cachedDashboard = freshDashboard;
-      unawaited(AppDataCache.instance.setCache('student_dashboard_$uid', data));
-      return freshDashboard;
+      _cachedDashboard = StudentDashboardData.fromJson(data);
+      unawaited(
+        AppDataCache.instance.setCache(
+          'student_dashboard_${authUser.uid}',
+          data,
+        ),
+      );
+      return _cachedDashboard!;
     } catch (e) {
       debugPrint('Pure Dart student dashboard notice: $e');
-      if (_cachedDashboard != null &&
-          _cachedDashboard!.student.id == authUser.uid) {
-        return _cachedDashboard!;
-      }
+      if (_cachedDashboard != null) return _cachedDashboard!;
       return _fallbackForAuthenticatedUser(authUser);
     }
   }

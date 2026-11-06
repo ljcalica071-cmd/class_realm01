@@ -8,7 +8,6 @@ abstract class TeacherClassworkRepository {
   Future<List<ActivityModel>> getActivities({
     String? subjectOfferingId,
     String? teacherId,
-    bool forceRefresh = false,
   });
 
   /// Saves (creates or updates) a classwork item.
