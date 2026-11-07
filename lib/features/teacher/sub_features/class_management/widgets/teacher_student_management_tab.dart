@@ -1,6 +1,7 @@
 import 'package:class_realm/core/services/app_data_cache.dart';
 
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -757,38 +758,172 @@ class _TeacherStudentManagementTabState
                                 children: [
                                   Expanded(
                                     child: displayList.isEmpty
-                                        ? Center(
-                                            child: Column(
-                                              mainAxisAlignment:
-                                                  MainAxisAlignment.center,
-                                              children: [
-                                                Icon(
-                                                  _showArchivedStudents
-                                                      ? Icons.archive_outlined
-                                                      : Icons.school_outlined,
-                                                  size: 56,
-                                                  color: Theme.of(context)
-                                                      .colorScheme
-                                                      .onSurface
-                                                      .withValues(alpha: 0.5),
-                                                ),
-                                                const SizedBox(height: 16),
-                                                Text(
-                                                  _showArchivedStudents
-                                                      ? 'No archived students found.'
-                                                      : 'No students found for ${_teacherSubjects.contains(_selectedSubjectFilter) ? _selectedSubjectFilter : (_teacherSubjects.isNotEmpty ? _teacherSubjects.first : "this subject")} in $_selectedSectionFilter.',
-                                                  textAlign: TextAlign.center,
-                                                  style: TextStyle(
-                                                    fontSize: 16,
-                                                    fontWeight: FontWeight.w500,
-                                                    color: Theme.of(context)
-                                                        .colorScheme
-                                                        .onSurface
-                                                        .withValues(alpha: 0.8),
+                                        ? LayoutBuilder(
+                                            builder: (context, constraints) {
+                                              const colNumWidth = 56.0;
+                                              const colLrnWidth = 160.0;
+                                              const colGenderWidth = 110.0;
+                                              const colBirthdateWidth = 160.0;
+                                              const colEmailWidth = 240.0;
+                                              const colStatusWidth = 180.0;
+                                              const colActionsWidth = 145.0;
+
+                                              const baseFixed = colNumWidth +
+                                                  colLrnWidth +
+                                                  colGenderWidth +
+                                                  colBirthdateWidth +
+                                                  colEmailWidth +
+                                                  colStatusWidth +
+                                                  colActionsWidth;
+                                              const baseNameWidth = 260.0;
+                                              const baseTotal = baseFixed + baseNameWidth;
+
+                                              final extraWidth = math.max(
+                                                0.0,
+                                                constraints.maxWidth - baseTotal,
+                                              );
+                                              final colNameWidth = baseNameWidth + extraWidth;
+                                              final totalTableWidth = math.max(
+                                                constraints.maxWidth,
+                                                baseTotal,
+                                              );
+
+                                              return SingleChildScrollView(
+                                                scrollDirection: Axis.horizontal,
+                                                child: SizedBox(
+                                                  width: totalTableWidth,
+                                                  child: Column(
+                                                    children: [
+                                                      // ── UNIFIED TABLE HEADER (Matches Manage Parents & populated table) ──
+                                                      Container(
+                                                        height: 48,
+                                                        decoration: BoxDecoration(
+                                                          color: theme.colorScheme.primary.withValues(alpha: 0.1),
+                                                          border: Border(
+                                                            bottom: BorderSide(
+                                                              color: theme.colorScheme.primary.withValues(alpha: 0.3),
+                                                            ),
+                                                          ),
+                                                        ),
+                                                        child: Row(
+                                                          children: [
+                                                            _buildHeaderCell(
+                                                              width: colNumWidth,
+                                                              child: Center(
+                                                                child: Text(
+                                                                  '#',
+                                                                  style: TextStyle(
+                                                                    color: tableHeaderTextColor,
+                                                                    fontWeight: FontWeight.bold,
+                                                                    fontSize: 13,
+                                                                  ),
+                                                                ),
+                                                              ),
+                                                            ),
+                                                            _buildHeaderCell(
+                                                              width: colNameWidth,
+                                                              child: _buildClickableHeaderTitle(
+                                                                'STUDENT NAME',
+                                                                'lastName',
+                                                              ),
+                                                            ),
+                                                            _buildHeaderCell(
+                                                              width: colLrnWidth,
+                                                              child: _buildClickableHeaderTitle(
+                                                                'LRN',
+                                                                'lrn',
+                                                              ),
+                                                            ),
+                                                            _buildHeaderCell(
+                                                              width: colGenderWidth,
+                                                              child: _buildClickableHeaderTitle(
+                                                                'GENDER',
+                                                                'gender',
+                                                              ),
+                                                            ),
+                                                            _buildHeaderCell(
+                                                              width: colBirthdateWidth,
+                                                              child: _buildClickableHeaderTitle(
+                                                                'BIRTHDATE',
+                                                                'birthdate',
+                                                              ),
+                                                            ),
+                                                            _buildHeaderCell(
+                                                              width: colEmailWidth,
+                                                              child: Text(
+                                                                'EMAIL',
+                                                                style: TextStyle(
+                                                                  color: tableHeaderTextColor,
+                                                                  fontWeight: FontWeight.bold,
+                                                                  fontSize: 13,
+                                                                ),
+                                                              ),
+                                                            ),
+                                                            _buildHeaderCell(
+                                                              width: colStatusWidth,
+                                                              child: _buildClickableHeaderTitle(
+                                                                'STATUS',
+                                                                'status',
+                                                              ),
+                                                            ),
+                                                            _buildHeaderCell(
+                                                              width: colActionsWidth,
+                                                              hasRightBorder: false,
+                                                              child: Center(
+                                                                child: Text(
+                                                                  'ACTIONS',
+                                                                  style: TextStyle(
+                                                                    color: tableHeaderTextColor,
+                                                                    fontWeight: FontWeight.bold,
+                                                                    fontSize: 13,
+                                                                  ),
+                                                                ),
+                                                              ),
+                                                            ),
+                                                          ],
+                                                        ),
+                                                      ),
+                                                      // ── EMPTY STATE MESSAGE UNDERNEATH HEADER ──
+                                                      Expanded(
+                                                        child: Center(
+                                                          child: Column(
+                                                            mainAxisAlignment:
+                                                                MainAxisAlignment.center,
+                                                            children: [
+                                                              Icon(
+                                                                _showArchivedStudents
+                                                                    ? Icons.archive_outlined
+                                                                    : Icons.school_outlined,
+                                                                size: 56,
+                                                                color: Theme.of(context)
+                                                                    .colorScheme
+                                                                    .onSurface
+                                                                    .withValues(alpha: 0.5),
+                                                              ),
+                                                              const SizedBox(height: 16),
+                                                              Text(
+                                                                _showArchivedStudents
+                                                                    ? 'No archived students found.'
+                                                                    : 'No students found for ${_teacherSubjects.contains(_selectedSubjectFilter) ? _selectedSubjectFilter : (_teacherSubjects.isNotEmpty ? _teacherSubjects.first : "this subject")} in $_selectedSectionFilter.',
+                                                                textAlign: TextAlign.center,
+                                                                style: TextStyle(
+                                                                  fontSize: 16,
+                                                                  fontWeight: FontWeight.w500,
+                                                                  color: Theme.of(context)
+                                                                      .colorScheme
+                                                                      .onSurface
+                                                                      .withValues(alpha: 0.8),
+                                                                ),
+                                                              ),
+                                                            ],
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ],
                                                   ),
                                                 ),
-                                              ],
-                                            ),
+                                              );
+                                            },
                                           )
                                         : Row(
                                             children: [

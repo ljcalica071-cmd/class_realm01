@@ -421,12 +421,12 @@ class _TeacherDashboardOverviewTabState
     final theme = Theme.of(context);
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(10),
       child: Container(
-        padding: const EdgeInsets.all(10),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         decoration: BoxDecoration(
           color: accentColor.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(10),
           border: Border.all(color: accentColor.withValues(alpha: 0.2)),
         ),
         child: Column(
@@ -434,14 +434,14 @@ class _TeacherDashboardOverviewTabState
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Container(
-              padding: const EdgeInsets.all(7),
+              padding: const EdgeInsets.all(5),
               decoration: BoxDecoration(
                 color: accentColor.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(6),
               ),
-              child: Icon(icon, color: accentColor, size: 18),
+              child: Icon(icon, color: accentColor, size: 16),
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 4),
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
@@ -452,7 +452,7 @@ class _TeacherDashboardOverviewTabState
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
-                    fontSize: 13,
+                    fontSize: 12.5,
                     color: theme.colorScheme.onSurface,
                   ),
                 ),
@@ -461,7 +461,7 @@ class _TeacherDashboardOverviewTabState
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontSize: 11,
+                    fontSize: 10.5,
                     color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                   ),
                 ),
@@ -625,7 +625,7 @@ class _TeacherDashboardOverviewTabState
                 flex: 7,
                 child: Card(
                   child: Padding(
-                    padding: const EdgeInsets.all(22),
+                    padding: const EdgeInsets.all(20),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -713,7 +713,7 @@ class _TeacherDashboardOverviewTabState
                         else if (todaySchedules.isEmpty)
                           Padding(
                             padding: const EdgeInsets.symmetric(
-                              vertical: 32,
+                              vertical: 24,
                               horizontal: 16,
                             ),
                             child: Center(
@@ -721,7 +721,7 @@ class _TeacherDashboardOverviewTabState
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   Container(
-                                    padding: const EdgeInsets.all(14),
+                                    padding: const EdgeInsets.all(12),
                                     decoration: BoxDecoration(
                                       color: theme.colorScheme.primary
                                           .withValues(alpha: 0.08),
@@ -729,16 +729,16 @@ class _TeacherDashboardOverviewTabState
                                     ),
                                     child: Icon(
                                       LucideIcons.calendarCheck2,
-                                      size: 32,
+                                      size: 28,
                                       color: theme.colorScheme.primary,
                                     ),
                                   ),
-                                  const SizedBox(height: 12),
+                                  const SizedBox(height: 10),
                                   Text(
                                     'No classes scheduled for today',
                                     style: TextStyle(
                                       fontWeight: FontWeight.bold,
-                                      fontSize: 15,
+                                      fontSize: 14.5,
                                       color: theme.colorScheme.onSurface,
                                     ),
                                   ),
@@ -801,7 +801,7 @@ class _TeacherDashboardOverviewTabState
                 flex: 3,
                 child: Card(
                   child: Padding(
-                    padding: const EdgeInsets.all(22),
+                    padding: const EdgeInsets.all(20),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -825,14 +825,14 @@ class _TeacherDashboardOverviewTabState
                             ),
                           ],
                         ),
-                        const SizedBox(height: 16),
+                        const SizedBox(height: 14),
                         GridView.count(
                           shrinkWrap: true,
                           physics: const NeverScrollableScrollPhysics(),
                           crossAxisCount: 2,
-                          crossAxisSpacing: 10,
-                          mainAxisSpacing: 10,
-                          childAspectRatio: 1.05,
+                          crossAxisSpacing: 8,
+                          mainAxisSpacing: 8,
+                          childAspectRatio: 1.55,
                           children: [
                             _buildQuickActionCard(
                               context,

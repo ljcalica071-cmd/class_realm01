@@ -358,19 +358,13 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
       );
     }
 
-    if (_teacherSubjects.isEmpty && widget.students.isEmpty) {
-      return _buildEmptyState(
-        icon: LucideIcons.bookOpen,
-        title: 'No Subject Offerings Found',
-        message: 'Set up your subjects and class sections in Classroom Setup first.',
-      );
-    }
+    final hasNoOfferings = _teacherSubjects.isEmpty && widget.students.isEmpty;
 
     final offering = _currentOffering ?? {
       'id': 'default',
-      'subject_name': 'Subject',
-      'ww_weight': 30.0,
-      'pt_weight': 50.0,
+      'subject_name': 'No Subject Selected',
+      'ww_weight': 20.0,
+      'pt_weight': 60.0,
       'ex_weight': 20.0,
       'terms_taught': 3,
       'term_block': 'FIRST TERM',
@@ -409,6 +403,34 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
           children: [
             // 1. TOP HEADER & REFRESH STRIP
             _buildTopHeader(isDark, theme),
+            if (hasNoOfferings)
+              Container(
+                margin: const EdgeInsets.only(top: 8, bottom: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF1E293B) : const Color(0xFFEFF6FF),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: isDark ? const Color(0xFF334155) : const Color(0xFFBFDBFE),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(LucideIcons.info, size: 16, color: crSteelBlue),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'No subject offerings found yet. Set up your subjects and class sections in Classroom Setup first.',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: isDark ? Colors.white70 : const Color(0xFF1E40AF),
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             if (_isLoadingSheets)
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 6),
@@ -723,31 +745,40 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                       initialValue: safeSubject,
                       dropdownColor: isDark ? theme.colorScheme.surface : Colors.white,
                       decoration: _inputDecoration(isDark),
-                      items: uniqueSubjects.map((s) {
-                        return DropdownMenuItem<String>(
-                          value: s,
-                          child: Text(
-                            s,
-                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        );
-                      }).toList(),
-                      onChanged: (val) {
-                        if (val != null && val != _selectedSubjectName) {
-                          setState(() {
-                            _selectedSubjectName = val;
-                            _selectedSectionFilter = 'All Sections';
-                            final offerings = _teacherSubjects.where((s) => s['subject_name'] == val).toList();
-                            if (offerings.isNotEmpty) {
-                              final termsTaught = (offerings.first['terms_taught'] as num?)?.toInt() ?? 3;
-                              _selectedTermView = termsTaught > 1 ? 0 : 1;
-                            }
-                            _currentPage = 1;
-                          });
-                          _loadSubjectData();
-                        }
-                      },
+                      hint: const Text(
+                        'No subjects available',
+                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: crSlateMuted),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      items: uniqueSubjects.isEmpty
+                          ? null
+                          : uniqueSubjects.map((s) {
+                              return DropdownMenuItem<String>(
+                                value: s,
+                                child: Text(
+                                  s,
+                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              );
+                            }).toList(),
+                      onChanged: uniqueSubjects.isEmpty
+                          ? null
+                          : (val) {
+                              if (val != null && val != _selectedSubjectName) {
+                                setState(() {
+                                  _selectedSubjectName = val;
+                                  _selectedSectionFilter = 'All Sections';
+                                  final offerings = _teacherSubjects.where((s) => s['subject_name'] == val).toList();
+                                  if (offerings.isNotEmpty) {
+                                    final termsTaught = (offerings.first['terms_taught'] as num?)?.toInt() ?? 3;
+                                    _selectedTermView = termsTaught > 1 ? 0 : 1;
+                                  }
+                                  _currentPage = 1;
+                                });
+                                _loadSubjectData();
+                              }
+                            },
                     ),
                   ],
                 ),
@@ -1840,6 +1871,7 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
     var startAngle = -math.pi / 2;
 
     for (final s in slices) {
+      if (s.pct <= 0) continue;
       final sweep = (s.pct / 100) * 2 * math.pi;
       final midAngle = startAngle + sweep / 2;
       startAngle += sweep;
@@ -2691,28 +2723,6 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(8),
         borderSide: const BorderSide(color: crBorder),
-      ),
-    );
-  }
-
-  Widget _buildEmptyState({
-    required IconData icon,
-    required String title,
-    required String message,
-  }) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 48, color: crSlateMuted),
-            const SizedBox(height: 12),
-            Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: crSlateDark)),
-            const SizedBox(height: 4),
-            Text(message, style: const TextStyle(fontSize: 12, color: crSlateMuted), textAlign: TextAlign.center),
-          ],
-        ),
       ),
     );
   }

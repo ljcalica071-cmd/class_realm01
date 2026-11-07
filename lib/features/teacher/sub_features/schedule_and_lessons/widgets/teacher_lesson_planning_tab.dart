@@ -275,67 +275,89 @@ class _TeacherLessonPlanningTabState extends State<TeacherLessonPlanningTab> {
   }
 
   Widget _buildHeader(ThemeData theme, int keyCount) {
-    return Wrap(
-      alignment: WrapAlignment.spaceBetween,
-      crossAxisAlignment: WrapCrossAlignment.center,
-      spacing: 16,
-      runSpacing: 12,
-      children: [
-        ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 680),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Wrap(
-                spacing: 10,
-                runSpacing: 6,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  Text(
-                    'ILAW Format',
-                    style: TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.w800,
-                      color: theme.colorScheme.onSurface,
-                    ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isCompact = constraints.maxWidth < 760;
+
+        final infoSection = Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Wrap(
+              spacing: 10,
+              runSpacing: 6,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                Text(
+                  'ILAW Format',
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                    color: theme.colorScheme.onSurface,
                   ),
-                  _buildSubtlePill(
-                    theme,
-                    icon: Icons.lock_outline,
-                    label: 'Private to Teacher',
-                    accent: theme.colorScheme.primary,
-                  ),
-                  _buildSubtlePill(
-                    theme,
-                    icon: keyCount > 0
-                        ? Icons.bolt_outlined
-                        : Icons.science_outlined,
-                    label: keyCount > 0
-                        ? 'Gemini AI Ready'
-                        : 'Sample Draft Ready',
-                    accent: keyCount > 0
-                        ? AppTheme.catGreen
-                        : AppTheme.catSlate,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Senior High School Strengthened Curriculum  •  Generate with AI, review & edit, format in minimalist iLAW, and export Word (.docx) or PDF (.pdf).',
-                style: TextStyle(
-                  fontSize: 12.8,
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.62),
                 ),
+                _buildSubtlePill(
+                  theme,
+                  icon: Icons.lock_outline,
+                  label: 'Private to Teacher',
+                  accent: theme.colorScheme.primary,
+                ),
+                _buildSubtlePill(
+                  theme,
+                  icon: keyCount > 0
+                      ? Icons.bolt_outlined
+                      : Icons.science_outlined,
+                  label: keyCount > 0
+                      ? 'Gemini AI Ready'
+                      : 'Sample Draft Ready',
+                  accent: keyCount > 0
+                      ? AppTheme.catGreen
+                      : AppTheme.catSlate,
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Senior High School Strengthened Curriculum  •  Generate with AI, review & edit, format in minimalist iLAW, and export Word (.docx) or PDF (.pdf).',
+              style: TextStyle(
+                fontSize: 12.8,
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.62),
               ),
-            ],
-          ),
-        ),
-        AppButton.primary(
+            ),
+          ],
+        );
+
+        final actionBtn = AppButton.primary(
           label: 'Generate New Lesson Plan',
           icon: Icons.auto_awesome_outlined,
           onPressed: _accessDeniedMessage != null ? null : () => _openWizard(),
-        ),
-      ],
+        );
+
+        if (isCompact) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              infoSection,
+              const SizedBox(height: 12),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: actionBtn,
+              ),
+            ],
+          );
+        }
+
+        return SizedBox(
+          width: double.infinity,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(child: infoSection),
+              const SizedBox(width: 16),
+              actionBtn,
+            ],
+          ),
+        );
+      },
     );
   }
 

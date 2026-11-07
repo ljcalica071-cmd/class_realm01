@@ -265,7 +265,46 @@ class _TeacherLearningMaterialsTabState
     }
   }
 
+  static final List<ClassRealmFolder> _defaultPlaceholderFolders = [
+    ClassRealmFolder(
+      id: 'placeholder_term_1',
+      subjectOfferingId: '',
+      folderName: 'Term 1 - First Quarter',
+      createdAt: DateTime.now(),
+      fileCount: 0,
+    ),
+    ClassRealmFolder(
+      id: 'placeholder_term_2',
+      subjectOfferingId: '',
+      folderName: 'Term 2 - Second Quarter',
+      createdAt: DateTime.now(),
+      fileCount: 0,
+    ),
+    ClassRealmFolder(
+      id: 'placeholder_term_3',
+      subjectOfferingId: '',
+      folderName: 'Term 3 - Third Quarter',
+      createdAt: DateTime.now(),
+      fileCount: 0,
+    ),
+    ClassRealmFolder(
+      id: 'placeholder_term_handouts',
+      subjectOfferingId: '',
+      folderName: 'Supplementary Handouts & Reviewers',
+      createdAt: DateTime.now(),
+      fileCount: 0,
+    ),
+  ];
+
   void _navigateToFolder(ClassRealmFolder folder) {
+    if (_selectedOffering == null) {
+      _showFeedbackModal(
+        'Class Setup Required',
+        'Learning materials can only be managed for classes that have actively enrolled students. Please set up subjects and enroll students in Classroom Setup first.',
+        isError: false,
+      );
+      return;
+    }
     setState(() {
       _folderStack.add(folder);
       _currentFolder = folder;
@@ -312,9 +351,12 @@ class _TeacherLearningMaterialsTabState
   }
 
   List<ClassRealmFolder> get _filteredFolders {
-    if (_folders.isEmpty) return [];
-    if (_searchQuery.isEmpty) return _folders;
-    return _folders
+    final list = _folders.isNotEmpty
+        ? _folders
+        : (_offerings.isEmpty ? _defaultPlaceholderFolders : <ClassRealmFolder>[]);
+    if (list.isEmpty) return [];
+    if (_searchQuery.isEmpty) return list;
+    return list
         .where(
           (f) =>
               f.folderName.toLowerCase().contains(_searchQuery.toLowerCase()),
@@ -342,7 +384,14 @@ class _TeacherLearningMaterialsTabState
 
   // --- Upload Modal Flow with Inline Error Messages (No bottom banners!) ---
   Future<void> _showUploadFileDialog() async {
-    if (_selectedOffering == null) return;
+    if (_selectedOffering == null) {
+      _showFeedbackModal(
+        'Class Setup Required',
+        'Learning materials can only be uploaded for classes that have actively enrolled students. Please set up subjects and enroll students in Classroom Setup first.',
+        isError: false,
+      );
+      return;
+    }
 
     final offeringId = _selectedOffering!['id'] as String;
     final subjectName = _selectedOffering!['subject_name'] ?? 'Subject';
@@ -860,7 +909,14 @@ class _TeacherLearningMaterialsTabState
 
   // --- Create Folder Dialog with Inline Error Messages (No bottom banners!) ---
   Future<void> _showCreateFolderDialog() async {
-    if (_selectedOffering == null) return;
+    if (_selectedOffering == null) {
+      _showFeedbackModal(
+        'Class Setup Required',
+        'Folders can only be created for classes that have actively enrolled students. Please set up subjects and enroll students in Classroom Setup first.',
+        isError: false,
+      );
+      return;
+    }
     final folderController = TextEditingController();
     bool isVisible = true;
     final formKey = GlobalKey<FormState>();
@@ -1225,25 +1281,65 @@ class _TeacherLearningMaterialsTabState
   }) {
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        title: Row(
-          children: [
-            Icon(
-              isError ? Icons.error_outline : Icons.check_circle_outline,
-              color: isError ? Colors.red : Colors.green,
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 440),
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      isError ? Icons.error_outline : Icons.check_circle_outline,
+                      color: isError ? Colors.red : Colors.green,
+                      size: 22,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        title,
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  message,
+                  style: TextStyle(
+                    fontSize: 13.5,
+                    height: 1.45,
+                    color: Theme.of(ctx).colorScheme.onSurface.withValues(alpha: 0.8),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 10,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    child: const Text('OK'),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(width: 8),
-            Text(title),
-          ],
-        ),
-        content: Text(message),
-        actions: [
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('OK'),
           ),
-        ],
+        ),
       ),
     );
   }
@@ -1375,37 +1471,6 @@ class _TeacherLearningMaterialsTabState
       );
     }
 
-    if (_offerings.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.folder_off_outlined,
-                size: 64,
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.3),
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                'No Classes with Enrolled Students Found',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Learning materials can only be managed for classes that have actively enrolled students.\nPlease enroll students in "Manage Students" or "Classroom Setup" first.',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
     // Safely guarantee cascading selection hierarchy
     final availableGrades = _availableGrades;
     if (_selectedGrade == null || !availableGrades.contains(_selectedGrade)) {
@@ -1442,6 +1507,40 @@ class _TeacherLearningMaterialsTabState
         children: [
           // Top Workspace Bar: Grade Level, Subject, Section Dropdowns & Archive Toggle
           _buildTopHeader(theme, activeGrade, activeSubject, activeSection),
+
+          if (_offerings.isEmpty) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.primary.withValues(alpha: 0.06),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: theme.colorScheme.primary.withValues(alpha: 0.18),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.info_outline,
+                    size: 16,
+                    color: theme.colorScheme.primary,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Learning materials can only be managed for classes that have actively enrolled students. Please enroll students in "Manage Students" or "Classroom Setup" first.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        color: theme.colorScheme.onSurface.withValues(alpha: 0.75),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
 
           const SizedBox(height: 16),
 
@@ -1588,6 +1687,37 @@ class _TeacherLearningMaterialsTabState
               ),
             ),
             const SizedBox(width: 10),
+          ] else ...[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.primary.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: theme.colorScheme.primary.withValues(alpha: 0.2),
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Grade Level',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                      color: theme.colorScheme.primary,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Icon(
+                    Icons.arrow_drop_down,
+                    size: 18,
+                    color: theme.colorScheme.primary,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 10),
           ],
 
           // 2. Subject Dropdown (NO All Subjects)
@@ -1631,6 +1761,39 @@ class _TeacherLearningMaterialsTabState
                     _loadFolderContents();
                   },
                 ),
+              ),
+            ),
+            const SizedBox(width: 10),
+          ] else ...[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surfaceContainerHighest.withValues(
+                  alpha: 0.35,
+                ),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.12),
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Subject',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Icon(
+                    Icons.arrow_drop_down,
+                    size: 18,
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                  ),
+                ],
               ),
             ),
             const SizedBox(width: 10),
@@ -1691,6 +1854,40 @@ class _TeacherLearningMaterialsTabState
             ),
             const Spacer(),
           ] else ...[
+            Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 7,
+              ),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surfaceContainerHighest.withValues(
+                  alpha: 0.2,
+                ),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.1),
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Section',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Icon(
+                    Icons.arrow_drop_down,
+                    size: 18,
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                  ),
+                ],
+              ),
+            ),
             const Spacer(),
           ],
 
@@ -1810,7 +2007,9 @@ class _TeacherLearningMaterialsTabState
                   const Icon(Icons.home_outlined, size: 18),
                   const SizedBox(width: 6),
                   Text(
-                    'Grade $activeGrade ($activeSection)',
+                    _selectedOffering != null
+                        ? 'Grade $activeGrade ($activeSection)'
+                        : 'Grade Level (No Active Class)',
                     style: TextStyle(
                       fontWeight: _folderStack.isEmpty
                           ? FontWeight.bold

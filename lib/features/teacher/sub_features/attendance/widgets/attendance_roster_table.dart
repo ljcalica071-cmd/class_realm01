@@ -478,7 +478,7 @@ class _AttendanceRosterTableState extends State<AttendanceRosterTable> {
               ),
 
               // ── ROSTER BODY ──
-              if (filteredStudents.isEmpty)
+              if (filteredStudents.isEmpty && widget.students.isNotEmpty)
                 AppEmptyState(
                   icon: LucideIcons.searchX,
 
@@ -977,7 +977,25 @@ class _AttendanceRosterTableState extends State<AttendanceRosterTable> {
             ),
           ),
 
-          ListView.builder(
+          if (students.isEmpty)
+            Container(
+              height: 100,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: isDark ? theme.colorScheme.surface : Colors.white,
+                border: Border(bottom: BorderSide(color: rowBorderColor)),
+              ),
+              child: Text(
+                'No learners enrolled in this section yet.',
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w500,
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
+                ),
+              ),
+            )
+          else
+            ListView.builder(
             shrinkWrap: true,
 
             physics: const NeverScrollableScrollPhysics(),
@@ -1189,7 +1207,25 @@ class _AttendanceRosterTableState extends State<AttendanceRosterTable> {
                 ),
               ),
 
-              ListView.builder(
+              if (students.isEmpty)
+                Container(
+                  height: 100,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: isDark ? theme.colorScheme.surface : Colors.white,
+                    border: Border(bottom: BorderSide(color: rowBorderColor)),
+                  ),
+                  child: Text(
+                    'No learners enrolled in this section yet.',
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w500,
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
+                    ),
+                  ),
+                )
+              else
+                ListView.builder(
                 shrinkWrap: true,
 
                 physics: const NeverScrollableScrollPhysics(),

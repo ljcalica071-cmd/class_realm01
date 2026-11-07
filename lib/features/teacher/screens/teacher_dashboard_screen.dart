@@ -488,9 +488,11 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     );
 
     final mainContent = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         // Top Header Navbar
         Container(
+          width: double.infinity,
           height: 70,
           padding: const EdgeInsets.symmetric(horizontal: 24),
           decoration: BoxDecoration(
@@ -531,7 +533,9 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                   ),
                 ),
               _selectedIndex == 0
-                  ? const Flexible(child: SchoolYearSelectorWidget())
+                  ? (isMobile
+                      ? const Flexible(child: SchoolYearSelectorWidget())
+                      : const SchoolYearSelectorWidget())
                   : Expanded(
                       child: Text(
                         _getTeacherTitle(_selectedIndex),
@@ -543,7 +547,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-              if (!isMobile || _selectedIndex == 0) const Spacer(),
+              if (_selectedIndex == 0) const Spacer(),
               if (!isMobile) const SyncStatusBadge(),
               if (!isMobile) const SizedBox(width: 16),
               // THEME TOGGLE

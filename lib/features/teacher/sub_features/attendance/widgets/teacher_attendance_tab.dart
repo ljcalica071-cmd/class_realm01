@@ -2243,14 +2243,15 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
 
                 onRetry: _loadSubjects,
               )
-            else if (_teacherSubjects.isEmpty)
-              _buildNoClassesAvailable(theme)
             else ...[
               // ── CASCADING FILTERS & DATE SELECTOR ──
 
               _buildClassAndDateControls(theme, isDark),
 
               const SizedBox(height: 14),
+
+              if (_teacherSubjects.isEmpty)
+                _buildEmptyClassesNoticeBanner(theme, isDark),
 
               if (_selectedAttendanceView == 'Take Attendance') ...[
                 // ── SCHEDULE / HOLIDAY GUARD BANNER (R3) ──
@@ -2376,18 +2377,17 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
                   isSavingBatch: _isSavingBatch,
                 ),
               ] else ...[
-                if (_selectedSubjectId != null)
-                  AttendanceHistoryAnalyticsView(
-                    key: _analyticsViewKey,
+                AttendanceHistoryAnalyticsView(
+                  key: _analyticsViewKey,
 
-                    subjectOfferingId: _selectedSubjectId!,
+                  subjectOfferingId: _selectedSubjectId ?? 'none',
 
-                    repository: _repository,
+                  repository: _repository,
 
-                    students: _rosterStudents,
+                  students: _rosterStudents,
 
-                    hideFilterBar: true,
-                  ),
+                  hideFilterBar: true,
+                ),
               ],
             ],
           ],
@@ -3492,25 +3492,58 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
 
               isDense: true,
 
-              items: items.map((item) {
-                return DropdownMenuItem<String>(
-                  value: item,
+              items: items.isEmpty
+                  ? [
+                      DropdownMenuItem<String>(
+                        value: null,
+                        enabled: false,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              icon,
+                              size: 13.5,
+                              color: theme.colorScheme.primary.withValues(
+                                alpha: 0.5,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              'No ${label.toLowerCase()}s',
+                              style: TextStyle(
+                                color: theme.colorScheme.onSurface.withValues(
+                                  alpha: 0.5,
+                                ),
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ]
+                  : items.map((item) {
+                      return DropdownMenuItem<String>(
+                        value: item,
 
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
 
-                    children: [
-                      Icon(icon, size: 13.5, color: theme.colorScheme.primary),
+                          children: [
+                            Icon(
+                              icon,
+                              size: 13.5,
+                              color: theme.colorScheme.primary,
+                            ),
 
-                      const SizedBox(width: 6),
+                            const SizedBox(width: 6),
 
-                      Text(itemLabel(item)),
-                    ],
-                  ),
-                );
-              }).toList(),
+                            Text(itemLabel(item)),
+                          ],
+                        ),
+                      );
+                    }).toList(),
 
-              onChanged: onChanged,
+              onChanged: items.isEmpty ? null : onChanged,
             ),
           ),
         ),
@@ -4083,28 +4116,54 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
     );
   }
 
-  Widget _buildNoClassesAvailable(ThemeData theme) {
+  Widget _buildEmptyClassesNoticeBanner(ThemeData theme, bool isDark) {
     return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-
-        borderRadius: BorderRadius.circular(16),
-
+        color: isDark ? const Color(0xFF1E293B) : const Color(0xFFEFF6FF),
+        borderRadius: BorderRadius.circular(10),
         border: Border.all(
-          color: theme.colorScheme.onSurface.withValues(alpha: 0.08),
+          color: isDark ? const Color(0xFF334155) : const Color(0xFFBFDBFE),
         ),
       ),
-
-      child: AppEmptyState(
-        icon: LucideIcons.school,
-
-        title: 'No Classes Available Yet',
-
-        message: 'Set up your subjects and class sections in the Classroom Setup tab before recording attendance.',
-
-        actionLabel: 'Reload Classes',
-
-        onAction: _loadSubjects,
+      child: Row(
+        children: [
+          Icon(LucideIcons.school, size: 18, color: theme.colorScheme.primary),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'No Classes Available Yet',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    color: isDark ? Colors.white : const Color(0xFF1E40AF),
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Set up your subjects and class sections in the Classroom Setup tab before recording attendance.',
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    color: isDark ? Colors.white70 : const Color(0xFF3B82F6),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          TextButton.icon(
+            onPressed: _loadSubjects,
+            icon: const Icon(LucideIcons.refreshCw, size: 13),
+            label: const Text(
+              'Reload Classes',
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
       ),
     );
   }

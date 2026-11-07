@@ -634,17 +634,23 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
         alignment: Alignment.center,
         padding: const EdgeInsets.all(24),
         decoration: BoxDecoration(
-          color: isDark
-              ? theme.colorScheme.surface
-              : theme.colorScheme.surfaceContainerHighest.withValues(
-                  alpha: 0.3,
-                ),
+          color: isDark ? theme.colorScheme.surface : Colors.white,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: theme.colorScheme.outline.withValues(
-              alpha: isDark ? 0.2 : 0.3,
-            ),
+            color: isDark
+                ? theme.colorScheme.outline.withValues(alpha: 0.25)
+                : const Color(0xFFE2E8F0),
+            width: 1.2,
           ),
+          boxShadow: isDark
+              ? null
+              : [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.035),
+                    blurRadius: 10,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -2399,26 +2405,43 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     return Container(
-      height: 240,
+      height: 250,
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: isDark ? theme.colorScheme.surface : const Color(0xFFFBFCFF),
+        color: isDark ? theme.colorScheme.surface : Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: isDark
               ? theme.colorScheme.outline.withValues(alpha: 0.25)
-              : const Color(0xFFBFD3F5),
+              : const Color(0xFFE2E8F0),
+          width: 1.2,
         ),
+        boxShadow: isDark
+            ? null
+            : [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.035),
+                  blurRadius: 10,
+                  offset: const Offset(0, 2),
+                ),
+              ],
       ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            LucideIcons.bookOpen,
-            size: 38,
-            color: isDark
-                ? theme.colorScheme.primary.withValues(alpha: 0.8)
-                : const Color(0xFF94A8C4),
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: isDark
+                  ? theme.colorScheme.primary.withValues(alpha: 0.12)
+                  : theme.colorScheme.primary.withValues(alpha: 0.08),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              LucideIcons.bookOpen,
+              size: 32,
+              color: theme.colorScheme.primary,
+            ),
           ),
           const SizedBox(height: 14),
           Text(
@@ -2713,17 +2736,23 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
         alignment: Alignment.center,
         padding: const EdgeInsets.all(24),
         decoration: BoxDecoration(
-          color: isDark
-              ? theme.colorScheme.surface
-              : theme.colorScheme.surfaceContainerHighest.withValues(
-                  alpha: 0.3,
-                ),
+          color: isDark ? theme.colorScheme.surface : Colors.white,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: theme.colorScheme.outline.withValues(
-              alpha: isDark ? 0.2 : 0.3,
-            ),
+            color: isDark
+                ? theme.colorScheme.outline.withValues(alpha: 0.25)
+                : const Color(0xFFE2E8F0),
+            width: 1.2,
           ),
+          boxShadow: isDark
+              ? null
+              : [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.035),
+                    blurRadius: 10,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,

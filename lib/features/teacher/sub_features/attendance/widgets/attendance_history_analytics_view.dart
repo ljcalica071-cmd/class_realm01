@@ -173,6 +173,26 @@ class AttendanceHistoryAnalyticsViewState
   }
 
   Future<void> _loadAnalytics() async {
+    if (widget.subjectOfferingId == 'none' ||
+        widget.subjectOfferingId.isEmpty) {
+      if (!mounted) return;
+      setState(() {
+        _analyticsSummary = const AttendanceAnalyticsSummary(
+          presenceRate: null,
+          absencesAndExcuses: 0,
+          warningCount: 0,
+          presentCount: 0,
+          lateCount: 0,
+          absentCount: 0,
+          excusedCount: 0,
+          trendPoints: [],
+          atRiskStudents: [],
+        );
+        _isLoadingAnalytics = false;
+      });
+      return;
+    }
+
     setState(() {
       _isLoadingAnalytics = true;
     });
@@ -208,6 +228,17 @@ class AttendanceHistoryAnalyticsViewState
   }
 
   Future<void> _loadInitialHistory() async {
+    if (widget.subjectOfferingId == 'none' ||
+        widget.subjectOfferingId.isEmpty) {
+      if (!mounted) return;
+      setState(() {
+        _historyRows = [];
+        _historyCurrentPage = 1;
+        _isLoadingHistory = false;
+      });
+      return;
+    }
+
     setState(() {
       _isLoadingHistory = true;
       _historyRows = [];
@@ -1315,14 +1346,6 @@ class AttendanceHistoryAnalyticsViewState
               padding: EdgeInsets.all(24),
               child: Center(child: CircularProgressIndicator()),
             )
-          else if (_historyRows.isEmpty)
-            AppEmptyState(
-              icon: Icons.history_edu_outlined,
-              title: 'No Attendance History Yet',
-              message: 'Recorded class attendance logs for the selected date range will appear here.',
-              actionLabel: 'Refresh',
-              onAction: _loadAll,
-            )
           else ...[
             Builder(
               builder: (context) {
@@ -1438,7 +1461,29 @@ class AttendanceHistoryAnalyticsViewState
                                     ),
                                   ),
                                 ],
-                                rows: pageRows.map((row) {
+                                rows: pageRows.isEmpty
+                                    ? const [
+                                        DataRow(
+                                          cells: [
+                                            DataCell(Text('—')),
+                                            DataCell(
+                                              Text(
+                                                'No attendance records logged for this period yet.',
+                                                style: TextStyle(
+                                                  fontSize: 12.5,
+                                                  fontStyle: FontStyle.italic,
+                                                ),
+                                              ),
+                                            ),
+                                            DataCell(Text('—')),
+                                            DataCell(Text('—')),
+                                            DataCell(Text('—')),
+                                            DataCell(Text('—')),
+                                            DataCell(Text('—')),
+                                          ],
+                                        ),
+                                      ]
+                                    : pageRows.map((row) {
                                   final studentName = _getStudentDisplayName(
                                     row.studentId,
                                   );
