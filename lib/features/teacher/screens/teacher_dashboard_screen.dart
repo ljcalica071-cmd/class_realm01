@@ -242,12 +242,16 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
 
     final theme = Theme.of(context);
     final isMobile = MediaQuery.of(context).size.width < 900;
+    final isSidebarExpanded = isMobile || _isSidebarExpanded;
 
     final sidebar = Material(
       color: theme.colorScheme.surface, // 30% Surface
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         curve: Curves.easeInOutCubic,
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surface,
+        ),
         clipBehavior: Clip.hardEdge,
         width: isMobile ? 260 : (_isSidebarExpanded ? 260 : 76),
         child: Column(
@@ -255,16 +259,18 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
             // Brand Header
             Container(
               height: 70,
-              padding: const EdgeInsets.symmetric(horizontal: 16),
+              padding: EdgeInsets.symmetric(
+                horizontal: isSidebarExpanded ? 16 : 0,
+              ),
               alignment: Alignment.centerLeft,
               child: LayoutBuilder(
                 builder: (context, constraints) {
                   final isWide = constraints.maxWidth >= 180;
-                  if (!isMobile && !isWide) {
+                  if (!isSidebarExpanded || (!isMobile && !isWide)) {
                     return Center(
                       child: IconButton(
                         icon: Icon(
-                          LucideIcons.menu,
+                          LucideIcons.panelLeftOpen,
                           color: theme.colorScheme.onSurface,
                           size: 22,
                         ),
@@ -407,7 +413,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
             ),
             Container(
               margin: const EdgeInsets.symmetric(
-                horizontal: 8,
+                horizontal: 10,
                 vertical: 4,
               ),
               child: Material(
@@ -415,63 +421,60 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                 borderRadius: BorderRadius.circular(8),
                 clipBehavior: Clip.antiAlias,
                 child: Tooltip(
-                  message: !_isSidebarExpanded ? 'Log Out' : '',
+                  message: !isSidebarExpanded ? 'Log Out' : '',
                   waitDuration: const Duration(milliseconds: 300),
-                  child: InkWell(
-                    onTap: () {
-                      AppModals.showConfirmationDialog(
-                        context: context,
-                        title: 'Confirm Logout',
-                        message:
-                            'Are you sure you want to log out of the teacher portal?',
-                        confirmLabel: 'Logout',
-                        confirmColor: Colors.redAccent,
-                        onConfirm: () async {
-                          await LogoutHelper.logout(context);
-                        },
-                      );
-                    },
-                    hoverColor: Colors.redAccent.withValues(alpha: 0.08),
-                    child: SizedBox(
-                      height: 40,
-                      child: LayoutBuilder(
-                        builder: (context, constraints) {
-                          if (constraints.maxWidth < 140) {
-                            return const Center(
-                              child: Icon(
-                                LucideIcons.logOut,
-                                color: Colors.redAccent,
-                                size: 20,
-                              ),
-                            );
+                  child: Builder(
+                    builder: (logoutContext) => InkWell(
+                      onTap: () {
+                        if (isMobile) {
+                          final scaffold = Scaffold.maybeOf(logoutContext);
+                          if (scaffold?.isDrawerOpen == true) {
+                            scaffold!.closeDrawer();
                           }
-                          return const Padding(
-                            padding: EdgeInsets.symmetric(horizontal: 12),
-                            child: Row(
-                              children: [
-                                Icon(
+                        }
+                        AppModals.showConfirmationDialog(
+                          context: context,
+                          title: 'Confirm Logout',
+                          message:
+                              'Are you sure you want to log out of the teacher portal?',
+                          confirmLabel: 'Logout',
+                          confirmColor: Colors.redAccent,
+                          onConfirm: () async {
+                            await LogoutHelper.logout(context);
+                          },
+                        );
+                      },
+                      hoverColor: Colors.redAccent.withValues(alpha: 0.08),
+                      child: SizedBox(
+                        height: 40,
+                        child: Row(
+                          children: [
+                            const SizedBox(
+                              width: 56,
+                              child: Center(
+                                child: Icon(
                                   LucideIcons.logOut,
                                   color: Colors.redAccent,
-                                  size: 18,
+                                  size: 20,
                                 ),
-                                SizedBox(width: 12),
-                                Expanded(
-                                  child: Text(
-                                    'Log Out',
-                                    style: TextStyle(
-                                      color: Colors.redAccent,
-                                      fontWeight: FontWeight.w600,
-                                      fontSize: 13,
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    softWrap: false,
-                                  ),
-                                ),
-                              ],
+                              ),
                             ),
-                          );
-                        },
+                            if (isSidebarExpanded)
+                              const Expanded(
+                                child: Text(
+                                  'Log Out',
+                                  style: TextStyle(
+                                    color: Colors.redAccent,
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 13,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  softWrap: false,
+                                ),
+                              ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -512,9 +515,23 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                       onPressed: () => Scaffold.of(ctx).openDrawer(),
                     ),
                   ),
+                )
+              else if (!_isSidebarExpanded)
+                Padding(
+                  padding: const EdgeInsets.only(right: 12),
+                  child: IconButton(
+                    icon: Icon(
+                      LucideIcons.panelLeftOpen,
+                      color: theme.colorScheme.onSurface,
+                      size: 20,
+                    ),
+                    tooltip: 'Expand Menu',
+                    onPressed: () =>
+                        setState(() => _isSidebarExpanded = true),
+                  ),
                 ),
               _selectedIndex == 0
-                  ? const SchoolYearSelectorWidget()
+                  ? const Flexible(child: SchoolYearSelectorWidget())
                   : Expanded(
                       child: Text(
                         _getTeacherTitle(_selectedIndex),
@@ -526,7 +543,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-              if (!isMobile) const Spacer(),
+              if (!isMobile || _selectedIndex == 0) const Spacer(),
               if (!isMobile) const SyncStatusBadge(),
               if (!isMobile) const SizedBox(width: 16),
               // THEME TOGGLE
@@ -598,12 +615,17 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                       ? teacherFullName
                       : (teacherUser?.fullName ?? 'Teacher');
 
-                  return Text(
-                    displayName,
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
-                      color: theme.colorScheme.onSurface,
+                  return ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 160),
+                    child: Text(
+                      displayName,
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                        color: theme.colorScheme.onSurface,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
                     ),
                   );
                 },
@@ -663,7 +685,8 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   }
 
   Widget _buildSectionHeader(String title, ThemeData theme) {
-    if (!_isSidebarExpanded) {
+    final isMobile = MediaQuery.of(context).size.width < 900;
+    if (!isMobile && !_isSidebarExpanded) {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 16),
         child: Divider(
@@ -672,33 +695,20 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         ),
       );
     }
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        if (constraints.maxWidth < 140) {
-          return Padding(
-            padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 16),
-            child: Divider(
-              color: theme.colorScheme.onSurface.withValues(alpha: 0.05),
-              height: 1,
-            ),
-          );
-        }
-        return Padding(
-          padding: const EdgeInsets.only(left: 16, top: 12, bottom: 4, right: 16),
-          child: Text(
-            title,
-            style: TextStyle(
-              color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
-              fontWeight: FontWeight.w700,
-              fontSize: 10,
-              letterSpacing: 1.4,
-            ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            softWrap: false,
-          ),
-        );
-      },
+    return Padding(
+      padding: const EdgeInsets.only(left: 18, top: 12, bottom: 4, right: 16),
+      child: Text(
+        title,
+        style: TextStyle(
+          color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
+          fontWeight: FontWeight.w700,
+          fontSize: 10,
+          letterSpacing: 1.4,
+        ),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        softWrap: false,
+      ),
     );
   }
 
@@ -752,13 +762,15 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     final isSelected = _selectedIndex == index;
     final isGradebook = index == 18;
     final isLocked = isGradebook && _isGradebookLocked;
+    final isMobile = MediaQuery.of(context).size.width < 900;
+    final isExpanded = isMobile || _isSidebarExpanded;
 
     final tooltipMessage = isLocked
         ? 'Gradebook feature is not yet available. Please add subjects and enroll students in Classroom Setup first.'
-        : (!_isSidebarExpanded ? label : '');
+        : (!isExpanded ? label : '');
 
     final item = Container(
-      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
       child: Material(
         color: isSelected
             ? theme.colorScheme.primary.withValues(alpha: 0.1)
@@ -768,43 +780,32 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         child: Tooltip(
           message: tooltipMessage,
           waitDuration: const Duration(milliseconds: 300),
-          child: InkWell(
-            onTap: isLocked
-                ? null
-                : () {
-                    _onSelectTab(index);
-                    if (!isGradebook) {
-                      _checkGradebookLockStatus();
-                    }
-                  },
-            hoverColor: theme.colorScheme.onSurface.withValues(alpha: 0.05),
-            splashColor: theme.colorScheme.primary.withValues(alpha: 0.1),
-            child: SizedBox(
-              height: 40,
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final isWide = constraints.maxWidth >= 140;
-                  if (!isWide) {
-                    return Center(
-                      child: Icon(
-                        isLocked ? LucideIcons.lock : icon,
-                        color: isLocked
-                            ? theme.colorScheme.onSurface.withValues(alpha: 0.4)
-                            : (isSelected
-                                  ? theme.colorScheme.primary
-                                  : theme.colorScheme.onSurface.withValues(
-                                      alpha: 0.75,
-                                    )),
-                        size: 20,
-                      ),
-                    );
-                  }
-
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    child: Row(
-                      children: [
-                        Icon(
+          child: Builder(
+            builder: (itemContext) => InkWell(
+              onTap: isLocked
+                  ? null
+                  : () {
+                      if (isMobile) {
+                        final scaffold = Scaffold.maybeOf(itemContext);
+                        if (scaffold?.isDrawerOpen == true) {
+                          scaffold!.closeDrawer();
+                        }
+                      }
+                      _onSelectTab(index);
+                      if (!isGradebook) {
+                        _checkGradebookLockStatus();
+                      }
+                    },
+              hoverColor: theme.colorScheme.onSurface.withValues(alpha: 0.05),
+              splashColor: theme.colorScheme.primary.withValues(alpha: 0.1),
+              child: SizedBox(
+                height: 40,
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 56,
+                      child: Center(
+                        child: Icon(
                           isLocked ? LucideIcons.lock : icon,
                           color: isLocked
                               ? theme.colorScheme.onSurface.withValues(alpha: 0.4)
@@ -813,34 +814,34 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                                     : theme.colorScheme.onSurface.withValues(
                                         alpha: 0.75,
                                       )),
-                          size: 18,
+                          size: 20,
                         ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            label,
-                            style: TextStyle(
-                              color: isLocked
-                                  ? theme.colorScheme.onSurface.withValues(alpha: 0.4)
-                                  : (isSelected
-                                        ? theme.colorScheme.primary
-                                        : theme.colorScheme.onSurface.withValues(
-                                            alpha: 0.9,
-                                          )),
-                              fontWeight: isSelected
-                                  ? FontWeight.w700
-                                  : FontWeight.w500,
-                              fontSize: 13,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            softWrap: false,
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
-                  );
-                },
+                    if (isExpanded)
+                      Expanded(
+                        child: Text(
+                          label,
+                          style: TextStyle(
+                            color: isLocked
+                                ? theme.colorScheme.onSurface.withValues(alpha: 0.4)
+                                : (isSelected
+                                      ? theme.colorScheme.primary
+                                      : theme.colorScheme.onSurface.withValues(
+                                          alpha: 0.9,
+                                        )),
+                            fontWeight: isSelected
+                                ? FontWeight.w700
+                                : FontWeight.w500,
+                            fontSize: 13,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          softWrap: false,
+                        ),
+                      ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -1080,62 +1081,67 @@ class _SchoolYearSelectorWidgetState extends State<SchoolYearSelectorWidget> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Row(
-      children: [
-        Text(
-          'School Year: ',
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-            color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10),
-          decoration: BoxDecoration(
-            color: theme.colorScheme.primary.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(
-              color: theme.colorScheme.primary.withValues(alpha: 0.3),
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      alignment: Alignment.centerLeft,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            'School Year: ',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
             ),
           ),
-          child: DropdownButtonHideUnderline(
-            child: DropdownButton<String>(
-              value: _selectedSy,
-              isDense: true,
-              padding: EdgeInsets.zero,
-              icon: Padding(
-                padding: const EdgeInsets.only(left: 6),
-                child: Icon(
-                  LucideIcons.chevronDown,
-                  color: theme.colorScheme.primary,
-                  size: 18,
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.primary.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(
+                color: theme.colorScheme.primary.withValues(alpha: 0.3),
+              ),
+            ),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                value: _selectedSy,
+                isDense: true,
+                padding: EdgeInsets.zero,
+                icon: Padding(
+                  padding: const EdgeInsets.only(left: 6),
+                  child: Icon(
+                    LucideIcons.chevronDown,
+                    color: theme.colorScheme.primary,
+                    size: 18,
+                  ),
                 ),
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                  letterSpacing: 0,
+                  color: theme.colorScheme.primary,
+                ),
+                items: _schoolYears
+                    .map(
+                      (sy) => DropdownMenuItem(
+                        value: sy,
+                        child: Text(sy, style: const TextStyle(letterSpacing: 0)),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (val) {
+                  if (val != null) {
+                    setState(() => _selectedSy = val);
+                  }
+                },
               ),
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 14,
-                letterSpacing: 0,
-                color: theme.colorScheme.primary,
-              ),
-              items: _schoolYears
-                  .map(
-                    (sy) => DropdownMenuItem(
-                      value: sy,
-                      child: Text(sy, style: const TextStyle(letterSpacing: 0)),
-                    ),
-                  )
-                  .toList(),
-              onChanged: (val) {
-                if (val != null) {
-                  setState(() => _selectedSy = val);
-                }
-              },
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
