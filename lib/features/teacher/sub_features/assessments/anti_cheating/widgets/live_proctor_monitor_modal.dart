@@ -112,6 +112,8 @@ class _LiveProctorMonitorModalState extends State<LiveProctorMonitorModal> {
       }
 
       _channelService.initializeRoster(learners);
+      await _channelService.loadHistoricalViolations();
+      _channelService.startListening();
       if (mounted) {
         setState(() {
           _students = _channelService.currentStates;

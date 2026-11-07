@@ -801,6 +801,11 @@ class _TeacherUnifiedAssessmentsTabState
   }
 
   Widget _buildUnifiedAssessmentCard(QuizOrExamModel item, String category) {
+    final examEndTime = item.scheduleDate.add(
+      Duration(minutes: item.durationMinutes),
+    );
+    final isTestingFinished = DateTime.now().isAfter(examEndTime);
+
     return _buildUnifiedCard(
       title: item.title,
       description: item.description,
@@ -808,6 +813,8 @@ class _TeacherUnifiedAssessmentsTabState
       details:
           '${item.section} • ${item.totalPoints.toInt()} pts • Start ${_monthName(item.scheduleDate.month)} ${item.scheduleDate.day}, ${_formatTime(item.scheduleDate)}',
       icon: item.isExam ? Icons.description_outlined : Icons.quiz_outlined,
+      resultsReleased: item.resultsReleased,
+      onToggleReleaseKey: () => _toggleResultsReleased(item),
       onPressed: () {
         AppModals.showUpcomingFeatureDialog(
           context,
@@ -828,8 +835,63 @@ class _TeacherUnifiedAssessmentsTabState
         assessmentTitle: item.title,
         section: item.section,
       ),
-      onItemAnalysis: () => _showItemAnalysisDialog(item),
+      isItemAnalysisLocked: !isTestingFinished,
+      onItemAnalysis: () {
+        if (!isTestingFinished) {
+          AppModals.showWarningDialog(
+            context: context,
+            title: 'Item Analysis Locked',
+            message:
+                'Under DepEd assessment standards, Item Analysis and difficulty index computation are finalized after the testing window concludes to ensure sample integrity.\n\nTesting Window Closes: ${_monthName(examEndTime.month)} ${examEndTime.day}, ${_formatTime(examEndTime)}.',
+          );
+          return;
+        }
+        _showItemAnalysisDialog(item);
+      },
     );
+  }
+
+  Future<void> _toggleResultsReleased(QuizOrExamModel item) async {
+    final newStatus = !item.resultsReleased;
+    try {
+      final client = SupabaseService().client;
+      await client
+          .from('digital_assessments')
+          .update({'results_released': newStatus})
+          .eq('id', item.id);
+
+      setState(() {
+        final index = widget.assessments.indexWhere((a) => a.id == item.id);
+        if (index != -1) {
+          widget.assessments[index] = item.copyWith(resultsReleased: newStatus);
+        }
+      });
+
+      if (!mounted) return;
+      if (newStatus) {
+        AppModals.showSuccessDialog(
+          context: context,
+          title: 'Answer Key Released',
+          message:
+              'The answer key for "${item.title}" has been released! Students can now review their responses, see which questions they got right or wrong, and inspect the official answers.',
+        );
+      } else {
+        AppModals.showSuccessDialog(
+          context: context,
+          title: 'Answer Key Retracted',
+          message:
+              'Answer key access for "${item.title}" has been hidden. Students will see their submission status as pending teacher evaluation.',
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        AppModals.showErrorDialog(
+          context: context,
+          title: 'Update Failed',
+          message: 'Failed to update answer key release state: $e',
+        );
+      }
+    }
   }
 
   Widget _buildUnifiedCard({
@@ -845,6 +907,9 @@ class _TeacherUnifiedAssessmentsTabState
     VoidCallback? onReschedule,
     VoidCallback? onProctor,
     VoidCallback? onItemAnalysis,
+    bool? resultsReleased,
+    VoidCallback? onToggleReleaseKey,
+    bool isItemAnalysisLocked = false,
   }) {
     final theme = Theme.of(context);
     final isPerformanceTask = category == 'PT';
@@ -895,6 +960,59 @@ class _TeacherUnifiedAssessmentsTabState
                       badgeBackground,
                       badgeText,
                     ),
+                    if (resultsReleased != null) ...[
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 3,
+                        ),
+                        decoration: BoxDecoration(
+                          color: resultsReleased
+                              ? AppTheme.catGreen.withValues(alpha: 0.12)
+                              : theme.colorScheme.onSurface.withValues(
+                                  alpha: 0.08,
+                                ),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                            color: resultsReleased
+                                ? AppTheme.catGreen.withValues(alpha: 0.3)
+                                : theme.colorScheme.onSurface.withValues(
+                                    alpha: 0.2,
+                                  ),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              resultsReleased
+                                  ? Icons.visibility
+                                  : Icons.visibility_off,
+                              size: 12,
+                              color: resultsReleased
+                                  ? AppTheme.catGreen
+                                  : theme.colorScheme.onSurface.withValues(
+                                      alpha: 0.6,
+                                    ),
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              resultsReleased ? 'Key Released' : 'Key Hidden',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: resultsReleased
+                                    ? AppTheme.catGreen
+                                    : theme.colorScheme.onSurface.withValues(
+                                        alpha: 0.6,
+                                      ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ],
                 ),
                 if (description.isNotEmpty) ...[
@@ -931,6 +1049,21 @@ class _TeacherUnifiedAssessmentsTabState
                 isSmall: true,
                 onPressed: onPressed,
               ),
+              if (onToggleReleaseKey != null && resultsReleased != null)
+                IconButton(
+                  tooltip: resultsReleased
+                      ? 'Answer Key: Released (Visible to students) — Tap to Hide'
+                      : 'Answer Key: Hidden from students — Tap to Release',
+                  icon: Icon(
+                    resultsReleased
+                        ? Icons.visibility
+                        : Icons.visibility_off_outlined,
+                    color: resultsReleased
+                        ? AppTheme.catGreen
+                        : theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                  ),
+                  onPressed: onToggleReleaseKey,
+                ),
               if (onProctor != null)
                 IconButton(
                   tooltip: 'Live Proctoring Monitor',
@@ -942,10 +1075,16 @@ class _TeacherUnifiedAssessmentsTabState
                 ),
               if (onItemAnalysis != null)
                 IconButton(
-                  tooltip: 'Item Analysis & DepEd Tiers',
-                  icon: const Icon(
-                    Icons.analytics_outlined,
-                    color: AppTheme.catTeal,
+                  tooltip: isItemAnalysisLocked
+                      ? 'Item Analysis Locked (Exam window active)'
+                      : 'Item Analysis & DepEd Tiers',
+                  icon: Icon(
+                    isItemAnalysisLocked
+                        ? Icons.lock_clock_outlined
+                        : Icons.analytics_outlined,
+                    color: isItemAnalysisLocked
+                        ? theme.colorScheme.onSurface.withValues(alpha: 0.38)
+                        : AppTheme.catTeal,
                   ),
                   onPressed: onItemAnalysis,
                 ),
@@ -1066,6 +1205,14 @@ class _TeacherUnifiedAssessmentsTabState
                 .from('digital_assessments')
                 .update({'results_released': released})
                 .eq('id', item.id);
+            if (mounted) {
+              setState(() {
+                final index = widget.assessments.indexWhere((a) => a.id == item.id);
+                if (index != -1) {
+                  widget.assessments[index] = item.copyWith(resultsReleased: released);
+                }
+              });
+            }
           } catch (_) {}
         },
       );

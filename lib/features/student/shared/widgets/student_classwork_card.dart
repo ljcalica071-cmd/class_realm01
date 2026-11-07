@@ -5,6 +5,8 @@ import 'package:class_realm/models/academic_models.dart';
 import 'package:class_realm/models/student_dashboard_models.dart';
 import 'package:class_realm/features/student/shared/widgets/student_submit_work_dialog.dart';
 import 'package:class_realm/features/student/sub_features/academics/screens/student_assessment_screen.dart';
+import 'package:class_realm/features/student/sub_features/academics/widgets/student_exam_review_modal.dart';
+import 'package:class_realm/widgets/common/app_modals.dart';
 
 class StudentClassworkCard extends StatelessWidget {
   const StudentClassworkCard({
@@ -69,7 +71,8 @@ class StudentClassworkCard extends StatelessWidget {
       if (context.mounted) {
         ScaffoldMessenger.of(context).clearSnackBars();
         final errStr = e.toString().toLowerCase();
-        final isNotFound = errStr.contains('404') ||
+        final isNotFound =
+            errStr.contains('404') ||
             errStr.contains('not_found') ||
             errStr.contains('object not found');
         ScaffoldMessenger.of(context).showSnackBar(
@@ -346,17 +349,42 @@ class StudentClassworkCard extends StatelessWidget {
                         color: Color(0xFF0F8A48),
                       ),
                       const SizedBox(width: 8),
-                      Text(
-                        classwork.score != null
-                            ? 'Examination Completed • Score: ${_formatScore(classwork.score!)} / ${_formatScore(classwork.maxScore)} pts'
-                            : 'Examination Submitted • Recorded in system',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 13,
-                          color: Color(0xFF0F8A48),
+                      Expanded(
+                        child: Text(
+                          classwork.score != null
+                              ? 'Examination Completed • Score: ${_formatScore(classwork.score!)} / ${_formatScore(classwork.maxScore)} pts'
+                              : 'Examination Submitted • Recorded in system',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                            color: Color(0xFF0F8A48),
+                          ),
                         ),
                       ),
                     ],
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFF0F8A48),
+                      side: const BorderSide(color: Color(0xFF0F8A48)),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 8,
+                      ),
+                    ),
+                    onPressed: () => _openExamReview(context),
+                    icon: const Icon(Icons.fact_check_outlined, size: 16),
+                    label: const Text(
+                      'Review Answers & Exam Key',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                    ),
                   ),
                 ),
               ] else if (isOverdue) ...[
@@ -706,6 +734,55 @@ class StudentClassworkCard extends StatelessWidget {
       ? score.toInt().toString()
       : score.toStringAsFixed(1);
 
+  Future<void> _openExamReview(BuildContext context) async {
+    final client = SupabaseService().client;
+    try {
+      var assessRow = await client
+          .from('digital_assessments')
+          .select('id, results_released')
+          .eq('id', classwork.id)
+          .maybeSingle();
+
+      final offeringId = classwork.subjectOfferingId;
+      if (assessRow == null && offeringId != null && offeringId.isNotEmpty) {
+        assessRow = await client
+            .from('digital_assessments')
+            .select('id, results_released')
+            .eq('subject_offering_id', offeringId)
+            .ilike('title', classwork.title)
+            .order('created_at', ascending: false)
+            .limit(1)
+            .maybeSingle();
+      }
+
+      final isReleased = assessRow?['results_released'] == true;
+      final assessmentId = assessRow?['id']?.toString() ?? classwork.id;
+
+      if (!isReleased) {
+        if (context.mounted) {
+          AppModals.showWarningDialog(
+            context: context,
+            title: 'Answer Key Not Yet Released',
+            message: 'Your teacher has not yet released the official answer key and examination review for this test. Please check back once all students have completed their submissions.',
+          );
+        }
+        return;
+      }
+
+      if (context.mounted) {
+        StudentExamReviewModal.show(
+          context,
+          assessmentId: assessmentId,
+          title: classwork.title,
+          subjectName: classwork.subjectName,
+          maxScore: classwork.maxScore,
+        );
+      }
+    } catch (e) {
+      debugPrint('Notice opening exam review: $e');
+    }
+  }
+
   Future<void> _startAssessmentFlow(BuildContext context) async {
     if (classwork.assignedAt != null &&
         classwork.assignedAt!.isAfter(DateTime.now())) {
@@ -731,7 +808,7 @@ class StudentClassworkCard extends StatelessWidget {
       );
 
       final client = SupabaseService().client;
-      final rawAssess = await client
+      var rawAssess = await client
           .from('digital_assessments')
           .select("""
             id,
@@ -759,6 +836,41 @@ class StudentClassworkCard extends StatelessWidget {
           """)
           .eq('id', classwork.id)
           .maybeSingle();
+
+      final offeringId = classwork.subjectOfferingId;
+      if (rawAssess == null && offeringId != null && offeringId.isNotEmpty) {
+        rawAssess = await client
+            .from('digital_assessments')
+            .select("""
+              id,
+              subject_offering_id,
+              assessment_type,
+              title,
+              instructions,
+              time_limit_minutes,
+              available_from,
+              deadline,
+              results_released,
+              assessment_questions (
+                id,
+                position,
+                question_type,
+                question_text,
+                points,
+                assessment_question_options (
+                  id,
+                  option_label,
+                  option_text,
+                  is_correct
+                )
+              )
+            """)
+            .eq('subject_offering_id', offeringId)
+            .ilike('title', classwork.title)
+            .order('created_at', ascending: false)
+            .limit(1)
+            .maybeSingle();
+      }
 
       if (context.mounted) Navigator.pop(context);
 

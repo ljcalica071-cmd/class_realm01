@@ -867,6 +867,7 @@ class _CreateAssessmentFlowDialogState
       // 1. Insert into classwork_items
       await client.from('classwork_items').insert({
         'subject_offering_id': offeringId,
+        'classwork_type': _isExam ? 'exam' : 'quiz',
         'grading_category': category,
         'title': title,
         'instructions': instructions,
@@ -1065,7 +1066,9 @@ class _CreateAssessmentFlowDialogState
 
       // 3. Persist to classwork_items
       await client.from('classwork_items').insert({
+        'id': assessmentId,
         'subject_offering_id': offeringId,
+        'classwork_type': _isExam ? 'exam' : 'quiz',
         'grading_category': category,
         'title': title,
         'instructions': instructions,

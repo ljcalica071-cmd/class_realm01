@@ -247,7 +247,9 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
       color: theme.colorScheme.surface, // 30% Surface
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        width: isMobile ? 260 : (_isSidebarExpanded ? 260 : 80),
+        curve: Curves.easeInOutCubic,
+        clipBehavior: Clip.hardEdge,
+        width: isMobile ? 260 : (_isSidebarExpanded ? 260 : 76),
         child: Column(
           children: [
             // Brand Header
@@ -255,63 +257,77 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
               height: 70,
               padding: const EdgeInsets.symmetric(horizontal: 16),
               alignment: Alignment.centerLeft,
-              child: Row(
-                children: [
-                  if (!isMobile && !_isSidebarExpanded)
-                    IconButton(
-                      icon: Icon(
-                        LucideIcons.menu,
-                        color: theme.colorScheme.onSurface,
-                      ),
-                      onPressed: () =>
-                          setState(() => _isSidebarExpanded = true),
-                    )
-                  else ...[
-                    Image.asset(
-                      'assets/branding/school_logo.png',
-                      width: 32,
-                      height: 32,
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            'CLASSREALM',
-                            style: TextStyle(
-                              color: theme.colorScheme.onSurface,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 15,
-                              letterSpacing: 1.2,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          Text(
-                            'TEACHER PORTAL',
-                            style: TextStyle(
-                              color: theme.colorScheme.primary,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 10,
-                              letterSpacing: 1,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    if (!isMobile)
-                      IconButton(
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final isWide = constraints.maxWidth >= 180;
+                  if (!isMobile && !isWide) {
+                    return Center(
+                      child: IconButton(
                         icon: Icon(
-                          LucideIcons.panelLeftClose,
+                          LucideIcons.menu,
                           color: theme.colorScheme.onSurface,
-                          size: 20,
+                          size: 22,
                         ),
+                        tooltip: 'Expand Menu',
                         onPressed: () =>
-                            setState(() => _isSidebarExpanded = false),
+                            setState(() => _isSidebarExpanded = true),
                       ),
-                  ],
-                ],
+                    );
+                  }
+                  return Row(
+                    children: [
+                      Image.asset(
+                        'assets/branding/school_logo.png',
+                        width: 32,
+                        height: 32,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              'CLASSREALM',
+                              style: TextStyle(
+                                color: theme.colorScheme.onSurface,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 15,
+                                letterSpacing: 1.2,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              softWrap: false,
+                            ),
+                            Text(
+                              'TEACHER PORTAL',
+                              style: TextStyle(
+                                color: theme.colorScheme.primary,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 10,
+                                letterSpacing: 1,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              softWrap: false,
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (!isMobile)
+                        IconButton(
+                          icon: Icon(
+                            LucideIcons.panelLeftClose,
+                            color: theme.colorScheme.onSurface,
+                            size: 20,
+                          ),
+                          tooltip: 'Collapse Menu',
+                          onPressed: () =>
+                              setState(() => _isSidebarExpanded = false),
+                        ),
+                    ],
+                  );
+                },
               ),
             ),
             Divider(
@@ -389,30 +405,78 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
               color: theme.colorScheme.onSurface.withValues(alpha: 0.05),
               height: 1,
             ),
-            ListTile(
-              leading: const Icon(LucideIcons.logOut, color: Colors.redAccent),
-              title: _isSidebarExpanded
-                  ? const Text(
-                      'Log Out',
-                      style: TextStyle(
-                        color: Colors.redAccent,
-                        fontWeight: FontWeight.w600,
+            Container(
+              margin: const EdgeInsets.symmetric(
+                horizontal: 8,
+                vertical: 4,
+              ),
+              child: Material(
+                color: Colors.transparent,
+                borderRadius: BorderRadius.circular(8),
+                clipBehavior: Clip.antiAlias,
+                child: Tooltip(
+                  message: !_isSidebarExpanded ? 'Log Out' : '',
+                  waitDuration: const Duration(milliseconds: 300),
+                  child: InkWell(
+                    onTap: () {
+                      AppModals.showConfirmationDialog(
+                        context: context,
+                        title: 'Confirm Logout',
+                        message:
+                            'Are you sure you want to log out of the teacher portal?',
+                        confirmLabel: 'Logout',
+                        confirmColor: Colors.redAccent,
+                        onConfirm: () async {
+                          await LogoutHelper.logout(context);
+                        },
+                      );
+                    },
+                    hoverColor: Colors.redAccent.withValues(alpha: 0.08),
+                    child: SizedBox(
+                      height: 40,
+                      child: LayoutBuilder(
+                        builder: (context, constraints) {
+                          if (constraints.maxWidth < 140) {
+                            return const Center(
+                              child: Icon(
+                                LucideIcons.logOut,
+                                color: Colors.redAccent,
+                                size: 20,
+                              ),
+                            );
+                          }
+                          return const Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 12),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  LucideIcons.logOut,
+                                  color: Colors.redAccent,
+                                  size: 18,
+                                ),
+                                SizedBox(width: 12),
+                                Expanded(
+                                  child: Text(
+                                    'Log Out',
+                                    style: TextStyle(
+                                      color: Colors.redAccent,
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 13,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    softWrap: false,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
                       ),
-                    )
-                  : null,
-              onTap: () {
-                AppModals.showConfirmationDialog(
-                  context: context,
-                  title: 'Confirm Logout',
-                  message:
-                      'Are you sure you want to log out of the teacher portal?',
-                  confirmLabel: 'Logout',
-                  confirmColor: Colors.redAccent,
-                  onConfirm: () async {
-                    await LogoutHelper.logout(context);
-                  },
-                );
-              },
+                    ),
+                  ),
+                ),
+              ),
             ),
             const SizedBox(height: 12),
           ],
@@ -601,24 +665,40 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   Widget _buildSectionHeader(String title, ThemeData theme) {
     if (!_isSidebarExpanded) {
       return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4),
+        padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 16),
         child: Divider(
           color: theme.colorScheme.onSurface.withValues(alpha: 0.05),
           height: 1,
         ),
       );
     }
-    return Padding(
-      padding: const EdgeInsets.only(left: 16, top: 12, bottom: 4),
-      child: Text(
-        title,
-        style: TextStyle(
-          color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
-          fontWeight: FontWeight.w700,
-          fontSize: 10,
-          letterSpacing: 1.4,
-        ),
-      ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth < 140) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 16),
+            child: Divider(
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.05),
+              height: 1,
+            ),
+          );
+        }
+        return Padding(
+          padding: const EdgeInsets.only(left: 16, top: 12, bottom: 4, right: 16),
+          child: Text(
+            title,
+            style: TextStyle(
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
+              fontWeight: FontWeight.w700,
+              fontSize: 10,
+              letterSpacing: 1.4,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            softWrap: false,
+          ),
+        );
+      },
     );
   }
 
@@ -673,63 +753,95 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     final isGradebook = index == 18;
     final isLocked = isGradebook && _isGradebookLocked;
 
+    final tooltipMessage = isLocked
+        ? 'Gradebook feature is not yet available. Please add subjects and enroll students in Classroom Setup first.'
+        : (!_isSidebarExpanded ? label : '');
+
     final item = Container(
-      margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       child: Material(
         color: isSelected
             ? theme.colorScheme.primary.withValues(alpha: 0.1)
             : Colors.transparent,
         borderRadius: BorderRadius.circular(8),
         clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: isLocked
-              ? null
-              : () {
-                  _onSelectTab(index);
-                  if (!isGradebook) {
-                    _checkGradebookLockStatus();
-                  }
-                },
-          hoverColor: theme.colorScheme.onSurface.withValues(alpha: 0.05),
-          splashColor: theme.colorScheme.primary.withValues(alpha: 0.1),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-            child: Row(
-              children: [
-                Icon(
-                  isLocked ? LucideIcons.lock : icon,
-                  color: isLocked
-                      ? theme.colorScheme.onSurface.withValues(alpha: 0.4)
-                      : (isSelected
-                            ? theme.colorScheme.primary
-                            : theme.colorScheme.onSurface.withValues(
-                                alpha: 0.75,
-                              )),
-                  size: 18,
-                ),
-                if (_isSidebarExpanded) ...[
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      label,
-                      style: TextStyle(
+        child: Tooltip(
+          message: tooltipMessage,
+          waitDuration: const Duration(milliseconds: 300),
+          child: InkWell(
+            onTap: isLocked
+                ? null
+                : () {
+                    _onSelectTab(index);
+                    if (!isGradebook) {
+                      _checkGradebookLockStatus();
+                    }
+                  },
+            hoverColor: theme.colorScheme.onSurface.withValues(alpha: 0.05),
+            splashColor: theme.colorScheme.primary.withValues(alpha: 0.1),
+            child: SizedBox(
+              height: 40,
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final isWide = constraints.maxWidth >= 140;
+                  if (!isWide) {
+                    return Center(
+                      child: Icon(
+                        isLocked ? LucideIcons.lock : icon,
                         color: isLocked
                             ? theme.colorScheme.onSurface.withValues(alpha: 0.4)
                             : (isSelected
                                   ? theme.colorScheme.primary
                                   : theme.colorScheme.onSurface.withValues(
-                                      alpha: 0.9,
+                                      alpha: 0.75,
                                     )),
-                        fontWeight: isSelected
-                            ? FontWeight.w700
-                            : FontWeight.w500,
-                        fontSize: 13,
+                        size: 20,
                       ),
-                      overflow: TextOverflow.ellipsis,
+                    );
+                  }
+
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: Row(
+                      children: [
+                        Icon(
+                          isLocked ? LucideIcons.lock : icon,
+                          color: isLocked
+                              ? theme.colorScheme.onSurface.withValues(alpha: 0.4)
+                              : (isSelected
+                                    ? theme.colorScheme.primary
+                                    : theme.colorScheme.onSurface.withValues(
+                                        alpha: 0.75,
+                                      )),
+                          size: 18,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            label,
+                            style: TextStyle(
+                              color: isLocked
+                                  ? theme.colorScheme.onSurface.withValues(alpha: 0.4)
+                                  : (isSelected
+                                        ? theme.colorScheme.primary
+                                        : theme.colorScheme.onSurface.withValues(
+                                            alpha: 0.9,
+                                          )),
+                              fontWeight: isSelected
+                                  ? FontWeight.w700
+                                  : FontWeight.w500,
+                              fontSize: 13,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            softWrap: false,
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                ],
-              ],
+                  );
+                },
+              ),
             ),
           ),
         ),
@@ -743,13 +855,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
             _checkGradebookLockStatus();
           }
         },
-        child: isLocked
-            ? Tooltip(
-                message: 'Gradebook feature is not yet available. Please add subjects and enroll students in Classroom Setup first.',
-                waitDuration: const Duration(milliseconds: 300),
-                child: item,
-              )
-            : item,
+        child: item,
       );
     }
 

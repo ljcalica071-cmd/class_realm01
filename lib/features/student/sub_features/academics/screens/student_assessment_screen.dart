@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:class_realm/core/services/app_data_cache.dart';
 import 'package:class_realm/core/services/supabase_service.dart';
 import 'package:class_realm/core/theme/app_theme.dart';
 import 'package:class_realm/models/academic_models.dart';
@@ -156,7 +157,7 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
             'details': '$event (Infraction #$_violations)',
             'student_id': user?.id,
             'assessment_id': widget.assessment.id,
-            'logged_at': DateTime.now().toIso8601String(),
+            'event_at': DateTime.now().toUtc().toIso8601String(),
           })
           .catchError((_) {});
     } catch (_) {}
@@ -170,7 +171,7 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
     //);
   }
 
-  void _submitAssessment({bool autoSubmit = false}) {
+  Future<void> _submitAssessment({bool autoSubmit = false}) async {
     if (_isSubmitting) return;
 
     if (!autoSubmit) {
@@ -243,24 +244,88 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
           role: UserRole.student,
         );
 
-    // Persist attempt record to Supabase (asynchronous)
+    // Persist attempt record, question responses, and submissions to Supabase
     try {
       final user = AuthRepository.instance.currentUser;
+      final studentId = user?.id ?? student.id;
       final attemptStatus = autoSubmit ? 'auto_submitted' : 'submitted';
-      SupabaseService().client
+      final client = SupabaseService().client;
+
+      // 1. Upsert assessment_attempts with score_earned
+      final attemptRes = await client
           .from('assessment_attempts')
           .upsert({
             'assessment_id': widget.assessment.id,
-            'student_id': user?.id ?? student.id,
+            'student_id': studentId,
             'attempt_number': 1,
             'status': attemptStatus,
+            'score_earned': scoreEarned,
             'started_at':
                 _startTime?.toIso8601String() ??
                 DateTime.now().toIso8601String(),
             'submitted_at': DateTime.now().toIso8601String(),
           })
-          .catchError((_) {});
-    } catch (_) {}
+          .select('id')
+          .maybeSingle();
+
+      final attemptId = attemptRes?['id']?.toString();
+
+      // 2. Persist individual question responses for review & item analysis
+      if (attemptId != null && attemptId.isNotEmpty) {
+        final responsesToInsert = <Map<String, dynamic>>[];
+        for (final q in _orderedQuestions) {
+          final studentAns = (_studentAnswers[q.id] ?? '').trim();
+          final correctAns = q.correctAnswer.trim();
+          final isMatching =
+              q.type == QuestionType.matching &&
+              q.matchingPairs.entries.every(
+                (pair) => studentAns.toLowerCase().contains('='),
+              );
+          final isCorrect =
+              isMatching ||
+              (studentAns.toLowerCase() == correctAns.toLowerCase());
+          final pointsEarned = isCorrect ? q.points : 0.0;
+
+          responsesToInsert.add({
+            'attempt_id': attemptId,
+            'question_id': q.id,
+            'text_response': studentAns,
+            'is_correct': isCorrect,
+            'points_earned': pointsEarned,
+            'answered_at': DateTime.now().toIso8601String(),
+          });
+        }
+
+        if (responsesToInsert.isNotEmpty) {
+          await client.from('assessment_responses').insert(responsesToInsert);
+        }
+      }
+
+      // 3. Upsert into student_classwork_submissions so card & gradebook reflect score
+      await client.from('student_classwork_submissions').upsert({
+        'classwork_id': widget.assessment.id,
+        'student_id': studentId,
+        'status': 'submitted',
+        'score': scoreEarned,
+        'submitted_at': DateTime.now().toIso8601String(),
+      });
+
+      // 4. Log session_submitted in anti_cheating_logs for proctoring audit
+      await client.from('anti_cheating_logs').insert({
+        'event_type': 'session_submitted',
+        'details':
+            'Submitted examination (Score: ${scoreEarned.toInt()}/${widget.assessment.totalPoints.toInt()})',
+        'student_id': studentId,
+        'assessment_id': widget.assessment.id,
+        'event_at': DateTime.now().toUtc().toIso8601String(),
+      });
+
+      // Invalidate relevant caches
+      AppDataCache.instance.invalidatePrefix('student_dashboard_');
+      AppDataCache.instance.invalidatePrefix('teacher_activities_');
+    } catch (e) {
+      debugPrint('Error saving assessment attempt and scores: ');
+    }
 
     if (!mounted) return;
     setState(() {
@@ -439,6 +504,21 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
                         }
                         setState(() => _currentStep = 1);
                         _startTimer();
+                        try {
+                          final user = AuthRepository.instance.currentUser;
+                          SupabaseService().client
+                              .from('anti_cheating_logs')
+                              .insert({
+                                'event_type': 'session_started',
+                                'details': 'Started assessment session',
+                                'student_id': user?.id,
+                                'assessment_id': widget.assessment.id,
+                                'event_at': DateTime.now()
+                                    .toUtc()
+                                    .toIso8601String(),
+                              })
+                              .catchError((_) {});
+                        } catch (_) {}
                       }
                     : null,
                 child: const Text(

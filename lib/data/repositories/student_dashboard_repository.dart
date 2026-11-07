@@ -302,6 +302,21 @@ class StudentDashboardRepository {
                   (attempt['status'] == 'submitted' ||
                       attempt['status'] == 'auto_submitted');
 
+              // Deduplicate if already loaded via classwork_items
+              final existingIndex = classworkList.indexWhere(
+                (cw) => cw['id'] == aId,
+              );
+              if (existingIndex != -1) {
+                if (isSubmitted &&
+                    classworkList[existingIndex]['status'] == 'pending') {
+                  classworkList[existingIndex]['status'] = 'submitted';
+                }
+                if (classworkList[existingIndex]['type'] == 'activity') {
+                  classworkList[existingIndex]['type'] = 'exam';
+                }
+                continue;
+              }
+
               classworkList.add({
                 'id': aId,
                 'subject_offering_id':
