@@ -33,8 +33,25 @@ class AppRoutes {
   static const String teacherSchedule = '/teacher/schedule';
   static const String teacherNotifications = '/teacher/notifications';
   static const String teacherProfile = '/teacher/profile';
+
+  // Student Sub-Routes
   static const String studentHome = '/student/home';
+  static const String studentClasswork = '/student/classwork';
+  static const String studentAlerts = '/student/alerts';
+  static const String studentProfile = '/student/profile';
+  static const String studentAttendance = '/student/attendance';
+  static const String studentSchedule = '/student/schedule';
+  static const String studentMaterials = '/student/materials';
+  static const String studentGrades = '/student/grades';
+  static const String studentPerformance = '/student/performance';
+
+  // Parent Sub-Routes
   static const String parentHome = '/parent/home';
+  static const String parentAttendance = '/parent/attendance';
+  static const String parentSchedule = '/parent/schedule';
+  static const String parentAlerts = '/parent/alerts';
+  static const String parentProfile = '/parent/profile';
+  static const String parentGrades = '/parent/grades';
 
   static String getFirstLoginRouteForRole(UserRole role) {
     switch (role) {

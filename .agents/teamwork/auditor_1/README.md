@@ -1,0 +1,2 @@
+# Auditor Workspace
+Workspace initialized for teamwork_victory_auditor.

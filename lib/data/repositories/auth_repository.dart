@@ -37,12 +37,14 @@ class LoginAttemptException implements Exception {
     this.message, {
     this.invalidCredentials = false,
     this.providerRateLimited = false,
+    this.isMaintenanceBlocked = false,
     this.retryAfterSeconds,
   });
 
   final String message;
   final bool invalidCredentials;
   final bool providerRateLimited;
+  final bool isMaintenanceBlocked;
   final int? retryAfterSeconds;
 
   @override
@@ -83,13 +85,17 @@ class AuthRepository {
   Future<String?>? _inFlightSessionFuture;
   bool _isLoggingOut = false;
 
-  void setCurrentUser(custom.UserModel user) {
+  void setCurrentUser(custom.UserModel? user) {
     _currentUser = user;
-    LocalStorageService.saveUser(user);
+    if (user != null) {
+      LocalStorageService.saveUser(user);
+    } else {
+      LocalStorageService.clearCachedUser();
+    }
   }
 
   /// Synchronously hydrates the cached user model before the first frame renders (e.g. on F5 refresh).
-  /// Enforces wall-clock inactivity checks (>= 30 mins triggers expiration).
+  /// Enforces wall-clock inactivity checks (>= 30 mins triggers expiration) and Maintenance Mode lockdown.
   custom.UserModel? hydrateCachedSessionSync() {
     final lastInteraction = LocalStorageService.getLastInteraction();
     if (lastInteraction != null) {
@@ -103,6 +109,13 @@ class AuthRepository {
     }
     final cached = LocalStorageService.getCachedUser();
     if (cached != null) {
+      if (LocalStorageService.isMaintenanceMode &&
+          cached.role != custom.UserRole.admin) {
+        LocalStorageService.clearCachedUser();
+        _currentUser = null;
+        clearWarmSession();
+        return null;
+      }
       _currentUser = cached;
       markWarmSession();
       unawaited(LocalStorageService.saveLastInteraction(DateTime.now()));
@@ -111,9 +124,60 @@ class AuthRepository {
     return null;
   }
 
+  /// Queries Supabase `system_settings` (with offline local cache fallback) to check if Maintenance Mode is active.
+  Future<bool> isSystemMaintenanceActive() async {
+    try {
+      final res = await _supabaseClient
+          .from('system_settings')
+          .select('is_maintenance_mode')
+          .eq('id', true)
+          .maybeSingle()
+          .timeout(const Duration(seconds: 3));
+      if (res != null) {
+        final isMaint = res['is_maintenance_mode'] == true;
+        await LocalStorageService.saveMaintenanceMode(isMaint);
+        return isMaint;
+      }
+    } catch (_) {
+      // Offline / network fallback: honor last saved maintenance state
+    }
+    return LocalStorageService.isMaintenanceMode;
+  }
+
   // Login
   Future<custom.UserModel?> authenticate(String email, String password) async {
     final cleanEmail = email.trim().toLowerCase();
+
+    // 0. PRIORITY #1: System Maintenance Mode Gatekeeping (Online & Offline)
+    final isMaintenance = await isSystemMaintenanceActive();
+    if (isMaintenance) {
+      bool isAdminAccount = false;
+      try {
+        final userCheck = await _supabaseClient
+            .from('users')
+            .select('role')
+            .ilike('email', cleanEmail)
+            .maybeSingle()
+            .timeout(const Duration(seconds: 3));
+        if (userCheck != null && userCheck['role'] == 'admin') {
+          isAdminAccount = true;
+        }
+      } catch (_) {
+        final cached = LocalStorageService.getCachedUser();
+        if (cached != null &&
+            cached.email.toLowerCase() == cleanEmail &&
+            cached.role == custom.UserRole.admin) {
+          isAdminAccount = true;
+        }
+      }
+
+      if (!isAdminAccount) {
+        throw const LoginAttemptException(
+          'The system is currently under maintenance. Teacher, Student, and Parent accounts cannot log in at this time. Please try again later.',
+          isMaintenanceBlocked: true,
+        );
+      }
+    }
 
     // 1. Check Device-Wide Lockout (10 failed attempts within 5 minutes)
     final deviceLimit = await RateLimitService.instance.checkStatus(
@@ -167,6 +231,18 @@ class AuthRepository {
           );
         }
 
+        // Post-auth Maintenance Mode verification: never allow Teacher/Student/Parent when maintenance is ON
+        if (_currentUser!.role != custom.UserRole.admin &&
+            await isSystemMaintenanceActive()) {
+          await _firebaseAuth.signOut();
+          await LocalStorageService.clearAuth();
+          _currentUser = null;
+          throw const LoginAttemptException(
+            'The system is currently under maintenance. Teacher, Student, and Parent accounts cannot log in at this time. Please try again later.',
+            isMaintenanceBlocked: true,
+          );
+        }
+
         // Authentication succeeded! Reset failed attempt counters on this device
         unawaited(
           RateLimitService.instance.clearRateLimit(
@@ -190,6 +266,12 @@ class AuthRepository {
     } on firebase.FirebaseAuthException catch (e) {
       if (e.code == 'network-request-failed' ||
           e.message?.contains('network AuthError') == true) {
+        if (LocalStorageService.isMaintenanceMode) {
+          throw const LoginAttemptException(
+            'The system is currently under maintenance. Teacher, Student, and Parent accounts cannot log in at this time. Please try again later.',
+            isMaintenanceBlocked: true,
+          );
+        }
         final cached = LocalStorageService.getCachedUser();
         if (cached != null &&
             cached.email.toLowerCase() == cleanEmail &&
@@ -269,6 +351,8 @@ class AuthRepository {
       await LocalStorageService.clearAuth();
     }
 
+    final isMaintenance = await isSystemMaintenanceActive();
+
     var firebaseUser = _firebaseAuth.currentUser;
     if (firebaseUser == null) {
       try {
@@ -296,7 +380,9 @@ class AuthRepository {
 
         if (_currentUser != null &&
             (_currentUser!.isArchived ||
-                _currentUser!.status == custom.AccountStatus.archived)) {
+                _currentUser!.status == custom.AccountStatus.archived ||
+                (isMaintenance &&
+                    _currentUser!.role != custom.UserRole.admin))) {
           await _firebaseAuth.signOut();
           await LocalStorageService.clearAuth();
           _currentUser = null;
@@ -312,7 +398,8 @@ class AuthRepository {
         _currentUser = await _getUserFromSupabase(firebaseUser.uid);
         if (_currentUser != null) {
           if (_currentUser!.isArchived ||
-              _currentUser!.status == custom.AccountStatus.archived) {
+              _currentUser!.status == custom.AccountStatus.archived ||
+              (isMaintenance && _currentUser!.role != custom.UserRole.admin)) {
             await _firebaseAuth.signOut();
             await LocalStorageService.clearAuth();
             _currentUser = null;
@@ -325,11 +412,22 @@ class AuthRepository {
       } catch (e) {
         debugPrint('Failed to restore session from Supabase: $e');
         if (cachedUser != null) {
+          if (isMaintenance && cachedUser.role != custom.UserRole.admin) {
+            await _firebaseAuth.signOut();
+            await LocalStorageService.clearAuth();
+            _currentUser = null;
+            return null;
+          }
           _currentUser = cachedUser;
           return _currentUser;
         }
       }
     } else if (cached != null) {
+      if (isMaintenance && cached.role != custom.UserRole.admin) {
+        await LocalStorageService.clearAuth();
+        _currentUser = null;
+        return null;
+      }
       _currentUser = cached;
       return _currentUser;
     }

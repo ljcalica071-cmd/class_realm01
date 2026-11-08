@@ -8,7 +8,10 @@ import 'package:class_realm/core/theme/app_theme.dart';
 import 'package:class_realm/models/academic_models.dart';
 import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
+import 'package:class_realm/data/repositories/subject_repository.dart';
+import 'package:class_realm/features/teacher/sub_features/grading/widgets/teacher_gradebook_tab.dart';
 import 'package:class_realm/shared/widgets/shared_widgets.dart';
+import 'package:class_realm/widgets/common/expandable_instructions_text.dart';
 
 class StudentAssessmentScreen extends StatefulWidget {
   final QuizOrExamModel assessment;
@@ -215,17 +218,17 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
 
     // Auto-check against answer key (unanswered or N/A answers yield 0 points)
     double scoreEarned = 0;
-    for (var q in _orderedQuestions) {
-      final studentAns = (_studentAnswers[q.id] ?? '').trim().toLowerCase();
-      final correctAns = q.correctAnswer.trim().toLowerCase();
+    for (final q in _orderedQuestions) {
+      final rawStudentAns = (_studentAnswers[q.id] ?? '').trim();
       final isMatching =
           q.type == QuestionType.matching &&
+          q.matchingPairs.isNotEmpty &&
           q.matchingPairs.entries.every(
-            (pair) => studentAns.contains(
+            (pair) => rawStudentAns.toLowerCase().contains(
               '${pair.key.toLowerCase()}=${pair.value.toLowerCase()}',
             ),
           );
-      if (studentAns == correctAns || isMatching) {
+      if (q.matchesStudentAnswer(rawStudentAns) || isMatching) {
         scoreEarned += q.points;
       }
     }
@@ -251,7 +254,38 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
       final attemptStatus = autoSubmit ? 'auto_submitted' : 'submitted';
       final client = SupabaseService().client;
 
-      // 1. Upsert assessment_attempts with score_earned
+      // Verify assessment still exists in DB (stale-cache guard if teacher deleted it)
+      final existingAssess = await client
+          .from('digital_assessments')
+          .select(
+            'id, is_archived, subject_offering_id, assessment_type, grading_category',
+          )
+          .eq('id', widget.assessment.id)
+          .maybeSingle();
+
+      if (existingAssess == null || existingAssess['is_archived'] == true) {
+        AppDataCache.instance.invalidatePrefix('student_dashboard_');
+        if (!mounted) return;
+        setState(() => _isSubmitting = false);
+        await AppModals.showWarningDialog(
+          context: context,
+          title: 'Assessment Unavailable',
+          message:
+              'This assessment has been removed by your teacher and can no longer accept submissions.',
+        );
+        if (mounted) {
+          Navigator.of(context).pop();
+        }
+        return;
+      }
+
+      final submittedUtc = DateTime.now().toUtc();
+      var startedUtc = (_startTime ?? DateTime.now()).toUtc();
+      if (startedUtc.isAfter(submittedUtc)) {
+        startedUtc = submittedUtc;
+      }
+
+      // 1. Upsert assessment_attempts with score_earned & conflict target
       final attemptRes = await client
           .from('assessment_attempts')
           .upsert({
@@ -260,11 +294,9 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
             'attempt_number': 1,
             'status': attemptStatus,
             'score_earned': scoreEarned,
-            'started_at':
-                _startTime?.toIso8601String() ??
-                DateTime.now().toIso8601String(),
-            'submitted_at': DateTime.now().toIso8601String(),
-          })
+            'started_at': startedUtc.toIso8601String(),
+            'submitted_at': submittedUtc.toIso8601String(),
+          }, onConflict: 'assessment_id,student_id,attempt_number')
           .select('id')
           .maybeSingle();
 
@@ -272,18 +304,23 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
 
       // 2. Persist individual question responses for review & item analysis
       if (attemptId != null && attemptId.isNotEmpty) {
+        await client
+            .from('assessment_responses')
+            .delete()
+            .eq('attempt_id', attemptId);
+
         final responsesToInsert = <Map<String, dynamic>>[];
         for (final q in _orderedQuestions) {
           final studentAns = (_studentAnswers[q.id] ?? '').trim();
-          final correctAns = q.correctAnswer.trim();
           final isMatching =
               q.type == QuestionType.matching &&
+              q.matchingPairs.isNotEmpty &&
               q.matchingPairs.entries.every(
-                (pair) => studentAns.toLowerCase().contains('='),
+                (pair) => studentAns.toLowerCase().contains(
+                  '${pair.key.toLowerCase()}=${pair.value.toLowerCase()}',
+                ),
               );
-          final isCorrect =
-              isMatching ||
-              (studentAns.toLowerCase() == correctAns.toLowerCase());
+          final isCorrect = isMatching || q.matchesStudentAnswer(studentAns);
           final pointsEarned = isCorrect ? q.points : 0.0;
 
           responsesToInsert.add({
@@ -292,7 +329,7 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
             'text_response': studentAns,
             'is_correct': isCorrect,
             'points_earned': pointsEarned,
-            'answered_at': DateTime.now().toIso8601String(),
+            'answered_at': submittedUtc.toIso8601String(),
           });
         }
 
@@ -301,30 +338,112 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
         }
       }
 
-      // 3. Upsert into student_classwork_submissions so card & gradebook reflect score
-      await client.from('student_classwork_submissions').upsert({
-        'classwork_id': widget.assessment.id,
-        'student_id': studentId,
-        'status': 'submitted',
-        'score': scoreEarned,
-        'submitted_at': DateTime.now().toIso8601String(),
-      });
+      // 3. Upsert into student_classwork_submissions if mirror row exists & sync Gradebook
+      final cwRow = await client
+          .from('classwork_items')
+          .select(
+            'id, subject_offering_id, term_number, gradebook_column_index, grading_category',
+          )
+          .eq('id', widget.assessment.id)
+          .maybeSingle();
+
+      if (cwRow != null) {
+        await client.from('student_classwork_submissions').upsert({
+          'classwork_id': widget.assessment.id,
+          'student_id': studentId,
+          'status': 'submitted',
+          'score': scoreEarned,
+          'submitted_at': submittedUtc.toIso8601String(),
+        }, onConflict: 'classwork_id,student_id');
+      }
+
+      // Sync auto-graded score to gradebook_term_sheets as Single Source of Truth
+      try {
+        final offeringId =
+            cwRow?['subject_offering_id']?.toString() ??
+            existingAssess['subject_offering_id']?.toString() ??
+            widget.assessment.subjectOfferingId;
+        final termNum =
+            (cwRow?['term_number'] as num?)?.toInt() ??
+            widget.assessment.termNumber;
+        final assessType =
+            existingAssess['assessment_type']?.toString().toLowerCase() ??
+            widget.assessment.examType;
+        final colIdx =
+            (cwRow?['gradebook_column_index'] as num?)?.toInt() ??
+            widget.assessment.gradebookColumnIndex ??
+            (assessType == 'st1'
+                ? 1
+                : (assessType == 'st2'
+                      ? 2
+                      : (assessType == 'term_exam' ? 3 : null)));
+        final catKey =
+            cwRow?['grading_category']?.toString().toLowerCase() ??
+            existingAssess['grading_category']?.toString().toLowerCase() ??
+            (widget.assessment.isExam ? 'ex' : 'ww');
+
+        if (offeringId != null && offeringId.isNotEmpty && colIdx != null) {
+          final sheet =
+              await SubjectRepository.instance.getGradebookTermSheet(
+                offeringId,
+                termNum,
+              ) ??
+              <String, dynamic>{};
+          final scores = Map<String, dynamic>.from(
+            sheet['scores'] as Map? ?? {},
+          );
+          final studentScores = Map<String, dynamic>.from(
+            scores[studentId] as Map? ?? {},
+          );
+          final catScores = Map<String, dynamic>.from(
+            studentScores[catKey] as Map? ?? {},
+          );
+          final colKey = catKey == 'ex'
+              ? (colIdx == 1 ? 'st1' : (colIdx == 2 ? 'st2' : 'te'))
+              : colIdx.toString();
+          catScores[colKey] = scoreEarned;
+          studentScores[catKey] = catScores;
+          scores[studentId] = studentScores;
+          sheet['scores'] = scores;
+
+          final hps = Map<String, dynamic>.from(sheet['hps'] as Map? ?? {});
+          final catHps = Map<String, dynamic>.from(hps[catKey] as Map? ?? {});
+          if (catHps[colKey] == null) {
+            catHps[colKey] = widget.assessment.totalPoints.toInt();
+            hps[catKey] = catHps;
+            sheet['hps'] = hps;
+          }
+
+          await SubjectRepository.instance.saveGradebookTermSheet(
+            offeringId,
+            termNum,
+            sheet,
+          );
+          TeacherGradebookTab.gradebookRefreshNotifier.value++;
+        }
+      } catch (gbErr) {
+        debugPrint('Gradebook assessment score sync notice: $gbErr');
+      }
 
       // 4. Log session_submitted in anti_cheating_logs for proctoring audit
-      await client.from('anti_cheating_logs').insert({
-        'event_type': 'session_submitted',
-        'details':
-            'Submitted examination (Score: ${scoreEarned.toInt()}/${widget.assessment.totalPoints.toInt()})',
-        'student_id': studentId,
-        'assessment_id': widget.assessment.id,
-        'event_at': DateTime.now().toUtc().toIso8601String(),
-      });
+      try {
+        await client.from('anti_cheating_logs').insert({
+          'event_type': 'session_submitted',
+          'details':
+              'Submitted ${widget.assessment.isExam ? "examination" : "quiz"} (Score: ${scoreEarned.toInt()}/${widget.assessment.totalPoints.toInt()})',
+          'student_id': studentId,
+          'assessment_id': widget.assessment.id,
+          'event_at': submittedUtc.toIso8601String(),
+        });
+      } catch (_) {}
 
       // Invalidate relevant caches
       AppDataCache.instance.invalidatePrefix('student_dashboard_');
       AppDataCache.instance.invalidatePrefix('teacher_activities_');
+      AppDataCache.instance.invalidatePrefix('teacher_assessments_');
+      AppDataCache.instance.invalidatePrefix('gradebook_');
     } catch (e) {
-      debugPrint('Error saving assessment attempt and scores: ');
+      debugPrint('Error saving assessment attempt and scores: $e');
     }
 
     if (!mounted) return;
@@ -450,6 +569,32 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
               ],
             ),
             const Divider(height: 32),
+            if (widget.assessment.description.trim().isNotEmpty) ...[
+              const Text(
+                'Teacher Instructions & Guidelines:',
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 6),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.outlineVariant.withValues(alpha: 0.5),
+                  ),
+                ),
+                child: ExpandableInstructionsText(
+                  text: widget.assessment.description,
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
             const Text(
               'Assessment Rules & Guidelines:',
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),

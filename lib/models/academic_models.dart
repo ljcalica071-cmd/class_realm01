@@ -152,6 +152,13 @@ class ActivityModel {
   final bool isArchived;
   final DateTime? updatedInstructionsAt;
   final List<String>? targetStudentIds;
+  final String? gradingCategory;
+
+  String get effectiveGradingCategory {
+    final cat = gradingCategory?.trim().toLowerCase();
+    if (cat == 'ww' || cat == 'pt' || cat == 'ex') return cat!;
+    return isRequirement ? 'pt' : 'ww';
+  }
 
   ActivityModel({
     required this.id,
@@ -183,6 +190,7 @@ class ActivityModel {
     this.isArchived = false,
     this.updatedInstructionsAt,
     this.targetStudentIds,
+    this.gradingCategory,
   }) : dateAssigned = dateAssigned ?? DateTime.now(),
        sectionDeadlines = sectionDeadlines ?? {section: deadline};
 
@@ -221,6 +229,7 @@ class ActivityModel {
     bool? isArchived,
     DateTime? updatedInstructionsAt,
     List<String>? targetStudentIds,
+    String? gradingCategory,
   }) {
     return ActivityModel(
       id: id ?? this.id,
@@ -253,6 +262,7 @@ class ActivityModel {
       updatedInstructionsAt:
           updatedInstructionsAt ?? this.updatedInstructionsAt,
       targetStudentIds: targetStudentIds ?? this.targetStudentIds,
+      gradingCategory: gradingCategory ?? this.gradingCategory,
     );
   }
 
@@ -305,7 +315,8 @@ class ActivityModel {
         sBytes = (att['file_size_bytes'] as num?)?.toInt();
       }
     } else {
-      attName = json['attachment_name']?.toString();
+      attName =
+          json['attachment_name']?.toString() ?? json['file_name']?.toString();
       sPath = json['storage_path']?.toString();
       mType = json['mime_type']?.toString();
       sBytes = (json['file_size_bytes'] as num?)?.toInt();
@@ -346,6 +357,7 @@ class ActivityModel {
           ? DateTime.tryParse(json['updated_instructions_at'].toString())
           : null,
       targetStudentIds: parsedTargetStudentIds,
+      gradingCategory: gradingCat,
     );
   }
 
@@ -427,6 +439,43 @@ class StudentSubmission {
   }
 }
 
+class ClassworkSlotSummary {
+  final Set<int> occupiedWwSlots;
+  final Set<int> occupiedPtSlots;
+  final bool st1Created;
+  final bool st2Created;
+  final bool teCreated;
+  final int maxWwSlot;
+  final int maxPtSlot;
+
+  const ClassworkSlotSummary({
+    this.occupiedWwSlots = const <int>{},
+    this.occupiedPtSlots = const <int>{},
+    this.st1Created = false,
+    this.st2Created = false,
+    this.teCreated = false,
+    this.maxWwSlot = 3,
+    this.maxPtSlot = 3,
+  });
+}
+
+bool isSameClassworkSchedule(
+  DateTime a,
+  DateTime b, {
+  required bool isInPerson,
+}) {
+  final al = a.toLocal();
+  final bl = b.toLocal();
+  if (isInPerson) {
+    return al.year == bl.year && al.month == bl.month && al.day == bl.day;
+  }
+  return al.year == bl.year &&
+      al.month == bl.month &&
+      al.day == bl.day &&
+      al.hour == bl.hour &&
+      al.minute == bl.minute;
+}
+
 class QuestionModel {
   final String id;
   final String questionText;
@@ -445,6 +494,100 @@ class QuestionModel {
     this.points = 1.0,
     this.matchingPairs = const {},
   });
+
+  factory QuestionModel.fromSupabaseMap(Map<String, dynamic> q) {
+    final qTypeStr = q['question_type']?.toString().toLowerCase() ?? '';
+    final qType = switch (qTypeStr) {
+      'multiple_choice' => QuestionType.multipleChoice,
+      'true_false' => QuestionType.trueFalse,
+      'identification' => QuestionType.identification,
+      'matching_type' => QuestionType.matching,
+      _ => QuestionType.multipleChoice,
+    };
+
+    final opts = (q['assessment_question_options'] as List? ?? [])
+        .map((o) => Map<String, dynamic>.from(o as Map))
+        .toList()
+      ..sort(
+        (a, b) => ((a['position'] as num?) ?? 0).compareTo(
+          (b['position'] as num?) ?? 0,
+        ),
+      );
+
+    final choices = <String>[];
+    String correctAnswer = '';
+
+    if (qType == QuestionType.multipleChoice) {
+      const labels = ['A', 'B', 'C', 'D'];
+      for (int i = 0; i < opts.length; i++) {
+        final opt = opts[i];
+        final text = opt['option_text']?.toString() ?? '';
+        choices.add(text);
+        if (opt['is_correct'] == true) {
+          final pos = ((opt['position'] as num?)?.toInt() ?? (i + 1)).clamp(
+            1,
+            labels.length,
+          );
+          correctAnswer = labels[pos - 1];
+        }
+      }
+    } else if (qType == QuestionType.trueFalse) {
+      choices.addAll(const ['True', 'False']);
+      for (final opt in opts) {
+        if (opt['is_correct'] == true) {
+          final txt = opt['option_text']?.toString().trim().toLowerCase();
+          final pos = (opt['position'] as num?)?.toInt();
+          correctAnswer = (txt == 'false' || pos == 2) ? 'False' : 'True';
+        }
+      }
+    } else if (qType == QuestionType.identification) {
+      for (final opt in opts) {
+        if (opt['is_correct'] == true) {
+          correctAnswer = opt['option_text']?.toString() ?? '';
+          break;
+        }
+      }
+      if (correctAnswer.isEmpty && opts.isNotEmpty) {
+        correctAnswer = opts.first['option_text']?.toString() ?? '';
+      }
+    }
+
+    return QuestionModel(
+      id: q['id']?.toString() ?? '',
+      questionText: q['question_text']?.toString() ?? '',
+      type: qType,
+      choices: choices,
+      correctAnswer: correctAnswer,
+      points: (q['points'] as num?)?.toDouble() ?? 1.0,
+    );
+  }
+
+  bool matchesStudentAnswer(String rawAnswer) {
+    final studentAns = rawAnswer.trim().toLowerCase();
+    if (studentAns.isEmpty || studentAns == 'n/a') return false;
+
+    if (type == QuestionType.matching) {
+      return matchingPairs.isNotEmpty &&
+          matchingPairs.entries.every(
+            (pair) => studentAns.contains(
+              '${pair.key.toLowerCase()}=${pair.value.toLowerCase()}',
+            ),
+          );
+    }
+
+    final correctAns = correctAnswer.trim().toLowerCase();
+    if (studentAns == correctAns) return true;
+
+    if (type == QuestionType.multipleChoice) {
+      const letters = ['a', 'b', 'c', 'd'];
+      final idx = letters.indexOf(correctAns);
+      if (idx != -1 && idx < choices.length) {
+        return choices[idx].trim().toLowerCase() == studentAns;
+      }
+    }
+
+    return false;
+  }
 }
 
 class QuizOrExamModel {
@@ -460,6 +603,12 @@ class QuizOrExamModel {
   final bool resultsReleased;
   final List<QuestionModel> questions;
   final Map<String, DateTime> sectionDeadlines;
+  final String completionMode; // 'online' or 'in_person'
+  final int termNumber;
+  final int? gradebookColumnIndex;
+  final String? subjectOfferingId;
+  final double? maxScore;
+  final String? examType;
 
   QuizOrExamModel({
     required this.id,
@@ -472,11 +621,19 @@ class QuizOrExamModel {
     required this.scheduleDate,
     this.isPublished = true,
     this.resultsReleased = false,
-    required this.questions,
+    this.questions = const [],
     Map<String, DateTime>? sectionDeadlines,
+    this.completionMode = 'online',
+    this.termNumber = 1,
+    this.gradebookColumnIndex,
+    this.subjectOfferingId,
+    this.maxScore,
+    this.examType,
   }) : sectionDeadlines = sectionDeadlines ?? {section: scheduleDate};
 
-  double get totalPoints => questions.fold(0, (sum, q) => sum + q.points);
+  double get totalPoints => questions.isNotEmpty
+      ? questions.fold(0, (sum, q) => sum + q.points)
+      : (maxScore ?? 0);
   DateTime get scheduledDate => scheduleDate;
   List<String> get assignedSections => sectionDeadlines.keys.toList();
   DateTime deadlineForSection(String targetSection) =>
@@ -495,6 +652,12 @@ class QuizOrExamModel {
     bool? resultsReleased,
     List<QuestionModel>? questions,
     Map<String, DateTime>? sectionDeadlines,
+    String? completionMode,
+    int? termNumber,
+    int? gradebookColumnIndex,
+    String? subjectOfferingId,
+    double? maxScore,
+    String? examType,
   }) {
     return QuizOrExamModel(
       id: id ?? this.id,
@@ -509,6 +672,12 @@ class QuizOrExamModel {
       resultsReleased: resultsReleased ?? this.resultsReleased,
       questions: questions ?? this.questions,
       sectionDeadlines: sectionDeadlines ?? this.sectionDeadlines,
+      completionMode: completionMode ?? this.completionMode,
+      termNumber: termNumber ?? this.termNumber,
+      gradebookColumnIndex: gradebookColumnIndex ?? this.gradebookColumnIndex,
+      subjectOfferingId: subjectOfferingId ?? this.subjectOfferingId,
+      maxScore: maxScore ?? this.maxScore,
+      examType: examType ?? this.examType,
     );
   }
 }

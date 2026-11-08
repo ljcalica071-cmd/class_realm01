@@ -496,22 +496,21 @@ class SubjectRepository {
       );
       return;
     }
-    unawaited(
-      _syncGradebookTermSheet(offeringId, termNumber, payload, teacherId),
-    );
+    await _syncGradebookTermSheet(offeringId, termNumber, payload, teacherId);
   }
 
   Future<Map<String, dynamic>?> getGradebookTermSheet(
     String offeringId,
-    int termNumber,
-  ) async {
+    int termNumber, {
+    bool forceRefresh = false,
+  }) async {
     _validateOfferingTerm(offeringId, termNumber);
     final cached = LocalStorageService.getGradebookSheet(
       offeringId,
       termNumber,
     );
     final teacherId = AuthRepository.instance.currentUser?.id;
-    if (cached != null) {
+    if (!forceRefresh && cached != null) {
       if (teacherId != null && teacherId.isNotEmpty) {
         unawaited(
           _refreshGradebookTermSheet(offeringId, termNumber, teacherId),
@@ -520,7 +519,7 @@ class SubjectRepository {
       return cached;
     }
     if (teacherId == null || teacherId.isEmpty) {
-      return null;
+      return cached;
     }
 
     try {
@@ -533,8 +532,24 @@ class SubjectRepository {
           .eq('term_number', termNumber)
           .maybeSingle();
 
+      final cloudHps = Map<String, dynamic>.from(
+        row?['hps_json'] as Map? ?? {},
+      );
+      final cachedHps = cached?['hps'] as Map? ?? {};
+      for (final colKey in const ['ww_columns', 'pt_columns']) {
+        final localVal = cachedHps[colKey] is num
+            ? (cachedHps[colKey] as num).toInt()
+            : int.tryParse(cachedHps[colKey]?.toString() ?? '');
+        final cloudVal = cloudHps[colKey] is num
+            ? (cloudHps[colKey] as num).toInt()
+            : int.tryParse(cloudHps[colKey]?.toString() ?? '');
+        if (localVal != null && (cloudVal == null || localVal > cloudVal)) {
+          cloudHps[colKey] = localVal.clamp(3, 10);
+        }
+      }
+
       final payload = {
-        'hps': Map<String, dynamic>.from(row?['hps_json'] as Map? ?? {}),
+        'hps': cloudHps,
         'scores': Map<String, dynamic>.from(row?['scores_json'] as Map? ?? {}),
       };
       await _mergeActiveAssessmentsIntoSheet(offeringId, termNumber, payload);
@@ -546,7 +561,7 @@ class SubjectRepository {
       return payload;
     } catch (e) {
       debugPrint('Notice loading gradebook sheet from cloud: $e');
-      return null;
+      return cached;
     }
   }
 

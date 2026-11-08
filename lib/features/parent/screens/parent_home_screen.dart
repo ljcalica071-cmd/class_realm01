@@ -10,18 +10,20 @@ import 'package:class_realm/models/academic_models.dart';
 import 'package:class_realm/features/parent/widgets/widgets.dart';
 import 'package:class_realm/data/repositories/supabase_parent_repository.dart';
 import 'package:class_realm/core/services/session_activity_tracker.dart';
+import 'package:class_realm/core/utils/browser_url_helper.dart';
 import 'package:class_realm/shared/widgets/shared_widgets.dart';
 import 'package:class_realm/routes/app_routes.dart';
 
 class ParentHomeScreen extends StatefulWidget {
-  const ParentHomeScreen({super.key});
+  final int initialTabIndex;
+  const ParentHomeScreen({super.key, this.initialTabIndex = 0});
 
   @override
   State<ParentHomeScreen> createState() => _ParentHomeScreenState();
 }
 
 class _ParentHomeScreenState extends State<ParentHomeScreen> {
-  int _currentIndex = 0;
+  late int _currentIndex;
   int _selectedChildIndex = 0;
   bool _isLoadingStudents = true;
   UserModel? _parentProfile;
@@ -37,14 +39,33 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
     'Profile',
   ];
 
+  String _routeForIndex(int index) {
+    switch (index) {
+      case 0:
+        return AppRoutes.parentHome;
+      case 1:
+        return AppRoutes.parentAttendance;
+      case 2:
+        return AppRoutes.parentSchedule;
+      case 3:
+        return AppRoutes.parentAlerts;
+      case 4:
+        return AppRoutes.parentProfile;
+      default:
+        return AppRoutes.parentHome;
+    }
+  }
+
   @override
   void initState() {
     super.initState();
     final savedTab = LocalStorageService.getActiveDashboardTab('parent');
-    if (savedTab >= 0 && savedTab < 5) {
-      _currentIndex = savedTab;
-    }
-    LocalStorageService.saveLastActiveRoute(AppRoutes.parentHome);
+    _currentIndex = (widget.initialTabIndex > 0)
+        ? widget.initialTabIndex
+        : (savedTab >= 0 && savedTab < 5 ? savedTab : 0);
+    final route = _routeForIndex(_currentIndex);
+    LocalStorageService.saveLastActiveRoute(route);
+    updateBrowserUrl(route);
     _hydrateLinkedStudentsFromCache();
     _loadLinkedStudents();
   }
@@ -211,16 +232,25 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
   }
 
   void _openReportCardScreen(UserModel? activeChild) {
+    updateBrowserUrl(AppRoutes.parentGrades);
+    LocalStorageService.saveLastActiveRoute(AppRoutes.parentGrades);
     Navigator.push(
       context,
       MaterialPageRoute(
+        settings: const RouteSettings(name: AppRoutes.parentGrades),
         builder: (_) => ParentGradesScreen(
           initialStudent: activeChild,
           allChildren: _linkedStudents,
           onSelectChild: _switchChildByModel,
         ),
       ),
-    );
+    ).then((_) {
+      if (mounted) {
+        final currentRoute = _routeForIndex(_currentIndex);
+        updateBrowserUrl(currentRoute);
+        LocalStorageService.saveLastActiveRoute(currentRoute);
+      }
+    });
   }
 
   void _openTeachersDirectoryScreen(UserModel? activeChild) {
@@ -233,7 +263,13 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
           onSelectChild: _switchChildByModel,
         ),
       ),
-    );
+    ).then((_) {
+      if (mounted) {
+        final currentRoute = _routeForIndex(_currentIndex);
+        updateBrowserUrl(currentRoute);
+        LocalStorageService.saveLastActiveRoute(currentRoute);
+      }
+    });
   }
 
   void _showChildSwitcherBottomSheet() {
@@ -469,6 +505,9 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
     if (index < 0 || index >= 5) return;
     setState(() => _currentIndex = index);
     LocalStorageService.saveActiveDashboardTab('parent', index);
+    final route = _routeForIndex(index);
+    LocalStorageService.saveLastActiveRoute(route);
+    updateBrowserUrl(route);
   }
 
   @override

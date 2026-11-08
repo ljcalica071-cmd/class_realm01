@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:class_realm/core/services/app_data_cache.dart';
 import 'package:class_realm/core/services/supabase_service.dart';
 import 'package:class_realm/models/academic_models.dart';
 import 'package:class_realm/models/student_dashboard_models.dart';
@@ -7,6 +8,7 @@ import 'package:class_realm/features/student/shared/widgets/student_submit_work_
 import 'package:class_realm/features/student/sub_features/academics/screens/student_assessment_screen.dart';
 import 'package:class_realm/features/student/sub_features/academics/widgets/student_exam_review_modal.dart';
 import 'package:class_realm/widgets/common/app_modals.dart';
+import 'package:class_realm/widgets/common/expandable_instructions_text.dart';
 
 class StudentClassworkCard extends StatelessWidget {
   const StudentClassworkCard({
@@ -190,17 +192,11 @@ class StudentClassworkCard extends StatelessWidget {
               ],
             ),
 
-            if (classwork.description.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              Text(
-                classwork.description,
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.bodyMedium,
-              ),
-            ],
-
-            if (classwork.instructions.isNotEmpty) ...[
+            if ((classwork.instructions.trim().isNotEmpty
+                    ? classwork.instructions
+                    : classwork.description)
+                .trim()
+                .isNotEmpty) ...[
               const SizedBox(height: 12),
               Container(
                 width: double.infinity,
@@ -227,8 +223,10 @@ class StudentClassworkCard extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 4),
-                    Text(
-                      classwork.instructions,
+                    ExpandableInstructionsText(
+                      text: classwork.instructions.trim().isNotEmpty
+                          ? classwork.instructions
+                          : classwork.description,
                       style: theme.textTheme.bodyMedium,
                     ),
                   ],
@@ -314,6 +312,8 @@ class StudentClassworkCard extends StatelessWidget {
                       child: Text(
                         classwork.type == 'exam'
                             ? 'In-Person Periodical Examination: Administered in classroom by teacher. Your score will appear here once recorded in the Gradebook.'
+                            : classwork.type == 'quiz'
+                            ? 'In-Person Quiz: Administered in classroom by teacher. Your score will appear here once recorded in the Gradebook.'
                             : 'In-Person ${classwork.type == 'performance_task' ? 'Performance Task' : 'Activity'}: Submit your physical work directly to your teacher in class. Your score and status will appear here once recorded.',
                         style: const TextStyle(
                           fontSize: 12,
@@ -352,8 +352,8 @@ class StudentClassworkCard extends StatelessWidget {
                       Expanded(
                         child: Text(
                           classwork.score != null
-                              ? 'Examination Completed • Score: ${_formatScore(classwork.score!)} / ${_formatScore(classwork.maxScore)} pts'
-                              : 'Examination Submitted • Recorded in system',
+                              ? '${classwork.type == 'quiz' ? 'Quiz' : 'Examination'} Completed • Score: ${_formatScore(classwork.score!)} / ${_formatScore(classwork.maxScore)} pts'
+                              : '${classwork.type == 'quiz' ? 'Quiz' : 'Examination'} Submitted • Recorded in system',
                           style: const TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 13,
@@ -434,9 +434,11 @@ class StudentClassworkCard extends StatelessWidget {
                     ),
                     onPressed: () => _startAssessmentFlow(context),
                     icon: const Icon(Icons.play_arrow_rounded, size: 18),
-                    label: const Text(
-                      'Take Examination (App)',
-                      style: TextStyle(fontWeight: FontWeight.bold),
+                    label: Text(
+                      classwork.type == 'quiz'
+                          ? 'Take Quiz (App)'
+                          : 'Take Examination (App)',
+                      style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
                   ),
                 ),
@@ -820,6 +822,7 @@ class StudentClassworkCard extends StatelessWidget {
             available_from,
             deadline,
             results_released,
+            is_archived,
             assessment_questions (
               id,
               position,
@@ -828,7 +831,7 @@ class StudentClassworkCard extends StatelessWidget {
               points,
               assessment_question_options (
                 id,
-                option_label,
+                position,
                 option_text,
                 is_correct
               )
@@ -851,6 +854,7 @@ class StudentClassworkCard extends StatelessWidget {
               available_from,
               deadline,
               results_released,
+              is_archived,
               assessment_questions (
                 id,
                 position,
@@ -859,13 +863,14 @@ class StudentClassworkCard extends StatelessWidget {
                 points,
                 assessment_question_options (
                   id,
-                  option_label,
+                  position,
                   option_text,
                   is_correct
                 )
               )
             """)
             .eq('subject_offering_id', offeringId)
+            .eq('is_archived', false)
             .ilike('title', classwork.title)
             .order('created_at', ascending: false)
             .limit(1)
@@ -874,12 +879,36 @@ class StudentClassworkCard extends StatelessWidget {
 
       if (context.mounted) Navigator.pop(context);
 
-      if (rawAssess == null) {
+      if (rawAssess == null || rawAssess['is_archived'] == true) {
+        AppDataCache.instance.invalidatePrefix('student_dashboard_');
+        onRefresh?.call();
         if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Could not load examination details.'),
-            ),
+          await AppModals.showWarningDialog(
+            context: context,
+            title: 'Assessment Unavailable',
+            message:
+                'This quiz or examination is no longer available because it was removed by your teacher.',
+          );
+        }
+        return;
+      }
+
+      final availRaw = rawAssess['available_from']?.toString();
+      final availLocal = availRaw != null
+          ? DateTime.tryParse(availRaw)?.toLocal()
+          : null;
+      if (availLocal != null && DateTime.now().isBefore(availLocal)) {
+        final h = availLocal.hour == 0
+            ? 12
+            : (availLocal.hour > 12 ? availLocal.hour - 12 : availLocal.hour);
+        final minStr = availLocal.minute.toString().padLeft(2, '0');
+        final ampm = availLocal.hour >= 12 ? 'PM' : 'AM';
+        if (context.mounted) {
+          await AppModals.showWarningDialog(
+            context: context,
+            title: 'Assessment Not Yet Open',
+            message:
+                'This assessment is scheduled to open on ${availLocal.month}/${availLocal.day}/${availLocal.year} at $h:$minStr $ampm.',
           );
         }
         return;
@@ -894,56 +923,12 @@ class StudentClassworkCard extends StatelessWidget {
         ),
       );
 
-      final questions = qRows.map((q) {
-        final qTypeStr = q['question_type']?.toString().toLowerCase() ?? '';
-        final qType = switch (qTypeStr) {
-          'multiple_choice' => QuestionType.multipleChoice,
-          'true_false' => QuestionType.trueFalse,
-          'identification' => QuestionType.identification,
-          'matching_type' => QuestionType.matching,
-          _ => QuestionType.multipleChoice,
-        };
+      final questions = qRows
+          .map((q) => QuestionModel.fromSupabaseMap(q))
+          .toList();
 
-        final opts = (q['assessment_question_options'] as List? ?? [])
-            .map((o) => Map<String, dynamic>.from(o as Map))
-            .toList();
-        final choices = <String>[];
-        String correctAnswer = '';
-
-        if (qType == QuestionType.multipleChoice) {
-          for (final opt in opts) {
-            final text = opt['option_text']?.toString() ?? '';
-            choices.add(text);
-            if (opt['is_correct'] == true) {
-              correctAnswer = opt['option_label']?.toString() ?? text;
-            }
-          }
-        } else if (qType == QuestionType.trueFalse) {
-          choices.addAll(['True', 'False']);
-          for (final opt in opts) {
-            if (opt['is_correct'] == true) {
-              correctAnswer = opt['option_label']?.toString() ?? 'True';
-            }
-          }
-        } else if (qType == QuestionType.identification) {
-          for (final opt in opts) {
-            if (opt['is_correct'] == true) {
-              correctAnswer = opt['option_text']?.toString() ?? '';
-            }
-          }
-        }
-
-        return QuestionModel(
-          id: q['id']?.toString() ?? '',
-          questionText: q['question_text']?.toString() ?? '',
-          type: qType,
-          choices: choices,
-          correctAnswer: correctAnswer,
-          points: (q['points'] as num?)?.toDouble() ?? 1.0,
-        );
-      }).toList();
-
-      final schedDate = classwork.assignedAt ?? DateTime.now();
+      final schedDate = availLocal ?? classwork.assignedAt ?? DateTime.now();
+      final assessType = rawAssess['assessment_type']?.toString().toLowerCase();
 
       final model = QuizOrExamModel(
         id: rawAssess['id'].toString(),
@@ -952,13 +937,17 @@ class StudentClassworkCard extends StatelessWidget {
             rawAssess['instructions']?.toString() ?? classwork.instructions,
         subject: classwork.subjectName,
         section: classwork.sectionName,
-        isExam: true,
+        isExam: assessType != 'quiz',
+        examType: assessType,
         durationMinutes:
             (rawAssess['time_limit_minutes'] as num?)?.toInt() ?? 60,
         scheduleDate: schedDate,
         isPublished: true,
         resultsReleased: rawAssess['results_released'] == true,
         questions: questions,
+        subjectOfferingId:
+            rawAssess['subject_offering_id']?.toString() ??
+            classwork.subjectOfferingId,
       );
 
       if (context.mounted) {

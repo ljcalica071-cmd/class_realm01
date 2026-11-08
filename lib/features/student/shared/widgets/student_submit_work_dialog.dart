@@ -5,6 +5,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:class_realm/core/services/app_data_cache.dart';
 import 'package:class_realm/core/services/supabase_service.dart';
+import 'package:class_realm/widgets/common/app_modals.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/models/student_dashboard_models.dart';
 
@@ -133,6 +134,28 @@ class _StudentSubmitWorkDialogState extends State<StudentSubmitWorkDialog> {
 
     try {
       final client = Supabase.instance.client;
+
+      // Check if classwork item still exists in database (handle stale cache / deletion scenario)
+      final existingItem = await client
+          .from('classwork_items')
+          .select('id')
+          .eq('id', widget.classwork.id)
+          .maybeSingle();
+
+      if (existingItem == null) {
+        AppDataCache.instance.invalidatePrefix('student_dashboard_${user.id}');
+        if (mounted) {
+          Navigator.of(context).pop();
+          AppModals.showWarningDialog(
+            context: context,
+            title: 'Classwork Unavailable',
+            message:
+                'This activity or performance task has already been deleted or removed by your teacher. Your submission cannot be accepted.',
+          );
+        }
+        return;
+      }
+
       String? storagePath;
 
       // 1. Upload file if attached

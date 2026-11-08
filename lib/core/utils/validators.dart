@@ -49,6 +49,7 @@ class AppValidators {
   /// Classwork & Assessment limits (Performance Tasks & Activities)
   static const int minClassworkTitleLength = 2;
   static const int maxClassworkTitleLength = 100;
+  static const int minClassworkInstructionsLength = 2;
   static const int maxClassworkInstructionsLength = 1000;
   static const int minClassworkHps = 1;
   static const int maxClassworkHps = 100;
@@ -104,14 +105,21 @@ class AppValidators {
     return null;
   }
 
-  /// Validates Performance Task / Activity detailed instructions & rubrics (Max 30,000 characters)
+  /// Validates Classwork / Assessment detailed instructions & rubrics (2 to 1,000 non-space characters)
   static String? validateClassworkInstructions(String? value) {
-    final text = (value ?? '').trim();
+    final raw = value ?? '';
+    final text = raw.trim();
+    if (raw.isNotEmpty && text.isEmpty) {
+      return 'Instructions cannot contain only spaces.';
+    }
     if (text.isEmpty) {
       return 'Detailed instructions are required.';
     }
+    if (text.length < minClassworkInstructionsLength) {
+      return 'Instructions must be at least $minClassworkInstructionsLength characters.';
+    }
     if (text.length > maxClassworkInstructionsLength) {
-      return 'Must not exceed 30,000 characters.';
+      return 'Must not exceed 1,000 characters.';
     }
     return null;
   }

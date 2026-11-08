@@ -2,25 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:class_realm/core/services/local_storage_service.dart';
 import 'package:class_realm/shared/services/in_app_notification_service.dart';
-import 'package:class_realm/shared/widgets/buttons/app_buttons.dart';
 import 'package:class_realm/shared/widgets/modals/app_modals.dart';
 import 'package:class_realm/shared/widgets/modals/legal_documents_modal.dart';
 
 /// Unified Settings list shared across Student, Parent, and Teacher portals.
 /// Strictly follows the ordered sequence:
-/// 1. Enable Notifications (labeled Next Update)
+/// 1. Enable Notifications
 /// 2. Change Password (labeled Next Update)
 /// 3. App Version
 /// 4. Terms of Service
 /// 5. Privacy Policy
-/// 6. Save Changes
 class PortalSettingsContent extends StatefulWidget {
   final String portalLabel;
 
-  const PortalSettingsContent({
-    super.key,
-    required this.portalLabel,
-  });
+  const PortalSettingsContent({super.key, required this.portalLabel});
 
   @override
   State<PortalSettingsContent> createState() => _PortalSettingsContentState();
@@ -107,7 +102,10 @@ class _PortalSettingsContentState extends State<PortalSettingsContent> {
                       ),
                     ),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 7,
+                        vertical: 2,
+                      ),
                       decoration: BoxDecoration(
                         color: _notificationsEnabled
                             ? const Color(0xFF10B981).withValues(alpha: 0.12)
@@ -197,10 +195,7 @@ class _PortalSettingsContentState extends State<PortalSettingsContent> {
                 ),
                 title: const Text(
                   'App Version',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 14,
-                  ),
+                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
                 ),
                 subtitle: const Text(
                   'Eduardo Barretto Senior Integrated School',
@@ -225,10 +220,7 @@ class _PortalSettingsContentState extends State<PortalSettingsContent> {
                 ),
                 title: const Text(
                   'Terms of Service',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 14,
-                  ),
+                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
                 ),
                 subtitle: const Text(
                   'Read our user responsibilities and acceptable use terms',
@@ -247,10 +239,7 @@ class _PortalSettingsContentState extends State<PortalSettingsContent> {
                 ),
                 title: const Text(
                   'Privacy Policy',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 14,
-                  ),
+                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
                 ),
                 subtitle: const Text(
                   'RA 10173 compliance & account deletion policy',
@@ -260,22 +249,6 @@ class _PortalSettingsContentState extends State<PortalSettingsContent> {
                 onTap: () => LegalDocumentsModal.showPrivacyPolicy(context),
               ),
             ],
-          ),
-        ),
-        const SizedBox(height: 20),
-
-        // 6. Save Changes
-        SizedBox(
-          height: 48,
-          child: AppButton.primary(
-            icon: Icons.check_circle_outline_rounded,
-            label: 'Save Changes (Next Update)',
-            onPressed: () {
-              AppModals.showUpcomingFeatureDialog(
-                context,
-                featureName: '${widget.portalLabel} Settings & Preferences',
-              );
-            },
           ),
         ),
       ],

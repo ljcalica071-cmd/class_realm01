@@ -9,15 +9,21 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'package:class_realm/core/theme/app_theme.dart';
+import 'package:class_realm/core/utils/validators.dart';
 import 'package:class_realm/core/services/supabase_service.dart';
 import 'package:class_realm/core/services/app_data_cache.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/data/repositories/subject_repository.dart';
+import 'package:class_realm/data/repositories/teacher_classwork_repository.dart';
+import 'package:class_realm/data/repositories/supabase_teacher_classwork_repository.dart';
 import 'package:class_realm/models/academic_models.dart';
+import 'package:class_realm/models/subject_catalog_model.dart';
+import 'package:class_realm/features/teacher/sub_features/grading/widgets/teacher_gradebook_tab.dart';
 import 'package:class_realm/widgets/common/app_buttons.dart';
 import 'package:class_realm/widgets/common/app_modals.dart';
 import 'package:class_realm/widgets/common/app_date_picker_field.dart';
 import 'package:class_realm/widgets/common/app_time_picker_field.dart';
+import 'package:class_realm/widgets/common/expandable_instructions_text.dart';
 import 'package:class_realm/features/teacher/sub_features/assessments/widgets/anti_cheating_documentation_modal.dart';
 
 /// Active draft of an individual question during step 2 authoring.
@@ -43,8 +49,9 @@ class QuestionDraft {
     if (statement.trim().isEmpty) return false;
     if (points <= 0) return false;
     if (type == QuestionType.multipleChoice) {
-      if (choices.length < 4 || choices.any((c) => c.trim().isEmpty))
+      if (choices.length < 4 || choices.any((c) => c.trim().isEmpty)) {
         return false;
+      }
       return correctAnswer.isNotEmpty;
     } else if (type == QuestionType.trueFalse) {
       return correctAnswer == 'True' || correctAnswer == 'False';
@@ -58,6 +65,10 @@ class QuestionDraft {
 class CreateAssessmentFlowDialog extends StatefulWidget {
   final VoidCallback onAssessmentCreated;
   final String initialSection;
+  final String? initialSubject;
+  final String? initialOfferingId;
+  final List<Map<String, dynamic>>? initialOfferings;
+  final TeacherClassworkRepository? repository;
   final bool initialIsExam;
   final bool skipTypeSelection;
 
@@ -65,6 +76,10 @@ class CreateAssessmentFlowDialog extends StatefulWidget {
     super.key,
     required this.onAssessmentCreated,
     this.initialSection = '',
+    this.initialSubject,
+    this.initialOfferingId,
+    this.initialOfferings,
+    this.repository,
     this.initialIsExam = false,
     this.skipTypeSelection = true,
   });
@@ -73,6 +88,10 @@ class CreateAssessmentFlowDialog extends StatefulWidget {
     BuildContext context, {
     required VoidCallback onAssessmentCreated,
     String? initialSection,
+    String? initialSubject,
+    String? initialOfferingId,
+    List<Map<String, dynamic>>? initialOfferings,
+    TeacherClassworkRepository? repository,
     bool initialIsExam = false,
     bool skipTypeSelection = true,
   }) {
@@ -82,6 +101,10 @@ class CreateAssessmentFlowDialog extends StatefulWidget {
       builder: (ctx) => CreateAssessmentFlowDialog(
         onAssessmentCreated: onAssessmentCreated,
         initialSection: initialSection ?? '',
+        initialSubject: initialSubject,
+        initialOfferingId: initialOfferingId,
+        initialOfferings: initialOfferings,
+        repository: repository,
         initialIsExam: initialIsExam,
         skipTypeSelection: skipTypeSelection,
       ),
@@ -106,8 +129,9 @@ class _CreateAssessmentFlowDialogState
   // Slot: 'ST1', 'ST2', 'TE' (for Periodical Exams)
   String _examCategory = 'ST1';
 
-  // Slot for Quiz (Written Works: WW 1..10)
+  // Slot for Quiz (Written Works: WW 1..maxWwSlots)
   int _quizSlotIndex = 1;
+  int _maxWwSlots = 3;
   Set<int> _occupiedWwSlots = <int>{};
 
   // Sequential slot statuses for selected offering (Exams)
@@ -116,10 +140,12 @@ class _CreateAssessmentFlowDialogState
   bool _teCreated = false;
   bool _isCheckingSlots = false;
 
-  // Selected Offering
+  // Selected Offering & Active Term
   Map<String, dynamic>? _selectedOffering;
   List<Map<String, dynamic>> _teacherSubjects = [];
   bool _isLoadingOfferings = true;
+  int _termNumber = 1;
+  int _slotCheckRequestId = 0;
 
   // Form Fields - Step 1
   final _titleCtrl = TextEditingController();
@@ -181,7 +207,7 @@ class _CreateAssessmentFlowDialogState
 
   bool get _areAllSlotsFilled => _isExam
       ? (_st1Created && _st2Created && _teCreated)
-      : (_occupiedWwSlots.length >= 10);
+      : (_occupiedWwSlots.where((s) => s <= _maxWwSlots).length >= _maxWwSlots);
 
   @override
   void initState() {
@@ -206,7 +232,132 @@ class _CreateAssessmentFlowDialogState
         setState(() => _durationError = null);
       }
     });
-    _loadTeacherOfferings();
+    if (widget.initialOfferings != null) {
+      _teacherSubjects = List<Map<String, dynamic>>.from(
+        widget.initialOfferings!,
+      );
+      _selectedOffering = _resolveInitialOffering(_teacherSubjects);
+      if (_selectedOffering != null) {
+        final terms = _getAvailableTermsForOffering(_selectedOffering);
+        _termNumber = terms.isNotEmpty ? terms.first : 1;
+      }
+      _isLoadingOfferings = false;
+      final offeringId = _selectedOffering?['id']?.toString() ?? '';
+      if (offeringId.isNotEmpty) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _checkSlotStatuses(offeringId);
+        });
+      }
+    } else {
+      _loadTeacherOfferings();
+    }
+  }
+
+  String _termLabel(int term) {
+    switch (term) {
+      case 1:
+        return '1st Term';
+      case 2:
+        return '2nd Term';
+      case 3:
+        return '3rd Term';
+      default:
+        return 'Term $term';
+    }
+  }
+
+  List<int> _getAvailableTermsForOffering(Map<String, dynamic>? offering) {
+    if (offering == null || offering.isEmpty) return const [1, 2, 3];
+
+    int? termsTaught;
+    String? termBlock;
+
+    if (offering['terms_taught'] != null) {
+      final tt = offering['terms_taught'];
+      termsTaught = tt is int ? tt : int.tryParse(tt.toString());
+    }
+    if (offering['term_block'] != null) {
+      termBlock = offering['term_block']?.toString();
+    }
+
+    final subjectName = offering['subject_name']?.toString().trim();
+    if (termsTaught == null || termsTaught == 3) {
+      if (subjectName != null && subjectName.isNotEmpty) {
+        try {
+          final catalogMatch = DepEdSubjectCatalog.allSubjects.firstWhere(
+            (item) => item.name.toLowerCase() == subjectName.toLowerCase(),
+          );
+          termsTaught = catalogMatch.termsTaught;
+        } catch (_) {}
+      }
+    }
+
+    termsTaught ??= 3;
+    termBlock ??= (termsTaught == 1
+        ? '1ST'
+        : (termsTaught == 2 ? '1ST & 2ND' : '1ST, 2ND, 3RD'));
+
+    try {
+      final active = DepEdSubjectCatalog.getActiveTermsForBlock(
+        termsTaught.clamp(1, 3),
+        termBlock,
+      );
+      if (active.isNotEmpty) return active;
+    } catch (_) {
+      if (termsTaught == 1) {
+        final upper = termBlock.toUpperCase();
+        if (upper.contains('3') || upper.contains('THIRD')) return const [3];
+        if (upper.contains('2') || upper.contains('SECOND')) return const [2];
+        return const [1];
+      } else if (termsTaught == 2) {
+        final upper = termBlock.toUpperCase();
+        if (upper.contains('3') || upper.contains('2ND & 3RD')) {
+          return const [2, 3];
+        }
+        return const [1, 2];
+      }
+    }
+    return const [1, 2, 3];
+  }
+
+  Map<String, dynamic>? _resolveInitialOffering(
+    List<Map<String, dynamic>> subjects,
+  ) {
+    if (subjects.isEmpty) return null;
+    if (widget.initialOfferingId != null &&
+        widget.initialOfferingId!.isNotEmpty) {
+      final byId = subjects.firstWhere(
+        (s) => s['id']?.toString() == widget.initialOfferingId,
+        orElse: () => <String, dynamic>{},
+      );
+      if (byId.isNotEmpty) return byId;
+    }
+    if (widget.initialSection.isNotEmpty ||
+        (widget.initialSubject != null && widget.initialSubject!.isNotEmpty)) {
+      final byContext = subjects.firstWhere(
+        (s) {
+          final secOk =
+              widget.initialSection.isEmpty ||
+              s['section_name']?.toString().trim() ==
+                  widget.initialSection.trim();
+          final subOk =
+              widget.initialSubject == null ||
+              widget.initialSubject!.isEmpty ||
+              s['subject_name']?.toString().trim() ==
+                  widget.initialSubject!.trim();
+          return secOk && subOk;
+        },
+        orElse: () => subjects.firstWhere(
+          (s) =>
+              widget.initialSection.isNotEmpty &&
+              s['section_name']?.toString().trim() ==
+                  widget.initialSection.trim(),
+          orElse: () => subjects.first,
+        ),
+      );
+      if (byContext.isNotEmpty) return byContext;
+    }
+    return subjects.first;
   }
 
   @override
@@ -240,22 +391,17 @@ class _CreateAssessmentFlowDialogState
       );
       if (!mounted) return;
 
-      Map<String, dynamic>? initial;
-      if (widget.initialSection.isNotEmpty) {
-        initial = subjects.firstWhere(
-          (s) => s['section_name']?.toString() == widget.initialSection,
-          orElse: () =>
-              subjects.isNotEmpty ? subjects.first : <String, dynamic>{},
-        );
-      } else if (subjects.isNotEmpty) {
-        initial = subjects.first;
-      }
+      final initial = _resolveInitialOffering(subjects);
+      final activeTerms = _getAvailableTermsForOffering(initial);
 
       setState(() {
         _teacherSubjects = subjects;
         _selectedOffering = initial != null && initial.isNotEmpty
             ? initial
             : null;
+        if (activeTerms.isNotEmpty && !activeTerms.contains(_termNumber)) {
+          _termNumber = activeTerms.first;
+        }
         _isLoadingOfferings = false;
       });
 
@@ -271,53 +417,31 @@ class _CreateAssessmentFlowDialogState
   }
 
   Future<void> _checkSlotStatuses(String offeringId) async {
+    final reqId = ++_slotCheckRequestId;
     setState(() => _isCheckingSlots = true);
     try {
-      final client = SupabaseService().client;
+      final repo =
+          widget.repository ?? SupabaseTeacherClassworkRepository.instance;
+      final summary = await repo.getOccupiedSlots(
+        subjectOfferingId: offeringId,
+        termNumber: _termNumber,
+      );
+      if (!mounted || reqId != _slotCheckRequestId) return;
 
       if (!_isExam) {
-        // 1. Check existing classwork items for this offering under WW (Written Works)
-        final items = await client
-            .from('classwork_items')
-            .select('title, gradebook_column_index')
-            .eq('subject_offering_id', offeringId)
-            .eq('grading_category', 'ww')
-            .eq('is_archived', false);
-
-        // 2. Check gradebook sheet HPS for WW
-        final termSheet = await SubjectRepository.instance.getGradebookTermSheet(
-          offeringId,
-          1,
-        );
-        final wwHps = termSheet != null
-            ? (termSheet['hps'] as Map? ?? {})['ww'] as Map? ?? {}
-            : {};
-
-        final occupied = <int>{};
-        for (final r in (items as List? ?? [])) {
-          final col = r['gradebook_column_index'] as int?;
-          if (col != null && col >= 1 && col <= 10) {
-            occupied.add(col);
-          }
-        }
-        for (final entry in wwHps.entries) {
-          final k = int.tryParse(entry.key.toString());
-          if (k != null && (entry.value as num? ?? 0) > 0) {
-            occupied.add(k);
-          }
-        }
-
+        final occupied = summary.occupiedWwSlots;
+        final maxWw = summary.maxWwSlot.clamp(3, 10);
         int firstAvailable = 1;
-        for (int i = 1; i <= 10; i++) {
+        for (int i = 1; i <= maxWw; i++) {
           if (!occupied.contains(i)) {
             firstAvailable = i;
             break;
           }
         }
 
-        if (!mounted) return;
         setState(() {
           _occupiedWwSlots = occupied;
+          _maxWwSlots = maxWw;
           _quizSlotIndex = firstAvailable;
           _isCheckingSlots = false;
           if (_titleCtrl.text.isEmpty ||
@@ -329,66 +453,25 @@ class _CreateAssessmentFlowDialogState
         return;
       }
 
-      // 1. Check existing classwork items for this offering under EX
-      final items = await client
-          .from('classwork_items')
-          .select('title, gradebook_column_index')
-          .eq('subject_offering_id', offeringId)
-          .eq('grading_category', 'ex')
-          .eq('is_archived', false);
-
-      // 2. Check gradebook sheet HPS
-      final termSheet = await SubjectRepository.instance.getGradebookTermSheet(
-        offeringId,
-        1,
-      );
-      final hps = termSheet != null
-          ? (termSheet['hps'] as Map? ?? {})['ex'] as Map? ?? {}
-          : {};
-
-      bool hasSt1 = false;
-      bool hasSt2 = false;
-      bool hasTe = false;
-
-      for (final r in (items as List? ?? [])) {
-        final col = r['gradebook_column_index'] as int?;
-        final t = (r['title'] ?? '').toString().toUpperCase();
-        if (col == 1 || t.contains('ST1') || t.contains('SUMMATIVE TEST 1'))
-          hasSt1 = true;
-        if (col == 2 || t.contains('ST2') || t.contains('SUMMATIVE TEST 2'))
-          hasSt2 = true;
-        if (col == 3 ||
-            t.contains('TE') ||
-            t.contains('TERM EXAM') ||
-            t.contains('PERIODICAL'))
-          hasTe = true;
-      }
-
-      if (hps['st1'] != null && (hps['st1'] as num) > 0) hasSt1 = true;
-      if (hps['st2'] != null && (hps['st2'] as num) > 0) hasSt2 = true;
-      if (hps['te'] != null && (hps['te'] as num) > 0) hasTe = true;
-
-      if (!mounted) return;
       setState(() {
-        _st1Created = hasSt1;
-        _st2Created = hasSt2;
-        _teCreated = hasTe;
+        _st1Created = summary.st1Created;
+        _st2Created = summary.st2Created;
+        _teCreated = summary.teCreated;
         _isCheckingSlots = false;
 
-        // Auto-select the first available sequential slot
-        if (!hasSt1) {
+        if (!summary.st1Created) {
           _setExamSlot('ST1');
-        } else if (!hasSt2) {
+        } else if (!summary.st2Created) {
           _setExamSlot('ST2');
-        } else if (!hasTe) {
-          _setExamSlot('TE');
         } else {
           _setExamSlot('TE');
         }
       });
     } catch (e) {
       debugPrint('Slot check notice: $e');
-      if (mounted) setState(() => _isCheckingSlots = false);
+      if (mounted && reqId == _slotCheckRequestId) {
+        setState(() => _isCheckingSlots = false);
+      }
     }
   }
 
@@ -430,7 +513,7 @@ class _CreateAssessmentFlowDialogState
       lastDate: DateTime(2100),
       title: _completionMode == 'online'
           ? 'Select Scheduled Date'
-          : 'Select Administered Date',
+          : 'Set Date',
       icon: Icons.calendar_today_outlined,
     );
 
@@ -470,10 +553,12 @@ class _CreateAssessmentFlowDialogState
       return;
     }
 
-    final instructions = _instructionsCtrl.text.trim();
-    if (instructions.isNotEmpty && instructions.length < 2) {
+    final instrErr = AppValidators.validateClassworkInstructions(
+      _instructionsCtrl.text,
+    );
+    if (instrErr != null) {
       setState(() {
-        _instructionsError = 'Instructions & Guidelines must be at least 2 characters if provided.';
+        _instructionsError = instrErr;
       });
       return;
     }
@@ -495,6 +580,29 @@ class _CreateAssessmentFlowDialogState
     }
 
     // Online Mode validations
+    final scheduledDateTime = DateTime(
+      _scheduledDate.year,
+      _scheduledDate.month,
+      _scheduledDate.day,
+      _startTime.hour,
+      _startTime.minute,
+    );
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final pickedDay = DateTime(
+      _scheduledDate.year,
+      _scheduledDate.month,
+      _scheduledDate.day,
+    );
+    if (pickedDay.isBefore(today) ||
+        scheduledDateTime.isBefore(now.subtract(const Duration(minutes: 1)))) {
+      setState(
+        () => _dateError =
+            'Scheduled start date and time cannot be in the past.',
+      );
+      return;
+    }
+
     final duration = int.tryParse(_durationCtrl.text.trim());
     if (duration == null || duration < 1) {
       setState(() => _durationError = 'Duration must be at least 1 minute.');
@@ -863,6 +971,38 @@ class _CreateAssessmentFlowDialogState
           : _quizSlotIndex;
 
       final category = _isExam ? 'ex' : 'ww';
+      final repo =
+          widget.repository ?? SupabaseTeacherClassworkRepository.instance;
+      final alreadyUsed = await repo.isGradebookSlotOccupied(
+        subjectOfferingId: offeringId,
+        gradingCategory: category,
+        termNumber: _termNumber,
+        gradebookColumnIndex: slotIndex,
+      );
+      if (alreadyUsed) {
+        if (mounted) {
+          setState(() => _isPublishing = false);
+          await _checkSlotStatuses(offeringId);
+          if (mounted) {
+            AppModals.showWarningDialog(
+              context: context,
+              title: 'Slot Already Occupied',
+              message: _isExam
+                  ? '$_examCategory was already created in the database for ${_termLabel(_termNumber)}. Please use the next available slot.'
+                  : 'WW $_quizSlotIndex is already occupied in the database for ${_termLabel(_termNumber)}. Please select an available slot.',
+            );
+          }
+        }
+        return;
+      }
+
+      final dateUtc = DateTime(
+        _scheduledDate.year,
+        _scheduledDate.month,
+        _scheduledDate.day,
+        23,
+        59,
+      ).toUtc();
 
       // 1. Insert into classwork_items
       await client.from('classwork_items').insert({
@@ -872,11 +1012,13 @@ class _CreateAssessmentFlowDialogState
         'title': title,
         'instructions': instructions,
         'max_score': hpsPoints,
-        'deadline': _scheduledDate.toIso8601String(),
+        'assigned_at': DateTime.now().toUtc().toIso8601String(),
+        'deadline': dateUtc.toIso8601String(),
         'completion_mode': 'in_person',
-        'is_requirement': true,
-        'term_number': 1,
+        'term_number': _termNumber,
         'gradebook_column_index': slotIndex,
+        'allow_late_submission': false,
+        'is_archived': false,
         'is_published': true,
       });
 
@@ -884,7 +1026,7 @@ class _CreateAssessmentFlowDialogState
       final termSheet =
           await SubjectRepository.instance.getGradebookTermSheet(
             offeringId,
-            1,
+            _termNumber,
           ) ??
           {};
       final hps = Map<String, dynamic>.from(termSheet['hps'] as Map? ?? {});
@@ -898,14 +1040,18 @@ class _CreateAssessmentFlowDialogState
         hps['ww'] = wwHps;
       }
       termSheet['hps'] = hps;
+      termSheet['scores'] ??= <String, dynamic>{};
       await SubjectRepository.instance.saveGradebookTermSheet(
         offeringId,
-        1,
+        _termNumber,
         termSheet,
       );
 
+      AppDataCache.instance.invalidatePrefix('gradebook_');
+      AppDataCache.instance.invalidatePrefix('teacher_assessments_');
       AppDataCache.instance.invalidatePrefix('teacher_activities_');
       AppDataCache.instance.invalidatePrefix('student_dashboard_');
+      TeacherGradebookTab.gradebookRefreshNotifier.value++;
 
       if (!mounted) return;
       Navigator.of(context).pop();
@@ -948,6 +1094,7 @@ class _CreateAssessmentFlowDialogState
     if (_selectedOffering == null) return;
     setState(() => _isPublishing = true);
 
+    String? createdAssessmentId;
     try {
       final client = SupabaseService().client;
       final offeringId = _selectedOffering!['id'].toString();
@@ -973,6 +1120,31 @@ class _CreateAssessmentFlowDialogState
           : _quizSlotIndex;
 
       final category = _isExam ? 'ex' : 'ww';
+      final repo =
+          widget.repository ?? SupabaseTeacherClassworkRepository.instance;
+      final alreadyUsed = await repo.isGradebookSlotOccupied(
+        subjectOfferingId: offeringId,
+        gradingCategory: category,
+        termNumber: _termNumber,
+        gradebookColumnIndex: slotIndex,
+      );
+      if (alreadyUsed) {
+        if (mounted) {
+          setState(() => _isPublishing = false);
+          await _checkSlotStatuses(offeringId);
+          if (mounted) {
+            AppModals.showWarningDialog(
+              context: context,
+              title: 'Slot Already Occupied',
+              message: _isExam
+                  ? '$_examCategory was already created in the database for ${_termLabel(_termNumber)}. Please review the active slot before publishing.'
+                  : 'WW $_quizSlotIndex is already occupied in the database for ${_termLabel(_termNumber)}. Please select an available slot.',
+            );
+          }
+        }
+        return;
+      }
+
       final assessType = _isExam
           ? switch (_examCategory) {
               'ST2' => 'st2',
@@ -996,8 +1168,8 @@ class _CreateAssessmentFlowDialogState
             'title': title,
             'instructions': instructions,
             'time_limit_minutes': duration,
-            'available_from': startDateTime.toIso8601String(),
-            'deadline': deadline.toIso8601String(),
+            'available_from': startDateTime.toUtc().toIso8601String(),
+            'deadline': deadline.toUtc().toIso8601String(),
             'attempts_allowed': 1,
             'is_published': true,
           })
@@ -1005,8 +1177,9 @@ class _CreateAssessmentFlowDialogState
           .single();
 
       final assessmentId = assessmentRow['id'].toString();
+      createdAssessmentId = assessmentId;
 
-      // 2. Insert assessment_questions & assessment_question_options
+      // 2. Insert assessment_questions & assessment_question_options using position
       for (final q in _plannedQuestions) {
         final qTypeStr = switch (q.type) {
           QuestionType.multipleChoice => 'multiple_choice',
@@ -1031,25 +1204,27 @@ class _CreateAssessmentFlowDialogState
 
         if (q.type == QuestionType.multipleChoice) {
           const labels = ['A', 'B', 'C', 'D'];
+          final optionRows = <Map<String, dynamic>>[];
           for (int i = 0; i < 4; i++) {
-            await client.from('assessment_question_options').insert({
+            optionRows.add({
               'question_id': qId,
-              'option_label': labels[i],
+              'position': i + 1,
               'option_text': q.choices[i],
               'is_correct': q.correctAnswer == labels[i],
             });
           }
+          await client.from('assessment_question_options').insert(optionRows);
         } else if (q.type == QuestionType.trueFalse) {
           await client.from('assessment_question_options').insert([
             {
               'question_id': qId,
-              'option_label': 'True',
+              'position': 1,
               'option_text': 'True',
               'is_correct': q.correctAnswer == 'True',
             },
             {
               'question_id': qId,
-              'option_label': 'False',
+              'position': 2,
               'option_text': 'False',
               'is_correct': q.correctAnswer == 'False',
             },
@@ -1057,14 +1232,14 @@ class _CreateAssessmentFlowDialogState
         } else if (q.type == QuestionType.identification) {
           await client.from('assessment_question_options').insert({
             'question_id': qId,
-            'option_label': 'Key',
+            'position': 1,
             'option_text': q.correctAnswer,
             'is_correct': true,
           });
         }
       }
 
-      // 3. Persist to classwork_items
+      // 3. Persist to classwork_items (shared ID for single source of truth)
       await client.from('classwork_items').insert({
         'id': assessmentId,
         'subject_offering_id': offeringId,
@@ -1073,19 +1248,21 @@ class _CreateAssessmentFlowDialogState
         'title': title,
         'instructions': instructions,
         'max_score': totalPoints.toInt(),
-        'deadline': deadline.toIso8601String(),
+        'assigned_at': startDateTime.toUtc().toIso8601String(),
+        'deadline': deadline.toUtc().toIso8601String(),
         'completion_mode': 'online',
-        'is_requirement': true,
-        'term_number': 1,
+        'term_number': _termNumber,
         'gradebook_column_index': slotIndex,
+        'allow_late_submission': false,
+        'is_archived': false,
         'is_published': true,
       });
 
-      // 4. Update Gradebook Sheet HPS
+      // 4. Update Gradebook Sheet HPS for the active term
       final termSheet =
           await SubjectRepository.instance.getGradebookTermSheet(
             offeringId,
-            1,
+            _termNumber,
           ) ??
           {};
       final hps = Map<String, dynamic>.from(termSheet['hps'] as Map? ?? {});
@@ -1099,20 +1276,24 @@ class _CreateAssessmentFlowDialogState
         hps['ww'] = wwHps;
       }
       termSheet['hps'] = hps;
+      termSheet['scores'] ??= <String, dynamic>{};
       await SubjectRepository.instance.saveGradebookTermSheet(
         offeringId,
-        1,
+        _termNumber,
         termSheet,
       );
 
-      // Clean local draft
+      // Clean local draft & refresh caches
       AppDataCache.instance.invalidate(
         _isExam
             ? 'exam_draft_${offeringId}_$_examCategory'
             : 'quiz_draft_${offeringId}_$_quizSlotIndex',
       );
+      AppDataCache.instance.invalidatePrefix('gradebook_');
+      AppDataCache.instance.invalidatePrefix('teacher_assessments_');
       AppDataCache.instance.invalidatePrefix('teacher_activities_');
       AppDataCache.instance.invalidatePrefix('student_dashboard_');
+      TeacherGradebookTab.gradebookRefreshNotifier.value++;
 
       if (!mounted) return;
       Navigator.of(context).pop();
@@ -1122,10 +1303,34 @@ class _CreateAssessmentFlowDialogState
         context: context,
         title: _isExam ? 'Examination Published' : 'Quiz Published',
         message: _isExam
-            ? '$title has been published for ${_selectedOffering!['section_name']}. Scheduled for ${_formatDate(_scheduledDate)} at ${AppTimePickerField.format(_startTime)} (${duration}m duration).'
-            : '$title has been published for ${_selectedOffering!['section_name']} under Written Works (WW $_quizSlotIndex). Scheduled for ${_formatDate(_scheduledDate)} at ${AppTimePickerField.format(_startTime)} (${duration}m duration).',
+            ? '$title has been published for ${_selectedOffering!['section_name']} (${_termLabel(_termNumber)}). Scheduled for ${_formatDate(_scheduledDate)} at ${AppTimePickerField.format(_startTime)} (${duration}m duration).'
+            : '$title has been published for ${_selectedOffering!['section_name']} (${_termLabel(_termNumber)}) under Written Works (WW $_quizSlotIndex). Scheduled for ${_formatDate(_scheduledDate)} at ${AppTimePickerField.format(_startTime)} (${duration}m duration).',
       );
     } catch (e) {
+      // Rollback any partially created records so orphan rows never remain in DB
+      if (createdAssessmentId != null) {
+        try {
+          final client = SupabaseService().client;
+          await client
+              .from('classwork_items')
+              .delete()
+              .eq('id', createdAssessmentId);
+        } catch (_) {}
+        try {
+          final client = SupabaseService().client;
+          await client
+              .from('assessment_questions')
+              .delete()
+              .eq('assessment_id', createdAssessmentId);
+        } catch (_) {}
+        try {
+          final client = SupabaseService().client;
+          await client
+              .from('digital_assessments')
+              .delete()
+              .eq('id', createdAssessmentId);
+        } catch (_) {}
+      }
       if (mounted) {
         setState(() => _isPublishing = false);
         AppModals.showErrorDialog(
@@ -1410,13 +1615,16 @@ class _CreateAssessmentFlowDialogState
                     children: [
                       Row(
                         children: [
-                          Text(
-                            _isExam
-                                ? 'Generate Examination with Gemini AI'
-                                : 'Generate Quiz with Gemini AI',
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 13,
+                          Flexible(
+                            child: Text(
+                              _isExam
+                                  ? 'Generate Examination with Gemini AI'
+                                  : 'Generate Quiz with Gemini AI',
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                              ),
                             ),
                           ),
                           const SizedBox(width: 8),
@@ -1632,7 +1840,16 @@ class _CreateAssessmentFlowDialogState
                         }).toList(),
                         onChanged: (newOff) {
                           if (newOff != null) {
-                            setState(() => _selectedOffering = newOff);
+                            final activeTerms = _getAvailableTermsForOffering(
+                              newOff,
+                            );
+                            setState(() {
+                              _selectedOffering = newOff;
+                              if (activeTerms.isNotEmpty &&
+                                  !activeTerms.contains(_termNumber)) {
+                                _termNumber = activeTerms.first;
+                              }
+                            });
                             final offId = newOff['id']?.toString() ?? '';
                             if (offId.isNotEmpty) {
                               _checkSlotStatuses(offId);
@@ -1667,6 +1884,101 @@ class _CreateAssessmentFlowDialogState
                     ),
                   ),
           const SizedBox(height: 16),
+
+          // 2b. Gradebook Term Selector / Display
+          if (_selectedOffering != null) ...[
+            Builder(
+              builder: (context) {
+                final availableTerms = _getAvailableTermsForOffering(
+                  _selectedOffering,
+                );
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Gradebook Term *',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: theme.colorScheme.onSurface,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    if (availableTerms.length <= 1)
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 11,
+                        ),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.surfaceContainerHighest
+                              .withValues(alpha: 0.25),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: theme.colorScheme.outline.withValues(
+                              alpha: 0.3,
+                            ),
+                          ),
+                        ),
+                        child: Text(
+                          _termLabel(_termNumber),
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      )
+                    else
+                      DropdownButtonFormField<int>(
+                        initialValue: availableTerms.contains(_termNumber)
+                            ? _termNumber
+                            : availableTerms.first,
+                        decoration: InputDecoration(
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 11,
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: BorderSide(
+                              color: theme.colorScheme.outline.withValues(
+                                alpha: 0.3,
+                              ),
+                            ),
+                          ),
+                        ),
+                        items: availableTerms
+                            .map(
+                              (t) => DropdownMenuItem<int>(
+                                value: t,
+                                child: Text(
+                                  _termLabel(t),
+                                  style: const TextStyle(fontSize: 13),
+                                ),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (newTerm) {
+                          if (newTerm != null && newTerm != _termNumber) {
+                            setState(() => _termNumber = newTerm);
+                            final offId =
+                                _selectedOffering?['id']?.toString() ?? '';
+                            if (offId.isNotEmpty) {
+                              _checkSlotStatuses(offId);
+                            }
+                          }
+                        },
+                      ),
+                    const SizedBox(height: 16),
+                  ],
+                );
+              },
+            ),
+          ],
 
           // 3. Slot Selector: ST1 -> ST2 -> TE for Exam, or WW Slots for Quiz
           if (_isExam) ...[
@@ -1928,7 +2240,7 @@ class _CreateAssessmentFlowDialogState
               ],
             ),
           ] else ...[
-            // In-Person Mode Controls: Administered Date & HPS
+            // In-Person Mode Controls: Set Date & HPS
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -1938,7 +2250,7 @@ class _CreateAssessmentFlowDialogState
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Date Administered *',
+                        'Set Date *',
                         style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
@@ -2062,80 +2374,13 @@ class _CreateAssessmentFlowDialogState
           ],
           const SizedBox(height: 18),
 
-          // 5. Instructions & Guidelines (Optional)
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Instructions & Guidelines',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: theme.colorScheme.onSurface,
-                ),
-              ),
-              Text(
-                '${_instructionsCtrl.text.length} / 1000',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w500,
-                  color: _instructionsCtrl.text.length > 1000
-                      ? const Color(0xFFDC2626)
-                      : theme.colorScheme.onSurface.withValues(alpha: 0.5),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          TextField(
+          // 5. Instructions & Guidelines (2 lines + See more / See less + min 2 chars)
+          ExpandableInstructionsInputField(
             controller: _instructionsCtrl,
-            maxLines: 3,
-            maxLength: 1000,
-            buildCounter: (
-              _, {
-              required currentLength,
-              required isFocused,
-              maxLength,
-            }) => const SizedBox.shrink(),
-            onChanged: (_) => setState(() {}),
-            decoration: InputDecoration(
-              hintText: 'e.g. Provide test-taking guidelines, no calculators allowed...',
-              filled: true,
-              fillColor: theme.colorScheme.surface,
-              contentPadding: const EdgeInsets.all(12),
-              errorText: _instructionsError,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: BorderSide(
-                  color: _instructionsError != null
-                      ? const Color(0xFFDC2626)
-                      : theme.colorScheme.outline.withValues(alpha: 0.3),
-                  width: _instructionsError != null ? 1.5 : 1.0,
-                ),
-              ),
-              errorBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(
-                  color: Color(0xFFDC2626),
-                  width: 1.5,
-                ),
-              ),
-              focusedErrorBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(
-                  color: Color(0xFFDC2626),
-                  width: 2.0,
-                ),
-              ),
-              errorStyle: const TextStyle(
-                fontSize: 12,
-                color: Color(0xFFDC2626),
-                fontWeight: FontWeight.w500,
-              ),
-            ),
+            label: 'Instructions & Guidelines *',
+            hint:
+                'e.g. Provide test-taking guidelines, no calculators allowed...',
+            errorText: _instructionsError,
           ),
           const SizedBox(height: 4),
           Align(
@@ -2326,7 +2571,7 @@ class _CreateAssessmentFlowDialogState
         Wrap(
           spacing: 8,
           runSpacing: 8,
-          children: List.generate(10, (idx) {
+          children: List.generate(_maxWwSlots, (idx) {
             final slot = idx + 1;
             final isOccupied = _occupiedWwSlots.contains(slot);
             final isSelected = _quizSlotIndex == slot;

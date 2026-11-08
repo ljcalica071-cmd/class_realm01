@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:class_realm/core/theme/app_theme.dart';
 import 'package:class_realm/core/services/local_storage_service.dart';
+import 'package:class_realm/core/utils/browser_url_helper.dart';
 import 'package:class_realm/core/utils/logout_helper.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/data/repositories/student_dashboard_repository.dart';
@@ -20,7 +21,8 @@ import 'package:class_realm/shared/widgets/shared_widgets.dart';
 import 'package:class_realm/routes/app_routes.dart';
 
 class StudentHomeScreen extends StatefulWidget {
-  const StudentHomeScreen({super.key});
+  final int initialTabIndex;
+  const StudentHomeScreen({super.key, this.initialTabIndex = 0});
 
   @override
   State<StudentHomeScreen> createState() => _StudentHomeScreenState();
@@ -28,20 +30,46 @@ class StudentHomeScreen extends StatefulWidget {
 
 class _StudentHomeScreenState extends State<StudentHomeScreen> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
-  int _currentIndex = 0;
+  late int _currentIndex;
   String? _selectedOfferingId;
   StudentDashboardData? _dashboard;
   Object? _loadError;
   bool _isLoading = true;
 
+  String _routeForIndex(int index) {
+    switch (index) {
+      case 0:
+        return AppRoutes.studentHome;
+      case 1:
+        return AppRoutes.studentClasswork;
+      case 2:
+        return AppRoutes.studentAlerts;
+      case 3:
+        return AppRoutes.studentProfile;
+      default:
+        return AppRoutes.studentHome;
+    }
+  }
+
+  void _onSelectTab(int index) {
+    if (index < 0 || index >= 4) return;
+    setState(() => _currentIndex = index);
+    LocalStorageService.saveActiveDashboardTab('student', index);
+    final route = _routeForIndex(index);
+    LocalStorageService.saveLastActiveRoute(route);
+    updateBrowserUrl(route);
+  }
+
   @override
   void initState() {
     super.initState();
     final savedTab = LocalStorageService.getActiveDashboardTab('student');
-    if (savedTab >= 0 && savedTab < 4) {
-      _currentIndex = savedTab;
-    }
-    LocalStorageService.saveLastActiveRoute(AppRoutes.studentHome);
+    _currentIndex = (widget.initialTabIndex > 0)
+        ? widget.initialTabIndex
+        : (savedTab >= 0 && savedTab < 4 ? savedTab : 0);
+    final route = _routeForIndex(_currentIndex);
+    LocalStorageService.saveLastActiveRoute(route);
+    updateBrowserUrl(route);
     _loadDashboard();
   }
 
@@ -209,10 +237,7 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
         ),
         bottomNavigationBar: BottomNavigationBar(
           currentIndex: _currentIndex.clamp(0, 3),
-          onTap: (index) {
-            setState(() => _currentIndex = index);
-            LocalStorageService.saveActiveDashboardTab('student', index);
-          },
+          onTap: _onSelectTab,
           type: BottomNavigationBarType.fixed,
           showSelectedLabels: true,
           showUnselectedLabels: false,
@@ -340,7 +365,11 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
             context,
             icon: Icons.fact_check_outlined,
             title: 'Attendance Records',
-            onTap: () => _openPage(context, const StudentAttendanceScreen()),
+            onTap: () => _openPage(
+              context,
+              const StudentAttendanceScreen(),
+              AppRoutes.studentAttendance,
+            ),
           ),
           _drawerItem(
             context,
@@ -349,27 +378,38 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
             onTap: () => _openPage(
               context,
               StudentScheduleScreen(dashboardData: _dashboard!),
+              AppRoutes.studentSchedule,
             ),
           ),
           _drawerItem(
             context,
             icon: Icons.menu_book_outlined,
             title: 'Learning Materials',
-            onTap: () =>
-                _openPage(context, const StudentLearningMaterialsScreen()),
+            onTap: () => _openPage(
+              context,
+              const StudentLearningMaterialsScreen(),
+              AppRoutes.studentMaterials,
+            ),
           ),
           _drawerItem(
             context,
             icon: Icons.grade_outlined,
             title: 'My Grades',
-            onTap: () => _openPage(context, const StudentGradesScreen()),
+            onTap: () => _openPage(
+              context,
+              const StudentGradesScreen(),
+              AppRoutes.studentGrades,
+            ),
           ),
           _drawerItem(
             context,
             icon: Icons.school_outlined,
             title: 'My Academic Performance',
-            onTap: () =>
-                _openPage(context, const StudentAcademicPerformanceScreen()),
+            onTap: () => _openPage(
+              context,
+              const StudentAcademicPerformanceScreen(),
+              AppRoutes.studentPerformance,
+            ),
           ),
           _drawerItem(
             context,
@@ -412,13 +452,45 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
     return ListTile(leading: Icon(icon), title: Text(title), onTap: onTap);
   }
 
-  void _openPage(BuildContext context, Widget page) {
+  void _openPage(BuildContext context, Widget page, [String? route]) {
     Navigator.pop(context);
-    Navigator.push(context, MaterialPageRoute(builder: (_) => page));
+    if (route != null) {
+      updateBrowserUrl(route);
+      LocalStorageService.saveLastActiveRoute(route);
+    }
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        settings: route != null ? RouteSettings(name: route) : null,
+        builder: (_) => page,
+      ),
+    ).then((_) {
+      if (mounted) {
+        final currentRoute = _routeForIndex(_currentIndex);
+        updateBrowserUrl(currentRoute);
+        LocalStorageService.saveLastActiveRoute(currentRoute);
+      }
+    });
   }
 
-  void _pushDirectPage(BuildContext context, Widget page) {
-    Navigator.push(context, MaterialPageRoute(builder: (_) => page));
+  void _pushDirectPage(BuildContext context, Widget page, [String? route]) {
+    if (route != null) {
+      updateBrowserUrl(route);
+      LocalStorageService.saveLastActiveRoute(route);
+    }
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        settings: route != null ? RouteSettings(name: route) : null,
+        builder: (_) => page,
+      ),
+    ).then((_) {
+      if (mounted) {
+        final currentRoute = _routeForIndex(_currentIndex);
+        updateBrowserUrl(currentRoute);
+        LocalStorageService.saveLastActiveRoute(currentRoute);
+      }
+    });
   }
 
   Widget _buildHomeTab(
@@ -1069,8 +1141,7 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
             context,
             icon: Icons.school_outlined,
             title: 'No enrolled subjects',
-            message:
-                'You are not enrolled in any subjects yet. Once your teacher or administrator enrolls you, your classwork will appear here.',
+            message: 'You are not enrolled in any subjects yet. Once your teacher or administrator enrolls you, your classwork will appear here.',
           ),
         ),
       );
@@ -1099,8 +1170,9 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
               i.type != 'quiz',
         )
         .toList();
-    final ptItems =
-        subjectItems.where((i) => i.type == 'performance_task').toList();
+    final ptItems = subjectItems
+        .where((i) => i.type == 'performance_task')
+        .toList();
     final exItems = subjectItems
         .where((i) => i.type == 'exam' || i.type == 'quiz')
         .toList();
@@ -1275,7 +1347,10 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
               label,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700),
+              style: const TextStyle(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
           const SizedBox(width: 4),

@@ -1,30 +1,65 @@
 // Models for Admin Portal, System Settings, User Session Logs, and Activity Analytics
 // Follows strict IT Admin privacy guidelines: Only aggregate integer counts and system telemetry.
 
+class MaintenanceEmailRecipient {
+  final String email;
+  final String role; // 'teacher' or 'student'
+  final String formattedName; // 'LastName, FirstName' (e.g. 'Calica, Ljay')
+
+  const MaintenanceEmailRecipient({
+    required this.email,
+    required this.role,
+    required this.formattedName,
+  });
+}
+
 class SystemSettingsModel {
   final bool isMaintenanceMode;
   final DateTime maintenanceUpdatedAt;
   final String? maintenanceUpdatedBy;
   final DateTime? schoolYearUpdatedAt;
+  final int cooldownRemainingSeconds;
+
+  static const int maintenanceCooldownDurationSeconds = 600; // 10 minutes
 
   const SystemSettingsModel({
     required this.isMaintenanceMode,
     required this.maintenanceUpdatedAt,
     this.maintenanceUpdatedBy,
     this.schoolYearUpdatedAt,
+    this.cooldownRemainingSeconds = 0,
   });
 
   factory SystemSettingsModel.fromJson(Map<String, dynamic> json) {
+    final updatedAt = json['maintenance_updated_at'] != null
+        ? DateTime.tryParse(json['maintenance_updated_at'].toString()) ??
+              DateTime.now()
+        : DateTime.now();
+    final updatedBy = json['maintenance_updated_by']?.toString();
+    final serverNow = json['server_now'] != null
+        ? DateTime.tryParse(json['server_now'].toString())
+        : null;
+
+    int computedCooldown = 0;
+    if (json['cooldown_remaining_seconds'] != null) {
+      computedCooldown =
+          (json['cooldown_remaining_seconds'] as num?)?.toInt() ?? 0;
+    } else if (updatedBy != null && updatedBy.trim().isNotEmpty) {
+      final refNow = (serverNow ?? DateTime.now()).toUtc();
+      final elapsed = refNow.difference(updatedAt.toUtc()).inSeconds;
+      if (elapsed >= 0 && elapsed < maintenanceCooldownDurationSeconds) {
+        computedCooldown = maintenanceCooldownDurationSeconds - elapsed;
+      }
+    }
+
     return SystemSettingsModel(
       isMaintenanceMode: json['is_maintenance_mode'] == true,
-      maintenanceUpdatedAt: json['maintenance_updated_at'] != null
-          ? DateTime.tryParse(json['maintenance_updated_at'].toString()) ??
-                DateTime.now()
-          : DateTime.now(),
-      maintenanceUpdatedBy: json['maintenance_updated_by']?.toString(),
+      maintenanceUpdatedAt: updatedAt,
+      maintenanceUpdatedBy: updatedBy,
       schoolYearUpdatedAt: json['school_year_updated_at'] != null
           ? DateTime.tryParse(json['school_year_updated_at'].toString())
           : null,
+      cooldownRemainingSeconds: computedCooldown < 0 ? 0 : computedCooldown,
     );
   }
 
@@ -35,6 +70,7 @@ class SystemSettingsModel {
       'maintenance_updated_by': maintenanceUpdatedBy,
       if (schoolYearUpdatedAt != null)
         'school_year_updated_at': schoolYearUpdatedAt!.toIso8601String(),
+      'cooldown_remaining_seconds': cooldownRemainingSeconds,
     };
   }
 
@@ -43,12 +79,15 @@ class SystemSettingsModel {
     DateTime? maintenanceUpdatedAt,
     String? maintenanceUpdatedBy,
     DateTime? schoolYearUpdatedAt,
+    int? cooldownRemainingSeconds,
   }) {
     return SystemSettingsModel(
       isMaintenanceMode: isMaintenanceMode ?? this.isMaintenanceMode,
       maintenanceUpdatedAt: maintenanceUpdatedAt ?? this.maintenanceUpdatedAt,
       maintenanceUpdatedBy: maintenanceUpdatedBy ?? this.maintenanceUpdatedBy,
       schoolYearUpdatedAt: schoolYearUpdatedAt ?? this.schoolYearUpdatedAt,
+      cooldownRemainingSeconds:
+          cooldownRemainingSeconds ?? this.cooldownRemainingSeconds,
     );
   }
 }

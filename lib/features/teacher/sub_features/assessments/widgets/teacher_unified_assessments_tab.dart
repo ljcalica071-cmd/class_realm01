@@ -1,15 +1,21 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
 
 import 'package:class_realm/core/theme/app_theme.dart';
+import 'package:class_realm/core/services/app_data_cache.dart';
 import 'package:class_realm/core/services/supabase_service.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/data/repositories/subject_repository.dart';
 import 'package:class_realm/data/repositories/teacher_classwork_repository.dart';
+import 'package:class_realm/features/teacher/sub_features/grading/widgets/teacher_gradebook_tab.dart';
 import 'package:class_realm/models/academic_models.dart';
 import 'package:class_realm/shared/widgets/shared_widgets.dart';
 import 'package:class_realm/shared/widgets/shimmer_loading.dart';
+import 'package:class_realm/widgets/common/app_date_picker_field.dart';
+import 'package:class_realm/widgets/common/app_time_picker_field.dart';
+import 'package:class_realm/widgets/common/expandable_instructions_text.dart';
 import 'package:class_realm/features/teacher/sub_features/assessments/screens/create_assessment_flow.dart';
 import 'package:class_realm/features/teacher/sub_features/assessments/screens/create_requirement_flow.dart';
 import 'package:class_realm/features/teacher/sub_features/assessments/screens/edit_assessment_flow.dart';
@@ -23,7 +29,7 @@ class TeacherUnifiedAssessmentsTab extends StatefulWidget {
   final String selectedClassSection;
   final ValueChanged<ActivityModel>? onViewSubmissions;
   final TeacherClassworkRepository? repository;
-  final VoidCallback? onRefresh;
+  final FutureOr<void> Function()? onRefresh;
   final bool isLoading;
 
   const TeacherUnifiedAssessmentsTab({
@@ -48,6 +54,7 @@ class _TeacherUnifiedAssessmentsTabState
   String? _selectedSubject;
   String? _selectedClassSection;
   List<Map<String, dynamic>> _teacherSubjects = [];
+  bool _isSyncing = false;
 
   @override
   void initState() {
@@ -495,6 +502,39 @@ class _TeacherUnifiedAssessmentsTabState
                 ),
               ],
             ),
+            if (_isSyncing) ...[
+              const SizedBox(height: 12),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: const LinearProgressIndicator(
+                  minHeight: 4,
+                  backgroundColor: Color(0xFFE2E8F0),
+                  valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF0F8A48)),
+                ),
+              ),
+              const SizedBox(height: 6),
+              const Row(
+                children: [
+                  SizedBox(
+                    width: 12,
+                    height: 12,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Color(0xFF0F8A48),
+                    ),
+                  ),
+                  SizedBox(width: 8),
+                  Text(
+                    'Updating schedule and syncing with gradebook...',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF0F8A48),
+                    ),
+                  ),
+                ],
+              ),
+            ],
             const SizedBox(height: 20),
             Container(
               decoration: BoxDecoration(
@@ -532,7 +572,7 @@ class _TeacherUnifiedAssessmentsTabState
                       emptyMessage: 'Create assignments, activities, and quizzes for your students.',
                       icon: LucideIcons.fileText,
                       actionButtons: [
-                        AppButton.secondary(
+                        AppButton.primary(
                           label: 'Create Activity',
                           icon: Icons.assignment_outlined,
                           onPressed: () {
@@ -570,14 +610,30 @@ class _TeacherUnifiedAssessmentsTabState
                           icon: Icons.quiz_outlined,
                           onPressed: () {
                             final sectionParam = _selectedClassSection ?? '';
+                            final offeringMatch = _teacherSubjects.firstWhere(
+                              (s) =>
+                                  (_selectedSubject == null ||
+                                      s['subject_name'] == _selectedSubject) &&
+                                  (_selectedClassSection == null ||
+                                      s['section_name'] ==
+                                          _selectedClassSection),
+                              orElse: () => _teacherSubjects.isNotEmpty
+                                  ? _teacherSubjects.first
+                                  : <String, dynamic>{},
+                            );
                             CreateAssessmentFlowDialog.show(
                               context,
                               initialSection: sectionParam,
+                              initialSubject: _selectedSubject,
+                              initialOfferingId: offeringMatch['id']
+                                  ?.toString(),
+                              initialOfferings: _teacherSubjects,
                               initialIsExam: false,
                               skipTypeSelection: true,
-                              onAssessmentCreated: () {
-                                widget.onRefresh?.call();
-                                setState(() {});
+                              repository: widget.repository,
+                              onAssessmentCreated: () async {
+                                await widget.onRefresh?.call();
+                                if (mounted) setState(() {});
                               },
                             );
                           },
@@ -657,14 +713,30 @@ class _TeacherUnifiedAssessmentsTabState
                               return;
                             }
                             final sectionParam = _selectedClassSection ?? '';
+                            final offeringMatch = _teacherSubjects.firstWhere(
+                              (s) =>
+                                  (_selectedSubject == null ||
+                                      s['subject_name'] == _selectedSubject) &&
+                                  (_selectedClassSection == null ||
+                                      s['section_name'] ==
+                                          _selectedClassSection),
+                              orElse: () => _teacherSubjects.isNotEmpty
+                                  ? _teacherSubjects.first
+                                  : <String, dynamic>{},
+                            );
                             CreateAssessmentFlowDialog.show(
                               context,
                               initialSection: sectionParam,
+                              initialSubject: _selectedSubject,
+                              initialOfferingId: offeringMatch['id']
+                                  ?.toString(),
+                              initialOfferings: _teacherSubjects,
                               initialIsExam: true,
                               skipTypeSelection: true,
-                              onAssessmentCreated: () {
-                                widget.onRefresh?.call();
-                                setState(() {});
+                              repository: widget.repository,
+                              onAssessmentCreated: () async {
+                                await widget.onRefresh?.call();
+                                if (mounted) setState(() {});
                               },
                             );
                           },
@@ -773,34 +845,31 @@ class _TeacherUnifiedAssessmentsTabState
   Widget _buildUnifiedActivityCard(ActivityModel item, String category) {
     final dueDate = item.deadlineForSection(_selectedClassSection ?? '');
     final isOnline = item.completionMode == 'online';
+    final effectiveInstructions = item.instructions.trim().isNotEmpty
+        ? item.instructions.trim()
+        : item.description.trim();
 
     return _buildUnifiedCard(
       title: item.title,
-      description: item.isRequirement ? '' : item.description,
+      description: effectiveInstructions,
       category: category,
-      details: item.isRequirement
-          ? '${item.section} • Term ${item.termNumber} • ${item.maxScore.toInt()} pts${isOnline ? ' • Due ${_monthName(dueDate.month)} ${dueDate.day}, ${_formatTime(dueDate)}' : ' • In-Person'}'
-          : '${item.section} • Term ${item.termNumber} • ${item.maxScore.toInt()} pts${isOnline ? ' • Due ${_monthName(dueDate.month)} ${dueDate.day}' : ' • In-Person'}',
+      details: isOnline
+          ? '${item.section} • Term ${item.termNumber} • ${item.maxScore.toInt()} pts • Due ${_monthName(dueDate.month)} ${dueDate.day}, ${_formatTime(dueDate)}'
+          : '${item.section} • Term ${item.termNumber} • ${item.maxScore.toInt()} pts • In-Person (${_monthName(dueDate.month)} ${dueDate.day}, ${dueDate.year})',
       icon: Icons.assignment_outlined,
-      onPressed: isOnline
-          ? () {
-              if (widget.onViewSubmissions != null) {
-                widget.onViewSubmissions!(item);
-              }
-            }
-          : () {
-              // In-Person -> Open Edit or Gradebook
-              if (widget.onViewSubmissions != null) {
-                widget.onViewSubmissions!(item);
-              }
-            },
-      actionLabel: 'View Submissions',
+      onPressed: () {
+        if (widget.onViewSubmissions != null) {
+          widget.onViewSubmissions!(item);
+        }
+      },
+      actionLabel: isOnline ? 'View Submissions' : 'Record Scores',
       onEdit: () => _showEditActivityModal(item),
       onDelete: () => _confirmDeleteActivity(item),
     );
   }
 
   Widget _buildUnifiedAssessmentCard(QuizOrExamModel item, String category) {
+    final isInPerson = item.completionMode == 'in_person';
     final examEndTime = item.scheduleDate.add(
       Duration(minutes: item.durationMinutes),
     );
@@ -810,44 +879,76 @@ class _TeacherUnifiedAssessmentsTabState
       title: item.title,
       description: item.description,
       category: category,
-      details:
-          '${item.section} • ${item.totalPoints.toInt()} pts • Start ${_monthName(item.scheduleDate.month)} ${item.scheduleDate.day}, ${_formatTime(item.scheduleDate)}',
+      details: isInPerson
+          ? '${item.section} • Term ${item.termNumber} • ${item.totalPoints.toInt()} pts • In-Person (${_monthName(item.scheduleDate.month)} ${item.scheduleDate.day}, ${item.scheduleDate.year})'
+          : '${item.section} • Term ${item.termNumber} • ${item.totalPoints.toInt()} pts • Start ${_monthName(item.scheduleDate.month)} ${item.scheduleDate.day}, ${_formatTime(item.scheduleDate)}',
       icon: item.isExam ? Icons.description_outlined : Icons.quiz_outlined,
-      resultsReleased: item.resultsReleased,
-      onToggleReleaseKey: () => _toggleResultsReleased(item),
-      onPressed: () {
-        AppModals.showUpcomingFeatureDialog(
-          context,
-          featureName: 'Assessment Score Summary',
-        );
-      },
-      actionLabel: 'View Scores (Next Update)',
+      resultsReleased: isInPerson ? null : item.resultsReleased,
+      onToggleReleaseKey: isInPerson ? null : () => _toggleResultsReleased(item),
+      onPressed: isInPerson
+          ? () {
+              if (widget.onViewSubmissions != null) {
+                widget.onViewSubmissions!(
+                  ActivityModel(
+                    id: item.id,
+                    title: item.title,
+                    description: item.description,
+                    instructions: item.description,
+                    subject: item.subject,
+                    section: item.section,
+                    deadline: item.scheduleDate,
+                    maxScore: item.totalPoints,
+                    isPublished: item.isPublished,
+                    isRequirement: false,
+                    subjectOfferingId: item.subjectOfferingId,
+                    termNumber: item.termNumber,
+                    gradebookColumnIndex: item.gradebookColumnIndex,
+                    completionMode: 'in_person',
+                    gradingCategory: item.isExam ? 'ex' : 'ww',
+                  ),
+                );
+              }
+            }
+          : () {
+              AppModals.showUpcomingFeatureDialog(
+                context,
+                featureName: 'Assessment Score Summary',
+              );
+            },
+      actionLabel: isInPerson ? 'Record Scores' : 'View Scores (Next Update)',
       onEdit: () => EditAssessmentFlowDialog.show(
         context,
         assessment: item,
-        onAssessmentUpdated: () => setState(() {}),
+        onAssessmentUpdated: () async {
+          await widget.onRefresh?.call();
+          if (mounted) setState(() {});
+        },
       ),
       onDelete: () => _confirmDeleteAssessment(item),
       onReschedule: () => _showRescheduleAssessmentDialog(item),
-      onProctor: () => LiveProctorMonitorModal.show(
-        context: context,
-        assessmentId: item.id,
-        assessmentTitle: item.title,
-        section: item.section,
-      ),
+      onProctor: isInPerson
+          ? null
+          : () => LiveProctorMonitorModal.show(
+              context: context,
+              assessmentId: item.id,
+              assessmentTitle: item.title,
+              section: item.section,
+            ),
       isItemAnalysisLocked: !isTestingFinished,
-      onItemAnalysis: () {
-        if (!isTestingFinished) {
-          AppModals.showWarningDialog(
-            context: context,
-            title: 'Item Analysis Locked',
-            message:
-                'Under DepEd assessment standards, Item Analysis and difficulty index computation are finalized after the testing window concludes to ensure sample integrity.\n\nTesting Window Closes: ${_monthName(examEndTime.month)} ${examEndTime.day}, ${_formatTime(examEndTime)}.',
-          );
-          return;
-        }
-        _showItemAnalysisDialog(item);
-      },
+      onItemAnalysis: isInPerson
+          ? null
+          : () {
+              if (!isTestingFinished) {
+                AppModals.showWarningDialog(
+                  context: context,
+                  title: 'Item Analysis Locked',
+                  message:
+                      'Under DepEd assessment standards, Item Analysis and difficulty index computation are finalized after the testing window concludes to ensure sample integrity.\n\nTesting Window Closes: ${_monthName(examEndTime.month)} ${examEndTime.day}, ${_formatTime(examEndTime)}.',
+                );
+                return;
+              }
+              _showItemAnalysisDialog(item);
+            },
     );
   }
 
@@ -1015,12 +1116,10 @@ class _TeacherUnifiedAssessmentsTabState
                     ],
                   ],
                 ),
-                if (description.isNotEmpty) ...[
+                if (description.trim().isNotEmpty) ...[
                   const SizedBox(height: 5),
-                  Text(
-                    description,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
+                  ExpandableInstructionsText(
+                    text: description,
                     style: TextStyle(
                       color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                       fontSize: 13,
@@ -1090,7 +1189,7 @@ class _TeacherUnifiedAssessmentsTabState
                 ),
               if (onReschedule != null)
                 IconButton(
-                  tooltip: 'Reschedule / Make-up Test',
+                  tooltip: 'Update Schedule',
                   icon: Icon(Icons.schedule, color: theme.colorScheme.primary),
                   onPressed: onReschedule,
                 ),
@@ -1296,14 +1395,17 @@ class _TeacherUnifiedAssessmentsTabState
             );
         if (termSheet != null && termSheet['scores'] is Map) {
           final scoresMap = termSheet['scores'] as Map;
-          final catKey = item.isRequirement ? 'pt' : 'ww';
+          final catKey = item.effectiveGradingCategory;
           final colKey = item.gradebookColumnIndex.toString();
           for (final studentVal in scoresMap.values) {
             if (studentVal is Map && studentVal[catKey] is Map) {
               final catScores = studentVal[catKey] as Map;
-              if (catScores[colKey] != null ||
-                  catScores[(item.gradebookColumnIndex! - 1).toString()] !=
-                      null) {
+              final usesZeroBased =
+                  catScores.containsKey('0') || catScores.containsKey(0);
+              final targetKey = usesZeroBased
+                  ? (item.gradebookColumnIndex! - 1).toString()
+                  : colKey;
+              if (catScores[targetKey] != null) {
                 hasRecords = true;
                 break;
               }
@@ -1330,88 +1432,103 @@ class _TeacherUnifiedAssessmentsTabState
     _showDeleteConfirmation(
       title: item.title,
       onDelete: () async {
+        setState(() => _isSyncing = true);
         if (widget.repository != null) {
           try {
             await widget.repository!.deleteActivity(item.id);
           } catch (_) {}
         }
-        widget.onRefresh?.call();
-        setState(() {});
+        TeacherGradebookTab.gradebookRefreshNotifier.value++;
+        if (mounted) {
+          await widget.onRefresh?.call();
+          setState(() => _isSyncing = false);
+        }
       },
     );
   }
 
   Future<void> _confirmDeleteAssessment(QuizOrExamModel item) async {
     bool hasRecords = false;
+    Map<String, dynamic>? classworkRow;
     try {
       final client = SupabaseService().client;
       // 1. Check assessment_attempts for submitted or scored attempts
       final attempts = await client
           .from('assessment_attempts')
-          .select('id, score, status')
+          .select('id, score_earned, status')
           .eq('assessment_id', item.id);
       final attemptList = List<Map<String, dynamic>>.from(
         attempts as List? ?? [],
       );
       for (final a in attemptList) {
-        if (a['score'] != null || a['status'] == 'submitted') {
+        if (a['score_earned'] != null ||
+            a['status'] == 'submitted' ||
+            a['status'] == 'auto_submitted') {
           hasRecords = true;
           break;
         }
       }
 
       // 2. Check classwork submissions if item exists in classwork_items
-      if (!hasRecords) {
-        final classworkRow = await client
-            .from('classwork_items')
-            .select(
-              'id, subject_offering_id, term_number, gradebook_column_index, grading_category',
-            )
-            .eq('id', item.id)
-            .maybeSingle();
+      classworkRow = await client
+          .from('classwork_items')
+          .select(
+            'id, subject_offering_id, term_number, gradebook_column_index, grading_category',
+          )
+          .eq('id', item.id)
+          .maybeSingle();
 
-        if (classworkRow != null) {
-          final subs = await client
-              .from('student_classwork_submissions')
-              .select('id, score, status')
-              .eq('classwork_id', item.id);
-          final subList = List<Map<String, dynamic>>.from(subs as List? ?? []);
-          for (final s in subList) {
-            if (s['score'] != null ||
-                s['status'] == 'graded' ||
-                s['status'] == 'submitted') {
-              hasRecords = true;
-              break;
-            }
+      if (!hasRecords && classworkRow != null) {
+        final subs = await client
+            .from('student_classwork_submissions')
+            .select('id, score, status')
+            .eq('classwork_id', item.id);
+        final subList = List<Map<String, dynamic>>.from(subs as List? ?? []);
+        for (final s in subList) {
+          if (s['score'] != null ||
+              s['status'] == 'graded' ||
+              s['status'] == 'submitted') {
+            hasRecords = true;
+            break;
           }
+        }
+      }
 
-          final offeringId = classworkRow['subject_offering_id']?.toString();
-          final termNumber =
-              (classworkRow['term_number'] as num?)?.toInt() ?? 1;
-          final colIdx =
-              (classworkRow['gradebook_column_index'] as num?)?.toInt();
-          final category =
-              classworkRow['grading_category']?.toString().toLowerCase() ??
-              (item.isExam ? 'ex' : 'ww');
-          if (!hasRecords && offeringId != null && colIdx != null) {
-            final termSheet =
-                await SubjectRepository.instance.getGradebookTermSheet(
-                  offeringId,
-                  termNumber,
-                );
-            if (termSheet != null && termSheet['scores'] is Map) {
-              final scoresMap = termSheet['scores'] as Map;
-              final colKey = category == 'ex'
-                  ? (colIdx == 1 ? 'st1' : (colIdx == 2 ? 'st2' : 'te'))
+      // 3. Check Gradebook sheet scores as Single Source of Truth
+      final offeringId =
+          classworkRow?['subject_offering_id']?.toString() ??
+          item.subjectOfferingId;
+      final termNumber =
+          (classworkRow?['term_number'] as num?)?.toInt() ?? item.termNumber;
+      final colIdx =
+          (classworkRow?['gradebook_column_index'] as num?)?.toInt() ??
+          item.gradebookColumnIndex;
+      final category =
+          classworkRow?['grading_category']?.toString().toLowerCase() ??
+          (item.isExam ? 'ex' : 'ww');
+
+      if (!hasRecords && offeringId != null && colIdx != null) {
+        final termSheet =
+            await SubjectRepository.instance.getGradebookTermSheet(
+              offeringId,
+              termNumber,
+            );
+        if (termSheet != null && termSheet['scores'] is Map) {
+          final scoresMap = termSheet['scores'] as Map;
+          final colKey = category == 'ex'
+              ? (colIdx == 1 ? 'st1' : (colIdx == 2 ? 'st2' : 'te'))
+              : colIdx.toString();
+          for (final studentVal in scoresMap.values) {
+            if (studentVal is Map && studentVal[category] is Map) {
+              final catScores = studentVal[category] as Map;
+              final usesZeroBased =
+                  catScores.containsKey('0') || catScores.containsKey(0);
+              final altKey = usesZeroBased
+                  ? (colIdx - 1).toString()
                   : colIdx.toString();
-              for (final studentVal in scoresMap.values) {
-                if (studentVal is Map && studentVal[category] is Map) {
-                  final catScores = studentVal[category] as Map;
-                  if (catScores[colKey] != null) {
-                    hasRecords = true;
-                    break;
-                  }
-                }
+              if (catScores[colKey] != null || catScores[altKey] != null) {
+                hasRecords = true;
+                break;
               }
             }
           }
@@ -1436,193 +1553,533 @@ class _TeacherUnifiedAssessmentsTabState
     _showDeleteConfirmation(
       title: item.title,
       onDelete: () async {
+        setState(() => _isSyncing = true);
         try {
           final client = SupabaseService().client;
+          // Remove any unsubmitted/abandoned attempt rows first (FK RESTRICT)
+          final openAttempts = await client
+              .from('assessment_attempts')
+              .select('id')
+              .eq('assessment_id', item.id);
+          final openIds = List<Map<String, dynamic>>.from(
+            openAttempts as List? ?? [],
+          ).map((e) => e['id'].toString()).toList();
+          if (openIds.isNotEmpty) {
+            await client
+                .from('assessment_responses')
+                .delete()
+                .inFilter('attempt_id', openIds);
+            await client
+                .from('assessment_attempts')
+                .delete()
+                .inFilter('id', openIds);
+          }
+
           await client
-              .from('classwork_items')
-              .update({'is_archived': true})
-              .eq('id', item.id);
-          await client
-              .from('digital_assessments')
+              .from('student_classwork_submissions')
               .delete()
-              .eq('id', item.id);
-        } catch (_) {}
+              .eq('classwork_id', item.id);
+
+          // Delete questions (cascade cleans up question_options)
+          await client
+              .from('assessment_questions')
+              .delete()
+              .eq('assessment_id', item.id);
+          // Hard delete from classwork_items
+          await client.from('classwork_items').delete().eq('id', item.id);
+          // Hard delete from digital_assessments
+          await client.from('digital_assessments').delete().eq('id', item.id);
+
+          // Clean up HPS from gradebook_term_sheets
+          final offeringId =
+              classworkRow?['subject_offering_id']?.toString() ??
+              item.subjectOfferingId;
+          final colIdx =
+              (classworkRow?['gradebook_column_index'] as num?)?.toInt() ??
+              item.gradebookColumnIndex;
+          final termNum =
+              (classworkRow?['term_number'] as num?)?.toInt() ??
+              item.termNumber;
+          final categoryKey =
+              classworkRow?['grading_category']?.toString().toLowerCase() ??
+              (item.isExam ? 'ex' : 'ww');
+
+          if (offeringId != null && colIdx != null) {
+            final termSheet =
+                await SubjectRepository.instance.getGradebookTermSheet(
+                  offeringId,
+                  termNum,
+                );
+            if (termSheet != null && termSheet['hps'] is Map) {
+              final hps = Map<String, dynamic>.from(termSheet['hps'] as Map);
+              if (hps[categoryKey] is Map) {
+                final catHps = Map<String, dynamic>.from(
+                  hps[categoryKey] as Map,
+                );
+                final colKey = categoryKey == 'ex'
+                    ? (colIdx == 1 ? 'st1' : (colIdx == 2 ? 'st2' : 'te'))
+                    : colIdx.toString();
+                catHps.remove(colKey);
+                if (categoryKey == 'ex') {
+                  catHps.remove(colIdx.toString());
+                }
+                hps[categoryKey] = catHps;
+                termSheet['hps'] = hps;
+                await SubjectRepository.instance.saveGradebookTermSheet(
+                  offeringId,
+                  termNum,
+                  termSheet,
+                );
+              }
+            }
+          }
+
+          // Clear caches & notify gradebook + student portal
+          AppDataCache.instance.invalidatePrefix('gradebook_');
+          AppDataCache.instance.invalidatePrefix('teacher_assessments_');
+          AppDataCache.instance.invalidatePrefix('teacher_activities_');
+          AppDataCache.instance.invalidatePrefix('student_dashboard_');
+          TeacherGradebookTab.gradebookRefreshNotifier.value++;
+        } catch (e) {
+          debugPrint('Error deleting assessment: $e');
+        }
 
         if (mounted) {
           setState(() {
             widget.assessments.removeWhere((q) => q.id == item.id);
           });
-          widget.onRefresh?.call();
+          await widget.onRefresh?.call();
+          setState(() => _isSyncing = false);
         }
       },
     );
   }
 
-  void _showRescheduleAssessmentDialog(QuizOrExamModel item) {
-    DateTime newDate = item.scheduleDate;
-    final isExam = item.isExam;
+  Future<void> _showRescheduleAssessmentDialog(QuizOrExamModel item) async {
+    final isInPerson = item.completionMode == 'in_person';
+    final localOrig = item.scheduleDate.toLocal();
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
 
-    showDialog(
+    DateTime selectedDate = DateTime(
+      localOrig.year,
+      localOrig.month,
+      localOrig.day,
+    );
+    if (!isInPerson && selectedDate.isBefore(today)) {
+      selectedDate = today;
+    }
+    TimeOfDay selectedTime = TimeOfDay.fromDateTime(localOrig);
+    bool isSavingSchedule = false;
+
+    String? computeTimeError(DateTime date, TimeOfDay time) {
+      if (isInPerson) return null;
+      final candidate = DateTime(
+        date.year,
+        date.month,
+        date.day,
+        time.hour,
+        time.minute,
+      );
+      if (!candidate.isAfter(DateTime.now())) {
+        return 'Updated schedule must be in the future.';
+      }
+      return null;
+    }
+
+    String? scheduleTimeError;
+
+    await showDialog(
       context: context,
+      barrierDismissible: false,
       builder: (ctx) => StatefulBuilder(
-        builder: (modalCtx, setModalState) => AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          title: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Theme.of(modalCtx).colorScheme.primary
-                      .withValues(alpha: 0.1),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  Icons.schedule,
-                  color: Theme.of(modalCtx).colorScheme.primary,
-                  size: 20,
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  isExam
-                      ? 'Reschedule Exam / Special Test'
-                      : 'Reschedule Quiz Window',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Assessment: ${item.title}',
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 13,
-                ),
-              ),
-              const SizedBox(height: 6),
-              const Text(
-                'Set a special make-up test window for absent or excused learners:',
-                style: TextStyle(fontSize: 12),
-              ),
-              const SizedBox(height: 14),
-              InkWell(
-                onTap: () async {
-                  final pickedDate = await showDatePicker(
-                    context: context,
-                    initialDate: newDate,
-                    firstDate: DateTime.now().subtract(
-                      const Duration(days: 30),
-                    ),
-                    lastDate: DateTime.now().add(const Duration(days: 90)),
-                  );
-                  if (pickedDate != null) {
-                    if (!mounted) return;
-                    final pickedTime = await showTimePicker(
-                      context: context,
-                      initialTime: TimeOfDay.fromDateTime(newDate),
-                    );
-                    if (pickedTime != null) {
-                      setModalState(() {
-                        newDate = DateTime(
-                          pickedDate.year,
-                          pickedDate.month,
-                          pickedDate.day,
-                          pickedTime.hour,
-                          pickedTime.minute,
-                        );
-                      });
-                    }
-                  }
-                },
-                borderRadius: BorderRadius.circular(10),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 12,
-                  ),
+        builder: (modalCtx, setModalState) {
+          final theme = Theme.of(modalCtx);
+          final candidateCombined = isInPerson
+              ? DateTime(
+                  selectedDate.year,
+                  selectedDate.month,
+                  selectedDate.day,
+                  23,
+                  59,
+                )
+              : DateTime(
+                  selectedDate.year,
+                  selectedDate.month,
+                  selectedDate.day,
+                  selectedTime.hour,
+                  selectedTime.minute,
+                );
+          final isUnchanged = isSameClassworkSchedule(
+            item.scheduleDate,
+            candidateCombined,
+            isInPerson: isInPerson,
+          );
+          final isSelectedToday =
+              selectedDate.year == today.year &&
+              selectedDate.month == today.month &&
+              selectedDate.day == today.day;
+
+          return AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            title: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(
-                      color: Theme.of(context).colorScheme.onSurface
-                          .withValues(alpha: 0.2),
+                    color: theme.colorScheme.primary.withValues(alpha: 0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.event_repeat,
+                    color: theme.colorScheme.primary,
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    isInPerson ? 'Update Date' : 'Update Schedule',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 17,
                     ),
                   ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        '${newDate.month}/${newDate.day}/${newDate.year} ${newDate.hour > 12 ? newDate.hour - 12 : newDate.hour}:${newDate.minute.toString().padLeft(2, '0')} ${newDate.hour >= 12 ? 'PM' : 'AM'}',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 13,
+                ),
+              ],
+            ),
+            content: SizedBox(
+              width: 440,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    isInPerson
+                        ? 'Update the scheduled date for "${item.title}".'
+                        : 'Set a new testing window for "${item.title}".',
+                    style: const TextStyle(fontSize: 13, height: 1.4),
+                  ),
+                  const SizedBox(height: 14),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0F8A48).withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: const Color(0xFF0F8A48).withValues(alpha: 0.3),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.schedule,
+                          size: 16,
+                          color: Color(0xFF0F8A48),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            isInPerson
+                                ? 'Current Date: ${localOrig.month.toString().padLeft(2, '0')}/${localOrig.day.toString().padLeft(2, '0')}/${localOrig.year}'
+                                : 'Current Schedule: ${localOrig.month.toString().padLeft(2, '0')}/${localOrig.day.toString().padLeft(2, '0')}/${localOrig.year} ${_formatTime(localOrig)}',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF0F8A48),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    isInPerson ? 'Update Date *' : 'Update Schedule Date *',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: theme.colorScheme.onSurface,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  InkWell(
+                    onTap: isSavingSchedule
+                        ? null
+                        : () async {
+                            final tNow = DateTime.now();
+                            final tToday = DateTime(
+                              tNow.year,
+                              tNow.month,
+                              tNow.day,
+                            );
+                            final pickedDate = await showAppDatePickerDialog(
+                              ctx,
+                              initialDate: selectedDate,
+                              firstDate: isInPerson
+                                  ? DateTime(tToday.year - 1, 1, 1)
+                                  : tToday,
+                              lastDate: DateTime(tToday.year + 5, 12, 31),
+                              title: isInPerson
+                                  ? 'Update Date'
+                                  : 'Update Schedule',
+                              icon: Icons.event_available_outlined,
+                              highlightDate: localOrig,
+                              highlightLabel: isInPerson
+                                  ? 'Current Date'
+                                  : 'Current Schedule',
+                            );
+                            if (pickedDate != null && ctx.mounted) {
+                              setModalState(() {
+                                selectedDate = pickedDate;
+                                scheduleTimeError = computeTimeError(
+                                  selectedDate,
+                                  selectedTime,
+                                );
+                              });
+                            }
+                          },
+                    borderRadius: BorderRadius.circular(10),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 12,
+                      ),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.surface,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: theme.colorScheme.outline.withValues(
+                            alpha: 0.3,
+                          ),
                         ),
                       ),
-                      const Icon(Icons.calendar_month, size: 18),
-                    ],
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              const Icon(
+                                Icons.calendar_today_outlined,
+                                size: 18,
+                                color: Color(0xFF0F8A48),
+                              ),
+                              const SizedBox(width: 10),
+                              Text(
+                                '${selectedDate.month.toString().padLeft(2, '0')}/${selectedDate.day.toString().padLeft(2, '0')}/${selectedDate.year}',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const Icon(Icons.arrow_drop_down),
+                        ],
+                      ),
+                    ),
                   ),
-                ),
+                  if (!isInPerson) ...[
+                    const SizedBox(height: 14),
+                    AppTimePickerField(
+                      key: ValueKey(
+                        '${selectedDate.year}-${selectedDate.month}-${selectedDate.day}-${selectedTime.hour}-${selectedTime.minute}',
+                      ),
+                      label: 'Start Time *',
+                      initialTime: selectedTime,
+                      minTime: isSelectedToday
+                          ? TimeOfDay.fromDateTime(
+                              DateTime.now().add(const Duration(minutes: 1)),
+                            )
+                          : null,
+                      onTimeSelected: (pickedTime) {
+                        setModalState(() {
+                          selectedTime = pickedTime;
+                          scheduleTimeError = computeTimeError(
+                            selectedDate,
+                            selectedTime,
+                          );
+                        });
+                      },
+                    ),
+                  ],
+                  if (scheduleTimeError != null) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      scheduleTimeError!,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Color(0xFFDC2626),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ] else if (isUnchanged) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      isInPerson
+                          ? 'Select a different date to update.'
+                          : 'Select a different date or time to update the schedule.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ],
               ),
-              const SizedBox(height: 10),
-              const Text(
-                'Note: In accordance with DepEd guidelines, testing start and end times must fall within the same calendar day.',
-                style: TextStyle(fontSize: 11, color: Colors.grey),
+            ),
+            actions: [
+              TextButton(
+                onPressed: isSavingSchedule ? null : () => Navigator.pop(ctx),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed:
+                    (isSavingSchedule ||
+                        isUnchanged ||
+                        scheduleTimeError != null)
+                    ? null
+                    : () async {
+                        final recheckErr = computeTimeError(
+                          selectedDate,
+                          selectedTime,
+                        );
+                        if (recheckErr != null) {
+                          setModalState(() => scheduleTimeError = recheckErr);
+                          return;
+                        }
+                        setModalState(() => isSavingSchedule = true);
+                        try {
+                          final client = SupabaseService().client;
+                          final existing = await client
+                              .from(
+                                isInPerson
+                                    ? 'classwork_items'
+                                    : 'digital_assessments',
+                              )
+                              .select('id')
+                              .eq('id', item.id)
+                              .eq('is_archived', false)
+                              .maybeSingle();
+
+                          if (existing == null) {
+                            AppDataCache.instance.invalidatePrefix(
+                              'teacher_assessments_',
+                            );
+                            AppDataCache.instance.invalidatePrefix(
+                              'teacher_activities_',
+                            );
+                            AppDataCache.instance.invalidatePrefix(
+                              'student_dashboard_',
+                            );
+                            AppDataCache.instance.invalidatePrefix(
+                              'gradebook_',
+                            );
+                            if (ctx.mounted) Navigator.pop(ctx);
+                            if (mounted) {
+                              await widget.onRefresh?.call();
+                              if (mounted) {
+                                await AppModals.showWarningDialog(
+                                  context: context,
+                                  title: 'Assessment Removed',
+                                  message:
+                                      'This assessment has already been deleted from the database and can no longer be updated.',
+                                );
+                              }
+                            }
+                            return;
+                          }
+
+                          if (isInPerson) {
+                            await client
+                                .from('classwork_items')
+                                .update({
+                                  'deadline': candidateCombined
+                                      .toUtc()
+                                      .toIso8601String(),
+                                })
+                                .eq('id', item.id);
+                          } else {
+                            final endUtc = candidateCombined
+                                .add(Duration(minutes: item.durationMinutes))
+                                .toUtc()
+                                .toIso8601String();
+                            await client
+                                .from('digital_assessments')
+                                .update({
+                                  'available_from': candidateCombined
+                                      .toUtc()
+                                      .toIso8601String(),
+                                  'deadline': endUtc,
+                                })
+                                .eq('id', item.id);
+
+                            await client
+                                .from('classwork_items')
+                                .update({'deadline': endUtc})
+                                .eq('id', item.id);
+                          }
+
+                          AppDataCache.instance.invalidatePrefix(
+                            'teacher_assessments_',
+                          );
+                          AppDataCache.instance.invalidatePrefix(
+                            'teacher_activities_',
+                          );
+                          AppDataCache.instance.invalidatePrefix(
+                            'student_dashboard_',
+                          );
+                          AppDataCache.instance.invalidatePrefix('gradebook_');
+                          TeacherGradebookTab.gradebookRefreshNotifier.value++;
+
+                          if (ctx.mounted) Navigator.pop(ctx);
+                          if (mounted) {
+                            setState(() => _isSyncing = true);
+                            await widget.onRefresh?.call();
+                            if (mounted) {
+                              setState(() => _isSyncing = false);
+                              await AppModals.showSuccessDialog(
+                                context: context,
+                                title: isInPerson
+                                    ? 'Date Updated'
+                                    : 'Schedule Updated',
+                                message: isInPerson
+                                    ? 'Scheduled date updated for "${item.title}".'
+                                    : 'Schedule updated for "${item.title}". Window opens on ${candidateCombined.month}/${candidateCombined.day}/${candidateCombined.year} at ${_formatTime(candidateCombined)}.',
+                              );
+                            }
+                          }
+                        } catch (e) {
+                          setModalState(() => isSavingSchedule = false);
+                          if (mounted) {
+                            await AppModals.showErrorDialog(
+                              context: context,
+                              title: 'Update Failed',
+                              message: 'Could not update schedule: $e',
+                            );
+                          }
+                        }
+                      },
+                child: isSavingSchedule
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : Text(isInPerson ? 'Save New Date' : 'Save New Schedule'),
               ),
             ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () async {
-                Navigator.pop(ctx);
-                try {
-                  final client = SupabaseService().client;
-                  await client
-                      .from('digital_assessments')
-                      .update({
-                        'available_from': newDate.toIso8601String(),
-                        'deadline': newDate
-                            .add(Duration(minutes: item.durationMinutes))
-                            .toIso8601String(),
-                      })
-                      .eq('id', item.id);
-
-                  await client
-                      .from('classwork_items')
-                      .update({
-                        'deadline': newDate
-                            .add(Duration(minutes: item.durationMinutes))
-                            .toIso8601String(),
-                      })
-                      .eq('id', item.id);
-                } catch (_) {}
-
-                if (!mounted) return;
-                AppModals.showSuccessDialog(
-                  context: context,
-                  title: 'Schedule Updated',
-                  message:
-                      'Schedule successfully updated for ${item.title}. Window opens at ${_formatTime(newDate)}.',
-                );
-                widget.onRefresh?.call();
-                setState(() {});
-              },
-              child: const Text('Save Reschedule'),
-            ),
-          ],
-        ),
+          );
+        },
       ),
     );
   }
@@ -1669,9 +2126,27 @@ class _TeacherUnifiedAssessmentsTabState
       initialOfferings: _teacherSubjects,
       isPerformanceTask: item.isRequirement,
       repository: widget.repository,
-      onRequirementCreated: () {
-        widget.onRefresh?.call();
-        setState(() {});
+      onRequirementCreated: () async {
+        setState(() => _isSyncing = true);
+        try {
+          final res = widget.onRefresh?.call();
+          if (res is Future) {
+            await res;
+          }
+        } finally {
+          if (mounted) {
+            setState(() => _isSyncing = false);
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                  'Classwork updated and synced with gradebook successfully.',
+                ),
+                duration: Duration(seconds: 2),
+                backgroundColor: Color(0xFF0F8A48),
+              ),
+            );
+          }
+        }
       },
     );
   }

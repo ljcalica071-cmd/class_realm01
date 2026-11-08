@@ -194,8 +194,7 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
 
   bool _hydrateSheetsFromLocalCache(String offeringId) {
     var foundAny = false;
-    _wwColumns = defaultCategoryColumns;
-    _ptColumns = defaultCategoryColumns;
+    _resetTermColumns();
     for (final term in const [1, 2, 3]) {
       for (final category in const ['ww', 'pt', 'ex']) {
         _termHps[term]![category]!.clear();
@@ -422,8 +421,46 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
   static const int maxCategoryColumns = 10;
   static const int exColumns = 3; // ST1, ST2, TE
 
-  int _wwColumns = defaultCategoryColumns;
-  int _ptColumns = defaultCategoryColumns;
+  final Map<int, int> _termWwColumns = {
+    1: defaultCategoryColumns,
+    2: defaultCategoryColumns,
+    3: defaultCategoryColumns,
+  };
+  final Map<int, int> _termPtColumns = {
+    1: defaultCategoryColumns,
+    2: defaultCategoryColumns,
+    3: defaultCategoryColumns,
+  };
+
+  int get _wwColumns => _termWwColumns[_selectedTerm] ?? defaultCategoryColumns;
+  set _wwColumns(int val) {
+    final targetTerm = (_selectedTerm >= 1 && _selectedTerm <= 3)
+        ? _selectedTerm
+        : 1;
+    _termWwColumns[targetTerm] = val.clamp(
+      defaultCategoryColumns,
+      maxCategoryColumns,
+    );
+  }
+
+  int get _ptColumns => _termPtColumns[_selectedTerm] ?? defaultCategoryColumns;
+  set _ptColumns(int val) {
+    final targetTerm = (_selectedTerm >= 1 && _selectedTerm <= 3)
+        ? _selectedTerm
+        : 1;
+    _termPtColumns[targetTerm] = val.clamp(
+      defaultCategoryColumns,
+      maxCategoryColumns,
+    );
+  }
+
+  void _resetTermColumns() {
+    for (final term in const [1, 2, 3]) {
+      _termWwColumns[term] = defaultCategoryColumns;
+      _termPtColumns[term] = defaultCategoryColumns;
+    }
+  }
+
   String _selectedGender = 'Male';
 
   List<UserModel> get _studentsForSchedule => _students;
@@ -583,7 +620,16 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
   }
 
   Map<String, dynamic> _encodeSheet(int term) {
-    final hps = <String, dynamic>{};
+    final hps = <String, dynamic>{
+      'ww_columns': (_termWwColumns[term] ?? defaultCategoryColumns).clamp(
+        defaultCategoryColumns,
+        maxCategoryColumns,
+      ),
+      'pt_columns': (_termPtColumns[term] ?? defaultCategoryColumns).clamp(
+        defaultCategoryColumns,
+        maxCategoryColumns,
+      ),
+    };
     for (final category in const ['ww', 'pt', 'ex']) {
       final catMap = <String, dynamic>{};
       final source = _termHps[term]?[category];
@@ -669,8 +715,7 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
       _isLoadingSheets = forceShowLoading || (!hasLocalCache && isFirstLoad);
       _sheetLoadError = null;
       if (!hasLocalCache) {
-        _wwColumns = defaultCategoryColumns;
-        _ptColumns = defaultCategoryColumns;
+        _resetTermColumns();
       }
     });
     if (!hasLocalCache) {
@@ -688,24 +733,50 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
           .select('grading_category, term_number, gradebook_column_index')
           .eq('subject_offering_id', offeringId)
           .eq('is_archived', false);
+      final digitalAssessmentsFuture = client
+          .from('digital_assessments')
+          .select('id, assessment_type, grading_category')
+          .eq('subject_offering_id', offeringId)
+          .eq('is_archived', false);
 
       final results = await Future.wait([
         Future.wait([
           for (final term in const [1, 2, 3])
-            SubjectRepository.instance.getGradebookTermSheet(offeringId, term),
+            SubjectRepository.instance.getGradebookTermSheet(
+              offeringId,
+              term,
+              forceRefresh: true,
+            ),
         ]),
         classworkFuture.catchError((_) => []),
+        digitalAssessmentsFuture.catchError((_) => []),
       ]);
 
       if (!mounted || request != _sheetLoadRequest) return;
       final sheets = results[0];
       final classworkData = results[1] as List? ?? [];
+      final digitalData = results[2] as List? ?? [];
+
+      final offMatch = _teacherSubjects.firstWhere(
+        (s) => s['id']?.toString() == offeringId,
+        orElse: () => <String, dynamic>{},
+      );
+      final offTermsTaught = offMatch['terms_taught'] is num
+          ? (offMatch['terms_taught'] as num).toInt()
+          : int.tryParse(offMatch['terms_taught']?.toString() ?? '') ?? 3;
+      final offTermBlock =
+          offMatch['term_block']?.toString() ?? '1ST, 2ND, 3RD';
+      final offActiveTerms = DepEdSubjectCatalog.getActiveTermsForBlock(
+        offTermsTaught,
+        offTermBlock,
+      );
+      final fallbackTerm = offActiveTerms.isNotEmpty ? offActiveTerms.first : 1;
 
       final occupied = <String>{};
       for (final item in classworkData) {
         if (item is Map) {
           final cat = item['grading_category']?.toString().toLowerCase();
-          final term = (item['term_number'] as num?)?.toInt() ?? 1;
+          final term = (item['term_number'] as num?)?.toInt() ?? fallbackTerm;
           final colIdx = (item['gradebook_column_index'] as num?)?.toInt();
           if (cat != null && colIdx != null) {
             final zeroCol = (cat == 'ex')
@@ -715,10 +786,20 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
           }
         }
       }
+      for (final da in digitalData) {
+        if (da is Map) {
+          final aType = da['assessment_type']?.toString().toLowerCase();
+          final zeroCol = aType == 'st1'
+              ? 0
+              : (aType == 'st2' ? 1 : (aType == 'term_exam' ? 2 : null));
+          if (zeroCol != null) {
+            occupied.add('$fallbackTerm-ex-$zeroCol');
+          }
+        }
+      }
       _classworkOccupiedSlots = occupied;
 
-      _wwColumns = defaultCategoryColumns;
-      _ptColumns = defaultCategoryColumns;
+      _resetTermColumns();
       for (final term in const [1, 2, 3]) {
         for (final category in const ['ww', 'pt', 'ex']) {
           _termHps[term]![category]!.clear();
@@ -728,6 +809,27 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
       for (var index = 0; index < sheets.length; index++) {
         final sheet = sheets[index];
         if (sheet != null) _decodeSheet(index + 1, sheet);
+      }
+      for (final slotKey in _classworkOccupiedSlots) {
+        final parts = slotKey.split('-');
+        if (parts.length == 3) {
+          final sTerm = int.tryParse(parts[0]);
+          final sCat = parts[1];
+          final zeroCol = int.tryParse(parts[2]);
+          if (sTerm != null && zeroCol != null) {
+            final colCount = (zeroCol + 1).clamp(
+              defaultCategoryColumns,
+              maxCategoryColumns,
+            );
+            if (sCat == 'ww' &&
+                colCount > (_termWwColumns[sTerm] ?? defaultCategoryColumns)) {
+              _termWwColumns[sTerm] = colCount;
+            } else if (sCat == 'pt' &&
+                colCount > (_termPtColumns[sTerm] ?? defaultCategoryColumns)) {
+              _termPtColumns[sTerm] = colCount;
+            }
+          }
+        }
       }
       _loadedOfferingIds.add(offeringId);
       _hpsRevision.value++;
@@ -757,7 +859,21 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
     if (rawHps is! Map && rawScores is! Map) {
       return;
     }
+    var wwCols = _termWwColumns[term] ?? defaultCategoryColumns;
+    var ptCols = _termPtColumns[term] ?? defaultCategoryColumns;
     if (rawHps is Map) {
+      final savedWwCols = rawHps['ww_columns'] is num
+          ? (rawHps['ww_columns'] as num).toInt()
+          : int.tryParse(rawHps['ww_columns']?.toString() ?? '');
+      if (savedWwCols != null && savedWwCols > wwCols) {
+        wwCols = savedWwCols.clamp(defaultCategoryColumns, maxCategoryColumns);
+      }
+      final savedPtCols = rawHps['pt_columns'] is num
+          ? (rawHps['pt_columns'] as num).toInt()
+          : int.tryParse(rawHps['pt_columns']?.toString() ?? '');
+      if (savedPtCols != null && savedPtCols > ptCols) {
+        ptCols = savedPtCols.clamp(defaultCategoryColumns, maxCategoryColumns);
+      }
       for (final category in const ['ww', 'pt', 'ex']) {
         final values = rawHps[category];
         if (values is! Map) continue;
@@ -786,8 +902,8 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
       (m) => m['ww']?.keys ?? <int>[],
     );
     for (final k in wwHpsKeys.followedBy(wwScoreKeys)) {
-      if (k + 1 > _wwColumns) {
-        _wwColumns = (k + 1).clamp(defaultCategoryColumns, maxCategoryColumns);
+      if (k + 1 > wwCols) {
+        wwCols = (k + 1).clamp(defaultCategoryColumns, maxCategoryColumns);
       }
     }
     final ptHpsKeys = _termHps[term]!['pt']!.keys;
@@ -795,10 +911,12 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
       (m) => m['pt']?.keys ?? <int>[],
     );
     for (final k in ptHpsKeys.followedBy(ptScoreKeys)) {
-      if (k + 1 > _ptColumns) {
-        _ptColumns = (k + 1).clamp(defaultCategoryColumns, maxCategoryColumns);
+      if (k + 1 > ptCols) {
+        ptCols = (k + 1).clamp(defaultCategoryColumns, maxCategoryColumns);
       }
     }
+    _termWwColumns[term] = wwCols;
+    _termPtColumns[term] = ptCols;
   }
 
   Map<int, double?> _decodeCategoryColumns(String category, Map values) {
@@ -2761,13 +2879,29 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
       child: InkWell(
         key: ValueKey('add-slot-$category'),
         onTap: () {
+          bool changed = false;
           setState(() {
             if (isWw && _wwColumns < maxCategoryColumns) {
-              _wwColumns++;
+              _wwColumns = _wwColumns + 1;
+              changed = true;
             } else if (!isWw && _ptColumns < maxCategoryColumns) {
-              _ptColumns++;
+              _ptColumns = _ptColumns + 1;
+              changed = true;
             }
           });
+          if (changed) {
+            _hpsRevision.value++;
+            final offeringId = _currentSubjectData?['id']?.toString();
+            final term = _selectedTerm;
+            if (offeringId != null && term >= 1 && term <= 3) {
+              _sheetSaveTimer?.cancel();
+              unawaited(
+                _persistSheet(offeringId, term).catchError((Object error) {
+                  debugPrint('Gradebook column count save failed: $error');
+                }),
+              );
+            }
+          }
         },
         child: Container(
           width: width,

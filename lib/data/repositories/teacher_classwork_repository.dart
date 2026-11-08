@@ -8,6 +8,7 @@ abstract class TeacherClassworkRepository {
   Future<List<ActivityModel>> getActivities({
     String? subjectOfferingId,
     String? teacherId,
+    bool forceRefresh = false,
   });
 
   /// Saves (creates or updates) a classwork item.
@@ -35,4 +36,13 @@ abstract class TeacherClassworkRepository {
     required int gradebookColumnIndex,
     String? excludeClassworkId,
   });
+
+  /// Returns a consolidated snapshot of occupied WW, PT, and EX (ST1/ST2/TE)
+  /// slots from database single-source-of-truth tables (`classwork_items`,
+  /// `digital_assessments`, and `gradebook_term_sheets`).
+  Future<ClassworkSlotSummary> getOccupiedSlots({
+    required String subjectOfferingId,
+    required int termNumber,
+    String? excludeClassworkId,
+  }) async => const ClassworkSlotSummary();
 }

@@ -77,18 +77,20 @@ class AppDatabase extends _$AppDatabase {
   }
 
   static QueryExecutor _openConnection() {
-    return driftDatabase(
-      name: 'classrealm_local_db',
-      web: DriftWebOptions(
-        sqlite3Wasm: Uri.parse('sqlite3.wasm'),
-        driftWorker: Uri.parse('drift_worker.js'),
-        onResult: (result) {
-          if (result.missingFeatures.isNotEmpty) {
-            debugPrint('Web SQLite features notice: ${result.missingFeatures}');
-          }
-        },
-      ),
-    );
+    return LazyDatabase(() async {
+      return driftDatabase(
+        name: 'classrealm_local_db',
+        web: DriftWebOptions(
+          sqlite3Wasm: Uri.parse('sqlite3.wasm'),
+          driftWorker: Uri.parse('drift_worker.js'),
+          onResult: (result) {
+            if (result.missingFeatures.isNotEmpty) {
+              debugPrint('Web SQLite features notice: ${result.missingFeatures}');
+            }
+          },
+        ),
+      );
+    });
   }
 
   // =========================================================================
@@ -96,8 +98,9 @@ class AppDatabase extends _$AppDatabase {
   // =========================================================================
 
   /// Save or update a single setting (Dark Mode, Session, etc.)
-  Future<void> setSetting(String key, String value) {
-    return into(localSettings).insertOnConflictUpdate(
+  Future<void> setSetting(String key, String value) async {
+    if (kIsWeb) return;
+    await into(localSettings).insertOnConflictUpdate(
       LocalSettingsCompanion.insert(
         key: key,
         value: value,
@@ -108,6 +111,7 @@ class AppDatabase extends _$AppDatabase {
 
   /// Get setting value
   Future<String?> getSetting(String key) async {
+    if (kIsWeb) return null;
     final query = select(localSettings)..where((tbl) => tbl.key.equals(key));
     final result = await query.getSingleOrNull();
     return result?.value;
@@ -117,14 +121,17 @@ class AppDatabase extends _$AppDatabase {
   Future<void> upsertOfferings(
     List<LocalSubjectOfferingsCompanion> offerings,
   ) async {
-    if (offerings.isEmpty) return;
+    if (kIsWeb || offerings.isEmpty) return;
     await batch((b) {
       b.insertAllOnConflictUpdate(localSubjectOfferings, offerings);
     });
   }
 
   /// Get subject offerings for a teacher (Instant read)
-  Future<List<LocalSubjectOffering>> getOfferingsForTeacher(String teacherId) {
+  Future<List<LocalSubjectOffering>> getOfferingsForTeacher(
+    String teacherId,
+  ) async {
+    if (kIsWeb) return const [];
     return (select(localSubjectOfferings)..where(
           (t) => t.teacherId.equals(teacherId) & t.isArchived.equals(false),
         ))
@@ -135,6 +142,7 @@ class AppDatabase extends _$AppDatabase {
   Stream<List<LocalSubjectOffering>> watchOfferingsForTeacher(
     String teacherId,
   ) {
+    if (kIsWeb) return const Stream.empty();
     return (select(localSubjectOfferings)..where(
           (t) => t.teacherId.equals(teacherId) & t.isArchived.equals(false),
         ))
@@ -147,6 +155,7 @@ class AppDatabase extends _$AppDatabase {
     required String subjectId,
     required bool isArchived,
   }) async {
+    if (kIsWeb) return;
     await (update(localSubjectOfferings)..where(
           (t) => t.teacherId.equals(teacherId) & t.subjectId.equals(subjectId),
         ))
@@ -158,6 +167,7 @@ class AppDatabase extends _$AppDatabase {
     required String offeringId,
     required bool isArchived,
   }) async {
+    if (kIsWeb) return;
     await (update(localSubjectOfferings)..where((t) => t.id.equals(offeringId)))
         .write(LocalSubjectOfferingsCompanion(isArchived: Value(isArchived)));
   }
@@ -167,6 +177,7 @@ class AppDatabase extends _$AppDatabase {
     required String teacherId,
     required String subjectId,
   }) async {
+    if (kIsWeb) return;
     await (delete(localSubjectOfferings)..where(
           (t) => t.teacherId.equals(teacherId) & t.subjectId.equals(subjectId),
         ))
@@ -175,6 +186,7 @@ class AppDatabase extends _$AppDatabase {
 
   /// Delete a single offering by id
   Future<void> deleteOfferingById(String offeringId) async {
+    if (kIsWeb) return;
     await (delete(
       localSubjectOfferings,
     )..where((t) => t.id.equals(offeringId))).go();
@@ -185,6 +197,7 @@ class AppDatabase extends _$AppDatabase {
     String teacherId,
     Set<String> keepOfferingIds,
   ) async {
+    if (kIsWeb) return;
     if (keepOfferingIds.isEmpty) {
       await (delete(
         localSubjectOfferings,
@@ -204,7 +217,7 @@ class AppDatabase extends _$AppDatabase {
 
   /// Batch upsert local students
   Future<void> upsertStudents(List<LocalStudentsCompanion> rows) async {
-    if (rows.isEmpty) return;
+    if (kIsWeb || rows.isEmpty) return;
     await batch((b) {
       b.insertAllOnConflictUpdate(localStudents, rows);
     });
@@ -212,7 +225,7 @@ class AppDatabase extends _$AppDatabase {
 
   /// Batch upsert local enrollments
   Future<void> upsertEnrollments(List<LocalEnrollmentsCompanion> rows) async {
-    if (rows.isEmpty) return;
+    if (kIsWeb || rows.isEmpty) return;
     await batch((b) {
       b.insertAllOnConflictUpdate(localEnrollments, rows);
     });
@@ -220,6 +233,7 @@ class AppDatabase extends _$AppDatabase {
 
   /// Update or unlink a student's RFID UID locally (clearing previous holder on reassignment)
   Future<void> updateStudentRfid(String studentId, String? rfidUid) async {
+    if (kIsWeb) return;
     final normalized = (rfidUid == null || rfidUid.trim().isEmpty)
         ? null
         : rfidUid.trim().toUpperCase();
@@ -241,6 +255,7 @@ class AppDatabase extends _$AppDatabase {
 
   /// Find a local student by RFID UID (case-insensitive & colon-tolerant)
   Future<LocalStudent?> findStudentByRfid(String rfidUid) async {
+    if (kIsWeb) return null;
     final cleanUid = rfidUid.trim().toUpperCase();
     if (cleanUid.isEmpty) return null;
     final hexOnly = cleanUid.replaceAll(RegExp(r'[^0-9A-F]'), '');
@@ -262,12 +277,14 @@ class AppDatabase extends _$AppDatabase {
   }
 
   /// Get all local students (Instant 0ms read)
-  Future<List<LocalStudent>> getAllStudents() {
+  Future<List<LocalStudent>> getAllStudents() async {
+    if (kIsWeb) return const [];
     return select(localStudents).get();
   }
 
   /// Get students for a specific offering
   Future<List<LocalStudent>> getStudentsForOffering(String offeringId) async {
+    if (kIsWeb) return const [];
     final query =
         select(localStudents).join([
           innerJoin(
@@ -290,7 +307,7 @@ class AppDatabase extends _$AppDatabase {
   Future<void> upsertAttendanceRecords(
     List<LocalAttendanceRecordsCompanion> rows,
   ) async {
-    if (rows.isEmpty) return;
+    if (kIsWeb || rows.isEmpty) return;
     await batch((b) {
       b.insertAllOnConflictUpdate(localAttendanceRecords, rows);
     });
@@ -300,7 +317,8 @@ class AppDatabase extends _$AppDatabase {
   Future<List<LocalAttendanceRecord>> getAttendanceForOfferingAndDate(
     String offeringId,
     String dateStr,
-  ) {
+  ) async {
+    if (kIsWeb) return const [];
     return (select(localAttendanceRecords)..where(
           (t) =>
               t.subjectOfferingId.equals(offeringId) &
@@ -310,12 +328,14 @@ class AppDatabase extends _$AppDatabase {
   }
 
   /// Upsert cutoff configuration for a subject offering
-  Future<void> upsertCutoffConfig(LocalAttendanceCutoffsCompanion row) {
-    return into(localAttendanceCutoffs).insertOnConflictUpdate(row);
+  Future<void> upsertCutoffConfig(LocalAttendanceCutoffsCompanion row) async {
+    if (kIsWeb) return;
+    await into(localAttendanceCutoffs).insertOnConflictUpdate(row);
   }
 
   /// Retrieve cached cutoff configuration for a subject offering
-  Future<LocalAttendanceCutoff?> getCutoffConfig(String offeringId) {
+  Future<LocalAttendanceCutoff?> getCutoffConfig(String offeringId) async {
+    if (kIsWeb) return null;
     return (select(
       localAttendanceCutoffs,
     )..where((t) => t.subjectOfferingId.equals(offeringId))).getSingleOrNull();
@@ -323,14 +343,15 @@ class AppDatabase extends _$AppDatabase {
 
   /// Batch upsert schedules for offline schedule guarding
   Future<void> upsertSchedules(List<LocalSchedulesCompanion> rows) async {
-    if (rows.isEmpty) return;
+    if (kIsWeb || rows.isEmpty) return;
     await batch((b) {
       b.insertAllOnConflictUpdate(localSchedules, rows);
     });
   }
 
   /// Retrieve cached schedules for a subject offering
-  Future<List<LocalSchedule>> getSchedulesForOffering(String offeringId) {
+  Future<List<LocalSchedule>> getSchedulesForOffering(String offeringId) async {
+    if (kIsWeb) return const [];
     return (select(
       localSchedules,
     )..where((t) => t.subjectOfferingId.equals(offeringId))).get();
@@ -346,10 +367,11 @@ class AppDatabase extends _$AppDatabase {
     required String action,
     required String targetTable,
     required String payloadJson,
-  }) {
+  }) async {
+    if (kIsWeb) return;
     final effectiveId =
         id ?? '${action}_${DateTime.now().microsecondsSinceEpoch}';
-    return into(offlineSyncQueue).insertOnConflictUpdate(
+    await into(offlineSyncQueue).insertOnConflictUpdate(
       OfflineSyncQueueCompanion.insert(
         id: effectiveId,
         action: action,
@@ -362,7 +384,8 @@ class AppDatabase extends _$AppDatabase {
   }
 
   /// Get pending offline actions ordered FIFO
-  Future<List<OfflineSyncQueueData>> getPendingSyncQueue() {
+  Future<List<OfflineSyncQueueData>> getPendingSyncQueue() async {
+    if (kIsWeb) return const [];
     return (select(offlineSyncQueue)
           ..where((t) => t.status.equals('pending'))
           ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
@@ -371,11 +394,13 @@ class AppDatabase extends _$AppDatabase {
 
   /// Remove a completed sync queue item
   Future<void> markSyncQueueCompleted(String id) async {
+    if (kIsWeb) return;
     await (delete(offlineSyncQueue)..where((t) => t.id.equals(id))).go();
   }
 
   /// Mark a sync queue item as failed (or increment retry count)
   Future<void> markSyncQueueFailed(String id, String error) async {
+    if (kIsWeb) return;
     final existing = await (select(
       offlineSyncQueue,
     )..where((t) => t.id.equals(id))).getSingleOrNull();

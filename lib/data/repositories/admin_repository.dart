@@ -4,10 +4,10 @@ import 'package:firebase_auth/firebase_auth.dart' as firebase;
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:class_realm/core/services/app_data_cache.dart';
+import 'package:class_realm/core/services/local_storage_service.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/models/admin_portal_models.dart';
 import 'package:class_realm/models/academic_models.dart';
-import 'package:class_realm/shared/services/in_app_notification_service.dart';
 
 class AdminRepository {
   static final AdminRepository instance = AdminRepository._internal();
@@ -128,55 +128,145 @@ class AdminRepository {
 
   Future<SystemSettingsModel> getSystemSettings() async {
     try {
+      // 1. Primary: Use server-synchronized RPC for exact maintenance state & 10-min cooldown
+      try {
+        final rpcRes = await _client
+            .rpc('get_system_maintenance_status')
+            .timeout(const Duration(seconds: 4));
+        if (rpcRes is Map) {
+          final model = SystemSettingsModel.fromJson(
+            Map<String, dynamic>.from(rpcRes),
+          );
+          await LocalStorageService.saveMaintenanceMode(
+            model.isMaintenanceMode,
+          );
+          await LocalStorageService.saveMaintenanceCooldownSeconds(
+            model.cooldownRemainingSeconds,
+          );
+          return model;
+        }
+      } catch (_) {
+        // Fallback to direct table select if RPC is unavailable
+      }
+
       final res = await _client
           .from('system_settings')
           .select()
           .eq('id', true)
-          .maybeSingle();
+          .maybeSingle()
+          .timeout(const Duration(seconds: 4));
 
       if (res != null) {
-        return SystemSettingsModel.fromJson(res);
+        final model = SystemSettingsModel.fromJson(res);
+        await LocalStorageService.saveMaintenanceMode(model.isMaintenanceMode);
+        await LocalStorageService.saveMaintenanceCooldownSeconds(
+          model.cooldownRemainingSeconds,
+        );
+        return model;
       }
       return SystemSettingsModel(
-        isMaintenanceMode: false,
+        isMaintenanceMode: LocalStorageService.isMaintenanceMode,
         maintenanceUpdatedAt: DateTime.now(),
+        cooldownRemainingSeconds:
+            LocalStorageService.getMaintenanceCooldownRemainingSeconds(),
       );
     } catch (e) {
       debugPrint('AdminRepository getSystemSettings error: $e');
+      // Offline / network fallback: strictly honor last cached maintenance mode
       return SystemSettingsModel(
-        isMaintenanceMode: false,
+        isMaintenanceMode: LocalStorageService.isMaintenanceMode,
         maintenanceUpdatedAt: DateTime.now(),
+        cooldownRemainingSeconds:
+            LocalStorageService.getMaintenanceCooldownRemainingSeconds(),
       );
     }
   }
 
-  Future<void> setMaintenanceMode(bool isMaintenance, [String? adminId]) async {
+  Future<SystemSettingsModel> setMaintenanceMode(
+    bool isMaintenance, [
+    String? adminId,
+  ]) async {
     final firebaseUser = firebase.FirebaseAuth.instance.currentUser;
     final authUser = AuthRepository.instance.currentUser;
-    final currentUid = adminId ?? firebaseUser?.uid ?? authUser?.id;
+    String? currentUid = adminId ?? firebaseUser?.uid ?? authUser?.id;
 
     if (currentUid == null || currentUid.isEmpty) {
       throw StateError('Your login session has expired. Please log in again.');
     }
 
-    final updateData = <String, dynamic>{
-      'is_maintenance_mode': isMaintenance,
-      'maintenance_updated_at': DateTime.now().toIso8601String(),
-    };
-
-    // If current admin user exists in public.users, associate the update with their ID
+    // Resolve verified admin ID in public.users
+    String? resolvedAdminId;
     try {
       final userRow = await _client
           .from('users')
-          .select('id')
+          .select('id, role')
           .eq('id', currentUid)
+          .eq('is_archived', false)
           .maybeSingle();
-      if (userRow != null) {
-        updateData['maintenance_updated_by'] = currentUid;
+      if (userRow != null && userRow['role'] == 'admin') {
+        resolvedAdminId = userRow['id']?.toString();
+      } else {
+        final fallbackAdmin = await _client
+            .from('users')
+            .select('id')
+            .eq('role', 'admin')
+            .eq('is_archived', false)
+            .limit(1)
+            .maybeSingle();
+        resolvedAdminId = fallbackAdmin?['id']?.toString();
       }
     } catch (e) {
       debugPrint('AdminRepository setMaintenanceMode user check error: $e');
     }
+
+    final effectiveAdminId = resolvedAdminId ?? currentUid;
+
+    // 1. Primary: Execute atomic server-side RPC (enforces 10-min cooldown & updates system_settings)
+    try {
+      final rpcRes = await _client.rpc(
+        'set_system_maintenance_mode',
+        params: {
+          'p_enabled': isMaintenance,
+          'p_admin_id': effectiveAdminId,
+        },
+      );
+      if (rpcRes is Map) {
+        final model = SystemSettingsModel.fromJson(
+          Map<String, dynamic>.from(rpcRes),
+        );
+        await LocalStorageService.saveMaintenanceMode(model.isMaintenanceMode);
+        await LocalStorageService.saveMaintenanceCooldownSeconds(
+          model.cooldownRemainingSeconds > 0
+              ? model.cooldownRemainingSeconds
+              : SystemSettingsModel.maintenanceCooldownDurationSeconds,
+        );
+        return model;
+      }
+    } catch (e) {
+      final errStr = e.toString();
+      if (errStr.contains('COOLDOWN_ACTIVE:')) {
+        final match = RegExp(r'COOLDOWN_ACTIVE:(\d+)').firstMatch(errStr);
+        final remSec = int.tryParse(match?.group(1) ?? '') ?? 600;
+        await LocalStorageService.saveMaintenanceCooldownSeconds(remSec);
+        final mins = (remSec ~/ 60).toString().padLeft(2, '0');
+        final secs = (remSec % 60).toString().padLeft(2, '0');
+        throw StateError(
+          'Maintenance toggle cooldown is active. Please wait $mins:$secs before toggling again.',
+        );
+      }
+      if (errStr.contains('UNAUTHORIZED_ADMIN')) {
+        throw StateError('Administrator access is required to toggle maintenance mode.');
+      }
+      debugPrint('AdminRepository setMaintenanceMode RPC notice (falling back to table update): $e');
+    }
+
+    // 2. Fallback: Direct verified table update with .select().single() so 0-row updates never fail silently
+    final nowUtc = DateTime.now().toUtc();
+    final updateData = <String, dynamic>{
+      'is_maintenance_mode': isMaintenance,
+      'maintenance_updated_at': nowUtc.toIso8601String(),
+      'maintenance_updated_by': effectiveAdminId,
+    };
 
     try {
       final existing = await _client
@@ -185,96 +275,141 @@ class AdminRepository {
           .eq('id', true)
           .maybeSingle();
 
+      Map<String, dynamic> updatedRow;
       if (existing == null) {
-        await _client.from('system_settings').insert({
-          'id': true,
-          ...updateData,
-        });
+        updatedRow = await _client
+            .from('system_settings')
+            .insert({'id': true, ...updateData})
+            .select()
+            .single();
       } else {
-        await _client
+        updatedRow = await _client
             .from('system_settings')
             .update(updateData)
-            .eq('id', true);
+            .eq('id', true)
+            .select()
+            .single();
       }
-    } catch (e) {
-      debugPrint('AdminRepository setMaintenanceMode error: $e');
-      rethrow;
-    }
 
-    // Record into audit_logs if admin user exists in users table
-    if (updateData.containsKey('maintenance_updated_by')) {
+      final model = SystemSettingsModel.fromJson(updatedRow).copyWith(
+        cooldownRemainingSeconds:
+            SystemSettingsModel.maintenanceCooldownDurationSeconds,
+      );
+      await LocalStorageService.saveMaintenanceMode(model.isMaintenanceMode);
+      await LocalStorageService.saveMaintenanceCooldownSeconds(
+        SystemSettingsModel.maintenanceCooldownDurationSeconds,
+      );
+
       try {
         await _client.from('audit_logs').insert({
-          'user_id': updateData['maintenance_updated_by'],
+          'user_id': effectiveAdminId,
           'action_type': 'admin_maintenance_toggle',
           'description':
               'System maintenance mode was switched to ${isMaintenance ? "ACTIVE (Lockdown)" : "OPERATIONAL"}.',
-          'logged_at': DateTime.now().toIso8601String(),
+          'logged_at': nowUtc.toIso8601String(),
         });
       } catch (e) {
         debugPrint('AdminRepository setMaintenanceMode audit_logs error: $e');
       }
-    }
 
-    // Broadcast in-app notification & heads-up banner to all active users (Teacher, Student, Parent)
-    try {
-      final nowIso = DateTime.now().toUtc().toIso8601String();
-      final notifTitle = isMaintenance
-          ? 'Scheduled System Maintenance Active'
-          : 'System Maintenance Complete — Back Online';
-      final notifMsg = isMaintenance
-          ? 'ClassRealm is currently undergoing scheduled maintenance to improve system performance. Portal access is temporarily paused while updates are being applied. All your grades, attendance records, and class activities are safely saved.'
-          : 'ClassRealm maintenance is now complete and all portal features are back online. You may now log in and continue viewing grades, attendance, and class activities as normal.';
-
-      await _client.from('notifications').insert({
-        'title': notifTitle,
-        'message': notifMsg,
-        'notification_type': 'general',
-        'target_audience': 'all',
-        'is_archived': false,
-        'created_at': nowIso,
-      });
-
-      InAppNotificationService.showBanner(
-        title: notifTitle,
-        message: notifMsg,
-        subtitle: isMaintenance
-            ? 'Maintenance Active • Access Paused'
-            : 'System Restored • All Portals Online',
-        severity: isMaintenance
-            ? InAppNotificationSeverity.warningLevel1
-            : InAppNotificationSeverity.info,
-      );
-    } catch (notifErr) {
-      debugPrint('AdminRepository maintenance notification broadcast notice: $notifErr');
+      return model;
+    } catch (e) {
+      debugPrint('AdminRepository setMaintenanceMode error: $e');
+      rethrow;
     }
   }
 
-  /// Fetch active Gmail/email addresses strictly for Teachers and Students
-  /// (Parents only receive in-app notifications & push popups when enabled).
-  Future<List<String>> getActiveUserEmails() async {
+  /// Fetch active registered Teacher & Student email recipients with their role and formatted name ('LastName, FirstName').
+  /// Excludes Parent accounts (@classrealm.com) and synthetic test/placeholder emails (.cr@gmail.com, @classrealm.local).
+  Future<List<MaintenanceEmailRecipient>> getMaintenanceEmailRecipients() async {
     try {
-      final res = await _client
+      final usersRes = await _client
           .from('users')
-          .select('email, role')
+          .select('id, email, role')
           .eq('is_archived', false)
           .inFilter('role', ['teacher', 'student'])
           .not('email', 'in', '("parent","student","teacher")');
 
-      final List<String> emails = [];
-      for (final row in res as List) {
-        final rawEmail = row['email']?.toString().trim() ?? '';
-        if (rawEmail.isNotEmpty &&
-            rawEmail.contains('@') &&
-            !rawEmail.endsWith('@classrealm.local')) {
-          emails.add(rawEmail);
+      final teacherProfilesRes = await _client
+          .from('teacher_profiles')
+          .select('teacher_id, first_name, last_name');
+
+      final studentProfilesRes = await _client
+          .from('student_profiles')
+          .select('student_id, first_name, last_name');
+
+      final Map<String, Map<String, String>> teacherNames = {};
+      for (final row in (teacherProfilesRes as List)) {
+        final id = row['teacher_id']?.toString() ?? '';
+        if (id.isNotEmpty) {
+          teacherNames[id] = {
+            'first_name': row['first_name']?.toString().trim() ?? '',
+            'last_name': row['last_name']?.toString().trim() ?? '',
+          };
         }
       }
-      return emails.toSet().toList();
+
+      final Map<String, Map<String, String>> studentNames = {};
+      for (final row in (studentProfilesRes as List)) {
+        final id = row['student_id']?.toString() ?? '';
+        if (id.isNotEmpty) {
+          studentNames[id] = {
+            'first_name': row['first_name']?.toString().trim() ?? '',
+            'last_name': row['last_name']?.toString().trim() ?? '',
+          };
+        }
+      }
+
+      final Map<String, MaintenanceEmailRecipient> uniqueRecipients = {};
+      for (final row in (usersRes as List)) {
+        final uid = row['id']?.toString() ?? '';
+        final rawEmail = row['email']?.toString().trim() ?? '';
+        final lowerEmail = rawEmail.toLowerCase();
+        final role = row['role']?.toString().trim().toLowerCase() ?? 'student';
+
+        if (rawEmail.isEmpty ||
+            !rawEmail.contains('@') ||
+            lowerEmail.endsWith('@classrealm.local') ||
+            lowerEmail.endsWith('@classrealm.com') ||
+            lowerEmail.endsWith('.cr@gmail.com')) {
+          continue;
+        }
+
+        final profileMap = role == 'teacher'
+            ? teacherNames[uid]
+            : studentNames[uid];
+        final firstName = profileMap?['first_name'] ?? '';
+        final lastName = profileMap?['last_name'] ?? '';
+
+        String formattedName;
+        if (lastName.isNotEmpty && firstName.isNotEmpty) {
+          formattedName = '$lastName, $firstName';
+        } else if (lastName.isNotEmpty) {
+          formattedName = lastName;
+        } else if (firstName.isNotEmpty) {
+          formattedName = firstName;
+        } else {
+          formattedName = role == 'teacher' ? 'Teacher' : 'Student';
+        }
+
+        uniqueRecipients[lowerEmail] = MaintenanceEmailRecipient(
+          email: rawEmail,
+          role: role,
+          formattedName: formattedName,
+        );
+      }
+
+      return uniqueRecipients.values.toList();
     } catch (e) {
-      debugPrint('AdminRepository getActiveUserEmails error: $e');
+      debugPrint('AdminRepository getMaintenanceEmailRecipients error: $e');
       return [];
     }
+  }
+
+  /// Fetch active Gmail/email addresses strictly for Teachers and Students
+  Future<List<String>> getActiveUserEmails() async {
+    final recipients = await getMaintenanceEmailRecipients();
+    return recipients.map((r) => r.email).toList();
   }
 
   // =========================================================================

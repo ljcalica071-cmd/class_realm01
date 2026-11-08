@@ -664,7 +664,7 @@ class _TeacherParentManagementTabState
                         height: 44,
                         child: AppButton.success(
                           icon: LucideIcons.upload,
-                          label: 'Import Excel (Next Update)',
+                          label: 'Import Excel',
                           onPressed: () {
                             AppModals.showUpcomingFeatureDialog(
                               context,
@@ -1578,7 +1578,6 @@ class _TeacherParentManagementTabState
   }
 }
 
-
 class _ParentAccessSlipDialog extends StatefulWidget {
   final UserModel initialParent;
   final String initialStudentNamesFallback;
@@ -1780,7 +1779,17 @@ Instructions:
               ),
             ),
             const SizedBox(height: 20),
-            _buildSlipRow(theme, 'Parent', Text(_parent.fullName, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700))),
+            _buildSlipRow(
+              theme,
+              'Parent',
+              Text(
+                _parent.fullName,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
             _buildSlipRow(
               theme,
               _linkedStudents.length > 1
@@ -1805,7 +1814,11 @@ Instructions:
                         : Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              for (int i = 0; i < _linkedStudents.length; i++) ...[
+                              for (
+                                int i = 0;
+                                i < _linkedStudents.length;
+                                i++
+                              ) ...[
                                 if (i > 0)
                                   Divider(
                                     height: 12,
@@ -2003,10 +2016,7 @@ class _LinkedStudentLinkItem {
   final UserModel student;
   String relationship;
 
-  _LinkedStudentLinkItem({
-    required this.student,
-    required this.relationship,
-  });
+  _LinkedStudentLinkItem({required this.student, required this.relationship});
 }
 
 class _EditParentAccountDialog extends StatefulWidget {
@@ -2048,14 +2058,12 @@ class _EditParentAccountDialogState extends State<_EditParentAccountDialog> {
   @override
   void initState() {
     super.initState();
-    final fallbackFirst =
-        widget.parent.firstName?.trim().isNotEmpty == true
+    final fallbackFirst = widget.parent.firstName?.trim().isNotEmpty == true
         ? widget.parent.firstName!.trim()
         : (widget.parent.fullName.contains(' ')
               ? widget.parent.fullName.split(' ').first
               : widget.parent.fullName);
-    final fallbackLast =
-        widget.parent.lastName?.trim().isNotEmpty == true
+    final fallbackLast = widget.parent.lastName?.trim().isNotEmpty == true
         ? widget.parent.lastName!.trim()
         : (widget.parent.fullName.contains(' ')
               ? widget.parent.fullName.split(' ').last
@@ -2173,10 +2181,7 @@ class _EditParentAccountDialogState extends State<_EditParentAccountDialog> {
 
     setState(() {
       _linkedItems.add(
-        _LinkedStudentLinkItem(
-          student: student,
-          relationship: effectiveRel,
-        ),
+        _LinkedStudentLinkItem(student: student, relationship: effectiveRel),
       );
       _newLinkError = null;
       _unlinkGuardError = null;
@@ -2527,9 +2532,7 @@ class _EditParentAccountDialogState extends State<_EditParentAccountDialog> {
                               height: 48,
                               alignment: Alignment.center,
                               decoration: BoxDecoration(
-                                color: theme
-                                    .colorScheme
-                                    .surfaceContainerHighest
+                                color: theme.colorScheme.surfaceContainerHighest
                                     .withValues(alpha: 0.4),
                                 borderRadius: BorderRadius.circular(10),
                                 border: Border.all(
@@ -2844,7 +2847,10 @@ class _EditParentAccountDialogState extends State<_EditParentAccountDialog> {
                   SizedBox(
                     width: double.infinity,
                     child: OutlinedButton.icon(
-                      icon: const Icon(Icons.person_add_alt_1_rounded, size: 18),
+                      icon: const Icon(
+                        Icons.person_add_alt_1_rounded,
+                        size: 18,
+                      ),
                       label: const Text(
                         '+ Link Another Student',
                         style: TextStyle(fontWeight: FontWeight.bold),
@@ -2953,24 +2959,25 @@ class _EditParentAccountDialogState extends State<_EditParentAccountDialog> {
                                         borderRadius: BorderRadius.circular(10),
                                       ),
                                     ),
-                                    items: const [
-                                      'Mother',
-                                      'Father',
-                                      'Guardian',
-                                      'Other',
-                                    ]
-                                        .map(
-                                          (r) => DropdownMenuItem(
-                                            value: r,
-                                            child: Text(
-                                              r,
-                                              style: const TextStyle(
-                                                fontSize: 13.5,
+                                    items:
+                                        const [
+                                              'Mother',
+                                              'Father',
+                                              'Guardian',
+                                              'Other',
+                                            ]
+                                            .map(
+                                              (r) => DropdownMenuItem(
+                                                value: r,
+                                                child: Text(
+                                                  r,
+                                                  style: const TextStyle(
+                                                    fontSize: 13.5,
+                                                  ),
+                                                ),
                                               ),
-                                            ),
-                                          ),
-                                        )
-                                        .toList(),
+                                            )
+                                            .toList(),
                                     onChanged: (val) {
                                       if (val != null) {
                                         setState(() {
@@ -3024,7 +3031,8 @@ class _EditParentAccountDialogState extends State<_EditParentAccountDialog> {
                           onChanged: (v) =>
                               setState(() => _studentSearchQuery = v),
                           decoration: InputDecoration(
-                            hintText: 'Search student by name, LRN, or section...',
+                            hintText:
+                                'Search student by name, LRN, or section...',
                             prefixIcon: const Icon(Icons.search, size: 18),
                             filled: true,
                             fillColor: theme.colorScheme.surface,

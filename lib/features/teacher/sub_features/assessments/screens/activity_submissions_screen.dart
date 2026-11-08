@@ -6,6 +6,10 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:class_realm/core/theme/app_theme.dart';
 import 'package:class_realm/core/services/app_data_cache.dart';
 import 'package:class_realm/core/services/supabase_service.dart';
+import 'package:class_realm/widgets/common/app_modals.dart';
+import 'package:class_realm/widgets/common/app_date_picker_field.dart';
+import 'package:class_realm/widgets/common/app_time_picker_field.dart';
+import 'package:class_realm/widgets/common/expandable_instructions_text.dart';
 import 'package:class_realm/features/teacher/sub_features/grading/widgets/teacher_gradebook_tab.dart';
 import 'package:class_realm/core/utils/validators.dart';
 import 'package:class_realm/models/user_model.dart';
@@ -358,6 +362,26 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
     });
 
     try {
+      // Check if item still exists in database
+      final existingItem = await _client
+          .from('classwork_items')
+          .select('id')
+          .eq('id', _activity.id)
+          .maybeSingle();
+
+      if (existingItem == null) {
+        setState(() => _isSavingStudent[student.id] = false);
+        if (mounted) {
+          AppModals.showWarningDialog(
+            context: context,
+            title: 'Classwork Removed',
+            message:
+                'This classwork item has already been deleted in the database. Scores can no longer be recorded.',
+          );
+        }
+        return false;
+      }
+
       final currentSub =
           _submissionsByStudent[student.id] ?? <String, dynamic>{};
       final newStatus = newScore != null
@@ -405,22 +429,35 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
           final studentScores = Map<String, dynamic>.from(
             scores[student.id] as Map? ?? {},
           );
-          final catKey = _activity.isRequirement ? 'pt' : 'ww';
+          final catKey = _activity.effectiveGradingCategory;
           final catScores = Map<String, dynamic>.from(
             studentScores[catKey] as Map? ?? {},
           );
-          final colKey = _activity.gradebookColumnIndex.toString();
+          final colKey = catKey == 'ex'
+              ? (_activity.gradebookColumnIndex == 1
+                    ? 'st1'
+                    : (_activity.gradebookColumnIndex == 2 ? 'st2' : 'te'))
+              : _activity.gradebookColumnIndex.toString();
 
           final hps = Map<String, dynamic>.from(termSheet['hps'] as Map? ?? {});
           final catHps = Map<String, dynamic>.from(hps[catKey] as Map? ?? {});
           catHps[colKey] = _activity.maxScore.toInt();
+          if (catKey == 'ex') {
+            catHps.remove(_activity.gradebookColumnIndex.toString());
+          }
           hps[catKey] = catHps;
           termSheet['hps'] = hps;
 
           if (newScore != null) {
             catScores[colKey] = newScore;
+            if (catKey == 'ex') {
+              catScores.remove(_activity.gradebookColumnIndex.toString());
+            }
           } else {
             catScores.remove(colKey);
+            if (catKey == 'ex') {
+              catScores.remove(_activity.gradebookColumnIndex.toString());
+            }
           }
           studentScores[catKey] = catScores;
           scores[student.id] = studentScores;
@@ -439,6 +476,8 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
 
       AppDataCache.instance.invalidatePrefix('student_dashboard_');
       AppDataCache.instance.invalidatePrefix('teacher_activities_');
+      AppDataCache.instance.invalidatePrefix('teacher_assessments_');
+      AppDataCache.instance.invalidatePrefix('gradebook_');
 
       // 3. Update local state
       setState(() {
@@ -481,6 +520,26 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
   Future<void> _updateInPersonStatus(UserModel student, String status) async {
     setState(() => _isSavingStudent[student.id] = true);
     try {
+      // Check if item still exists in database
+      final existingItem = await _client
+          .from('classwork_items')
+          .select('id')
+          .eq('id', _activity.id)
+          .maybeSingle();
+
+      if (existingItem == null) {
+        setState(() => _isSavingStudent[student.id] = false);
+        if (mounted) {
+          AppModals.showWarningDialog(
+            context: context,
+            title: 'Classwork Removed',
+            message:
+                'This classwork item has already been deleted in the database. Scores can no longer be recorded.',
+          );
+        }
+        return;
+      }
+
       final currentSub =
           _submissionsByStudent[student.id] ?? <String, dynamic>{};
       final upsertData = <String, dynamic>{
@@ -513,9 +572,31 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
 
   Future<void> _showUpdateDeadlineDialog() async {
     final localDl = _currentDeadline.toLocal();
-    DateTime selectedDate = localDl;
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    DateTime selectedDate = DateTime(localDl.year, localDl.month, localDl.day);
+    if (!_isInPerson && selectedDate.isBefore(today)) {
+      selectedDate = today;
+    }
     TimeOfDay selectedTime = TimeOfDay.fromDateTime(localDl);
     bool isSavingDeadline = false;
+
+    String? computeTimeError(DateTime date, TimeOfDay time) {
+      if (_isInPerson) return null;
+      final candidate = DateTime(
+        date.year,
+        date.month,
+        date.day,
+        time.hour,
+        time.minute,
+      );
+      if (!candidate.isAfter(DateTime.now())) {
+        return 'Updated deadline must be in the future.';
+      }
+      return null;
+    }
+
+    String? deadlineTimeError;
 
     await showDialog(
       context: context,
@@ -523,6 +604,31 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
       builder: (ctx) => StatefulBuilder(
         builder: (context, setModalState) {
           final theme = Theme.of(context);
+          final candidateCombined = _isInPerson
+              ? DateTime(
+                  selectedDate.year,
+                  selectedDate.month,
+                  selectedDate.day,
+                  23,
+                  59,
+                )
+              : DateTime(
+                  selectedDate.year,
+                  selectedDate.month,
+                  selectedDate.day,
+                  selectedTime.hour,
+                  selectedTime.minute,
+                );
+          final isUnchanged = isSameClassworkSchedule(
+            _currentDeadline,
+            candidateCombined,
+            isInPerson: _isInPerson,
+          );
+          final isSelectedToday =
+              selectedDate.year == today.year &&
+              selectedDate.month == today.month &&
+              selectedDate.day == today.day;
+
           return AlertDialog(
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(16),
@@ -542,9 +648,12 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
                   ),
                 ),
                 const SizedBox(width: 10),
-                const Text(
-                  'Update Deadline',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                Text(
+                  _isInPerson ? 'Update Date' : 'Update Deadline',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
+                  ),
                 ),
               ],
             ),
@@ -555,33 +664,92 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Set a new submission deadline for "${_activity.title}". Extending the deadline dynamically re-opens submission for all enrolled students.',
+                    _isInPerson
+                        ? 'Update the scheduled date for "${_activity.title}".'
+                        : 'Set a new submission deadline for "${_activity.title}". Extending the deadline dynamically re-opens submission for all enrolled students.',
                     style: const TextStyle(fontSize: 13, height: 1.4),
                   ),
+                  const SizedBox(height: 14),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0F8A48).withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: const Color(0xFF0F8A48).withValues(alpha: 0.3),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.schedule,
+                          size: 16,
+                          color: Color(0xFF0F8A48),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            _isInPerson
+                                ? 'Current Date: ${_formatDateOnly(_currentDeadline)}'
+                                : 'Current Deadline: ${_formatDateTime(_currentDeadline)}',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF0F8A48),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                   const SizedBox(height: 16),
+                  Text(
+                    _isInPerson ? 'Update Date *' : 'Update Deadline Date *',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: theme.colorScheme.onSurface,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
                   InkWell(
                     onTap: isSavingDeadline
                         ? null
                         : () async {
-                            final pickedDate = await showDatePicker(
-                              context: ctx,
+                            final tNow = DateTime.now();
+                            final tToday = DateTime(
+                              tNow.year,
+                              tNow.month,
+                              tNow.day,
+                            );
+                            final pickedDate = await showAppDatePickerDialog(
+                              ctx,
                               initialDate: selectedDate,
-                              firstDate: DateTime.now().subtract(
-                                const Duration(days: 30),
-                              ),
-                              lastDate: DateTime(2100),
+                              firstDate: _isInPerson
+                                  ? DateTime(tToday.year - 1, 1, 1)
+                                  : tToday,
+                              lastDate: DateTime(tToday.year + 5, 12, 31),
+                              title: _isInPerson
+                                  ? 'Update Date'
+                                  : 'Update Deadline',
+                              icon: Icons.event_available_outlined,
+                              highlightDate: localDl,
+                              highlightLabel: _isInPerson
+                                  ? 'Current Date'
+                                  : 'Current Deadline',
                             );
                             if (pickedDate != null && ctx.mounted) {
-                              final pickedTime = await showTimePicker(
-                                context: ctx,
-                                initialTime: selectedTime,
-                              );
-                              if (pickedTime != null) {
-                                setModalState(() {
-                                  selectedDate = pickedDate;
-                                  selectedTime = pickedTime;
-                                });
-                              }
+                              setModalState(() {
+                                selectedDate = pickedDate;
+                                deadlineTimeError = computeTimeError(
+                                  selectedDate,
+                                  selectedTime,
+                                );
+                              });
                             }
                           },
                     borderRadius: BorderRadius.circular(10),
@@ -594,8 +762,8 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
                         color: theme.colorScheme.surface,
                         borderRadius: BorderRadius.circular(10),
                         border: Border.all(
-                          color: theme.colorScheme.onSurface.withValues(
-                            alpha: 0.2,
+                          color: theme.colorScheme.outline.withValues(
+                            alpha: 0.3,
                           ),
                         ),
                       ),
@@ -604,15 +772,16 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
                         children: [
                           Row(
                             children: [
-                              const Icon(
-                                Icons.calendar_month_outlined,
-                                size: 20,
+                              Icon(
+                                Icons.calendar_today_outlined,
+                                size: 18,
+                                color: const Color(0xFF0F8A48),
                               ),
                               const SizedBox(width: 10),
                               Text(
-                                '${selectedDate.month}/${selectedDate.day}/${selectedDate.year} at ${selectedTime.format(context)}',
+                                '${selectedDate.month.toString().padLeft(2, '0')}/${selectedDate.day.toString().padLeft(2, '0')}/${selectedDate.year}',
                                 style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
+                                  fontWeight: FontWeight.w600,
                                   fontSize: 14,
                                 ),
                               ),
@@ -623,14 +792,52 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 12),
-                  Text(
-                    'Current Deadline: ${_formatDateTime(_currentDeadline)}',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: theme.colorScheme.onSurfaceVariant,
+                  if (!_isInPerson) ...[
+                    const SizedBox(height: 14),
+                    AppTimePickerField(
+                      key: ValueKey(
+                        '${selectedDate.year}-${selectedDate.month}-${selectedDate.day}-${selectedTime.hour}-${selectedTime.minute}',
+                      ),
+                      label: 'Submission Time *',
+                      initialTime: selectedTime,
+                      minTime: isSelectedToday
+                          ? TimeOfDay.fromDateTime(
+                              DateTime.now().add(const Duration(minutes: 1)),
+                            )
+                          : null,
+                      onTimeSelected: (pickedTime) {
+                        setModalState(() {
+                          selectedTime = pickedTime;
+                          deadlineTimeError = computeTimeError(
+                            selectedDate,
+                            selectedTime,
+                          );
+                        });
+                      },
                     ),
-                  ),
+                  ],
+                  if (deadlineTimeError != null) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      deadlineTimeError!,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Color(0xFFDC2626),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ] else if (isUnchanged) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      _isInPerson
+                          ? 'Select a different date to update.'
+                          : 'Select a different date or time to update the deadline.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -640,24 +847,60 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
                 child: const Text('Cancel'),
               ),
               FilledButton(
-                onPressed: isSavingDeadline
+                onPressed:
+                    (isSavingDeadline ||
+                        isUnchanged ||
+                        deadlineTimeError != null)
                     ? null
                     : () async {
-                        final messenger = ScaffoldMessenger.of(context);
-                        setModalState(() => isSavingDeadline = true);
-                        final newCombined = DateTime(
-                          selectedDate.year,
-                          selectedDate.month,
-                          selectedDate.day,
-                          selectedTime.hour,
-                          selectedTime.minute,
+                        final recheckErr = computeTimeError(
+                          selectedDate,
+                          selectedTime,
                         );
+                        if (recheckErr != null) {
+                          setModalState(() => deadlineTimeError = recheckErr);
+                          return;
+                        }
+                        final messenger = ScaffoldMessenger.of(this.context);
+                        setModalState(() => isSavingDeadline = true);
 
                         try {
+                          final existing = await _client
+                              .from('classwork_items')
+                              .select('id')
+                              .eq('id', _activity.id)
+                              .eq('is_archived', false)
+                              .maybeSingle();
+
+                          if (existing == null) {
+                            AppDataCache.instance.invalidatePrefix(
+                              'teacher_activities_',
+                            );
+                            AppDataCache.instance.invalidatePrefix(
+                              'teacher_assessments_',
+                            );
+                            AppDataCache.instance.invalidatePrefix(
+                              'student_dashboard_',
+                            );
+                            AppDataCache.instance.invalidatePrefix(
+                              'gradebook_',
+                            );
+                            if (ctx.mounted) Navigator.pop(ctx);
+                            if (mounted) {
+                              await AppModals.showWarningDialog(
+                                context: this.context,
+                                title: 'Classwork Removed',
+                                message:
+                                    'This classwork item has already been deleted from the database and can no longer be updated.',
+                              );
+                            }
+                            return;
+                          }
+
                           await _client
                               .from('classwork_items')
                               .update({
-                                'deadline': newCombined
+                                'deadline': candidateCombined
                                     .toUtc()
                                     .toIso8601String(),
                               })
@@ -667,14 +910,19 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
                             'teacher_activities_',
                           );
                           AppDataCache.instance.invalidatePrefix(
+                            'teacher_assessments_',
+                          );
+                          AppDataCache.instance.invalidatePrefix(
                             'student_dashboard_',
                           );
+                          AppDataCache.instance.invalidatePrefix('gradebook_');
+                          TeacherGradebookTab.gradebookRefreshNotifier.value++;
 
                           if (mounted) {
                             setState(() {
-                              _currentDeadline = newCombined;
+                              _currentDeadline = candidateCombined;
                               _activity = _activity.copyWith(
-                                deadline: newCombined,
+                                deadline: candidateCombined,
                               );
                             });
                           }
@@ -685,7 +933,9 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
                           messenger.showSnackBar(
                             SnackBar(
                               content: Text(
-                                'Deadline updated to ${_formatDateTime(newCombined)}. Submissions window synchronized.',
+                                _isInPerson
+                                    ? 'Scheduled date updated to ${_formatDateOnly(candidateCombined)}.'
+                                    : 'Deadline updated to ${_formatDateTime(candidateCombined)}. Submissions window synchronized.',
                               ),
                               backgroundColor: const Color(0xFF0F8A48),
                             ),
@@ -694,7 +944,11 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
                           setModalState(() => isSavingDeadline = false);
                           messenger.showSnackBar(
                             SnackBar(
-                              content: Text('Failed to update deadline: $e'),
+                              content: Text(
+                                _isInPerson
+                                    ? 'Failed to update date: $e'
+                                    : 'Failed to update deadline: $e',
+                              ),
                               backgroundColor: const Color(0xFFDC2626),
                             ),
                           );
@@ -709,7 +963,9 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
                           color: Colors.white,
                         ),
                       )
-                    : const Text('Save New Deadline'),
+                    : Text(
+                        _isInPerson ? 'Save New Date' : 'Save New Deadline',
+                      ),
               ),
             ],
           );
@@ -1213,6 +1469,23 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
     );
   }
 
+  String _formatDateOnly(DateTime dt) {
+    final local = dt.toLocal();
+    return '${local.month.toString().padLeft(2, '0')}/${local.day.toString().padLeft(2, '0')}/${local.year}';
+  }
+
+  String _formatSlotBadge() {
+    final col = _activity.gradebookColumnIndex;
+    if (col == null) return '';
+    final cat = _activity.effectiveGradingCategory;
+    if (cat == 'ex') {
+      if (col == 1) return ' • ST1';
+      if (col == 2) return ' • ST2';
+      return ' • TE';
+    }
+    return ' • ${cat == 'pt' ? 'PT' : 'WW'} $col';
+  }
+
   String _formatDateTime(DateTime dt) {
     final local = dt.toLocal();
     final hour = local.hour == 0
@@ -1373,12 +1646,30 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
                     ),
                     const SizedBox(height: 3),
                     Text(
-                      '${_activity.subject} • ${_activity.section} • Term ${_activity.termNumber} • Max ${_activity.maxScore.toInt()} pts${_activity.gradebookColumnIndex != null ? ' • ${_activity.isRequirement ? 'PT' : 'WW'} ${_activity.gradebookColumnIndex}' : ''}',
+                      '${_activity.subject} • ${_activity.section} • Term ${_activity.termNumber} • Max ${_activity.maxScore.toInt()} pts${_formatSlotBadge()}',
                       style: TextStyle(
                         fontSize: 12,
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
                     ),
+                    if ((_activity.instructions.trim().isNotEmpty
+                            ? _activity.instructions
+                            : _activity.description)
+                        .trim()
+                        .isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      ExpandableInstructionsText(
+                        text: _activity.instructions.trim().isNotEmpty
+                            ? _activity.instructions
+                            : _activity.description,
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          color: theme.colorScheme.onSurface.withValues(
+                            alpha: 0.72,
+                          ),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -1433,19 +1724,25 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(
-                      Icons.schedule,
+                      _isInPerson ? Icons.event_outlined : Icons.schedule,
                       size: 16,
-                      color: _currentDeadline.isBefore(DateTime.now())
+                      color:
+                          (!_isInPerson &&
+                              _currentDeadline.isBefore(DateTime.now()))
                           ? const Color(0xFFDC2626)
                           : theme.colorScheme.primary,
                     ),
                     const SizedBox(width: 8),
                     Text(
-                      'Deadline: ${_formatDateTime(_currentDeadline)}',
+                      _isInPerson
+                          ? 'Set Date: ${_formatDateOnly(_currentDeadline)}'
+                          : 'Deadline: ${_formatDateTime(_currentDeadline)}',
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
-                        color: _currentDeadline.isBefore(DateTime.now())
+                        color:
+                            (!_isInPerson &&
+                                _currentDeadline.isBefore(DateTime.now()))
                             ? const Color(0xFFDC2626)
                             : theme.colorScheme.onSurface,
                       ),
@@ -1454,7 +1751,9 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
                     TextButton.icon(
                       onPressed: _showUpdateDeadlineDialog,
                       icon: const Icon(Icons.edit_calendar, size: 15),
-                      label: const Text('Update Deadline'),
+                      label: Text(
+                        _isInPerson ? 'Update Date' : 'Update Deadline',
+                      ),
                       style: TextButton.styleFrom(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 10,

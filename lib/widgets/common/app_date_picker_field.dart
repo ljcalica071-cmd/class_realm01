@@ -226,6 +226,8 @@ Future<DateTime?> showAppDatePickerDialog(
   String title = 'Select Date',
   IconData icon = Icons.calendar_month_outlined,
   bool showAge = false,
+  DateTime? highlightDate,
+  String? highlightLabel,
 }) async {
   final theme = Theme.of(context);
   final now = DateTime.now();
@@ -297,16 +299,24 @@ Future<DateTime?> showAppDatePickerDialog(
             (index) => maxYear - index,
           );
 
-          // Build all 12 calendar months so users can clearly see the full year,
-          // while day-level bounds and validation prevent selecting invalid/past dates.
+          // Build calendar months, restricting past/future months when at boundary years
           final validMonthItems = <DropdownMenuItem<int>>[];
           for (int m = 1; m <= 12; m++) {
+            final isMonthDisabled =
+                (selectedYear == minDateOnly.year && m < minDateOnly.month) ||
+                (selectedYear == maxDateOnly.year && m > maxDateOnly.month);
             validMonthItems.add(
               DropdownMenuItem<int>(
                 value: m,
+                enabled: !isMonthDisabled,
                 child: Text(
                   monthNames[m - 1],
-                  style: const TextStyle(fontSize: 13),
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: isMonthDisabled
+                        ? theme.colorScheme.onSurface.withValues(alpha: 0.3)
+                        : null,
+                  ),
                 ),
               ),
             );
@@ -412,6 +422,43 @@ Future<DateTime?> showAppDatePickerDialog(
                       ],
                     ],
                   ),
+                  if (highlightDate != null) ...[
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF0F8A48).withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: const Color(0xFF0F8A48)
+                              .withValues(alpha: 0.25),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.schedule,
+                            size: 16,
+                            color: Color(0xFF0F8A48),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              '${highlightLabel ?? 'Current Deadline'}: ${_formatDateHelper(highlightDate)}',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF0F8A48),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 20),
 
                   // Quick Selectors Row (Year & Month Dropdowns)
@@ -625,6 +672,44 @@ Future<DateTime?> showAppDatePickerDialog(
                             dayDate.isAfter(maxDateOnly);
                         final isSelected =
                             dayNum == selectedDay && !isDayDisabled;
+                        final isHighlighted =
+                            highlightDate != null &&
+                            dayDate.year == highlightDate.year &&
+                            dayDate.month == highlightDate.month &&
+                            dayDate.day == highlightDate.day;
+
+                        Color? cellBg;
+                        Border? cellBorder;
+                        Color textColor;
+
+                        if (isSelected) {
+                          cellBg = theme.colorScheme.primary;
+                          if (isHighlighted) {
+                            cellBorder = Border.all(
+                              color: const Color(0xFF0F8A48),
+                              width: 2,
+                            );
+                          }
+                          textColor = theme.colorScheme.onPrimary;
+                        } else if (isHighlighted) {
+                          cellBg = const Color(0xFF0F8A48)
+                              .withValues(alpha: 0.12);
+                          cellBorder = Border.all(
+                            color: const Color(0xFF0F8A48),
+                            width: 2,
+                          );
+                          textColor = const Color(0xFF0F8A48);
+                        } else if (isDayDisabled) {
+                          cellBg = theme.colorScheme.onSurface.withValues(
+                            alpha: 0.04,
+                          );
+                          textColor = theme.colorScheme.onSurface.withValues(
+                            alpha: 0.22,
+                          );
+                        } else {
+                          cellBg = Colors.transparent;
+                          textColor = theme.colorScheme.onSurface;
+                        }
 
                         return InkWell(
                           borderRadius: BorderRadius.circular(8),
@@ -636,29 +721,36 @@ Future<DateTime?> showAppDatePickerDialog(
                             duration: const Duration(milliseconds: 150),
                             alignment: Alignment.center,
                             decoration: BoxDecoration(
-                              color: isSelected
-                                  ? theme.colorScheme.primary
-                                  : (isDayDisabled
-                                        ? theme.colorScheme.onSurface
-                                              .withValues(alpha: 0.04)
-                                        : Colors.transparent),
+                              color: cellBg,
+                              border: cellBorder,
                               borderRadius: BorderRadius.circular(8),
                             ),
-                            child: Text(
-                              '$dayNum',
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: isSelected
-                                    ? FontWeight.bold
-                                    : FontWeight.normal,
-                                color: isDayDisabled
-                                    ? theme.colorScheme.onSurface.withValues(
-                                        alpha: 0.22,
-                                      )
-                                    : (isSelected
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  '$dayNum',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: (isSelected || isHighlighted)
+                                        ? FontWeight.bold
+                                        : FontWeight.normal,
+                                    color: textColor,
+                                  ),
+                                ),
+                                if (isHighlighted)
+                                  Container(
+                                    margin: const EdgeInsets.only(top: 2),
+                                    width: 4,
+                                    height: 4,
+                                    decoration: BoxDecoration(
+                                      color: isSelected
                                           ? theme.colorScheme.onPrimary
-                                          : theme.colorScheme.onSurface),
-                              ),
+                                          : const Color(0xFF0F8A48),
+                                      shape: BoxShape.circle,
+                                    ),
+                                  ),
+                              ],
                             ),
                           ),
                         );

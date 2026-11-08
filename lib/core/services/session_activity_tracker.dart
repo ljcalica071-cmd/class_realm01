@@ -243,7 +243,28 @@ class _SessionActivityTrackerState extends State<SessionActivityTracker>
   // 3. REALTIME MAINTENANCE MODE GATEKEEPING (EDGE CASES #1, #4, #5)
   // =========================================================================
 
+  Future<void> _enforceMaintenanceLockdownIfNeeded() async {
+    final user = AuthRepository.instance.currentUser;
+    if (user == null || user.role == UserRole.admin) return;
+
+    if (user.role == UserRole.teacher) {
+      await SyncCoordinator.instance.processPendingQueue();
+    }
+    await LocalStorageService.saveMaintenanceMode(true);
+    await LocalStorageService.saveMaintenanceForcedLogout(true);
+    await _triggerAutoLogout('maintenance_forced');
+  }
+
   void _subscribeToMaintenanceMode() {
+    // 1. Immediate initial check on mount (online & offline cache)
+    unawaited(() async {
+      final isMaint = await AuthRepository.instance.isSystemMaintenanceActive();
+      if (isMaint && mounted) {
+        await _enforceMaintenanceLockdownIfNeeded();
+      }
+    }());
+
+    // 2. Realtime subscription for live toggle changes
     _maintenanceChannel = Supabase.instance.client
         .channel('system_settings_listener')
         .onPostgresChanges(
@@ -253,57 +274,13 @@ class _SessionActivityTrackerState extends State<SessionActivityTracker>
           callback: (payload) async {
             final newRow = payload.newRecord;
             final isMaintenance = newRow['is_maintenance_mode'] == true;
+            await LocalStorageService.saveMaintenanceMode(isMaintenance);
             if (isMaintenance) {
-              final user = AuthRepository.instance.currentUser;
-              // Admin is never locked out
-              if (user != null && user.role != UserRole.admin) {
-                // Edge Case #4: Flush offline teacher queue before force logout
-                if (user.role == UserRole.teacher) {
-                  await SyncCoordinator.instance.processPendingQueue();
-                }
-                await _triggerAutoLogout('maintenance_forced');
-                if (mounted) {
-                  _showMaintenanceForcedDialog();
-                }
-              }
+              await _enforceMaintenanceLockdownIfNeeded();
             }
           },
         )
         .subscribe();
-  }
-
-  void _showMaintenanceForcedDialog() {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Row(
-          children: [
-            Icon(Icons.build_circle_outlined, color: AppTheme.catRed, size: 28),
-            SizedBox(width: 12),
-            Text(
-              'System Maintenance',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-            ),
-          ],
-        ),
-        content: const Text(
-          'The system is currently under maintenance. You cannot log into your account at this time. Please try again later.',
-          style: TextStyle(fontSize: 14, height: 1.4),
-        ),
-        actions: [
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.catRed,
-              foregroundColor: Colors.white,
-            ),
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('OK'),
-          ),
-        ],
-      ),
-    );
   }
 
   @override

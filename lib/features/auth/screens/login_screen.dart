@@ -33,6 +33,7 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _obscurePassword = true;
   bool _rememberMe = false;
   bool _hasSubmitted = false;
+  bool _hasShownMaintenanceDialogOnLoad = false;
   Timer? _lockoutTimer;
   Duration? _lockoutRemaining;
 
@@ -64,6 +65,10 @@ class _LoginScreenState extends State<LoginScreen> {
     if (_rememberMe && LocalStorageService.savedEmail != null) {
       _emailController.text = LocalStorageService.savedEmail!;
     }
+
+    // Always synchronize browser URL to /login when rendering LoginScreen
+    updateBrowserUrl(AppRoutes.login);
+    LocalStorageService.saveLastActiveRoute(AppRoutes.login);
 
     // Fast Login / Cache Check & Route User + Rate Limit Status Check
     WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -106,9 +111,47 @@ class _LoginScreenState extends State<LoginScreen> {
         }
       } catch (_) {}
 
+      if (!mounted) return;
+
+      // 1. Check if user arrived via forced maintenance logout
+      final args = ModalRoute.of(context)?.settings.arguments;
+      final argReason = args is Map ? args['logout_reason']?.toString() : null;
+      final wasForcedLogout =
+          argReason == 'maintenance_forced' ||
+          LocalStorageService.isMaintenanceForcedLogout;
+
+      if (wasForcedLogout) {
+        await LocalStorageService.saveMaintenanceForcedLogout(false);
+        if (mounted) {
+          _showMaintenanceDialog(isForcedLogout: true);
+        }
+        return;
+      }
+
+      // 2. Sync latest maintenance state into local cache on LoginScreen mount
+      bool isMaintenance = LocalStorageService.isMaintenanceMode;
+      try {
+        final settings = await AdminRepository.instance.getSystemSettings();
+        isMaintenance = settings.isMaintenanceMode;
+      } catch (_) {}
+
       final cachedUser = await AuthRepository.instance.restoreSession();
       if (cachedUser != null && mounted) {
+        if (cachedUser.role != UserRole.admin && isMaintenance) {
+          await AuthRepository.instance.logout('maintenance_forced');
+          if (mounted) {
+            _showMaintenanceDialog(isForcedLogout: true);
+          }
+          return;
+        }
         _routeUser(cachedUser);
+        return;
+      }
+
+      // 3. If no active session, and maintenance is active, pop up modal on arrival
+      if (isMaintenance && mounted && !_hasShownMaintenanceDialogOnLoad) {
+        _hasShownMaintenanceDialogOnLoad = true;
+        _showMaintenanceDialog(isForcedLogout: false);
       }
     });
   }
@@ -165,21 +208,31 @@ class _LoginScreenState extends State<LoginScreen> {
     final rawEmail = _emailController.text.trim();
     final emailInput = rawEmail.toLowerCase();
 
-    // System Maintenance Gatekeeping (Edge Cases #1 & #5)
+    // System Maintenance Gatekeeping — PRIORITY #1 VALIDATION (Online & Offline)
     try {
       final settings = await AdminRepository.instance.getSystemSettings();
-      if (settings.isMaintenanceMode) {
+      final isMaintActive =
+          settings.isMaintenanceMode || LocalStorageService.isMaintenanceMode;
+      if (isMaintActive) {
         bool isAdmin = false;
         try {
           final userCheck = await Supabase.instance.client
               .from('users')
               .select('role')
-              .eq('email', emailInput)
-              .maybeSingle();
+              .ilike('email', emailInput)
+              .maybeSingle()
+              .timeout(const Duration(seconds: 3));
           if (userCheck != null && userCheck['role'] == 'admin') {
             isAdmin = true;
           }
-        } catch (_) {}
+        } catch (_) {
+          final cached = LocalStorageService.getCachedUser();
+          if (cached != null &&
+              cached.email.toLowerCase() == emailInput &&
+              cached.role == UserRole.admin) {
+            isAdmin = true;
+          }
+        }
 
         if (!isAdmin) {
           if (!mounted) return;
@@ -255,6 +308,12 @@ class _LoginScreenState extends State<LoginScreen> {
       setState(() => _isLoading = false);
 
       if (e is LoginAttemptException) {
+        if (e.isMaintenanceBlocked) {
+          _passwordController.clear();
+          _passwordFocusNode.unfocus();
+          _showMaintenanceDialog();
+          return;
+        }
         if (e.providerRateLimited) {
           final seconds = e.retryAfterSeconds ?? 300;
           _beginLockoutCountdown(Duration(seconds: seconds));
@@ -295,44 +354,148 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  void _showMaintenanceDialog() {
+  void _showMaintenanceDialog({
+    String? customMessage,
+    bool isForcedLogout = false,
+  }) {
+    if (!mounted) return;
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Row(
-          children: [
-            Icon(Icons.build_circle_outlined, color: AppTheme.catRed, size: 28),
-            SizedBox(width: 12),
-            Text(
-              'System Maintenance',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-            ),
-          ],
-        ),
-        content: const Text(
-          'The system is currently under maintenance. You cannot log into your account at this time. Please try again later.',
-          style: TextStyle(fontSize: 14, height: 1.4),
-        ),
-        actions: [
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.catRed,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        elevation: 16,
+        backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 440),
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF59E0B).withValues(alpha: 0.15),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      LucideIcons.wrench,
+                      color: Color(0xFFD97706),
+                      size: 26,
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 3,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFEF4444)
+                                .withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: const Text(
+                            'MAINTENANCE ACTIVE',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800,
+                              color: Color(0xFFDC2626),
+                              letterSpacing: 0.6,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'System Under Maintenance',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: isDark
+                                ? Colors.white
+                                : const Color(0xFF0F172A),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
-            ),
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('OK'),
+              const SizedBox(height: 18),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? const Color(0xFF0F172A).withValues(alpha: 0.6)
+                      : const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: isDark
+                        ? const Color(0xFF334155)
+                        : const Color(0xFFE2E8F0),
+                  ),
+                ),
+                child: Text(
+                  customMessage ??
+                      (isForcedLogout
+                          ? 'The system has entered scheduled maintenance mode. You have been safely logged out of your session.\n\nTeacher, Student, and Parent accounts cannot log in to their accounts at this time. Please try again later.'
+                          : 'ClassRealm is currently undergoing scheduled system maintenance.\n\nTeacher, Student, and Parent accounts cannot log in to their accounts at this time. Please try again later.'),
+                  style: TextStyle(
+                    fontSize: 13.5,
+                    height: 1.5,
+                    color: isDark
+                        ? const Color(0xFFCBD5E1)
+                        : const Color(0xFF334155),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF0284C7),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 13),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    elevation: 0,
+                  ),
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  child: const Text(
+                    'Understood',
+                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                  ),
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
 
   void _routeUser(UserModel user) {
+    if (user.role != UserRole.admin && LocalStorageService.isMaintenanceMode) {
+      unawaited(AuthRepository.instance.logout());
+      setState(() => _isLoading = false);
+      _showMaintenanceDialog();
+      return;
+    }
+
     if (user.status == AccountStatus.pendingFirstLogin ||
         user.status == AccountStatus.pending) {
       // Must remain in default light theme for first-login and password setup
@@ -371,8 +534,7 @@ class _LoginScreenState extends State<LoginScreen> {
       AppModals.showErrorDialog(
         context: context,
         title: 'Account Unavailable',
-        message:
-            'This account cannot access ClassRealm. Please contact the school administrator.',
+        message: 'This account cannot access ClassRealm. Please contact the school administrator.',
       );
       return;
     }

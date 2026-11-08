@@ -557,6 +557,65 @@ class LocalStorageService {
     return _preferences?.getBool('${_settingsPrefix}push_notifications_enabled') ?? true;
   }
 
+  // =========================================================================
+  // System Maintenance Mode Offline Cache & Cooldown Persistence
+  // =========================================================================
+  static const String _maintenanceModeKey =
+      '${_settingsPrefix}is_maintenance_mode';
+  static const String _maintenanceCooldownKey =
+      '${_settingsPrefix}maintenance_cooldown_until_ms';
+  static const String _maintenanceForcedLogoutKey =
+      '${_settingsPrefix}maintenance_forced_logout';
+
+  static Future<void> saveMaintenanceMode(bool isMaintenance) async {
+    try {
+      final prefs = await _prefs;
+      await prefs.setBool(_maintenanceModeKey, isMaintenance);
+    } catch (_) {}
+  }
+
+  static bool get isMaintenanceMode =>
+      _preferences?.getBool(_maintenanceModeKey) ?? false;
+
+  static Future<void> saveMaintenanceForcedLogout(bool value) async {
+    try {
+      final prefs = await _prefs;
+      if (value) {
+        await prefs.setBool(_maintenanceForcedLogoutKey, true);
+      } else {
+        await prefs.remove(_maintenanceForcedLogoutKey);
+      }
+    } catch (_) {}
+  }
+
+  static bool get isMaintenanceForcedLogout =>
+      _preferences?.getBool(_maintenanceForcedLogoutKey) ?? false;
+
+  static Future<void> saveMaintenanceCooldownSeconds(int remainingSeconds) async {
+    try {
+      final prefs = await _prefs;
+      if (remainingSeconds <= 0) {
+        await prefs.remove(_maintenanceCooldownKey);
+      } else {
+        final unlockAtMs = DateTime.now()
+            .add(Duration(seconds: remainingSeconds))
+            .millisecondsSinceEpoch;
+        await prefs.setInt(_maintenanceCooldownKey, unlockAtMs);
+      }
+    } catch (_) {}
+  }
+
+  static int getMaintenanceCooldownRemainingSeconds() {
+    final unlockAtMs = _preferences?.getInt(_maintenanceCooldownKey);
+    if (unlockAtMs == null) return 0;
+    final remainingMs = unlockAtMs - DateTime.now().millisecondsSinceEpoch;
+    if (remainingMs <= 0) {
+      _preferences?.remove(_maintenanceCooldownKey);
+      return 0;
+    }
+    return (remainingMs / 1000).ceil();
+  }
+
   static Future<void> _ensureSaved(bool saved) async {
     if (!saved) {
       throw StateError('Failed to persist local preference.');

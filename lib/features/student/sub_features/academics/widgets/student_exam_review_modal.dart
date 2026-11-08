@@ -133,7 +133,7 @@ class _StudentExamReviewModalState extends State<StudentExamReviewModal>
             points,
             assessment_question_options (
               id,
-              option_label,
+              position,
               option_text,
               is_correct
             )
@@ -174,18 +174,37 @@ class _StudentExamReviewModalState extends State<StudentExamReviewModal>
 
         final opts = (q['assessment_question_options'] as List? ?? [])
             .map((o) => Map<String, dynamic>.from(o as Map))
-            .toList();
+            .toList()
+          ..sort(
+            (a, b) => ((a['position'] as num?) ?? 0).compareTo(
+              (b['position'] as num?) ?? 0,
+            ),
+          );
 
         String correctKey = '';
-        if (qType == 'multiple_choice' || qType == 'true_false') {
-          final correctOpt = opts.firstWhere(
-            (o) => o['is_correct'] == true,
-            orElse: () => <String, dynamic>{},
-          );
-          correctKey =
-              correctOpt['option_label']?.toString() ??
-              correctOpt['option_text']?.toString() ??
-              '';
+        if (qType == 'multiple_choice') {
+          const letters = ['A', 'B', 'C', 'D', 'E', 'F'];
+          for (int idx = 0; idx < opts.length; idx++) {
+            final pos = (opts[idx]['position'] as num?)?.toInt() ?? (idx + 1);
+            final label = (pos >= 1 && pos <= letters.length)
+                ? letters[pos - 1]
+                : '$pos';
+            opts[idx]['_derived_label'] = label;
+            if (opts[idx]['is_correct'] == true) {
+              correctKey =
+                  '$label (${opts[idx]['option_text']?.toString() ?? ''})';
+            }
+          }
+        } else if (qType == 'true_false') {
+          for (int idx = 0; idx < opts.length; idx++) {
+            if (opts[idx]['is_correct'] == true) {
+              final text = opts[idx]['option_text']?.toString().trim() ?? '';
+              final pos = (opts[idx]['position'] as num?)?.toInt() ?? (idx + 1);
+              correctKey = text.isNotEmpty
+                  ? text
+                  : (pos == 1 ? 'True' : 'False');
+            }
+          }
         } else if (qType == 'identification') {
           final correctOpt = opts.firstWhere(
             (o) => o['is_correct'] == true,
@@ -485,13 +504,23 @@ class _StudentExamReviewModalState extends State<StudentExamReviewModal>
           // Options breakdown for Multiple Choice
           if (item.questionType == 'multiple_choice' &&
               item.options.isNotEmpty) ...[
-            ...item.options.map((opt) {
-              final label = opt['option_label']?.toString() ?? '';
+            ...item.options.asMap().entries.map((entry) {
+              final opt = entry.value;
+              const letters = ['A', 'B', 'C', 'D', 'E', 'F'];
+              final pos =
+                  (opt['position'] as num?)?.toInt() ?? (entry.key + 1);
+              final label =
+                  opt['_derived_label']?.toString() ??
+                  ((pos >= 1 && pos <= letters.length)
+                      ? letters[pos - 1]
+                      : '$pos');
               final text = opt['option_text']?.toString() ?? '';
               final isCorrectOpt = opt['is_correct'] == true;
               final isSelectedByStudent =
-                  item.studentAnswer.toUpperCase() == label.toUpperCase() ||
-                  item.studentAnswer.toLowerCase() == text.toLowerCase();
+                  item.studentAnswer.trim().toUpperCase() ==
+                      label.toUpperCase() ||
+                  item.studentAnswer.trim().toLowerCase() ==
+                      text.trim().toLowerCase();
 
               Color optBg = Colors.transparent;
               Color optBorder = theme.colorScheme.onSurface.withValues(

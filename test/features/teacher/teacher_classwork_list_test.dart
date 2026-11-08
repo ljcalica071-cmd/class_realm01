@@ -45,6 +45,15 @@ class MockClassworkRepo implements TeacherClassworkRepository {
   }) async {
     return false;
   }
+
+  @override
+  Future<ClassworkSlotSummary> getOccupiedSlots({
+    required String subjectOfferingId,
+    required int termNumber,
+    String? excludeClassworkId,
+  }) async {
+    return const ClassworkSlotSummary();
+  }
 }
 
 void main() {

@@ -1,74 +1,35 @@
-Implement production-ready fixes and enhancements across the teacher, student, and parent modules in Class Realm: resolve Gradebook column rendering lag and filter duplication crashes, polish Manage Students and Manage Parents tables, streamline attendance with inline RFID tap-to-link, paginated audit logs, caching, responsive layouts following the 60-30-10 color rule, and build student/parent portal views with automated 3/5/10-absence push notifications.
+This is a single self-contained fix; keep it small and focused. Audit commit `b649f8b` against current HEAD (`9bc8763`) on `lib/features/teacher/screens/teacher_dashboard_screen.dart`, evaluate whether the changes are safe, regression-free, and address legitimate UI/UX bugs, and if verified safe, re-apply the changes to the codebase.
 
-Working directory: c:\Users\Admin\AndroidStudioProjects\class_realm01
 Integrity mode: development
 
 ## Requirements
 
-### R1. Gradebook Optimization and Crash/Duplication Fixes
-- Reduce default score column slots from 10 to 5 per assessment category, providing an inline "+" button on subsequent columns to add slots up to a maximum of 10 (the "+" button disappears once 10 slots are reached) to eliminate UI lag.
-- Resolve the Flutter crash caused by duplicate keys (`Duplicate keys found. Column(direction: vertical...) has multiple children with key [gradebook-row-zV0ZGShD46TGOcXrfsLIX1Jd45j2-true]`) in `teacher_gradebook_tab.dart`.
-- Fix the assertion failure and column duplication bug when toggling gender filters ('All', 'Male', 'Female'): filtering must strictly display the corresponding learners without duplicating sticky/header columns or repeating '# LEARNERS NAMES' horizontally across the table.
+### R1. Audit Reverted Commit Changes
+Thoroughly audit the diff and changes introduced in commit `b649f8b` (`fix(teacher-portal): smooth sidebar collapse toggle and prevent layout jumps`) against current HEAD (`9bc8763`) in `lib/features/teacher/screens/teacher_dashboard_screen.dart`, specifically:
+1. Navigation items and Log Out button icon alignment: fixed 56px icon slot ensuring icons remain centered at identical horizontal coordinates without jumping or flickering during sidebar collapse (76px) and expand (260px).
+2. Brand Header collapse toggle: clean state handling (`panelLeftOpen` icon when collapsed at 76px, full logo + title + `panelLeftClose` when expanded at 260px) without layout constraint errors.
+3. Top navbar overflow protection: `TextOverflow.ellipsis` and `maxLines: 1` wrapped in `ConstrainedBox` for the teacher's display name, and `Flexible` for the selector widget to prevent `RenderFlex overflowed` errors on screens between 900px and 1150px.
+4. Mobile drawer UX: automatic drawer closure on item selection when `isMobile` is true and drawer is open.
 
-### R2. Manage Students and Manage Parents UI Polish
-- Standardize learner name text sizes in Manage Students and parent name text sizes in Manage Parents to an equal, legible, and consistent size.
-- In the Manage Parents directory table:
-  - Remove the checkbox column adjacent to '#'.
-  - Replace the 'SECTION' column with a 'BIRTHDAY' column.
-  - Remove the 'All Subjects' option from the subject filter dropdown so teachers select only specific assigned subjects.
-  - Fix table header horizontal overflow rendering artifacts.
+### R2. Safety, Bug Fix, and Regression Evaluation
+Evaluate whether each of the 4 changes is safe, regression-free, and resolves legitimate UI/UX issues. Provide a clear technical assessment answering whether the changes should be restored.
 
-### R3. Attendance Tab Improvements & Inline RFID Tap-to-Link
-- Increase student name text size in the attendance list to match the readable standard size, and remove the LRN label displayed underneath student names.
-- Implement lazy loading in the attendance student list (loading 20 students per batch).
-- Implement an inline tap-to-link workflow for RFID cards without opening a popup modal: clicking "Link RFID" displays an inline "Waiting for RFID..." indicator on the student row that listens for card reader input (8-character UID keystrokes), automatically links the card to the student, and confirms completion.
-- Reorganize action buttons: place the "Save Attendance" button directly beside the "Auto Absent" button, and move the "Cut off rules" button before the "Take Attendance" button.
-- Rename "History & Analytics" to "Analytics & History", and integrate "This Week", "This Month", "Custom", and "Export" buttons inside the filter container box next to Grade, Subject, and Section on the right-hand side. Filter dropdowns must only list grades, subjects, and sections with active schedules.
+### R3. Re-apply Safe Changes
+If the audit verifies that the changes are safe and bug-free, cleanly restore and re-apply the improvements from commit `b649f8b` to `lib/features/teacher/screens/teacher_dashboard_screen.dart` without introducing syntax errors or lint issues.
 
-### R4. Attendance Audit & History Logs Refactoring
-- Replace lazy loading with pagination displaying 20 records per page, matching the pagination pattern in Manage Students.
-- Display student full names in format "Lastname, Firstname Middlename" instead of raw/random IDs (e.g. "JrZ...").
-- Display Time In and Attendance Method (e.g., Manual vs RFID) in dedicated, separate table columns rather than placed under the student name.
+## Verification Resources
 
-### R5. Performance Caching, Responsiveness, and Visual Hierarchy
-- Implement client-side caching for slower modules (Classroom Setup, Gradebook, Manage Students, Manage Parents, Learning Materials, and My Schedule) so navigation and data retrieval are fast without redundant reload states.
-- Ensure all teacher-side screens adapt responsively across supported viewports without overflow stripes or broken layouts.
-- Strictly adhere to the 60-30-10 color rule across updated layouts.
-
-### R6. Student & Parent Portals and Multi-Tier Absence Push Notifications
-- Implement student portal views for Attendance history and My Schedule.
-- Implement parent portal views allowing parents/guardians to inspect their linked child's schedule and attendance records.
-- Implement automated push notification alerts to admin and parents upon student reaching 3 absences (early warning), 5 absences (second warning), and 10 absences (final warning), integrated via the existing FCM architecture.
+- Code diff inspection between commit `b649f8b` and HEAD (`9bc8763`).
+- Static analysis command: `flutter analyze` executed from the repository root.
 
 ## Acceptance Criteria
 
-### Gradebook
-- [ ] Initial assessment score columns render 5 slots with a "+" button that increments columns up to 10 and hides thereafter.
-- [ ] Switching between All, Male, and Female filters displays only matching rows without throwing duplicate key errors or duplicating sticky columns and header titles.
-- [ ] Gradebook scrolling and interactions operate smoothly without perceptible lag or redundant re-renders.
+### Audit & Evaluation
+- [ ] A documented audit comparing commit `b649f8b` against HEAD (`9bc8763`) on `teacher_dashboard_screen.dart` is provided.
+- [ ] Each of the 4 change areas is evaluated for safety, regression risk, and bug fix legitimacy with concrete reasoning.
+- [ ] A definitive conclusion is provided on whether the commit is safe and beneficial to restore.
 
-### Directory Management (Manage Students & Manage Parents)
-- [ ] Student names in Manage Students and parent names in Manage Parents render with equal, readable font sizes.
-- [ ] Manage Parents table has no checkbox column next to '#', displays 'BIRTHDAY' instead of 'SECTION', and contains no 'All Subjects' option in the subject dropdown.
-- [ ] Table headers render cleanly without horizontal overflow stripes.
-
-### Attendance & RFID
-- [ ] Attendance list loads students lazily in batches of 20, student names are clearly readable, and LRN labels are removed from underneath names.
-- [ ] Clicking "Link RFID" displays an inline "Waiting for RFID..." indicator on the student item without a modal popup, automatically capturing the scanned 8-character UID and saving the link.
-- [ ] "Save Attendance" is positioned next to "Auto Absent", and "Cut off rules" is positioned before "Take Attendance".
-- [ ] Filter box in Analytics & History contains "This Week", "This Month", "Custom", and "Export" on the right side, and only lists grades, subjects, and sections with existing schedules.
-
-### Audit & History Logs
-- [ ] Audit logs display paginated at 20 items per page with functional page navigation controls.
-- [ ] Student records display full names (Lastname, Firstname Middlename) rather than alphanumeric IDs.
-- [ ] Time In and Method are displayed in dedicated, separate columns.
-
-### Caching, Responsiveness, & Styling
-- [ ] Classroom Setup, Gradebook, Manage Students, Manage Parents, Learning Materials, and My Schedule utilize caching for quick revisitation without blocking loading states.
-- [ ] Teacher interface layouts adapt responsively without overflow errors across window resizes.
-- [ ] Color usage conforms to the 60-30-10 palette distribution.
-
-### Student & Parent Portals & Notifications
-- [ ] Student portal displays student schedule and personal attendance history.
-- [ ] Parent portal displays linked children's schedules and attendance records.
-- [ ] Push notifications are automatically dispatched to admin and parent devices upon a student reaching exactly 3, 5, and 10 cumulative absences.
+### Restoration & Verification
+- [ ] If verified safe, the changes are applied to `lib/features/teacher/screens/teacher_dashboard_screen.dart`.
+- [ ] `flutter analyze` passes on `lib/features/teacher/screens/teacher_dashboard_screen.dart` with zero errors or warnings introduced by the changes.
+- [ ] The fixed 56px icon slot, brand header toggle states, top navbar overflow protection, and mobile drawer auto-close logic are preserved and verified in code.

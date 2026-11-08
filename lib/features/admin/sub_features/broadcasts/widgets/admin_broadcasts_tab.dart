@@ -24,6 +24,9 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
   // Maintenance State
   bool _isMaintenanceMode = false;
   bool _isTogglingMaintenance = false;
+  int _cooldownRemainingSeconds = 0;
+  Timer? _cooldownTimer;
+  static const int _maintenanceCooldownSeconds = 600; // 10 minutes
 
   // Announcement Composer State
   final _titleController = TextEditingController();
@@ -71,12 +74,47 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
 
   @override
   void dispose() {
+    _cooldownTimer?.cancel();
     _titleController.dispose();
     _messageController.dispose();
     if (_realtimeChannel != null) {
       Supabase.instance.client.removeChannel(_realtimeChannel!);
     }
     super.dispose();
+  }
+
+  void _startCooldownTimer(int seconds) {
+    _cooldownTimer?.cancel();
+    if (seconds <= 0) {
+      if (mounted) {
+        setState(() => _cooldownRemainingSeconds = 0);
+      }
+      return;
+    }
+    final endTime = DateTime.now().add(Duration(seconds: seconds));
+    if (mounted) {
+      setState(() => _cooldownRemainingSeconds = seconds);
+    }
+    _cooldownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      final remaining = endTime.difference(DateTime.now()).inSeconds;
+      if (remaining <= 0) {
+        timer.cancel();
+        setState(() => _cooldownRemainingSeconds = 0);
+      } else {
+        setState(() => _cooldownRemainingSeconds = remaining);
+      }
+    });
+  }
+
+  String _formatCooldown(int totalSeconds) {
+    final clamped = totalSeconds < 0 ? 0 : totalSeconds;
+    final minutes = (clamped ~/ 60).toString().padLeft(2, '0');
+    final seconds = (clamped % 60).toString().padLeft(2, '0');
+    return '$minutes:$seconds';
   }
 
   void _subscribeToRealtime() {
@@ -155,10 +193,24 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
 
   Future<void> _loadMaintenanceState() async {
     final settings = await AdminRepository.instance.getSystemSettings();
+    final rateLimitCd = await RateLimitService.instance.checkAdminCooldown(
+      actionKey: 'admin_maintenance_toggle',
+      cooldownSeconds: _maintenanceCooldownSeconds,
+    );
+    final effectiveCooldown =
+        settings.cooldownRemainingSeconds >= rateLimitCd
+            ? settings.cooldownRemainingSeconds
+            : rateLimitCd;
+
     if (mounted) {
       setState(() {
         _isMaintenanceMode = settings.isMaintenanceMode;
       });
+      if (effectiveCooldown > 0) {
+        _startCooldownTimer(effectiveCooldown);
+      } else {
+        _startCooldownTimer(0);
+      }
     }
   }
 
@@ -179,18 +231,26 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
   // =========================================================================
 
   Future<void> _handleMaintenanceToggle(bool targetState) async {
-    // 5-second persistent cooldown via RateLimitService
-    final cooldownRemaining = await RateLimitService.instance
-        .checkAdminCooldown(
-          actionKey: 'admin_maintenance_toggle',
-          cooldownSeconds: 5,
-        );
-    if (cooldownRemaining > 0) {
+    // Strict 10-minute (600s) tamper-proof cooldown check (server + rate limit service)
+    final settingsCheck = await AdminRepository.instance.getSystemSettings();
+    final rateCooldown = await RateLimitService.instance.checkAdminCooldown(
+      actionKey: 'admin_maintenance_toggle',
+      cooldownSeconds: _maintenanceCooldownSeconds,
+    );
+    final activeCooldown = [
+      _cooldownRemainingSeconds,
+      settingsCheck.cooldownRemainingSeconds,
+      rateCooldown,
+    ].reduce((a, b) => a > b ? a : b);
+
+    if (activeCooldown > 0) {
+      _startCooldownTimer(activeCooldown);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
+            backgroundColor: AppTheme.catRed,
             content: Text(
-              'Please wait $cooldownRemaining seconds before changing maintenance mode again.',
+              'Maintenance toggle is on cooldown. Please wait ${_formatCooldown(activeCooldown)} before changing maintenance mode again.',
             ),
           ),
         );
@@ -214,17 +274,27 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
     final adminId = adminUser?.id ?? 'admin';
 
     try {
-      await AdminRepository.instance.setMaintenanceMode(targetState, adminId);
+      final updatedSettings = await AdminRepository.instance.setMaintenanceMode(
+        targetState,
+        adminId,
+      );
       await RateLimitService.instance.recordAdminCooldown(
         actionKey: 'admin_maintenance_toggle',
-        cooldownSeconds: 5,
+        cooldownSeconds: _maintenanceCooldownSeconds,
       );
 
-      // DISPATCH EMAILS IN BACKGROUND (Fire and forget)
-      AdminRepository.instance.getActiveUserEmails().then((emails) {
-        if (emails.isNotEmpty) {
+      final cooldownToStart = updatedSettings.cooldownRemainingSeconds > 0
+          ? updatedSettings.cooldownRemainingSeconds
+          : _maintenanceCooldownSeconds;
+      _startCooldownTimer(cooldownToStart);
+
+      // DISPATCH PERSONALIZED EMAILS IN BACKGROUND TO REGISTERED TEACHER & STUDENT ACCOUNTS ONLY
+      AdminRepository.instance.getMaintenanceEmailRecipients().then((
+        recipients,
+      ) {
+        if (recipients.isNotEmpty) {
           EmailService.instance.sendSystemMaintenanceAlertEmail(
-            recipientEmails: emails,
+            recipients: recipients,
             isEnabled: targetState,
           );
         }
@@ -232,7 +302,7 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
 
       if (mounted) {
         setState(() {
-          _isMaintenanceMode = targetState;
+          _isMaintenanceMode = updatedSettings.isMaintenanceMode;
           _isTogglingMaintenance = false;
         });
         ScaffoldMessenger.of(context).showSnackBar(
@@ -240,19 +310,22 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
             backgroundColor: targetState ? AppTheme.catRed : AppTheme.catGreen,
             content: Text(
               targetState
-                  ? 'System Maintenance Mode is now ACTIVE. Non-admin users are restricted.'
-                  : 'System Maintenance Mode has been DISABLED. Normal access restored.',
+                  ? 'System Maintenance Mode is now ACTIVE. Teacher, Student, and Parent accounts are restricted.'
+                  : 'System Maintenance Mode has been DISABLED. Normal login access restored.',
             ),
           ),
         );
       }
     } catch (e) {
+      await _loadMaintenanceState();
       if (mounted) {
         setState(() => _isTogglingMaintenance = false); // UI rollback
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             backgroundColor: AppTheme.catRed,
-            content: Text('Failed to update maintenance mode: $e'),
+            content: Text(
+              'Failed to update maintenance mode: ${e.toString().replaceAll('Bad state: ', '')}',
+            ),
           ),
         );
       }
@@ -561,7 +634,7 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
                       const SizedBox(height: 5),
                       Text(
                         _isMaintenanceMode
-                            ? 'Non-admin users cannot log in. Active sessions are locked out.'
+                            ? 'Teachers, Students, and Parents cannot log in. Active sessions are locked out.'
                             : 'All users (Teachers, Students, Parents) can log in and use the system normally.',
                         style: TextStyle(
                           fontSize: 13,
@@ -571,6 +644,49 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
                           height: 1.35,
                         ),
                       ),
+                      if (_cooldownRemainingSeconds > 0) ...[
+                        const SizedBox(height: 10),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: isDark
+                                ? const Color(0xFF78350F).withValues(alpha: 0.35)
+                                : const Color(0xFFFFFBEB),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: const Color(0xFFF59E0B).withValues(
+                                alpha: 0.5,
+                              ),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                Icons.timer_outlined,
+                                size: 15,
+                                color: Color(0xFFD97706),
+                              ),
+                              const SizedBox(width: 6),
+                              Flexible(
+                                child: Text(
+                                  'Cooldown active: ${_formatCooldown(_cooldownRemainingSeconds)} remaining before maintenance mode can be toggled again.',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: isDark
+                                        ? const Color(0xFFFDE68A)
+                                        : const Color(0xFF92400E),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -581,19 +697,42 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
                     size: 22,
                   )
                 else
-                  Transform.scale(
-                    scale: 0.95,
-                    child: Switch(
-                      value: _isMaintenanceMode,
-                      activeTrackColor: const Color(0xFFEF4444),
-                      activeThumbColor: Colors.white,
-                      inactiveThumbColor:
-                          isDark ? Colors.grey.shade400 : Colors.white,
-                      inactiveTrackColor: isDark
-                          ? Colors.grey.shade700
-                          : const Color(0xFFCBD5E1),
-                      onChanged: (val) => _handleMaintenanceToggle(val),
-                    ),
+                  Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Transform.scale(
+                        scale: 0.95,
+                        child: Switch(
+                          value: _isMaintenanceMode,
+                          activeTrackColor: const Color(0xFFEF4444),
+                          activeThumbColor: Colors.white,
+                          inactiveThumbColor:
+                              isDark ? Colors.grey.shade400 : Colors.white,
+                          inactiveTrackColor: isDark
+                              ? Colors.grey.shade700
+                              : const Color(0xFFCBD5E1),
+                          onChanged: (_isTogglingMaintenance ||
+                                  _cooldownRemainingSeconds > 0)
+                              ? null
+                              : (val) => _handleMaintenanceToggle(val),
+                        ),
+                      ),
+                      if (_cooldownRemainingSeconds > 0)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 4),
+                          child: Text(
+                            'Locked (${_formatCooldown(_cooldownRemainingSeconds)})',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: isDark
+                                  ? const Color(0xFFFBBF24)
+                                  : const Color(0xFFB45309),
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
               ],
             ),

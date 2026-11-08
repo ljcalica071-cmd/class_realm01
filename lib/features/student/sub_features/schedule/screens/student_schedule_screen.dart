@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/data/repositories/supabase_schedule_repository.dart';
 import 'package:class_realm/models/academic_models.dart';
 import 'package:class_realm/models/student_dashboard_models.dart';
@@ -9,9 +10,9 @@ import 'package:loading_animation_widget/loading_animation_widget.dart';
 enum ScheduleViewMode { list, grid }
 
 class StudentScheduleScreen extends StatefulWidget {
-  final StudentDashboardData dashboardData;
+  final StudentDashboardData? dashboardData;
 
-  const StudentScheduleScreen({super.key, required this.dashboardData});
+  const StudentScheduleScreen({super.key, this.dashboardData});
 
   @override
   State<StudentScheduleScreen> createState() => _StudentScheduleScreenState();
@@ -38,8 +39,11 @@ class _StudentScheduleScreenState extends State<StudentScheduleScreen> {
     });
 
     try {
+      final section =
+          widget.dashboardData?.student.departmentOrSection ??
+          AuthRepository.instance.currentUser?.departmentOrSection;
       final rows = await SupabaseScheduleRepository.instance.getSchedules(
-        section: widget.dashboardData.student.departmentOrSection,
+        section: section,
       );
       if (!mounted) return;
       setState(() {
@@ -183,7 +187,9 @@ class _StudentScheduleScreenState extends State<StudentScheduleScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final rawSection = widget.dashboardData.student.departmentOrSection;
+    final rawSection =
+        widget.dashboardData?.student.departmentOrSection ??
+        AuthRepository.instance.currentUser?.departmentOrSection;
     final section = rawSection?.trim().isNotEmpty == true
         ? rawSection!.trim()
         : 'Class';

@@ -257,7 +257,7 @@ class StudentDashboardRepository {
           try {
             final attemptRows = await client
                 .from('assessment_attempts')
-                .select('assessment_id, status, submitted_at')
+                .select('assessment_id, status, score_earned, submitted_at')
                 .eq('student_id', uid);
             final attemptsByAssessmentId = <String, Map<String, dynamic>>{};
             for (final a in (attemptRows as List? ?? [])) {
@@ -280,6 +280,7 @@ class StudentDashboardRepository {
                   time_limit_minutes,
                   available_from,
                   deadline,
+                  assessment_questions ( points ),
                   subject_offerings (
                     subjects ( subject_name ),
                     sections ( section_name, grade_level )
@@ -301,18 +302,37 @@ class StudentDashboardRepository {
                   attempt != null &&
                   (attempt['status'] == 'submitted' ||
                       attempt['status'] == 'auto_submitted');
+              final isQuiz =
+                  m['assessment_type']?.toString().toLowerCase() == 'quiz';
+              final qList = m['assessment_questions'] as List? ?? const [];
+              double computedMax = 0;
+              for (final q in qList) {
+                if (q is Map && q['points'] != null) {
+                  computedMax += (q['points'] as num).toDouble();
+                }
+              }
+              if (computedMax <= 0) computedMax = 100;
 
               // Deduplicate if already loaded via classwork_items
               final existingIndex = classworkList.indexWhere(
                 (cw) => cw['id'] == aId,
               );
               if (existingIndex != -1) {
-                if (isSubmitted &&
-                    classworkList[existingIndex]['status'] == 'pending') {
+                if (isSubmitted) {
                   classworkList[existingIndex]['status'] = 'submitted';
+                  if (attempt['score_earned'] != null) {
+                    classworkList[existingIndex]['score'] =
+                        attempt['score_earned'];
+                  }
                 }
-                if (classworkList[existingIndex]['type'] == 'activity') {
-                  classworkList[existingIndex]['type'] = 'exam';
+                classworkList[existingIndex]['type'] = isQuiz ? 'quiz' : 'exam';
+                if (m['available_from'] != null) {
+                  classworkList[existingIndex]['assigned_at'] =
+                      m['available_from']?.toString();
+                }
+                if (m['deadline'] != null) {
+                  classworkList[existingIndex]['deadline'] = m['deadline']
+                      ?.toString();
                 }
                 continue;
               }
@@ -321,20 +341,22 @@ class StudentDashboardRepository {
                 'id': aId,
                 'subject_offering_id':
                     m['subject_offering_id']?.toString() ?? '',
-                'type': 'exam',
-                'title': m['title']?.toString() ?? 'Periodical Examination',
+                'type': isQuiz ? 'quiz' : 'exam',
+                'title':
+                    m['title']?.toString() ??
+                    (isQuiz ? 'Unit Quiz' : 'Periodical Examination'),
                 'description':
-                    'Periodical Examination (${m['time_limit_minutes'] ?? 60} mins)',
+                    '${isQuiz ? 'Unit Quiz' : 'Periodical Examination'} (${m['time_limit_minutes'] ?? 60} mins)',
                 'instructions': m['instructions']?.toString() ?? '',
                 'assigned_at': m['available_from']?.toString(),
                 'deadline': m['deadline']?.toString(),
-                'max_score': 100,
+                'max_score': computedMax,
                 'completion_mode': 'online',
                 'subject_name': s['subject_name']?.toString() ?? '',
                 'section_name': sec['section_name']?.toString() ?? '',
                 'grade_level': sec['grade_level']?.toString() ?? '',
                 'status': isSubmitted ? 'submitted' : 'pending',
-                'score': null,
+                'score': attempt?['score_earned'],
                 'submitted_at': attempt?['submitted_at'],
               });
             }

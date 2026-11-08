@@ -30,7 +30,13 @@ import 'features/admin/screens/admin_add_teacher_screen.dart';
 import 'features/teacher/sub_features/setup/screens/academic_setup_wizard_screen.dart';
 import 'features/teacher/screens/teacher_dashboard_screen.dart';
 import 'features/student/screens/student_home_screen.dart';
+import 'features/student/sub_features/academics/screens/student_academic_performance_screen.dart';
+import 'features/student/sub_features/academics/screens/student_grades_screen.dart';
+import 'features/student/sub_features/academics/screens/student_learning_materials_screen.dart';
+import 'features/student/sub_features/schedule/screens/student_attendance_screen.dart';
+import 'features/student/sub_features/schedule/screens/student_schedule_screen.dart';
 import 'features/parent/screens/parent_home_screen.dart';
+import 'features/parent/sub_features/child_details/widgets/parent_grades_tab.dart';
 
 /// Runs a startup task with a strict timeout without letting its failure abort the boot sequence.
 Future<void> _guarded(
@@ -266,7 +272,20 @@ class _ClassRealmAppState extends State<ClassRealmApp> {
       AppRoutes.teacherNotifications,
       AppRoutes.teacherProfile,
       AppRoutes.studentHome,
+      AppRoutes.studentClasswork,
+      AppRoutes.studentAlerts,
+      AppRoutes.studentProfile,
+      AppRoutes.studentAttendance,
+      AppRoutes.studentSchedule,
+      AppRoutes.studentMaterials,
+      AppRoutes.studentGrades,
+      AppRoutes.studentPerformance,
       AppRoutes.parentHome,
+      AppRoutes.parentAttendance,
+      AppRoutes.parentSchedule,
+      AppRoutes.parentAlerts,
+      AppRoutes.parentProfile,
+      AppRoutes.parentGrades,
     };
     if (restorableRoutes.contains(initialPath)) {
       _targetRoute = initialPath;
@@ -496,13 +515,67 @@ class _ClassRealmAppState extends State<ClassRealmApp> {
         allowedRoles: [UserRole.teacher],
         child: TeacherDashboardScreen(initialSelectedIndex: 16),
       ),
+      // Student Routes with sub-route support
       AppRoutes.studentHome: (context) => const AuthGuard(
         allowedRoles: [UserRole.student],
-        child: StudentHomeScreen(),
+        child: StudentHomeScreen(initialTabIndex: 0),
       ),
+      AppRoutes.studentClasswork: (context) => const AuthGuard(
+        allowedRoles: [UserRole.student],
+        child: StudentHomeScreen(initialTabIndex: 1),
+      ),
+      AppRoutes.studentAlerts: (context) => const AuthGuard(
+        allowedRoles: [UserRole.student],
+        child: StudentHomeScreen(initialTabIndex: 2),
+      ),
+      AppRoutes.studentProfile: (context) => const AuthGuard(
+        allowedRoles: [UserRole.student],
+        child: StudentHomeScreen(initialTabIndex: 3),
+      ),
+      AppRoutes.studentAttendance: (context) => const AuthGuard(
+        allowedRoles: [UserRole.student],
+        child: StudentAttendanceScreen(),
+      ),
+      AppRoutes.studentSchedule: (context) => const AuthGuard(
+        allowedRoles: [UserRole.student],
+        child: StudentScheduleScreen(),
+      ),
+      AppRoutes.studentMaterials: (context) => const AuthGuard(
+        allowedRoles: [UserRole.student],
+        child: StudentLearningMaterialsScreen(),
+      ),
+      AppRoutes.studentGrades: (context) => const AuthGuard(
+        allowedRoles: [UserRole.student],
+        child: StudentGradesScreen(),
+      ),
+      AppRoutes.studentPerformance: (context) => const AuthGuard(
+        allowedRoles: [UserRole.student],
+        child: StudentAcademicPerformanceScreen(),
+      ),
+      // Parent Routes with sub-route support
       AppRoutes.parentHome: (context) => const AuthGuard(
         allowedRoles: [UserRole.parent],
-        child: ParentHomeScreen(),
+        child: ParentHomeScreen(initialTabIndex: 0),
+      ),
+      AppRoutes.parentAttendance: (context) => const AuthGuard(
+        allowedRoles: [UserRole.parent],
+        child: ParentHomeScreen(initialTabIndex: 1),
+      ),
+      AppRoutes.parentSchedule: (context) => const AuthGuard(
+        allowedRoles: [UserRole.parent],
+        child: ParentHomeScreen(initialTabIndex: 2),
+      ),
+      AppRoutes.parentAlerts: (context) => const AuthGuard(
+        allowedRoles: [UserRole.parent],
+        child: ParentHomeScreen(initialTabIndex: 3),
+      ),
+      AppRoutes.parentProfile: (context) => const AuthGuard(
+        allowedRoles: [UserRole.parent],
+        child: ParentHomeScreen(initialTabIndex: 4),
+      ),
+      AppRoutes.parentGrades: (context) => const AuthGuard(
+        allowedRoles: [UserRole.parent],
+        child: ParentGradesScreen(initialStudent: null),
       ),
     };
   }
@@ -537,16 +610,37 @@ class _ClassRealmAppState extends State<ClassRealmApp> {
           themeAnimationCurve: Curves.easeInOut,
           initialRoute: initialDestination,
           onGenerateInitialRoutes: (String initialRouteName) {
+            final validBuilder = appRoutes[initialRouteName];
+            final actualRouteName = validBuilder != null
+                ? initialRouteName
+                : initialDestination;
             final builder =
-                appRoutes[initialRouteName] ??
+                validBuilder ??
                 appRoutes[initialDestination] ??
                 appRoutes[AppRoutes.login]!;
+            if (validBuilder == null) {
+              updateBrowserUrl(actualRouteName);
+            }
             return [
               MaterialPageRoute(
-                settings: RouteSettings(name: initialRouteName),
+                settings: RouteSettings(name: actualRouteName),
                 builder: builder,
               ),
             ];
+          },
+          onUnknownRoute: (settings) {
+            final user = AuthRepository.instance.currentUser;
+            final fallbackRoute = user != null
+                ? AppRoutes.getDashboardRouteForRole(user.role)
+                : AppRoutes.login;
+            updateBrowserUrl(fallbackRoute);
+            return MaterialPageRoute(
+              settings: RouteSettings(name: fallbackRoute),
+              builder: (ctx) =>
+                  (appRoutes[fallbackRoute] ?? appRoutes[AppRoutes.login]!)(
+                    ctx,
+                  ),
+            );
           },
           builder: (context, child) {
             return InAppNotificationBannerOverlay(

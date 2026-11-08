@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:class_realm/core/services/local_storage_service.dart';
 import 'package:class_realm/core/utils/browser_url_helper.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/models/user_model.dart';
@@ -30,6 +31,9 @@ class _AuthGuardState extends State<AuthGuard> {
   bool get _isAuthorized {
     final user = AuthRepository.instance.currentUser;
     if (user == null) return false;
+    if (user.role != UserRole.admin && LocalStorageService.isMaintenanceMode) {
+      return false;
+    }
     if (!widget.allowedRoles.contains(user.role)) return false;
     if (user.status == AccountStatus.deactivated ||
         user.status == AccountStatus.rejected) {
@@ -50,6 +54,15 @@ class _AuthGuardState extends State<AuthGuard> {
 
       // 1. Not logged in
       if (user == null) {
+        _redirect(AppRoutes.login);
+        return;
+      }
+
+      // 1b. Maintenance Mode lockdown for non-admin users
+      if (user.role != UserRole.admin &&
+          LocalStorageService.isMaintenanceMode) {
+        LocalStorageService.saveMaintenanceForcedLogout(true);
+        AuthRepository.instance.logout('maintenance_forced');
         _redirect(AppRoutes.login);
         return;
       }
@@ -86,6 +99,7 @@ class _AuthGuardState extends State<AuthGuard> {
   void _redirect(String route) {
     if (!mounted) return;
     updateBrowserUrl(route);
+    LocalStorageService.saveLastActiveRoute(route);
     if (route == AppRoutes.login) {
       Navigator.pushNamedAndRemoveUntil(context, AppRoutes.login, (r) => false);
     } else if (ModalRoute.of(context)?.settings.name != route) {

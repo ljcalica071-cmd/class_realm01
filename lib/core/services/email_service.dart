@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:class_realm/core/config/env_config.dart';
+import 'package:class_realm/models/admin_portal_models.dart';
 
 class EmailDeliveryException implements Exception {
   final String message;
@@ -408,18 +409,23 @@ class EmailService {
     );
   }
 
-  /// Send system maintenance alerts (60-30-10 Minimalist UI/UX Design, Strictly Teacher & Student Gmail Accounts)
-  Future<void> sendSystemMaintenanceAlertEmail({
-    required List<String> recipientEmails,
+  /// Builds personalized maintenance advisory HTML for a specific recipient role & name
+  static String buildMaintenanceAdvisoryHtml({
     required bool isEnabled,
-  }) async {
+    required String role,
+    required String formattedName,
+  }) {
     final currentYear = DateTime.now().year;
-    final String subject = isEnabled
-        ? 'ClassRealm Advisory: Scheduled System Maintenance Active'
-        : 'ClassRealm Advisory: System Maintenance Complete — Back Online';
+    final cleanRole = role.trim().toLowerCase();
+    final portalAdvisoryLabel = cleanRole == 'teacher'
+        ? 'Teacher Portal Advisory'
+        : 'Student Portal Advisory';
+    final displayGreetingName = formattedName.trim().isNotEmpty
+        ? formattedName.trim()
+        : (cleanRole == 'teacher' ? 'Teacher' : 'Student');
 
-    final String htmlTemplate = isEnabled
-        ? '''
+    if (isEnabled) {
+      return '''
       <!DOCTYPE html>
       <html lang="en">
       <head>
@@ -428,7 +434,7 @@ class EmailService {
         <title>Scheduled System Maintenance Active</title>
       </head>
       <body style="margin: 0; padding: 0; background-color: #F8FAFC; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #0F172A; -webkit-font-smoothing: antialiased;">
-        <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #F8FAFC; padding: 36px 16px;">
+        <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #F8FAFC; padding: 28px 12px;">
           <tr>
             <td align="center">
               <table width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width: 580px; background-color: #FFFFFF; border-radius: 14px; border: 1px solid #E2E8F0; overflow: hidden; box-shadow: 0 4px 12px rgba(15, 23, 42, 0.04);">
@@ -438,15 +444,15 @@ class EmailService {
                 </tr>
                 <!-- 30% Brand Header (#3A6B88 Steel-Blue) -->
                 <tr>
-                  <td style="background-color: #3A6B88; padding: 22px 28px;">
+                  <td style="background-color: #3A6B88; padding: 20px 22px;">
                     <table width="100%" border="0" cellspacing="0" cellpadding="0">
                       <tr>
-                        <td>
-                          <div style="color: #FFFFFF; font-size: 18px; font-weight: 800; letter-spacing: 0.4px;">CLASSREALM</div>
-                          <div style="color: #E0F2FE; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.8px; margin-top: 2px;">Teacher &amp; Student Portal Advisory</div>
+                        <td valign="middle" align="left">
+                          <div style="color: #FFFFFF; font-size: 17px; font-weight: 800; letter-spacing: 0.4px; line-height: 1.2;">CLASSREALM</div>
+                          <div style="color: #E0F2FE; font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.7px; margin-top: 3px; line-height: 1.25;">$portalAdvisoryLabel</div>
                         </td>
-                        <td align="right">
-                          <span style="display: inline-block; background-color: #FEF3C7; color: #92400E; border: 1px solid #FDE68A; font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 999px; letter-spacing: 0.3px;">
+                        <td valign="middle" align="right" style="white-space: nowrap; padding-left: 10px;">
+                          <span style="display: inline-block; white-space: nowrap; text-align: center; vertical-align: middle; background-color: #FEF3C7; color: #92400E; border: 1px solid #FDE68A; font-size: 10.5px; font-weight: 700; line-height: 1.2; padding: 6px 11px; border-radius: 999px; letter-spacing: 0.3px;">
                             MAINTENANCE ACTIVE
                           </span>
                         </td>
@@ -456,15 +462,15 @@ class EmailService {
                 </tr>
                 <!-- Main Body Content -->
                 <tr>
-                  <td style="padding: 32px 28px; color: #334155;">
-                    <h2 style="margin: 0 0 12px 0; color: #0F172A; font-size: 20px; font-weight: 800; letter-spacing: -0.2px;">
+                  <td style="padding: 28px 24px; color: #334155;">
+                    <h2 style="margin: 0 0 12px 0; color: #0F172A; font-size: 19px; font-weight: 800; letter-spacing: -0.2px; line-height: 1.3;">
                       Scheduled System Maintenance Active
                     </h2>
-                    <p style="font-size: 14px; line-height: 1.6; color: #475569; margin: 0 0 20px 0;">
-                      Hello Teacher / Student,
+                    <p style="font-size: 14px; line-height: 1.6; color: #334155; margin: 0 0 18px 0;">
+                      Good day <strong>$displayGreetingName</strong>,
                     </p>
                     <p style="font-size: 14px; line-height: 1.65; color: #334155; margin: 0 0 20px 0;">
-                      ClassRealm is currently undergoing scheduled maintenance to improve system speed and reliability. While our team applies these updates, access to the Teacher and Student portals is temporarily paused.
+                      ClassRealm is currently undergoing scheduled system maintenance to improve speed and reliability. Please be advised that while Maintenance Mode is active, all <strong>Teacher, Student, and Parent accounts</strong> are temporarily unable to log in to their accounts.
                     </p>
 
                     <!-- Status Summary Box -->
@@ -475,9 +481,9 @@ class EmailService {
                             What You Need to Know
                           </div>
                           <div style="font-size: 13px; color: #78350F; line-height: 1.55;">
-                            &bull; <strong>Portal Status:</strong> Temporarily paused for updates<br>
+                            &bull; <strong>Account Access:</strong> All Teacher, Student, and Parent accounts cannot log in during maintenance<br>
                             &bull; <strong>Your Records:</strong> All grades, attendance logs, and classwork are safely saved<br>
-                            &bull; <strong>Next Update:</strong> You will receive an email as soon as the portal is back online
+                            &bull; <strong>Next Update:</strong> You will receive an email as soon as the system is back online
                           </div>
                         </td>
                       </tr>
@@ -490,7 +496,7 @@ class EmailService {
                 </tr>
                 <!-- Footer -->
                 <tr>
-                  <td style="background-color: #F8FAFC; padding: 18px 28px; border-top: 1px solid #E2E8F0; text-align: center;">
+                  <td style="background-color: #F8FAFC; padding: 18px 24px; border-top: 1px solid #E2E8F0; text-align: center;">
                     <p style="margin: 0; font-size: 11.5px; color: #64748B; line-height: 1.5;">
                       &copy; $currentYear ClassRealm Academic Portal &bull; Eduardo Barretto Sr. Integrated School<br>
                       This is an automated system advisory sent to registered Teacher and Student accounts.
@@ -503,8 +509,10 @@ class EmailService {
         </table>
       </body>
       </html>
-    '''
-        : '''
+    ''';
+    }
+
+    return '''
       <!DOCTYPE html>
       <html lang="en">
       <head>
@@ -513,7 +521,7 @@ class EmailService {
         <title>System Maintenance Complete</title>
       </head>
       <body style="margin: 0; padding: 0; background-color: #F8FAFC; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #0F172A; -webkit-font-smoothing: antialiased;">
-        <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #F8FAFC; padding: 36px 16px;">
+        <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #F8FAFC; padding: 28px 12px;">
           <tr>
             <td align="center">
               <table width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width: 580px; background-color: #FFFFFF; border-radius: 14px; border: 1px solid #E2E8F0; overflow: hidden; box-shadow: 0 4px 12px rgba(15, 23, 42, 0.04);">
@@ -523,15 +531,15 @@ class EmailService {
                 </tr>
                 <!-- 30% Brand Header (#3A6B88 Steel-Blue) -->
                 <tr>
-                  <td style="background-color: #3A6B88; padding: 22px 28px;">
+                  <td style="background-color: #3A6B88; padding: 20px 22px;">
                     <table width="100%" border="0" cellspacing="0" cellpadding="0">
                       <tr>
-                        <td>
-                          <div style="color: #FFFFFF; font-size: 18px; font-weight: 800; letter-spacing: 0.4px;">CLASSREALM</div>
-                          <div style="color: #E0F2FE; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.8px; margin-top: 2px;">Teacher &amp; Student Portal Advisory</div>
+                        <td valign="middle" align="left">
+                          <div style="color: #FFFFFF; font-size: 17px; font-weight: 800; letter-spacing: 0.4px; line-height: 1.2;">CLASSREALM</div>
+                          <div style="color: #E0F2FE; font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.7px; margin-top: 3px; line-height: 1.25;">$portalAdvisoryLabel</div>
                         </td>
-                        <td align="right">
-                          <span style="display: inline-block; background-color: #ECFDF5; color: #065F46; border: 1px solid #A7F3D0; font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 999px; letter-spacing: 0.3px;">
+                        <td valign="middle" align="right" style="white-space: nowrap; padding-left: 10px;">
+                          <span style="display: inline-block; white-space: nowrap; text-align: center; vertical-align: middle; background-color: #ECFDF5; color: #065F46; border: 1px solid #A7F3D0; font-size: 10.5px; font-weight: 700; line-height: 1.2; padding: 6px 11px; border-radius: 999px; letter-spacing: 0.3px;">
                             SYSTEM ONLINE
                           </span>
                         </td>
@@ -541,15 +549,15 @@ class EmailService {
                 </tr>
                 <!-- Main Body Content -->
                 <tr>
-                  <td style="padding: 32px 28px; color: #334155;">
-                    <h2 style="margin: 0 0 12px 0; color: #0F172A; font-size: 20px; font-weight: 800; letter-spacing: -0.2px;">
+                  <td style="padding: 28px 24px; color: #334155;">
+                    <h2 style="margin: 0 0 12px 0; color: #0F172A; font-size: 19px; font-weight: 800; letter-spacing: -0.2px; line-height: 1.3;">
                       System Maintenance Complete — Back Online
                     </h2>
-                    <p style="font-size: 14px; line-height: 1.6; color: #475569; margin: 0 0 20px 0;">
-                      Hello Teacher / Student,
+                    <p style="font-size: 14px; line-height: 1.6; color: #334155; margin: 0 0 18px 0;">
+                      Good day <strong>$displayGreetingName</strong>,
                     </p>
                     <p style="font-size: 14px; line-height: 1.65; color: #334155; margin: 0 0 20px 0;">
-                      Scheduled maintenance is now complete and ClassRealm is back online. All Teacher and Student portal features have been restored and are ready for use.
+                      Scheduled system maintenance is now complete and ClassRealm is back online. All <strong>Teacher, Student, and Parent accounts</strong> can now log in to their accounts and access all portal features as normal.
                     </p>
 
                     <!-- Status Summary Box -->
@@ -560,7 +568,7 @@ class EmailService {
                             All Features Restored
                           </div>
                           <div style="font-size: 13px; color: #047857; line-height: 1.55;">
-                            &bull; <strong>Portal Status:</strong> Online and ready for login<br>
+                            &bull; <strong>Account Access:</strong> Teacher, Student, and Parent accounts are ready for login<br>
                             &bull; <strong>Available Services:</strong> Gradebook, Performance Analytics, Attendance, and Classwork<br>
                             &bull; <strong>Data Integrity:</strong> All records and recent updates are synced and intact
                           </div>
@@ -575,7 +583,7 @@ class EmailService {
                 </tr>
                 <!-- Footer -->
                 <tr>
-                  <td style="background-color: #F8FAFC; padding: 18px 28px; border-top: 1px solid #E2E8F0; text-align: center;">
+                  <td style="background-color: #F8FAFC; padding: 18px 24px; border-top: 1px solid #E2E8F0; text-align: center;">
                     <p style="margin: 0; font-size: 11.5px; color: #64748B; line-height: 1.5;">
                       &copy; $currentYear ClassRealm Academic Portal &bull; Eduardo Barretto Sr. Integrated School<br>
                       This is an automated system advisory sent to registered Teacher and Student accounts.
@@ -589,16 +597,50 @@ class EmailService {
       </body>
       </html>
     ''';
+  }
 
-    // Dispatch emails silently to Teacher & Student Gmail accounts
-    for (final email in recipientEmails) {
-      if (email.trim().isNotEmpty &&
+  /// Send system maintenance alerts (60-30-10 Minimalist UI/UX Design, Strictly Registered Teacher & Student Accounts)
+  Future<void> sendSystemMaintenanceAlertEmail({
+    List<MaintenanceEmailRecipient>? recipients,
+    List<String>? recipientEmails,
+    required bool isEnabled,
+  }) async {
+    final String subject = isEnabled
+        ? 'ClassRealm Advisory: Scheduled System Maintenance Active'
+        : 'ClassRealm Advisory: System Maintenance Complete — Back Online';
+
+    final List<MaintenanceEmailRecipient> effectiveRecipients =
+        recipients != null && recipients.isNotEmpty
+        ? recipients
+        : (recipientEmails ?? const <String>[])
+              .map(
+                (e) => MaintenanceEmailRecipient(
+                  email: e,
+                  role: 'student',
+                  formattedName: 'User',
+                ),
+              )
+              .toList();
+
+    // Dispatch personalized emails silently to registered Teacher & Student accounts
+    for (final recipient in effectiveRecipients) {
+      final email = recipient.email.trim();
+      final lower = email.toLowerCase();
+      if (email.isNotEmpty &&
           email.contains('@') &&
-          email.trim().toLowerCase() != 'parent' &&
-          email.trim().toLowerCase() != 'teacher' &&
-          email.trim().toLowerCase() != 'student') {
+          lower != 'parent' &&
+          lower != 'teacher' &&
+          lower != 'student' &&
+          !lower.endsWith('@classrealm.local') &&
+          !lower.endsWith('@classrealm.com') &&
+          !lower.endsWith('.cr@gmail.com')) {
         try {
-          await sendEmail(to: email, subject: subject, html: htmlTemplate);
+          final html = buildMaintenanceAdvisoryHtml(
+            isEnabled: isEnabled,
+            role: recipient.role,
+            formattedName: recipient.formattedName,
+          );
+          await sendEmail(to: email, subject: subject, html: html);
           // Slight delay to prevent rate limit spikes
           await Future.delayed(const Duration(milliseconds: 50));
         } catch (e) {
