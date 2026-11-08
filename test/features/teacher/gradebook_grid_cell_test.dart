@@ -200,4 +200,74 @@ void main() {
     expect(scoreNotifier.value, '4');
     expect(tester.widget<TextField>(scoreField).controller?.text, '4');
   });
+
+  testWidgets('clearing HPS cell while focused does not emit empty string until submitted', (
+    tester,
+  ) async {
+    var latest = 'unchanged';
+    await tester.pumpWidget(
+      buildCell(
+        value: '10',
+        onChanged: (value) => latest = value,
+        isHpsCell: true,
+        columnHps: null,
+      ),
+    );
+
+    final textField = find.byType(TextField);
+    await tester.tap(textField);
+    await tester.pump();
+
+    // User backspaces the existing text to empty string while typing
+    await tester.enterText(textField, '');
+    await tester.pump(const Duration(milliseconds: 300));
+
+    // Must NOT emit empty string while user is actively editing!
+    expect(latest, 'unchanged');
+
+    // User types new replacement value '25'
+    await tester.enterText(textField, '25');
+    await tester.pump(const Duration(milliseconds: 250));
+
+    // Must emit new value '25'
+    expect(latest, '25');
+
+    // When explicitly submitted with empty text (Enter key), emits empty string
+    await tester.enterText(textField, '');
+    await tester.pump();
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pump();
+    expect(latest, '');
+  });
+
+  testWidgets('unfocusing empty HPS cell without submit reverts controller to previous value', (
+    tester,
+  ) async {
+    var latest = 'unchanged';
+    await tester.pumpWidget(
+      buildCell(
+        value: '50',
+        onChanged: (value) => latest = value,
+        isHpsCell: true,
+        columnHps: null,
+      ),
+    );
+
+    final textField = find.byType(TextField);
+    await tester.tap(textField);
+    await tester.pump();
+
+    // Backspace to empty
+    await tester.enterText(textField, '');
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(latest, 'unchanged');
+
+    // Click outside / unfocus without pressing Enter
+    FocusManager.instance.primaryFocus?.unfocus();
+    await tester.pump();
+
+    // Controller safely reverts back to '50' without firing premature empty callback
+    expect(tester.widget<TextField>(textField).controller?.text, '50');
+    expect(latest, 'unchanged');
+  });
 }

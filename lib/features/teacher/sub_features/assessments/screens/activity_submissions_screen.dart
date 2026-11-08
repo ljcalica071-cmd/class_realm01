@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -9,7 +10,6 @@ import 'package:class_realm/core/services/supabase_service.dart';
 import 'package:class_realm/widgets/common/app_modals.dart';
 import 'package:class_realm/widgets/common/app_date_picker_field.dart';
 import 'package:class_realm/widgets/common/app_time_picker_field.dart';
-import 'package:class_realm/widgets/common/expandable_instructions_text.dart';
 import 'package:class_realm/features/teacher/sub_features/grading/widgets/teacher_gradebook_tab.dart';
 import 'package:class_realm/core/utils/validators.dart';
 import 'package:class_realm/models/user_model.dart';
@@ -22,12 +22,14 @@ class ActivitySubmissionsScreen extends StatefulWidget {
   final ActivityModel activity;
   final bool embedded;
   final VoidCallback? onBack;
+  final SupabaseClient? supabaseClient;
 
   const ActivitySubmissionsScreen({
     super.key,
     required this.activity,
     this.embedded = false,
     this.onBack,
+    this.supabaseClient,
   });
 
   static Future<void> show(BuildContext context, ActivityModel activity) {
@@ -52,7 +54,10 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
   String _selectedStatus = 'All';
   String _searchQuery = '';
   int _currentPage = 1;
-  static const int _pageSize = 20;
+  static const int _pageSize = 15;
+
+  bool _isInstructionsExpanded = false;
+  final ScrollController _instructionsScrollController = ScrollController();
 
   List<UserModel> _enrolledStudents = [];
   Map<String, Map<String, dynamic>> _submissionsByStudent = {};
@@ -60,7 +65,8 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
   final Map<String, bool> _isSavingStudent = {};
   final Map<String, String?> _scoreErrors = {};
 
-  final SupabaseClient _client = Supabase.instance.client;
+  SupabaseClient get _client =>
+      widget.supabaseClient ?? Supabase.instance.client;
 
   bool get _isInPerson => _activity.completionMode == 'in_person';
 
@@ -74,10 +80,33 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
 
   @override
   void dispose() {
+    _instructionsScrollController.dispose();
     for (final ctrl in _scoreControllers.values) {
       ctrl.dispose();
     }
     super.dispose();
+  }
+
+  String _formatStudentName(UserModel s) {
+    final last = s.lastName?.trim() ?? '';
+    final first = s.firstName?.trim() ?? '';
+    final mid = s.middleName?.trim() ?? '';
+
+    if (last.isNotEmpty && first.isNotEmpty) {
+      final mi = mid.isNotEmpty ? ' ${AppValidators.formatMiddleInitial(mid)}' : '';
+      return '$last, $first$mi';
+    }
+
+    final full = s.fullName.trim();
+    if (full.contains(',')) return full;
+
+    final parts = full.split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
+    if (parts.length >= 2) {
+      final parsedLast = parts.last;
+      final parsedFirstMid = parts.sublist(0, parts.length - 1).join(' ');
+      return '$parsedLast, $parsedFirstMid';
+    }
+    return full;
   }
 
   Future<void> _loadData() async {
@@ -89,6 +118,28 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
     }
 
     try {
+      // Re-hydrate activity details to ensure attachment and instructions are always fresh
+      try {
+        final freshRow = await _client
+            .from('classwork_items')
+            .select()
+            .eq('id', _activity.id)
+            .maybeSingle();
+        if (freshRow != null) {
+          _activity = _activity.copyWith(
+            title: freshRow['title']?.toString(),
+            instructions: freshRow['instructions']?.toString(),
+            storagePath: freshRow['storage_path']?.toString(),
+            attachmentName: freshRow['file_name']?.toString() ??
+                freshRow['attachment_name']?.toString(),
+            mimeType: freshRow['mime_type']?.toString(),
+            fileSizeBytes: (freshRow['file_size_bytes'] as num?)?.toInt(),
+          );
+        }
+      } catch (err) {
+        debugPrint('Notice refreshing activity details in submissions: $err');
+      }
+
       // 1. Load enrolled students for this offering
       final studentRepo = SupabaseStudentRepository();
       final students = await studentRepo.getStudentsForTeacher(
@@ -108,9 +159,9 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
             }
             return true;
           }).toList()..sort((a, b) {
-            final lastA = a.lastName ?? a.fullName;
-            final lastB = b.lastName ?? b.fullName;
-            return lastA.toLowerCase().compareTo(lastB.toLowerCase());
+            final nameA = _formatStudentName(a);
+            final nameB = _formatStudentName(b);
+            return nameA.toLowerCase().compareTo(nameB.toLowerCase());
           });
 
       // 2. Load submissions from student_classwork_submissions with attachments
@@ -129,12 +180,48 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
             ''')
             .eq('classwork_id', _activity.id);
         submissionRows = res as List? ?? [];
-      } catch (_) {
-        final res = await _client
-            .from('student_classwork_submissions')
-            .select()
-            .eq('classwork_id', _activity.id);
-        submissionRows = res as List? ?? [];
+      } catch (e) {
+        debugPrint('Notice join on submission_attachments: $e');
+        try {
+          final res = await _client
+              .from('student_classwork_submissions')
+              .select()
+              .eq('classwork_id', _activity.id);
+          submissionRows = res as List? ?? [];
+        } catch (_) {}
+      }
+
+      // Populate attachments reliably from submission_attachments table
+      final subIds = submissionRows
+          .map((r) => r['id']?.toString())
+          .whereType<String>()
+          .toList();
+      if (subIds.isNotEmpty) {
+        try {
+          final attRes = await SupabaseService().adminClient
+              .from('submission_attachments')
+              .select('submission_id, file_name, storage_url, mime_type, file_size_bytes')
+              .inFilter('submission_id', subIds);
+          final attList = attRes as List? ?? [];
+          final attBySubId = <String, Map<String, dynamic>>{};
+          for (final a in attList) {
+            final m = Map<String, dynamic>.from(a as Map);
+            final sId = m['submission_id']?.toString();
+            if (sId != null && !attBySubId.containsKey(sId)) {
+              attBySubId[sId] = m;
+            }
+          }
+          for (final row in submissionRows) {
+            final sId = row['id']?.toString();
+            if (sId != null && attBySubId.containsKey(sId)) {
+              final att = attBySubId[sId]!;
+              row['storage_path'] = att['storage_url'] ?? row['storage_path'];
+              row['file_name'] = att['file_name'] ?? row['file_name'];
+            }
+          }
+        } catch (attErr) {
+          debugPrint('Notice querying submission_attachments directly: $attErr');
+        }
       }
 
       final subMap = <String, Map<String, dynamic>>{};
@@ -231,6 +318,11 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
 
   Future<String> _sanitizeAndSignClassworkUrl(String rawPath) async {
     var cleanPath = rawPath.trim();
+    if (cleanPath.startsWith('http://') || cleanPath.startsWith('https://')) {
+      if (cleanPath.contains('token=') || cleanPath.contains('Signature=')) {
+        return cleanPath;
+      }
+    }
     if (cleanPath.contains('/classwork-materials/')) {
       cleanPath = cleanPath.split('/classwork-materials/').last;
     } else if (cleanPath.contains('/classwork%20materials/')) {
@@ -262,10 +354,18 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
     try {
       final url = await _sanitizeAndSignClassworkUrl(path); // 1 hour expiry
       final uri = Uri.parse(url);
-      final launched = await launchUrl(
-        uri,
-        mode: LaunchMode.externalApplication,
-      );
+      bool launched = false;
+      if (kIsWeb) {
+        launched = await launchUrl(uri, webOnlyWindowName: '_blank');
+      } else {
+        launched = await launchUrl(
+          uri,
+          mode: LaunchMode.externalApplication,
+        );
+        if (!launched) {
+          launched = await launchUrl(uri, mode: LaunchMode.platformDefault);
+        }
+      }
       if (!launched && mounted) {
         ScaffoldMessenger.of(context).clearSnackBars();
         ScaffoldMessenger.of(context).showSnackBar(
@@ -297,16 +397,32 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
   Future<void> _openTeacherAttachment() async {
     if (_isOpeningFile) return;
     final path = _activity.storagePath;
-    if (path == null || path.isEmpty) return;
+    if (path == null || path.trim().isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).clearSnackBars();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No attached file available.')),
+        );
+      }
+      return;
+    }
 
     _isOpeningFile = true;
     try {
       final url = await _sanitizeAndSignClassworkUrl(path); // 1 hour expiry
       final uri = Uri.parse(url);
-      final launched = await launchUrl(
-        uri,
-        mode: LaunchMode.externalApplication,
-      );
+      bool launched = false;
+      if (kIsWeb) {
+        launched = await launchUrl(uri, webOnlyWindowName: '_blank');
+      } else {
+        launched = await launchUrl(
+          uri,
+          mode: LaunchMode.externalApplication,
+        );
+        if (!launched) {
+          launched = await launchUrl(uri, mode: LaunchMode.platformDefault);
+        }
+      }
       if (!launched && mounted) {
         ScaffoldMessenger.of(context).clearSnackBars();
         ScaffoldMessenger.of(context).showSnackBar(
@@ -387,7 +503,10 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
       final newStatus = newScore != null
           ? 'graded'
           : (_isInPerson
-                ? (currentSub['status'] ?? 'submitted')
+                ? ((currentSub['submitted_at'] != null ||
+                        currentSub['status'] == 'submitted')
+                    ? 'submitted'
+                    : 'pending')
                 : (currentSub['status'] ?? 'submitted'));
 
       // 1. Upsert to student_classwork_submissions
@@ -403,7 +522,9 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
             ? feedback.trim()
             : null;
       }
-      if (currentSub['submitted_at'] != null) {
+      if (newStatus == 'pending') {
+        upsertData['submitted_at'] = null;
+      } else if (currentSub['submitted_at'] != null) {
         upsertData['submitted_at'] = currentSub['submitted_at'];
       } else {
         upsertData['submitted_at'] = DateTime.now().toUtc().toIso8601String();
@@ -540,16 +661,19 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
         return;
       }
 
+      final dbStatus =
+          status.toLowerCase() == 'missing' ? 'pending' : 'submitted';
       final currentSub =
           _submissionsByStudent[student.id] ?? <String, dynamic>{};
       final upsertData = <String, dynamic>{
         'classwork_id': _activity.id,
         'student_id': student.id,
-        'status': status,
+        'status': dbStatus,
         'score': currentSub['score'],
-        'submitted_at':
-            currentSub['submitted_at'] ??
-            DateTime.now().toUtc().toIso8601String(),
+        'submitted_at': dbStatus == 'submitted'
+            ? (currentSub['submitted_at'] ??
+                DateTime.now().toUtc().toIso8601String())
+            : null,
         'updated_at': DateTime.now().toUtc().toIso8601String(),
       };
 
@@ -559,7 +683,12 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
 
       setState(() {
         final updated = Map<String, dynamic>.from(currentSub);
-        updated['status'] = status;
+        updated['status'] = dbStatus;
+        if (dbStatus == 'submitted') {
+          updated['submitted_at'] = upsertData['submitted_at'];
+        } else {
+          updated.remove('submitted_at');
+        }
         _submissionsByStudent[student.id] = updated;
         _isSavingStudent[student.id] = false;
       });
@@ -1017,8 +1146,8 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
                       alpha: 0.12,
                     ),
                     child: Text(
-                      student.fullName.isNotEmpty
-                          ? student.fullName.trim()[0].toUpperCase()
+                      _formatStudentName(student).isNotEmpty
+                          ? _formatStudentName(student).trim()[0].toUpperCase()
                           : 'S',
                       style: TextStyle(
                         color: theme.colorScheme.primary,
@@ -1032,7 +1161,7 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          student.fullName,
+                          _formatStudentName(student),
                           style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
@@ -1536,9 +1665,10 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
     return _enrolledStudents.where((student) {
       if (_searchQuery.isNotEmpty) {
         final q = _searchQuery.toLowerCase();
-        final name = student.fullName.toLowerCase();
+        final name = _formatStudentName(student).toLowerCase();
+        final rawName = student.fullName.toLowerCase();
         final lrn = (student.lrn ?? '').toLowerCase();
-        if (!name.contains(q) && !lrn.contains(q)) return false;
+        if (!name.contains(q) && !rawName.contains(q) && !lrn.contains(q)) return false;
       }
 
       if (_selectedStatus != 'All') {
@@ -1610,13 +1740,18 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text(
-                          _activity.title,
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: theme.colorScheme.onSurface,
+                        Flexible(
+                          child: Text(
+                            _activity.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: theme.colorScheme.onSurface,
+                            ),
                           ),
                         ),
                         const SizedBox(width: 10),
@@ -1647,133 +1782,31 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
                     const SizedBox(height: 3),
                     Text(
                       '${_activity.subject} • ${_activity.section} • Term ${_activity.termNumber} • Max ${_activity.maxScore.toInt()} pts${_formatSlotBadge()}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: 12,
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
                     ),
-                    if ((_activity.instructions.trim().isNotEmpty
-                            ? _activity.instructions
-                            : _activity.description)
-                        .trim()
-                        .isNotEmpty) ...[
-                      const SizedBox(height: 4),
-                      ExpandableInstructionsText(
-                        text: _activity.instructions.trim().isNotEmpty
-                            ? _activity.instructions
-                            : _activity.description,
-                        style: TextStyle(
-                          fontSize: 12.5,
-                          color: theme.colorScheme.onSurface.withValues(
-                            alpha: 0.72,
-                          ),
-                        ),
-                      ),
-                    ],
                   ],
                 ),
               ),
-              // Teacher Attached Material Pill
-              if (_activity.storagePath != null ||
-                  _activity.attachmentName != null) ...[
-                OutlinedButton.icon(
-                  onPressed: _openTeacherAttachment,
-                  icon: Icon(
-                    (_activity.attachmentName ?? '').toLowerCase().endsWith(
-                          '.pdf',
-                        )
-                        ? Icons.picture_as_pdf
-                        : Icons.description,
-                    size: 16,
-                    color:
-                        (_activity.attachmentName ?? '').toLowerCase().endsWith(
-                          '.pdf',
-                        )
-                        ? const Color(0xFFDC2626)
-                        : const Color(0xFF2563EB),
-                  ),
-                  label: Text(
-                    'Material: ${_activity.attachmentName ?? 'View File'}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 6,
-                    ),
-                    visualDensity: VisualDensity.compact,
-                  ),
-                ),
-                const SizedBox(width: 10),
-              ],
-              // Deadline Pill & Update Button
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: isDark ? Colors.white10 : const Color(0xFFF1F5F9),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.12),
-                  ),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      _isInPerson ? Icons.event_outlined : Icons.schedule,
-                      size: 16,
-                      color:
-                          (!_isInPerson &&
-                              _currentDeadline.isBefore(DateTime.now()))
-                          ? const Color(0xFFDC2626)
-                          : theme.colorScheme.primary,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      _isInPerson
-                          ? 'Set Date: ${_formatDateOnly(_currentDeadline)}'
-                          : 'Deadline: ${_formatDateTime(_currentDeadline)}',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color:
-                            (!_isInPerson &&
-                                _currentDeadline.isBefore(DateTime.now()))
-                            ? const Color(0xFFDC2626)
-                            : theme.colorScheme.onSurface,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    TextButton.icon(
-                      onPressed: _showUpdateDeadlineDialog,
-                      icon: const Icon(Icons.edit_calendar, size: 15),
-                      label: Text(
-                        _isInPerson ? 'Update Date' : 'Update Deadline',
-                      ),
-                      style: TextButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 4,
-                        ),
-                        visualDensity: VisualDensity.compact,
-                        textStyle: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+              const SizedBox(width: 12),
+              // Teacher Attached Material Box (Rectangular, matches Deadline Box)
+              _buildAttachmentBox(isDark, theme),
+              const SizedBox(width: 10),
+              // Deadline Box & Update Button
+              _buildDeadlineContainer(isDark, theme),
             ],
           ),
         ],
       ),
     );
+
+    final rawInstructions = _activity.instructions.trim().isNotEmpty
+        ? _activity.instructions.trim()
+        : _activity.description.trim();
 
     final content = _isLoading
         ? const Center(child: CircularProgressIndicator())
@@ -1782,6 +1815,9 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                if (rawInstructions.isNotEmpty) ...[
+                  _buildInstructionsSection(rawInstructions, isDark, theme),
+                ],
                 // Top Filter & Search Bar (60-30-10 styling)
                 Row(
                   children: [
@@ -1799,7 +1835,7 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
                     const SizedBox(width: 8),
                     _statBadge(
                       'Graded: $gradedCount',
-                      theme.colorScheme.primary,
+                      AppTheme.catBlue,
                       isDark,
                     ),
                     const SizedBox(width: 8),
@@ -1949,11 +1985,13 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
                         ),
                       ),
                       const SizedBox(width: 8),
-                      const Expanded(
+                      Expanded(
                         flex: 3,
                         child: Text(
-                          'SUBMITTED WORK (PDF / DOC)',
-                          style: TextStyle(
+                          _isInPerson
+                              ? 'SUBMISSION'
+                              : 'SUBMITTED WORK (PDF / DOC)',
+                          style: const TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.bold,
                           ),
@@ -2171,6 +2209,292 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
     );
   }
 
+  Widget _buildAttachmentBox(bool isDark, ThemeData theme) {
+    final hasAttachment = (_activity.storagePath != null &&
+            _activity.storagePath!.trim().isNotEmpty) ||
+        (_activity.attachmentName != null &&
+            _activity.attachmentName!.trim().isNotEmpty);
+
+    if (hasAttachment) {
+      final fileName = _activity.attachmentName?.trim() ?? '';
+      final isPdf = fileName.toLowerCase().endsWith('.pdf');
+
+      return Tooltip(
+        message: fileName.isNotEmpty ? fileName : 'View Attached File',
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: _openTeacherAttachment,
+            borderRadius: BorderRadius.circular(8),
+            child: Container(
+              constraints: const BoxConstraints(minHeight: 38),
+              alignment: Alignment.center,
+              padding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 6,
+              ),
+              decoration: BoxDecoration(
+                color: isDark ? Colors.white10 : const Color(0xFFF1F5F9),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: isPdf
+                      ? const Color(0xFFDC2626).withValues(alpha: 0.28)
+                      : theme.colorScheme.primary.withValues(alpha: 0.28),
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    isPdf ? Icons.picture_as_pdf : Icons.description,
+                    size: 16,
+                    color: isPdf
+                        ? const Color(0xFFDC2626)
+                        : theme.colorScheme.primary,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'View Attached File',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: theme.colorScheme.onSurface,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Icon(
+                    Icons.open_in_new,
+                    size: 14,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      constraints: const BoxConstraints(minHeight: 38),
+      alignment: Alignment.center,
+      padding: const EdgeInsets.symmetric(
+        horizontal: 12,
+        vertical: 6,
+      ),
+      decoration: BoxDecoration(
+        color: isDark ? Colors.white10 : const Color(0xFFF1F5F9),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: theme.colorScheme.onSurface.withValues(alpha: 0.12),
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.attachment_outlined,
+            size: 16,
+            color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.45),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            'No Attached File',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.65),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDeadlineContainer(bool isDark, ThemeData theme) {
+    return Container(
+      constraints: const BoxConstraints(minHeight: 38),
+      alignment: Alignment.center,
+      padding: const EdgeInsets.symmetric(
+        horizontal: 12,
+        vertical: 6,
+      ),
+      decoration: BoxDecoration(
+        color: isDark ? Colors.white10 : const Color(0xFFF1F5F9),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: theme.colorScheme.onSurface.withValues(alpha: 0.12),
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            _isInPerson ? Icons.event_outlined : Icons.schedule,
+            size: 16,
+            color: (!_isInPerson && _currentDeadline.isBefore(DateTime.now()))
+                ? const Color(0xFFDC2626)
+                : theme.colorScheme.primary,
+          ),
+          const SizedBox(width: 8),
+          Text(
+            _isInPerson
+                ? 'Set Date: ${_formatDateOnly(_currentDeadline)}'
+                : 'Deadline: ${_formatDateTime(_currentDeadline)}',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: (!_isInPerson && _currentDeadline.isBefore(DateTime.now()))
+                  ? const Color(0xFFDC2626)
+                  : theme.colorScheme.onSurface,
+            ),
+          ),
+          const SizedBox(width: 10),
+          TextButton.icon(
+            onPressed: _showUpdateDeadlineDialog,
+            icon: const Icon(Icons.edit_calendar, size: 15),
+            label: Text(
+              _isInPerson ? 'Update Date' : 'Update Deadline',
+            ),
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 10,
+                vertical: 4,
+              ),
+              visualDensity: VisualDensity.compact,
+              textStyle: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInstructionsSection(
+    String instructions,
+    bool isDark,
+    ThemeData theme,
+  ) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: theme.colorScheme.onSurface.withValues(alpha: 0.1),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          InkWell(
+            onTap: () {
+              setState(() {
+                _isInstructionsExpanded = !_isInstructionsExpanded;
+              });
+            },
+            borderRadius: BorderRadius.circular(10),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.assignment_outlined,
+                    size: 16,
+                    color: theme.colorScheme.primary,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Instructions',
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                      color: theme.colorScheme.onSurface,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  if (!_isInstructionsExpanded)
+                    Expanded(
+                      child: Text(
+                        instructions.replaceAll(RegExp(r'\s+'), ' '),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    )
+                  else
+                    const Spacer(),
+                  const SizedBox(width: 8),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        _isInstructionsExpanded ? 'Hide' : 'Show More',
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w600,
+                          color: theme.colorScheme.primary,
+                        ),
+                      ),
+                      const SizedBox(width: 2),
+                      Icon(
+                        _isInstructionsExpanded
+                            ? Icons.keyboard_arrow_up
+                            : Icons.keyboard_arrow_down,
+                        size: 18,
+                        color: theme.colorScheme.primary,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (_isInstructionsExpanded) ...[
+            Divider(
+              height: 1,
+              thickness: 1,
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.08),
+            ),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 280),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 10,
+                ),
+                child: Scrollbar(
+                  controller: _instructionsScrollController,
+                  thumbVisibility: true,
+                  child: SingleChildScrollView(
+                    controller: _instructionsScrollController,
+                    child: SelectableText(
+                      instructions,
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        height: 1.45,
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.85,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   Widget _statBadge(String label, Color color, bool isDark) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -2194,11 +2518,11 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
     Color badgeBg;
     Color badgeText;
     switch (status) {
-      case 'Graded':
+      case 'Submitted':
         badgeBg = AppTheme.catGreen.withValues(alpha: 0.12);
         badgeText = AppTheme.catGreen;
         break;
-      case 'Submitted':
+      case 'Graded':
         badgeBg = AppTheme.catBlue.withValues(alpha: 0.12);
         badgeText = AppTheme.catBlue;
         break;
@@ -2274,8 +2598,8 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
             radius: 18,
             backgroundColor: theme.colorScheme.primary.withValues(alpha: 0.12),
             child: Text(
-              student.fullName.isNotEmpty
-                  ? student.fullName.trim()[0].toUpperCase()
+              _formatStudentName(student).isNotEmpty
+                  ? _formatStudentName(student).trim()[0].toUpperCase()
                   : 'S',
               style: TextStyle(
                 color: theme.colorScheme.primary,
@@ -2286,14 +2610,14 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
           ),
           const SizedBox(width: 12),
 
-          // Student Name & LRN
+          // Student Name & LRN (Lastname, Firstname M.I.)
           Expanded(
             flex: 3,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  student.fullName,
+                  _formatStudentName(student),
                   style: const TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 14,
@@ -2315,48 +2639,60 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
           // Status Badge / In-Person Selector
           SizedBox(
             width: 100,
-            child: _isInPerson
+            child: (_isInPerson && status != 'Graded')
                 ? Container(
                     height: 32,
                     padding: const EdgeInsets.symmetric(horizontal: 8),
                     decoration: BoxDecoration(
-                      color: (status == 'Graded' || status == 'Submitted')
+                      color: (status == 'Submitted' || status == 'Late')
                           ? AppTheme.catGreen.withValues(alpha: 0.12)
                           : const Color(0xFFDC2626).withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(
-                        color: (status == 'Graded' || status == 'Submitted')
+                        color: (status == 'Submitted' || status == 'Late')
                             ? AppTheme.catGreen.withValues(alpha: 0.3)
                             : const Color(0xFFDC2626).withValues(alpha: 0.3),
                       ),
                     ),
                     child: DropdownButtonHideUnderline(
                       child: DropdownButton<String>(
-                        value: (status == 'Graded' || status == 'Submitted')
+                        value: (status == 'Submitted' || status == 'Late')
                             ? 'Submitted'
                             : 'Missing',
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.bold,
-                          color: (status == 'Graded' || status == 'Submitted')
+                          color: (status == 'Submitted' || status == 'Late')
                               ? AppTheme.catGreen
                               : const Color(0xFFDC2626),
                         ),
                         items: const [
                           DropdownMenuItem(
                             value: 'Submitted',
-                            child: Text('Submitted'),
+                            child: Text(
+                              'Submitted',
+                              style: TextStyle(
+                                color: AppTheme.catGreen,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                           ),
                           DropdownMenuItem(
                             value: 'Missing',
-                            child: Text('Missing'),
+                            child: Text(
+                              'Missing',
+                              style: TextStyle(
+                                color: Color(0xFFDC2626),
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                           ),
                         ],
                         onChanged: (val) {
                           if (val != null) {
                             _updateInPersonStatus(
                               student,
-                              val == 'Submitted' ? 'submitted' : 'missing',
+                              val.toLowerCase(),
                             );
                           }
                         },

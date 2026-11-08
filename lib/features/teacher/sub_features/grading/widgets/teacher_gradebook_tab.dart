@@ -679,6 +679,69 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
       payload,
     );
     TeacherGradebookTab.classworkSyncNotifier.value++;
+    AppDataCache.instance.invalidatePrefix('student_dashboard_');
+    unawaited(_syncScoresToClassworkSubmissions(offeringId, term, payload));
+  }
+
+  Future<void> _syncScoresToClassworkSubmissions(
+    String offeringId,
+    int term,
+    Map<String, dynamic> payload,
+  ) async {
+    try {
+      final client = SupabaseService().client;
+      final items = await client
+          .from('classwork_items')
+          .select('id, grading_category, gradebook_column_index')
+          .eq('subject_offering_id', offeringId)
+          .eq('term_number', term)
+          .eq('is_published', true)
+          .eq('is_archived', false);
+
+      final itemList = items as List? ?? [];
+      if (itemList.isEmpty) return;
+
+      final scoresMap = payload['scores'] as Map<String, dynamic>? ?? {};
+      final upsertRows = <Map<String, dynamic>>[];
+
+      for (final item in itemList) {
+        final itemId = item['id']?.toString();
+        final cat = item['grading_category']?.toString();
+        final colIdx = (item['gradebook_column_index'] as num?)?.toInt();
+        if (itemId == null || cat == null || colIdx == null) continue;
+
+        final colKey = cat == 'ex'
+            ? (colIdx == 1 ? 'st1' : (colIdx == 2 ? 'st2' : 'te'))
+            : colIdx.toString();
+
+        for (final entry in scoresMap.entries) {
+          final studentId = entry.key;
+          final studentCats = entry.value as Map<String, dynamic>? ?? {};
+          final catScores = studentCats[cat] as Map<String, dynamic>? ?? {};
+          if (catScores.containsKey(colKey)) {
+            final scoreVal = catScores[colKey];
+            if (scoreVal != null && scoreVal is num) {
+              upsertRows.add({
+                'classwork_id': itemId,
+                'student_id': studentId,
+                'score': scoreVal.toDouble(),
+                'status': 'graded',
+                'updated_at': DateTime.now().toUtc().toIso8601String(),
+              });
+            }
+          }
+        }
+      }
+
+      if (upsertRows.isNotEmpty) {
+        await client
+            .from('student_classwork_submissions')
+            .upsert(upsertRows, onConflict: 'classwork_id,student_id');
+        AppDataCache.instance.invalidatePrefix('student_dashboard_');
+      }
+    } catch (e) {
+      debugPrint('Notice on syncing gradebook scores to submissions: $e');
+    }
   }
 
   Map<String, dynamic> _buildPersistedTermGrade(String studentId, int term) {

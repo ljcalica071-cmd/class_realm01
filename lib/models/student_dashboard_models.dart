@@ -204,6 +204,15 @@ class StudentClassworkModel {
       parsedAttachment = StudentAttachmentModel.fromJson(
         Map<String, dynamic>.from(json['attachment'] as Map),
       );
+    } else if (json['storage_path'] != null &&
+        json['storage_path'].toString().trim().isNotEmpty) {
+      parsedAttachment = StudentAttachmentModel(
+        id: json['id']?.toString() ?? '',
+        fileName: json['file_name']?.toString() ?? 'Teacher Attached File',
+        mimeType: json['mime_type']?.toString(),
+        fileSizeBytes: (json['file_size_bytes'] as num?)?.toInt(),
+        signedUrl: json['storage_path']?.toString(),
+      );
     }
 
     StudentAttachmentModel? parsedStudentSubmission;

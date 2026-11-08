@@ -43,6 +43,13 @@ class _GradebookGridCellState extends State<GradebookGridCell> {
   void _onTextChanged(String text) {
     _debounceTimer?.cancel();
     if (widget.isHpsCell) {
+      if (text.trim().isEmpty) {
+        // While user is actively typing/deleting an HPS value, do NOT emit
+        // an empty string via debounce. This prevents premature "Linked to Classwork"
+        // dialogs from popping up when the user backspaces a digit to replace it.
+        if (mounted) setState(() {});
+        return;
+      }
       _debounceTimer = Timer(const Duration(milliseconds: 220), () {
         if (mounted) {
           widget.onChanged(text);
@@ -54,6 +61,14 @@ class _GradebookGridCellState extends State<GradebookGridCell> {
     if (mounted) {
       setState(() {});
       widget.onChanged(text);
+    }
+  }
+
+  void _onFieldSubmitted(String text) {
+    _debounceTimer?.cancel();
+    final trimmed = text.trim();
+    if (mounted) {
+      widget.onChanged(trimmed);
     }
   }
 
@@ -187,6 +202,7 @@ class _GradebookGridCellState extends State<GradebookGridCell> {
               focusNode: _focusNode,
               enabled: widget.isEnabled,
               onChanged: _onTextChanged,
+              onSubmitted: _onFieldSubmitted,
               textAlign: TextAlign.center,
               textAlignVertical: TextAlignVertical.center,
               keyboardType: TextInputType.number,

@@ -62,7 +62,7 @@ void main() {
       await tester.tap(find.text('Add Subject'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Add Subject & Sections'), findsOneWidget);
+      expect(find.text('Add New Subject & Sections'), findsOneWidget);
       expect(find.text('Save Subject'), findsOneWidget);
       expect(find.text('SUBJECT TERM CONFIGURATION'), findsOneWidget);
       expect(find.text('Term Block (Active Term)'), findsOneWidget);

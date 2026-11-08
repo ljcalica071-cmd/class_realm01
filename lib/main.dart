@@ -261,7 +261,7 @@ class _ClassRealmAppState extends State<ClassRealmApp> {
   UserModel? _bootstrappedUser;
   String? _targetRoute;
   late final Map<String, WidgetBuilder> _appRoutes = _buildAppRoutes();
-  late String _initialDestination;
+  String _initialDestination = AppRoutes.login;
 
   @override
   void initState() {
@@ -619,7 +619,9 @@ class _ClassRealmAppState extends State<ClassRealmApp> {
     return ValueListenableBuilder<ThemeMode>(
       valueListenable: AppTheme.themeModeNotifier,
       builder: (context, themeMode, _) {
-        final initialDestination = _initialDestination;
+        final initialDestination = _initialDestination.isNotEmpty
+            ? _initialDestination
+            : _determineInitialDestination();
         final appRoutes = _appRoutes;
 
         return MaterialApp(

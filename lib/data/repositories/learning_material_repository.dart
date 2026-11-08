@@ -362,6 +362,7 @@ abstract class LearningMaterialRepository {
   Future<List<ClassRealmFolder>> getFolders({
     required String subjectOfferingId,
     String? parentFolderId,
+    bool studentOnly = false,
   });
 
   Future<ClassRealmFolder> createFolder({

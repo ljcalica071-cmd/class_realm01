@@ -189,12 +189,44 @@ class StudentDashboardRepository {
       List<Map<String, dynamic>> classworkList = [];
       if (offeringIds.isNotEmpty) {
         try {
-          final submissionRows = await client
-              .from('student_classwork_submissions')
-              .select('classwork_id, status, score, feedback, submitted_at')
-              .eq('student_id', uid);
+          List<dynamic> submissionRows = [];
+          try {
+            final res = await client
+                .from('student_classwork_submissions')
+                .select('''
+                  id,
+                  classwork_id,
+                  status,
+                  score,
+                  feedback,
+                  submitted_at,
+                  submission_attachments (
+                    id,
+                    file_name,
+                    storage_url,
+                    file_size_bytes,
+                    mime_type
+                  )
+                ''')
+                .eq('student_id', uid);
+            submissionRows = res as List? ?? [];
+          } catch (subErr) {
+            debugPrint(
+              'Notice fetching student submissions with attachments: $subErr. Retrying without attachments...',
+            );
+            try {
+              final res = await client
+                  .from('student_classwork_submissions')
+                  .select('id, classwork_id, status, score, feedback, submitted_at')
+                  .eq('student_id', uid);
+              submissionRows = res as List? ?? [];
+            } catch (fallbackErr) {
+              debugPrint('Notice on fallback submissions fetch: $fallbackErr');
+            }
+          }
+
           final submissionsByClassworkId = <String, Map<String, dynamic>>{};
-          for (final row in submissionRows as List) {
+          for (final row in submissionRows) {
             final submission = Map<String, dynamic>.from(row as Map);
             final classworkId = submission['classwork_id']?.toString();
             if (classworkId != null) {
@@ -208,12 +240,21 @@ class StudentDashboardRepository {
                 id,
                 subject_offering_id,
                 classwork_type,
+                grading_category,
                 title,
                 description,
                 instructions,
                 assigned_at,
                 deadline,
                 max_score,
+                completion_mode,
+                storage_path,
+                file_name,
+                file_size_bytes,
+                mime_type,
+                term_number,
+                gradebook_column_index,
+                allow_late_submission,
                 subject_offerings (
                   subjects ( subject_name ),
                   sections ( section_name, grade_level )
@@ -230,6 +271,43 @@ class StudentDashboardRepository {
             final s = off['subjects'] as Map<String, dynamic>? ?? {};
             final sec = off['sections'] as Map<String, dynamic>? ?? {};
             final submission = submissionsByClassworkId[m['id']?.toString()];
+
+            Map<String, dynamic>? studentSubMap;
+            if (submission != null) {
+              final attList =
+                  submission['submission_attachments'] as List? ?? [];
+              final firstAtt = attList.isNotEmpty && attList.first is Map
+                  ? Map<String, dynamic>.from(attList.first as Map)
+                  : null;
+              studentSubMap = {
+                'id': submission['id']?.toString() ?? '',
+                'score': submission['score'],
+                'feedback': submission['feedback'],
+                'submitted_at': submission['submitted_at'],
+                'status': submission['status'],
+                if (firstAtt != null) ...{
+                  'file_name': firstAtt['file_name'],
+                  'storage_path': firstAtt['storage_url'],
+                  'signed_url': firstAtt['storage_url'],
+                  'file_size_bytes': firstAtt['file_size_bytes'],
+                  'mime_type': firstAtt['mime_type'],
+                },
+              };
+            }
+
+            final hasAttachment = m['storage_path'] != null &&
+                m['storage_path'].toString().trim().isNotEmpty;
+            final attachmentMap = hasAttachment
+                ? <String, dynamic>{
+                    'id': m['id']?.toString() ?? '',
+                    'file_name':
+                        m['file_name']?.toString() ?? 'Teacher Attached File',
+                    'mime_type': m['mime_type']?.toString(),
+                    'file_size_bytes': (m['file_size_bytes'] as num?)?.toInt(),
+                    'signed_url': m['storage_path']?.toString(),
+                  }
+                : null;
+
             return {
               'id': m['id']?.toString() ?? '',
               'subject_offering_id': m['subject_offering_id']?.toString() ?? '',
@@ -243,13 +321,24 @@ class StudentDashboardRepository {
               'deadline': m['deadline']?.toString(),
               'max_score': m['max_score'] is num ? m['max_score'] : 100,
               'completion_mode': m['completion_mode']?.toString() ?? 'online',
+              'storage_path': m['storage_path']?.toString(),
+              'file_name': m['file_name']?.toString(),
+              'file_size_bytes': (m['file_size_bytes'] as num?)?.toInt(),
+              'mime_type': m['mime_type']?.toString(),
+              'term_number': (m['term_number'] as num?)?.toInt() ?? 1,
+              'gradebook_column_index':
+                  (m['gradebook_column_index'] as num?)?.toInt(),
               'subject_name': s['subject_name']?.toString() ?? '',
               'section_name': sec['section_name']?.toString() ?? '',
               'grade_level': sec['grade_level']?.toString() ?? '',
-              'status': submission?['status']?.toString() ?? 'pending',
+              'status': submission?['score'] != null
+                  ? 'graded'
+                  : (submission?['status']?.toString() ?? 'pending'),
               'score': submission?['score'],
               'feedback': submission?['feedback'],
               'submitted_at': submission?['submitted_at'],
+              if (attachmentMap != null) ...{'attachment': attachmentMap},
+              if (studentSubMap != null) ...{'submission': studentSubMap},
             };
           }).toList();
 

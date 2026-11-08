@@ -1,7 +1,9 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:class_realm/core/services/app_data_cache.dart';
 import 'package:class_realm/core/services/supabase_service.dart';
+import 'package:class_realm/core/theme/app_theme.dart';
 import 'package:class_realm/models/academic_models.dart';
 import 'package:class_realm/models/student_dashboard_models.dart';
 import 'package:class_realm/features/student/shared/widgets/student_submit_work_dialog.dart';
@@ -26,7 +28,7 @@ class StudentClassworkCard extends StatelessWidget {
 
   Future<void> _openAttachment(BuildContext context, String? signedUrl) async {
     if (_isOpeningAttachment) return;
-    if (signedUrl == null || signedUrl.isEmpty) {
+    if (signedUrl == null || signedUrl.trim().isEmpty) {
       ScaffoldMessenger.of(context).clearSnackBars();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -38,29 +40,55 @@ class StudentClassworkCard extends StatelessWidget {
 
     _isOpeningAttachment = true;
     try {
-      String cleanPath = signedUrl.trim();
-      if (cleanPath.contains('/classwork-materials/')) {
-        cleanPath = cleanPath.split('/classwork-materials/').last;
-      } else if (cleanPath.contains('/classwork%20materials/')) {
-        cleanPath = cleanPath.split('/classwork%20materials/').last;
-      } else if (cleanPath.contains('/learning_materials/')) {
-        cleanPath = cleanPath.split('/learning_materials/').last;
-      }
-      if (cleanPath.contains('?')) {
-        cleanPath = cleanPath.split('?').first;
-      }
-      cleanPath = Uri.decodeComponent(cleanPath);
+      final rawUrl = signedUrl.trim();
+      String resolvedUrl = rawUrl;
 
-      final resolvedUrl = await SupabaseService().adminClient.storage
-          .from('classwork-materials')
-          .createSignedUrl(cleanPath, 60 * 60);
+      final isFullHttpUrl =
+          rawUrl.startsWith('http://') || rawUrl.startsWith('https://');
+      final alreadySigned =
+          rawUrl.contains('token=') || rawUrl.contains('Signature=');
+
+      if (!isFullHttpUrl || !alreadySigned) {
+        String cleanPath = rawUrl;
+        if (cleanPath.contains('/classwork-materials/')) {
+          cleanPath = cleanPath.split('/classwork-materials/').last;
+        } else if (cleanPath.contains('/classwork%20materials/')) {
+          cleanPath = cleanPath.split('/classwork%20materials/').last;
+        } else if (cleanPath.contains('/learning_materials/')) {
+          cleanPath = cleanPath.split('/learning_materials/').last;
+        }
+        if (cleanPath.contains('?')) {
+          cleanPath = cleanPath.split('?').first;
+        }
+        cleanPath = Uri.decodeComponent(cleanPath);
+
+        try {
+          resolvedUrl = await SupabaseService().adminClient.storage
+              .from('classwork-materials')
+              .createSignedUrl(cleanPath, 60 * 60);
+        } catch (storageErr) {
+          debugPrint('Storage createSignedUrl notice: $storageErr');
+          if (isFullHttpUrl) {
+            resolvedUrl = rawUrl;
+          } else {
+            rethrow;
+          }
+        }
+      }
 
       bool launched = false;
       if (urlLauncher != null) {
         launched = await urlLauncher!(resolvedUrl);
       } else {
         final uri = Uri.parse(resolvedUrl);
-        launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+        if (kIsWeb) {
+          launched = await launchUrl(uri, webOnlyWindowName: '_blank');
+        } else {
+          launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+          if (!launched) {
+            launched = await launchUrl(uri, mode: LaunchMode.platformDefault);
+          }
+        }
       }
 
       if (!launched && context.mounted) {
@@ -101,15 +129,16 @@ class StudentClassworkCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isGraded = classwork.status == 'graded' || classwork.score != null;
     final isSubmitted =
-        classwork.status == 'submitted' || classwork.status == 'graded';
+        isGraded || classwork.status == 'submitted';
     final isOverdue =
         !isSubmitted &&
         classwork.deadline != null &&
         classwork.deadline!.isBefore(DateTime.now());
     final isMissing =
         !isSubmitted && (isOverdue || classwork.status == 'missing');
-    final status = classwork.status == 'graded'
+    final status = isGraded
         ? 'Graded'
         : classwork.status == 'submitted'
         ? 'Submitted'
@@ -118,8 +147,10 @@ class StudentClassworkCard extends StatelessWidget {
         : isMissing
         ? 'Missing'
         : 'Assigned';
-    final statusColor = classwork.status == 'graded'
-        ? const Color(0xFF0F8A48)
+    final statusColor = isGraded
+        ? AppTheme.catBlue
+        : classwork.status == 'submitted'
+        ? AppTheme.catGreen
         : isMissing
         ? const Color(0xFFDC2626)
         : theme.colorScheme.primary;
@@ -173,9 +204,6 @@ class StudentClassworkCard extends StatelessWidget {
                       Text(
                         [
                           classwork.subjectName,
-                          classwork.sectionName,
-                          if (classwork.gradeLevel.isNotEmpty)
-                            'Grade ${classwork.gradeLevel}',
                           classwork.type == 'performance_task'
                               ? 'Performance Task${classwork.gradebookColumnIndex != null ? ' (PT ${classwork.gradebookColumnIndex})' : ''}'
                               : 'Activity${classwork.gradebookColumnIndex != null ? ' (WW ${classwork.gradebookColumnIndex})' : ''}',
@@ -235,7 +263,9 @@ class StudentClassworkCard extends StatelessWidget {
             ],
 
             // 1. TEACHER'S ATTACHED REFERENCE MATERIAL (PDF or DOC)
-            if (classwork.attachment != null) ...[
+            if (classwork.attachment != null &&
+                classwork.attachment!.fileName.trim().isNotEmpty &&
+                (classwork.attachment!.signedUrl?.trim().isNotEmpty ?? false)) ...[
               const SizedBox(height: 12),
               _buildDocumentCard(
                 context: context,
@@ -244,7 +274,7 @@ class StudentClassworkCard extends StatelessWidget {
                 fileName: classwork.attachment!.fileName,
                 fileSizeBytes: classwork.attachment!.fileSizeBytes,
                 signedUrl: classwork.attachment!.signedUrl,
-                buttonLabel: 'Open Material',
+                buttonLabel: 'View Attached File',
               ),
             ],
 
@@ -277,7 +307,14 @@ class StudentClassworkCard extends StatelessWidget {
                       ? 'No deadline'
                       : 'Due ${_formatDate(classwork.deadline!)}',
                 ),
-                if (classwork.maxScore > 0)
+                if (classwork.score != null)
+                  _Detail(
+                    icon: Icons.grade_rounded,
+                    text: 'Score: ${_formatScore(classwork.score!)} / ${_formatScore(classwork.maxScore)} pts',
+                    color: AppTheme.catBlue,
+                    fontWeight: FontWeight.bold,
+                  )
+                else if (classwork.maxScore > 0)
                   _Detail(
                     icon: Icons.stars_outlined,
                     text: '${_formatScore(classwork.maxScore)} points',
@@ -481,39 +518,57 @@ class StudentClassworkCard extends StatelessWidget {
                 ),
               ],
               // Action Buttons: Turn In Work / Resubmit Work
-              if (!isOverdue) ...[
+              if (!isOverdue && !isGraded) ...[
                 const SizedBox(height: 12),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (isSubmitted && classwork.status != 'graded')
-                        OutlinedButton.icon(
-                          onPressed: () {
-                            StudentSubmitWorkDialog.show(
-                              context,
-                              classwork: classwork,
-                              onSubmitted: () => onRefresh?.call(),
-                            );
-                          },
-                          icon: const Icon(Icons.sync, size: 16),
-                          label: const Text('Resubmit / Update File'),
-                        )
-                      else if (!isSubmitted)
-                        FilledButton.icon(
-                          onPressed: () {
-                            StudentSubmitWorkDialog.show(
-                              context,
-                              classwork: classwork,
-                              onSubmitted: () => onRefresh?.call(),
-                            );
-                          },
-                          icon: const Icon(Icons.upload_file, size: 16),
-                          label: const Text('Turn In Work (PDF/DOC)'),
-                        ),
-                    ],
-                  ),
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final isCompact = constraints.maxWidth < 360;
+                    final button = isSubmitted && !isGraded
+                        ? OutlinedButton.icon(
+                            onPressed: () {
+                              StudentSubmitWorkDialog.show(
+                                context,
+                                classwork: classwork,
+                                onSubmitted: () => onRefresh?.call(),
+                              );
+                            },
+                            icon: const Icon(Icons.sync, size: 16),
+                            label: Text(
+                              isCompact
+                                  ? 'Resubmit File'
+                                  : 'Resubmit / Update File',
+                            ),
+                          )
+                        : !isSubmitted
+                            ? FilledButton.icon(
+                                onPressed: () {
+                                  StudentSubmitWorkDialog.show(
+                                    context,
+                                    classwork: classwork,
+                                    onSubmitted: () => onRefresh?.call(),
+                                  );
+                                },
+                                icon: const Icon(Icons.upload_file, size: 16),
+                                label: Text(
+                                  isCompact
+                                      ? 'Turn In Work'
+                                      : 'Turn In Work (PDF/DOC)',
+                                ),
+                              )
+                            : const SizedBox.shrink();
+
+                    if (isCompact) {
+                      return SizedBox(
+                        width: double.infinity,
+                        child: button,
+                      );
+                    }
+
+                    return Align(
+                      alignment: Alignment.centerRight,
+                      child: button,
+                    );
+                  },
                 ),
               ],
             ],
@@ -522,30 +577,55 @@ class StudentClassworkCard extends StatelessWidget {
               const SizedBox(height: 12),
               Container(
                 padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 8,
+                  horizontal: 14,
+                  vertical: 10,
                 ),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF0F8A48).withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(8),
+                  color: AppTheme.catBlue.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(10),
                   border: Border.all(
-                    color: const Color(0xFF0F8A48).withValues(alpha: 0.25),
+                    color: AppTheme.catBlue.withValues(alpha: 0.3),
+                    width: 1.2,
                   ),
                 ),
                 child: Row(
                   children: [
-                    const Icon(
-                      Icons.check_circle,
-                      size: 18,
-                      color: Color(0xFF0F8A48),
+                    Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: AppTheme.catBlue.withValues(alpha: 0.15),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.grade_rounded,
+                        size: 20,
+                        color: AppTheme.catBlue,
+                      ),
                     ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Recorded Score: ${_formatScore(classwork.score!)} / ${_formatScore(classwork.maxScore)} pts',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14,
-                        color: Color(0xFF0F8A48),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Score Recorded by Teacher',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: AppTheme.catBlue,
+                              letterSpacing: 0.3,
+                            ),
+                          ),
+                          const SizedBox(height: 1),
+                          Text(
+                            '${_formatScore(classwork.score!)} / ${_formatScore(classwork.maxScore)} pts',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 16,
+                              color: AppTheme.catBlue,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
@@ -604,107 +684,132 @@ class StudentClassworkCard extends StatelessWidget {
                 : theme.colorScheme.onSurface.withValues(alpha: 0.12),
           ),
         ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: accentColor.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(iconData, size: 24, color: accentColor),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final isVeryNarrow = constraints.maxWidth < 340;
+            final isNarrow = constraints.maxWidth < 420;
+
+            final String? actionLabel = isVeryNarrow
+                ? null
+                : isNarrow
+                    ? (buttonLabel.contains('Work') ? 'View Work' : 'View File')
+                    : buttonLabel;
+
+            return Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: accentColor.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(iconData, size: 20, color: accentColor),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 1,
-                        ),
-                        decoration: BoxDecoration(
-                          color: accentColor.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          isPdf ? 'PDF' : 'DOC',
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                            color: accentColor,
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 1,
+                            ),
+                            decoration: BoxDecoration(
+                              color: accentColor.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              isPdf ? 'PDF' : 'DOC',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: accentColor,
+                              ),
+                            ),
                           ),
+                          const SizedBox(width: 6),
+                          Flexible(
+                            child: Text(
+                              title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        fileName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12.5,
                         ),
                       ),
-                      const SizedBox(width: 6),
+                      const SizedBox(height: 1),
                       Text(
-                        title,
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
+                        subtitle ??
+                            (fileSizeBytes != null
+                                ? '${_formatFileSize(fileSizeBytes)} • Click to open'
+                                : 'Click to open document'),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodySmall?.copyWith(
                           color: theme.colorScheme.onSurfaceVariant,
+                          fontSize: 11,
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 2),
-                  Text(
-                    fileName,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
-                    ),
-                  ),
-                  const SizedBox(height: 1),
-                  Text(
-                    subtitle ??
-                        (fileSizeBytes != null
-                            ? '${_formatFileSize(fileSizeBytes)} • Click to open'
-                            : 'Click to open document'),
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                      fontSize: 11,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.primary.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(
-                  color: theme.colorScheme.primary.withValues(alpha: 0.2),
                 ),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    buttonLabel,
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      color: theme.colorScheme.primary,
+                const SizedBox(width: 8),
+                Container(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: actionLabel != null ? 8 : 6,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primary.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(
+                      color: theme.colorScheme.primary.withValues(alpha: 0.2),
                     ),
                   ),
-                  const SizedBox(width: 4),
-                  Icon(
-                    Icons.open_in_new,
-                    size: 14,
-                    color: theme.colorScheme.primary,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (actionLabel != null) ...[
+                        Text(
+                          actionLabel,
+                          style: TextStyle(
+                            fontSize: isNarrow ? 11 : 12,
+                            fontWeight: FontWeight.bold,
+                            color: theme.colorScheme.primary,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                      ],
+                      Icon(
+                        Icons.open_in_new,
+                        size: 13,
+                        color: theme.colorScheme.primary,
+                      ),
+                    ],
                   ),
-                ],
-              ),
-            ),
-          ],
+                ),
+              ],
+            );
+          },
         ),
       ),
     );
@@ -990,19 +1095,33 @@ class _StatusPill extends StatelessWidget {
 }
 
 class _Detail extends StatelessWidget {
-  const _Detail({required this.icon, required this.text});
+  const _Detail({
+    required this.icon,
+    required this.text,
+    this.color,
+    this.fontWeight,
+  });
 
   final IconData icon;
   final String text;
+  final Color? color;
+  final FontWeight? fontWeight;
 
   @override
   Widget build(BuildContext context) {
+    final defaultColor = Theme.of(context).colorScheme.primary;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 16, color: Theme.of(context).colorScheme.primary),
+        Icon(icon, size: 16, color: color ?? defaultColor),
         const SizedBox(width: 5),
-        Text(text, style: Theme.of(context).textTheme.bodySmall),
+        Text(
+          text,
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: color,
+                fontWeight: fontWeight,
+              ),
+        ),
       ],
     );
   }

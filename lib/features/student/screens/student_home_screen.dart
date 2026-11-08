@@ -1112,26 +1112,6 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
                               ),
                             ],
                           ),
-                          const SizedBox(height: 4),
-                          Row(
-                            children: [
-                              Icon(
-                                Icons.meeting_room_outlined,
-                                size: 15,
-                                color: theme.colorScheme.onSurfaceVariant,
-                              ),
-                              const SizedBox(width: 4),
-                              Flexible(
-                                child: Text(
-                                  '${item.sectionName.isNotEmpty ? item.sectionName : "Section"} · Grade ${item.gradeLevel}',
-                                  overflow: TextOverflow.ellipsis,
-                                  style: theme.textTheme.bodySmall?.copyWith(
-                                    color: theme.colorScheme.onSurfaceVariant,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
                         ],
                       ),
                     ),

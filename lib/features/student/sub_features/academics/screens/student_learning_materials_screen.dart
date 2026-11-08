@@ -1,12 +1,16 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:loading_animation_widget/loading_animation_widget.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+import 'package:class_realm/core/services/supabase_service.dart';
+import 'package:class_realm/core/utils/file_download_helper.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/data/repositories/learning_material_repository.dart';
 import 'package:class_realm/data/repositories/supabase_learning_material_repository.dart';
 import 'package:class_realm/shared/widgets/shared_widgets.dart';
+import 'package:class_realm/widgets/common/expandable_instructions_text.dart';
 
 class StudentLearningMaterialsScreen extends StatefulWidget {
   const StudentLearningMaterialsScreen({super.key});
@@ -24,21 +28,19 @@ class _StudentLearningMaterialsScreenState
   bool _isLoading = true;
   String? _errorMessage;
 
-  // Toggle: Current Classes vs Past / Archived Classes (Edge Case #17)
-  bool _showArchivedClasses = false;
-
   // Enrolled subjects & active selection
   List<Map<String, dynamic>> _allEnrolledSubjects = [];
   Map<String, dynamic>? _selectedSubject;
 
-  // Folders & Materials
+  // Folders & Materials within active subject
   List<ClassRealmFolder> _folders = [];
   List<ClassRealmMaterial> _materials = [];
   ClassRealmFolder? _currentFolder;
   final List<ClassRealmFolder> _folderStack = [];
 
-  // In-flight download lock for debouncing (Edge Case #13 & #28)
+  // In-flight locks for debouncing
   final Set<String> _downloadingIds = {};
+  final Set<String> _openingIds = {};
 
   @override
   void initState() {
@@ -46,16 +48,8 @@ class _StudentLearningMaterialsScreenState
     _loadStudentEnrolledClasses();
   }
 
-  // Filter subjects based on Current vs Past classes toggle
-  List<Map<String, dynamic>> get _filteredSubjects {
-    return _allEnrolledSubjects.where((sub) {
-      final isArchived = sub['is_archived'] == true;
-      return _showArchivedClasses ? isArchived : !isArchived;
-    }).toList();
-  }
-
-  Future<void> _refreshMaterials() async {
-    if (_allEnrolledSubjects.isEmpty || _selectedSubject == null) {
+  Future<void> _refreshScreen() async {
+    if (_selectedSubject == null) {
       await _loadStudentEnrolledClasses(silent: true);
     } else {
       await _loadMaterialsForOffering(silent: true);
@@ -97,6 +91,7 @@ class _StudentLearningMaterialsScreenState
                 id, section_name, grade_level,
                 school_years ( id, school_year, is_current, is_archived )
               ),
+              teacher_profiles ( first_name, last_name ),
               terms ( id, term_name, term_number )
             )
           ''')
@@ -120,11 +115,43 @@ class _StudentLearningMaterialsScreenState
         final sec = offering['sections'] as Map<String, dynamic>? ?? {};
         final sy = sec['school_years'] as Map<String, dynamic>? ?? {};
         final term = offering['terms'] as Map<String, dynamic>? ?? {};
+        final teacher = offering['teacher_profiles'] as Map<String, dynamic>?;
 
         final isSyCurrent = sy['is_current'] == true;
         final isOfferingArchived =
             offering['is_archived'] == true || sy['is_archived'] == true;
         final isPastOrArchived = !isSyCurrent || isOfferingArchived;
+
+        // Skip archived or inactive school years unless none available
+        if (isPastOrArchived) continue;
+
+        // Clean section name (prevent "Section Section 1")
+        final rawSec = sec['section_name']?.toString().trim() ?? '';
+        final cleanSec = rawSec.isEmpty
+            ? 'Section'
+            : rawSec.toLowerCase().startsWith('section')
+                ? rawSec
+                : 'Section $rawSec';
+
+        // Teacher full name
+        String teacherName = '';
+        if (teacher != null) {
+          final first = teacher['first_name']?.toString().trim() ?? '';
+          final last = teacher['last_name']?.toString().trim() ?? '';
+          if (first.isNotEmpty || last.isNotEmpty) {
+            teacherName = '$first $last'.trim();
+          }
+        }
+
+        // Clean term name strictly using "Term"
+        final termNum = term['term_number'] ?? offering['term_block'];
+        final cleanTerm = termNum != null
+            ? 'Term $termNum'
+            : (term['term_name']?.toString().replaceAll(
+                    RegExp(r'quarter', caseSensitive: false),
+                    'Term',
+                  ) ??
+                'Term');
 
         mapped.add({
           'offering_id':
@@ -134,32 +161,41 @@ class _StudentLearningMaterialsScreenState
           'subject_name': sub['subject_name']?.toString() ?? 'Subject',
           'subject_code': sub['subject_code']?.toString() ?? '',
           'grade_level': sub['grade_level'] ?? sec['grade_level'] ?? 11,
-          'section_name': sec['section_name']?.toString() ?? 'Section',
-          'term_name': term['term_name']?.toString() ?? 'Term',
+          'section_name': cleanSec,
+          'teacher_name': teacherName,
+          'term_name': cleanTerm,
           'school_year': sy['school_year']?.toString() ?? '',
           'is_irregular': e['is_irregular'] == true,
-          'is_archived': isPastOrArchived,
         });
       }
+
+      // Sort alphabetically by subject code / name
+      mapped.sort((a, b) {
+        final codeComp = (a['subject_code'] as String).compareTo(
+          b['subject_code'] as String,
+        );
+        if (codeComp != 0) return codeComp;
+        return (a['subject_name'] as String).compareTo(
+          b['subject_name'] as String,
+        );
+      });
 
       if (!mounted) return;
       setState(() {
         _allEnrolledSubjects = mapped;
-        final available = _filteredSubjects;
-        final previousId = _selectedSubject?['offering_id'];
-        _selectedSubject = available.firstWhere(
-          (s) => s['offering_id'] == previousId,
-          orElse: () => available.isNotEmpty ? available.first : {},
-        );
-        if (_selectedSubject != null && _selectedSubject!.isEmpty) {
-          _selectedSubject = null;
+        // Keep selected subject if it still exists in the refreshed list
+        if (_selectedSubject != null) {
+          final previousId = _selectedSubject!['offering_id'];
+          final match = _allEnrolledSubjects.where(
+            (s) => s['offering_id'] == previousId,
+          );
+          _selectedSubject = match.isNotEmpty ? match.first : null;
         }
+        _isLoading = false;
       });
 
       if (_selectedSubject != null) {
         await _loadMaterialsForOffering(silent: silent);
-      } else {
-        setState(() => _isLoading = false);
       }
     } catch (e) {
       if (!mounted) return;
@@ -188,18 +224,18 @@ class _StudentLearningMaterialsScreenState
     }
 
     try {
-      // 1. Fetch folders for this offering
+      // 1. Fetch folders for this offering (strictly counting student-visible materials)
       final allFolders = await _materialRepo.getFolders(
         subjectOfferingId: offeringId,
         parentFolderId: _currentFolder?.id,
+        studentOnly: true,
       );
 
-      // Strict ancestor folder visibility: only show folders that are visible & not archived
       final visibleFolders = allFolders
           .where((f) => f.isVisibleToStudents && !f.isArchived)
           .toList();
 
-      // 2. Fetch materials using hierarchical visibility check and server UTC time
+      // 2. Fetch materials using hierarchical visibility check
       List<ClassRealmMaterial> visibleMaterials = [];
       if (_currentFolder != null) {
         final rawMaterials = await _materialRepo
@@ -208,8 +244,7 @@ class _StudentLearningMaterialsScreenState
               folderId: _currentFolder!.id,
             );
 
-        // Irregular Student Deduplication (Edge Case #30):
-        // Deduplicate materials by storage_path_url and fileName so identical shared records don't repeat
+        // Deduplicate materials by storage_path_url and fileName
         final seenKeys = <String>{};
         for (final m in rawMaterials) {
           final dedupKey = '${m.fileName}_${m.storagePathUrl}';
@@ -238,6 +273,15 @@ class _StudentLearningMaterialsScreenState
     }
   }
 
+  void _selectSubject(Map<String, dynamic> subject) {
+    setState(() {
+      _selectedSubject = subject;
+      _folderStack.clear();
+      _currentFolder = null;
+    });
+    _loadMaterialsForOffering();
+  }
+
   void _navigateToFolder(ClassRealmFolder folder) {
     setState(() {
       _folderStack.add(folder);
@@ -261,50 +305,138 @@ class _StudentLearningMaterialsScreenState
     _loadMaterialsForOffering();
   }
 
-  // --- Debounced Offline Download (Edge Cases #1, #13, #20, #21, #28) ---
-  Future<void> _downloadOfflineCopy(ClassRealmMaterial material) async {
-    // In-flight download lock: rapid 50x clicks only fire a single task
-    if (_downloadingIds.contains(material.id)) {
-      return;
+  void _handleBackNavigation() {
+    if (_folderStack.isNotEmpty) {
+      _navigateBackTo(_folderStack.length - 2);
+    } else {
+      setState(() {
+        _selectedSubject = null;
+        _folders = [];
+        _materials = [];
+      });
+    }
+  }
+
+  // --- Resolve Supabase Storage Download/View URL ---
+  Future<String?> _resolveMaterialUrl(ClassRealmMaterial material) async {
+    final raw = material.storagePathUrl.trim();
+    if (raw.isEmpty) return null;
+    if (material.isEmbedUrl) return raw;
+    if (raw.startsWith('lesson://')) return null;
+
+    if (raw.contains('token=') || raw.contains('Signature=')) {
+      return raw;
     }
 
+    var cleanPath = raw;
+    if (cleanPath.contains('/learning_materials/')) {
+      cleanPath = cleanPath.split('/learning_materials/').last;
+    }
+    if (cleanPath.contains('?')) {
+      cleanPath = cleanPath.split('?').first;
+    }
+    cleanPath = Uri.decodeComponent(cleanPath).trim();
+
+    try {
+      final signedUrl = await SupabaseService().adminClient.storage
+          .from('learning_materials')
+          .createSignedUrl(cleanPath, 60 * 60);
+      return signedUrl;
+    } catch (_) {}
+
+    try {
+      final signedUrl = await _client.storage
+          .from('learning_materials')
+          .createSignedUrl(cleanPath, 60 * 60);
+      return signedUrl;
+    } catch (_) {}
+
+    if (raw.startsWith('http://') || raw.startsWith('https://')) {
+      return raw;
+    }
+
+    return _client.storage.from('learning_materials').getPublicUrl(cleanPath);
+  }
+
+  // --- View Material File Directly ---
+  Future<void> _viewMaterial(ClassRealmMaterial material) async {
+    if (_openingIds.contains(material.id)) return;
+    setState(() => _openingIds.add(material.id));
+
+    try {
+      final resolvedUrl = await _resolveMaterialUrl(material);
+      if (resolvedUrl == null || resolvedUrl.isEmpty) {
+        if (!mounted) return;
+        _showToast('Material file link is not available.');
+        return;
+      }
+
+      final uri = Uri.parse(resolvedUrl);
+      bool launched = false;
+      try {
+        launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } catch (_) {}
+
+      if (!launched) {
+        launched = await launchUrl(uri, mode: LaunchMode.platformDefault);
+      }
+
+      if (!launched && mounted) {
+        _showToast('Unable to open file in browser or default viewer.');
+      }
+    } catch (e) {
+      if (mounted) {
+        _showToast('Failed to open file: $e');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _openingIds.remove(material.id));
+      }
+    }
+  }
+
+  // --- Download Material File Directly ---
+  Future<void> _downloadMaterial(ClassRealmMaterial material) async {
+    if (_downloadingIds.contains(material.id)) return;
     setState(() => _downloadingIds.add(material.id));
 
     try {
-      if (material.isRichTextLesson) {
-        _showStudentAlert(
-          title: 'Lesson Module Ready',
-          message: 'This lesson module is built directly into the app and is always accessible offline inside the reader.',
-        );
+      final resolvedUrl = await _resolveMaterialUrl(material);
+      if (resolvedUrl == null || resolvedUrl.isEmpty) {
+        if (!mounted) return;
+        _showToast('Material file link is not available for download.');
         return;
       }
 
-      if (material.isEmbedUrl) {
-        _showStudentAlert(
-          title: 'Cloud Document Link',
-          message: 'This is an online cloud document / presentation. You can open and view it anytime with an internet connection.',
-        );
-        return;
-      }
+      final extension = material.fileExtension.toLowerCase();
+      final sanitizedFileName = material.fileName.isNotEmpty
+          ? material.fileName
+          : '${material.displayName}.$extension';
 
-      // Offline file download is scheduled for the next update
-      if (!mounted) return;
-      await AppModals.showUpcomingFeatureDialog(
-        context,
-        featureName: 'Offline Material Download',
-      );
-    } on FileSystemException {
-      // Edge Case #26: Storage full / Disk error
-      _showStudentAlert(
-        title: 'Storage Full',
-        message: 'Unable to save offline copy. Please check if your device has enough free storage space.',
-      );
+      // Fetch bytes from URL
+      final response = await http.get(Uri.parse(resolvedUrl));
+      if (response.statusCode == 200) {
+        final result = await FileDownloadHelper.downloadBytes(
+          bytes: response.bodyBytes,
+          fileName: sanitizedFileName,
+          extension: extension,
+          mimeType: material.mimeType ?? 'application/octet-stream',
+        );
+
+        if (mounted) {
+          _showToast(result ?? 'Downloaded $sanitizedFileName');
+        }
+      } else {
+        // Fallback: launch external URL so browser/device initiates download
+        await launchUrl(
+          Uri.parse(resolvedUrl),
+          mode: LaunchMode.externalApplication,
+        );
+      }
     } catch (e) {
-      // Edge Case #1 & #20: Graceful fallback
-      _showStudentAlert(
-        title: 'Document Notice',
-        message: 'The cloud storage server is temporarily unreachable. Your study notes and chapter content remain fully readable in the viewer.',
-      );
+      if (mounted) {
+        _showToast('Download error: $e');
+      }
     } finally {
       if (mounted) {
         setState(() => _downloadingIds.remove(material.id));
@@ -312,30 +444,13 @@ class _StudentLearningMaterialsScreenState
     }
   }
 
-  void _showStudentAlert({required String title, required String message}) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+  void _showToast(String message) {
+    ScaffoldMessenger.of(context).clearSnackBars();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
         content: Text(message),
-        actions: [
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('OK'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // --- Open Strictly Read-Only In-App Reader Modal (NO RAW URLS!) ---
-  void _openStudentReaderModal(ClassRealmMaterial material) {
-    showDialog(
-      context: context,
-      builder: (ctx) => _StudentMaterialReaderModal(
-        material: material,
-        isDownloading: _downloadingIds.contains(material.id),
-        onDownloadRequested: () => _downloadOfflineCopy(material),
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 3),
       ),
     );
   }
@@ -343,101 +458,414 @@ class _StudentLearningMaterialsScreenState
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final availableSubjects = _filteredSubjects;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Learning Materials & Lessons'),
-        backgroundColor: theme.colorScheme.primary,
-        foregroundColor: theme.colorScheme.onPrimary,
-        elevation: 0,
-      ),
-      body: _isLoading
-          ? Center(
-              child: LoadingAnimationWidget.staggeredDotsWave(
-                color: theme.colorScheme.primary,
-                size: 42,
-              ),
-            )
-          : Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Subject, Section & Class Toggle Bar
-                _buildTopSelectorBar(theme, availableSubjects),
-
-                // Folder Breadcrumbs
-                if (_folderStack.isNotEmpty) _buildBreadcrumbs(theme),
-
-                // Main Content with Branded Mobile Swipe-Down Refresh
-                Expanded(
-                  child: AppPullToRefresh(
-                    onRefresh: _refreshMaterials,
-                    child: _errorMessage != null
-                        ? AppPullToRefresh.scrollableState(
-                            child: _buildErrorView(theme),
-                          )
-                        : (_folders.isEmpty && _materials.isEmpty)
-                        ? AppPullToRefresh.scrollableState(
-                            child: _buildEmptyState(theme),
-                          )
-                        : ListView(
-                            physics: const AlwaysScrollableScrollPhysics(),
-                            padding: const EdgeInsets.all(16),
-                            children: [
-                              // Folders
-                              if (_folders.isNotEmpty) ...[
-                                Text(
-                                  'MODULE FOLDERS (${_folders.length})',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold,
-                                    letterSpacing: 0.8,
-                                    color: theme.colorScheme.onSurface
-                                        .withValues(alpha: 0.6),
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                ..._folders.map(
-                                  (f) => _buildFolderCard(f, theme),
-                                ),
-                                const SizedBox(height: 16),
-                              ],
-
-                              // Learning Materials & Notes
-                              if (_materials.isNotEmpty) ...[
-                                Text(
-                                  'LEARNING DOCUMENTS & LESSONS (${_materials.length})',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold,
-                                    letterSpacing: 0.8,
-                                    color: theme.colorScheme.onSurface
-                                        .withValues(alpha: 0.6),
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                ..._materials.map(
-                                  (m) => _buildMaterialCard(m, theme),
-                                ),
-                              ],
-                            ],
-                          ),
-                  ),
+    return PopScope(
+      canPop: _selectedSubject == null,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        _handleBackNavigation();
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text(
+            _selectedSubject != null
+                ? (_selectedSubject!['subject_name'] ?? 'Learning Materials')
+                : 'Learning Materials',
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+          ),
+          leading: _selectedSubject != null
+              ? IconButton(
+                  icon: const Icon(Icons.arrow_back),
+                  tooltip: _folderStack.isNotEmpty
+                      ? 'Back to parent folder'
+                      : 'Back to subjects',
+                  onPressed: _handleBackNavigation,
+                )
+              : null,
+          backgroundColor: theme.colorScheme.primary,
+          foregroundColor: theme.colorScheme.onPrimary,
+          elevation: 0,
+        ),
+        body: _isLoading
+            ? Center(
+                child: LoadingAnimationWidget.staggeredDotsWave(
+                  color: theme.colorScheme.primary,
+                  size: 42,
                 ),
-              ],
-            ),
+              )
+            : _selectedSubject == null
+                ? _buildEnrolledSubjectsView(theme)
+                : _buildSubjectMaterialsView(theme),
+      ),
     );
   }
 
-  // --- Top Selector Bar with Current vs Past Classes Toggle ---
-  Widget _buildTopSelectorBar(
-    ThemeData theme,
-    List<Map<String, dynamic>> availableSubjects,
-  ) {
-    final activeGrade = _selectedSubject?['grade_level'] ?? 11;
+  // ===========================================================================
+  // LEVEL 1: Enrolled Subjects View (Overview of student's subjects)
+  // ===========================================================================
+  Widget _buildEnrolledSubjectsView(ThemeData theme) {
+    return AppPullToRefresh(
+      onRefresh: _refreshScreen,
+      child: _errorMessage != null
+          ? AppPullToRefresh.scrollableState(
+              child: _buildErrorView(theme),
+            )
+          : _allEnrolledSubjects.isEmpty
+              ? AppPullToRefresh.scrollableState(
+                  child: _buildNoSubjectsState(theme),
+                )
+              : ListView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 20,
+                  ),
+                  children: [
+                    // Header Guidance Card
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.primary.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: theme.colorScheme.primary.withValues(
+                            alpha: 0.15,
+                          ),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: theme.colorScheme.primary.withValues(
+                                alpha: 0.15,
+                              ),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              Icons.folder_shared_outlined,
+                              color: theme.colorScheme.primary,
+                              size: 24,
+                            ),
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'My Enrolled Subjects',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  'Select a subject below to access its official modules, handouts, and notes.',
+                                  style: TextStyle(
+                                    fontSize: 12.5,
+                                    color: theme.colorScheme.onSurface
+                                        .withValues(alpha: 0.7),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+
+                    // Section Heading with Subject Count
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'ENROLLED SUBJECTS',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 0.8,
+                            color: theme.colorScheme.onSurface.withValues(
+                              alpha: 0.6,
+                            ),
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 3,
+                          ),
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.surfaceContainerHighest,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            '${_allEnrolledSubjects.length} ${_allEnrolledSubjects.length == 1 ? "Class" : "Classes"}',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+
+                    // Enrolled Subject Cards
+                    ..._allEnrolledSubjects.map(
+                      (subject) => _buildSubjectCard(subject, theme),
+                    ),
+                  ],
+                ),
+    );
+  }
+
+  Widget _buildSubjectCard(Map<String, dynamic> subject, ThemeData theme) {
+    final subName = subject['subject_name'] ?? 'Subject';
+    final subCode = subject['subject_code'] ?? '';
+    final gradeLevel = subject['grade_level'] ?? 11;
+    final sectionName = subject['section_name'] ?? 'Section';
+    final teacherName = subject['teacher_name'] as String? ?? '';
+    final isIrreg = subject['is_irregular'] == true;
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      elevation: 0,
+      color: theme.colorScheme.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(
+          color: theme.colorScheme.onSurface.withValues(alpha: 0.09),
+        ),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: () => _selectSubject(subject),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Badges Row
+              Row(
+                children: [
+                  if (subCode.isNotEmpty) ...[
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.primary.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        subCode,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: theme.colorScheme.primary,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.surfaceContainerHighest,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      'GRADE $gradeLevel',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                  if (isIrreg) ...[
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: const Text(
+                        'Irregular',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.deepOrange,
+                        ),
+                      ),
+                    ),
+                  ],
+                  const Spacer(),
+                  const Icon(
+                    Icons.arrow_forward_ios_rounded,
+                    size: 14,
+                    color: Colors.grey,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+
+              // Subject Title
+              Text(
+                subName,
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
+              const SizedBox(height: 6),
+
+              // Section & Teacher Information
+              Row(
+                children: [
+                  Icon(
+                    Icons.class_outlined,
+                    size: 14,
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    sectionName,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.75),
+                    ),
+                  ),
+                  if (teacherName.isNotEmpty) ...[
+                    const SizedBox(width: 12),
+                    Icon(
+                      Icons.person_outline_rounded,
+                      size: 14,
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        teacherName,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          color: theme.colorScheme.onSurface.withValues(
+                            alpha: 0.75,
+                          ),
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ===========================================================================
+  // LEVEL 2: Subject Explorer (Module Folders & Learning Documents)
+  // ===========================================================================
+  Widget _buildSubjectMaterialsView(ThemeData theme) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Subject Context & Quick Switch Strip
+        _buildSubjectContextStrip(theme),
+
+        // Folder Breadcrumbs
+        _buildBreadcrumbs(theme),
+
+        // Main Folder & Materials Content
+        Expanded(
+          child: AppPullToRefresh(
+            onRefresh: _refreshScreen,
+            child: _errorMessage != null
+                ? AppPullToRefresh.scrollableState(
+                    child: _buildErrorView(theme),
+                  )
+                : (_folders.isEmpty && _materials.isEmpty)
+                    ? AppPullToRefresh.scrollableState(
+                        child: _buildEmptyFolderState(theme),
+                      )
+                    : ListView(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 14,
+                        ),
+                        children: [
+                          // Module Folders Section
+                          if (_folders.isNotEmpty) ...[
+                            Text(
+                              'MODULE FOLDERS (${_folders.length})',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 0.8,
+                                color: theme.colorScheme.onSurface.withValues(
+                                  alpha: 0.6,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            ..._folders.map(
+                              (folder) => _buildFolderCard(folder, theme),
+                            ),
+                            const SizedBox(height: 18),
+                          ],
+
+                          // Learning Documents Section
+                          if (_materials.isNotEmpty) ...[
+                            Text(
+                              'LEARNING DOCUMENTS & LESSONS (${_materials.length})',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 0.8,
+                                color: theme.colorScheme.onSurface.withValues(
+                                  alpha: 0.6,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            ..._materials.map(
+                              (material) => _buildMaterialCard(material, theme),
+                            ),
+                          ],
+                        ],
+                      ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSubjectContextStrip(ThemeData theme) {
+    final sub = _selectedSubject ?? {};
+    final subCode = sub['subject_code'] ?? '';
+    final sectionName = sub['section_name'] ?? '';
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
         color: theme.colorScheme.surface,
         border: Border(
@@ -446,141 +874,42 @@ class _StudentLearningMaterialsScreenState
           ),
         ),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          Row(
-            children: [
-              // Grade Badge
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 5,
-                ),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.primary.withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  'GRADE $activeGrade',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 11.5,
-                    color: theme.colorScheme.primary,
-                  ),
-                ),
-              ),
-              const Spacer(),
-              // Current vs Past Classes Toggle (Edge Case #17)
-              Tooltip(
-                message: _showArchivedClasses
-                    ? 'Switch to Current Classes'
-                    : 'Switch to Past / Archived Classes for Review',
-                child: FilterChip(
-                  visualDensity: VisualDensity.compact,
-                  label: Text(
-                    _showArchivedClasses
-                        ? 'Past Classes (Review)'
-                        : 'Current Classes',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      color: _showArchivedClasses
-                          ? Colors.orange.shade800
-                          : theme.colorScheme.primary,
-                    ),
-                  ),
-                  selected: _showArchivedClasses,
-                  onSelected: (val) {
-                    setState(() {
-                      _showArchivedClasses = val;
-                      final filtered = _filteredSubjects;
-                      _selectedSubject = filtered.isNotEmpty
-                          ? filtered.first
-                          : null;
-                      _folderStack.clear();
-                      _currentFolder = null;
-                    });
-                    _loadMaterialsForOffering();
-                  },
-                ),
-              ),
-            ],
+          Icon(
+            Icons.menu_book_rounded,
+            size: 16,
+            color: theme.colorScheme.primary,
           ),
-          const SizedBox(height: 10),
-          // Subject Dropdown with Irregular student Section & Term details
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.surfaceContainerHighest.withValues(
-                alpha: 0.35,
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              '$subCode • $sectionName',
+              style: TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.bold,
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.85),
               ),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.1),
-              ),
+              overflow: TextOverflow.ellipsis,
             ),
-            child: availableSubjects.isEmpty
-                ? Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.class_outlined,
-                          size: 16,
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            _showArchivedClasses
-                                ? 'No archived classes found'
-                                : 'No current enrolled classes',
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w600,
-                              fontSize: 13,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  )
-                : DropdownButtonHideUnderline(
-                    child: DropdownButton<Map<String, dynamic>>(
-                      value: availableSubjects.contains(_selectedSubject)
-                          ? _selectedSubject
-                          : availableSubjects.first,
-                      isExpanded: true,
-                      items: availableSubjects.map((sub) {
-                        final s = sub['subject_name'] ?? 'Subject';
-                        final sec = sub['section_name'] ?? '';
-                        final term = sub['term_name'] ?? '';
-                        final isIrreg = sub['is_irregular'] == true;
-                        return DropdownMenuItem(
-                          value: sub,
-                          child: Text(
-                            '$s — Section $sec • $term ${isIrreg ? "(Irregular)" : ""}',
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 13,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        );
-                      }).toList(),
-                      onChanged: (newSub) {
-                        if (newSub == null || newSub == _selectedSubject) {
-                          return;
-                        }
-                        setState(() {
-                          _selectedSubject = newSub;
-                          _folderStack.clear();
-                          _currentFolder = null;
-                        });
-                        _loadMaterialsForOffering();
-                      },
-                    ),
-                  ),
+          ),
+          TextButton.icon(
+            style: TextButton.styleFrom(
+              visualDensity: VisualDensity.compact,
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+            ),
+            icon: const Icon(Icons.swap_horiz_rounded, size: 16),
+            label: const Text(
+              'Change Subject',
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+            ),
+            onPressed: () {
+              setState(() {
+                _selectedSubject = null;
+                _folders = [];
+                _materials = [];
+              });
+            },
           ),
         ],
       ),
@@ -588,22 +917,60 @@ class _StudentLearningMaterialsScreenState
   }
 
   Widget _buildBreadcrumbs(ThemeData theme) {
+    final subName =
+        _selectedSubject?['subject_code'] ??
+        _selectedSubject?['subject_name'] ??
+        'Subject';
+
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+      color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: Row(
           children: [
             InkWell(
-              onTap: () => _navigateBackTo(-1),
-              child: const Row(
+              onTap: () {
+                setState(() {
+                  _selectedSubject = null;
+                  _folders = [];
+                  _materials = [];
+                });
+              },
+              child: Row(
                 children: [
-                  Icon(Icons.home_outlined, size: 16),
-                  SizedBox(width: 4),
-                  Text('Root', style: TextStyle(fontSize: 12)),
+                  Icon(
+                    Icons.school_outlined,
+                    size: 15,
+                    color: theme.colorScheme.primary,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    'All Subjects',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: theme.colorScheme.primary,
+                    ),
+                  ),
                 ],
+              ),
+            ),
+            const Icon(Icons.chevron_right, size: 16, color: Colors.grey),
+            InkWell(
+              onTap: () => _navigateBackTo(-1),
+              child: Text(
+                subName,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: _folderStack.isEmpty
+                      ? FontWeight.bold
+                      : FontWeight.normal,
+                  color: _folderStack.isEmpty
+                      ? theme.colorScheme.primary
+                      : theme.colorScheme.onSurface,
+                ),
               ),
             ),
             for (int i = 0; i < _folderStack.length; i++) ...[
@@ -645,15 +1012,18 @@ class _StudentLearningMaterialsScreenState
         leading: const Icon(
           Icons.folder_rounded,
           color: Colors.amber,
-          size: 30,
+          size: 32,
         ),
         title: Text(
           folder.folderName,
           style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
         ),
         subtitle: Text(
-          '${folder.fileCount} materials available',
-          style: const TextStyle(fontSize: 11.5),
+          '${folder.fileCount} ${folder.fileCount == 1 ? "material" : "materials"} available',
+          style: TextStyle(
+            fontSize: 11.5,
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
+          ),
         ),
         trailing: const Icon(Icons.chevron_right, size: 20),
         onTap: () => _navigateToFolder(folder),
@@ -663,91 +1033,259 @@ class _StudentLearningMaterialsScreenState
 
   Widget _buildMaterialCard(ClassRealmMaterial material, ThemeData theme) {
     final ext = material.fileExtension;
+    final isDownloading = _downloadingIds.contains(material.id);
+    final isOpening = _openingIds.contains(material.id);
+    final hasDescription =
+        material.description != null && material.description!.trim().isNotEmpty;
 
     return Card(
-      margin: const EdgeInsets.only(bottom: 10),
+      margin: const EdgeInsets.only(bottom: 12),
       elevation: 0,
       color: theme.colorScheme.surface,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
         side: BorderSide(
-          color: theme.colorScheme.onSurface.withValues(alpha: 0.09),
+          color: theme.colorScheme.onSurface.withValues(alpha: 0.1),
         ),
       ),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(14),
-        // ZERO edit or delete controls! Opens strictly read-only In-App Reader Modal
-        onTap: () => _openStudentReaderModal(material),
-        child: Padding(
-          padding: const EdgeInsets.all(13),
-          child: Row(
-            children: [
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Top Row: Format Icon + Document Title + Size
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: _getFormatColor(ext).withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(
+                    _getFormatIcon(ext),
+                    color: _getFormatColor(ext),
+                    size: 26,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        material.displayName,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14.5,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        '${material.fileExtension} • ${material.formattedSize}',
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          color: theme.colorScheme.onSurface.withValues(
+                            alpha: 0.6,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+
+            // Middle: Teacher's Note (2 lines clamp + See more / See less)
+            if (hasDescription) ...[
+              const SizedBox(height: 10),
               Container(
+                width: double.infinity,
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: _getFormatColor(ext).withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(10),
+                  color: theme.colorScheme.surfaceContainerHighest.withValues(
+                    alpha: 0.35,
+                  ),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.07),
+                  ),
                 ),
-                child: Icon(
-                  _getFormatIcon(ext),
-                  color: _getFormatColor(ext),
-                  size: 26,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      material.displayName,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.chat_bubble_outline_rounded,
+                          size: 13,
+                          color: theme.colorScheme.primary,
+                        ),
+                        const SizedBox(width: 5),
+                        Text(
+                          "Teacher's Note:",
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.bold,
+                            color: theme.colorScheme.primary,
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 2),
-                    Text(
-                      '${material.fileExtension} • ${material.formattedSize}',
+                    const SizedBox(height: 4),
+                    ExpandableInstructionsText(
+                      text: material.description!.trim(),
+                      collapsedMaxLines: 2,
                       style: TextStyle(
-                        fontSize: 11,
+                        fontSize: 12.5,
+                        height: 1.4,
                         color: theme.colorScheme.onSurface.withValues(
-                          alpha: 0.6,
+                          alpha: 0.85,
                         ),
                       ),
                     ),
                   ],
                 ),
               ),
-              // Read / View Icon
-              Icon(
-                Icons.chrome_reader_mode_outlined,
-                color: theme.colorScheme.primary,
-                size: 22,
-              ),
             ],
-          ),
+
+            const SizedBox(height: 12),
+
+            // Bottom Actions: Direct View & Direct Download Buttons
+            Row(
+              children: [
+                // View File Button
+                Expanded(
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    icon: isOpening
+                        ? SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: LoadingAnimationWidget.staggeredDotsWave(
+                              color: theme.colorScheme.primary,
+                              size: 14,
+                            ),
+                          )
+                        : const Icon(Icons.remove_red_eye_outlined, size: 16),
+                    label: Text(
+                      isOpening ? 'Opening...' : 'View File',
+                      style: const TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    onPressed: isOpening ? null : () => _viewMaterial(material),
+                  ),
+                ),
+                const SizedBox(width: 10),
+
+                // Download File Button
+                Expanded(
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: theme.colorScheme.primary,
+                      foregroundColor: theme.colorScheme.onPrimary,
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    icon: isDownloading
+                        ? SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: LoadingAnimationWidget.staggeredDotsWave(
+                              color: theme.colorScheme.onPrimary,
+                              size: 14,
+                            ),
+                          )
+                        : const Icon(Icons.download_rounded, size: 16),
+                    label: Text(
+                      isDownloading ? 'Saving...' : 'Download',
+                      style: const TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    onPressed: isDownloading
+                        ? null
+                        : () => _downloadMaterial(material),
+                  ),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildEmptyState(ThemeData theme) {
+  // ===========================================================================
+  // Empty & Error States
+  // ===========================================================================
+  Widget _buildNoSubjectsState(ThemeData theme) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(32),
+      alignment: Alignment.center,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 70,
+            height: 70,
+            decoration: BoxDecoration(
+              color: theme.colorScheme.primary.withValues(alpha: 0.1),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              Icons.school_outlined,
+              size: 36,
+              color: theme.colorScheme.primary,
+            ),
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'No Enrolled Subjects Found',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'You are not currently enrolled in any active classes for this school year.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 13,
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
+            ),
+          ),
+          const SizedBox(height: 18),
+          ElevatedButton.icon(
+            icon: const Icon(Icons.refresh, size: 18),
+            label: const Text('Refresh'),
+            onPressed: () => _loadStudentEnrolledClasses(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyFolderState(ThemeData theme) {
     final isDark = theme.brightness == Brightness.dark;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(28),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: theme.colorScheme.onSurface.withValues(
-            alpha: isDark ? 0.14 : 0.09,
-          ),
-        ),
-      ),
+      alignment: Alignment.center,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -768,13 +1306,13 @@ class _StudentLearningMaterialsScreenState
           ),
           const SizedBox(height: 14),
           const Text(
-            'No Learning Materials Found',
+            'No Learning Materials Yet',
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 6),
           Text(
-            'No published materials available in this folder yet.',
+            'Your teacher has not published any learning materials or modules in this folder yet.',
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 12.5,
@@ -787,277 +1325,39 @@ class _StudentLearningMaterialsScreenState
   }
 
   Widget _buildErrorView(ThemeData theme) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        const Icon(Icons.error_outline, size: 48, color: Colors.red),
-        const SizedBox(height: 12),
-        Text(
-          _errorMessage!,
-          textAlign: TextAlign.center,
-          style: const TextStyle(fontSize: 15),
-        ),
-        const SizedBox(height: 16),
-        ElevatedButton.icon(
-          icon: const Icon(Icons.refresh),
-          label: const Text('Retry'),
-          onPressed: _loadStudentEnrolledClasses,
-        ),
-      ],
-    );
-  }
-
-  IconData _getFormatIcon(String ext) {
-    final e = ext.toLowerCase();
-    if (e == 'pdf') return Icons.picture_as_pdf;
-    if (e == 'doc' || e == 'docx') return Icons.description;
-    if (e == 'ppt' || e == 'pptx') return Icons.slideshow;
-    if (e == 'lesson') return Icons.article;
-    if (e == 'link') return Icons.link;
-    return Icons.insert_drive_file;
-  }
-
-  Color _getFormatColor(String ext) {
-    final e = ext.toLowerCase();
-    if (e == 'pdf') return Colors.red.shade600;
-    if (e == 'doc' || e == 'docx') return Colors.blue.shade600;
-    if (e == 'ppt' || e == 'pptx') return Colors.orange.shade700;
-    if (e == 'lesson') return Colors.purple.shade600;
-    if (e == 'link') return Colors.teal.shade700;
-    return Colors.blueGrey;
-  }
-}
-
-/// Strictly Read-Only In-App Reader Modal for Students
-/// Zero edit/delete/archive buttons.
-/// Chunked paragraph rendering for 50,000 char chapters on low-end devices.
-/// SelectionArea is DISABLED to prevent copy-paste cheating during background quizzes.
-class _StudentMaterialReaderModal extends StatelessWidget {
-  final ClassRealmMaterial material;
-  final bool isDownloading;
-  final VoidCallback onDownloadRequested;
-
-  const _StudentMaterialReaderModal({
-    required this.material,
-    required this.isDownloading,
-    required this.onDownloadRequested,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-    final ext = material.fileExtension;
-
-    // Split lesson text into paragraphs for low-end device smooth scrolling (Edge Case #11)
-    final rawDescription = material.description?.trim() ?? '';
-    final paragraphs = rawDescription.isNotEmpty
-        ? rawDescription.split(RegExp(r'\n{2,}'))
-        : <String>[];
-
-    return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      backgroundColor: theme.colorScheme.surface,
-      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 780, maxHeight: 680),
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Header: Icon, Title, Close (ZERO EDIT/DELETE BUTTONS)
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: _getFormatColor(ext).withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Icon(
-                      _getFormatIcon(ext),
-                      color: _getFormatColor(ext),
-                      size: 24,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          material.displayName,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        Text(
-                          '${material.fileExtension} • ${material.formattedSize}',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: theme.colorScheme.onSurface.withValues(
-                              alpha: 0.6,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close),
-                    onPressed: () => Navigator.pop(context),
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 12),
-              const Divider(height: 1),
-              const SizedBox(height: 12),
-
-              // Embedded link notice if text/uri-list
-              if (material.isEmbedUrl) ...[
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.blue.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: Colors.blue.withValues(alpha: 0.2),
-                    ),
-                  ),
-                  child: const Row(
-                    children: [
-                      Icon(Icons.open_in_new, color: Colors.blue, size: 20),
-                      SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          'Cloud Document / Presentation. Direct document view prepared below.',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 12),
-              ],
-
-              // Chunked Lesson Reader Area (SelectionArea DISABLED for quiz anti-cheat, Edge Case #14)
-              Expanded(
-                child: paragraphs.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.notes,
-                              size: 48,
-                              color: theme.colorScheme.onSurface.withValues(
-                                alpha: 0.3,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'No study notes or chapter content attached to this document.',
-                              style: TextStyle(
-                                color: theme.colorScheme.onSurface.withValues(
-                                  alpha: 0.6,
-                                ),
-                                fontSize: 13,
-                              ),
-                            ),
-                          ],
-                        ),
-                      )
-                    : Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: isDark
-                              ? const Color(0xFF0F172A)
-                              : const Color(0xFFF8FAFC),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: theme.colorScheme.onSurface.withValues(
-                              alpha: 0.08,
-                            ),
-                          ),
-                        ),
-                        child: ListView.builder(
-                          itemCount: paragraphs.length,
-                          itemBuilder: (ctx, index) {
-                            final p = paragraphs[index].trim();
-                            return Padding(
-                              padding: const EdgeInsets.only(bottom: 12),
-                              child: Text(
-                                p,
-                                style: TextStyle(
-                                  // Theme-adaptive contrast (WCAG AA compliant, Edge Case #22)
-                                  color: isDark
-                                      ? const Color(0xFFE2E8F0)
-                                      : const Color(0xFF1E293B),
-                                  fontSize: 14,
-                                  height: 1.6,
-                                  letterSpacing: 0.2,
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-              ),
-
-              const SizedBox(height: 14),
-
-              // Bottom Bar: Debounced Download Button & Close (STRICTLY READ-ONLY)
-              Row(
-                children: [
-                  OutlinedButton.icon(
-                    icon: isDownloading
-                        ? SizedBox(
-                            width: 18,
-                            height: 14,
-                            child: LoadingAnimationWidget.staggeredDotsWave(
-                              color: theme.colorScheme.primary,
-                              size: 16,
-                            ),
-                          )
-                        : const Icon(
-                            Icons.download_for_offline_outlined,
-                            size: 18,
-                          ),
-                    label: Text(
-                      isDownloading ? 'Saving Offline...' : 'Save Offline Copy',
-                    ),
-                    onPressed: isDownloading ? null : onDownloadRequested,
-                  ),
-                  const Spacer(),
-                  ElevatedButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('Done Reading'),
-                  ),
-                ],
-              ),
-            ],
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(28),
+      alignment: Alignment.center,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.error_outline, size: 48, color: Colors.red),
+          const SizedBox(height: 12),
+          Text(
+            _errorMessage!,
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 14.5),
           ),
-        ),
+          const SizedBox(height: 16),
+          ElevatedButton.icon(
+            icon: const Icon(Icons.refresh),
+            label: const Text('Retry'),
+            onPressed: () => _loadStudentEnrolledClasses(),
+          ),
+        ],
       ),
     );
   }
 
   IconData _getFormatIcon(String ext) {
     final e = ext.toLowerCase();
-    if (e == 'pdf') return Icons.picture_as_pdf;
-    if (e == 'doc' || e == 'docx') return Icons.description;
-    if (e == 'ppt' || e == 'pptx') return Icons.slideshow;
-    if (e == 'lesson') return Icons.article;
-    if (e == 'link') return Icons.link;
-    return Icons.insert_drive_file;
+    if (e == 'pdf') return Icons.picture_as_pdf_rounded;
+    if (e == 'doc' || e == 'docx') return Icons.description_rounded;
+    if (e == 'ppt' || e == 'pptx') return Icons.slideshow_rounded;
+    if (e == 'lesson') return Icons.article_rounded;
+    if (e == 'link') return Icons.link_rounded;
+    return Icons.insert_drive_file_rounded;
   }
 
   Color _getFormatColor(String ext) {

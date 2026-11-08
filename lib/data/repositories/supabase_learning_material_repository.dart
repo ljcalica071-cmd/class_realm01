@@ -22,17 +22,63 @@ class SupabaseLearningMaterialRepository implements LearningMaterialRepository {
           .select('id, folder_name')
           .eq('subject_offering_id', subjectOfferingId);
 
+      final existingList = (existing as List?)
+              ?.map((e) => Map<String, dynamic>.from(e as Map))
+              .toList() ??
+          [];
+
+      // Migration: clean up any legacy Quarter-named folders and merge into Term 1, 2, 3
+      const legacyMap = {
+        'Term 1 - First Quarter': 'Term 1',
+        'Term 2 - Second Quarter': 'Term 2',
+        'Term 3 - Third Quarter': 'Term 3',
+      };
+
+      for (final legacyEntry in legacyMap.entries) {
+        final legacyName = legacyEntry.key;
+        final targetName = legacyEntry.value;
+
+        final legacyFolder = existingList.firstWhere(
+          (f) => f['folder_name'] == legacyName,
+          orElse: () => {},
+        );
+
+        if (legacyFolder.isNotEmpty) {
+          final targetFolder = existingList.firstWhere(
+            (f) => f['folder_name'] == targetName,
+            orElse: () => {},
+          );
+
+          final legacyId = legacyFolder['id'].toString();
+          if (targetFolder.isNotEmpty) {
+            final targetId = targetFolder['id'].toString();
+            await _client
+                .from('learning_materials')
+                .update({'folder_id': targetId})
+                .eq('folder_id', legacyId);
+            await _client
+                .from('folders')
+                .update({'parent_folder_id': targetId})
+                .eq('parent_folder_id', legacyId);
+            await _client.from('folders').delete().eq('id', legacyId);
+            existingList.removeWhere((f) => f['id'] == legacyId);
+          } else {
+            await _client
+                .from('folders')
+                .update({'folder_name': targetName})
+                .eq('id', legacyId);
+            legacyFolder['folder_name'] = targetName;
+          }
+        }
+      }
+
       final existingNames =
-          (existing as List?)
-              ?.map((e) => e['folder_name']?.toString())
-              .whereType<String>()
-              .toSet() ??
-          <String>{};
+          existingList.map((e) => e['folder_name']?.toString()).toSet();
 
       final defaultFolders = [
-        'Term 1 - First Quarter',
-        'Term 2 - Second Quarter',
-        'Term 3 - Third Quarter',
+        'Term 1',
+        'Term 2',
+        'Term 3',
         'Supplementary Handouts & Reviewers',
       ];
 
@@ -55,6 +101,7 @@ class SupabaseLearningMaterialRepository implements LearningMaterialRepository {
   Future<List<ClassRealmFolder>> getFolders({
     required String subjectOfferingId,
     String? parentFolderId,
+    bool studentOnly = false,
   }) async {
     try {
       var query = _client
@@ -68,10 +115,14 @@ class SupabaseLearningMaterialRepository implements LearningMaterialRepository {
             is_archived,
             created_at,
             updated_at,
-            learning_materials ( id, is_archived )
+            learning_materials ( id, is_archived, is_visible_to_students )
           ''')
           .eq('subject_offering_id', subjectOfferingId)
           .eq('is_archived', false);
+
+      if (studentOnly) {
+        query = query.eq('is_visible_to_students', true);
+      }
 
       if (parentFolderId == null) {
         query = query.filter('parent_folder_id', 'is', null);
@@ -82,19 +133,27 @@ class SupabaseLearningMaterialRepository implements LearningMaterialRepository {
       final response = await query.order('folder_name', ascending: true);
 
       final defaultOrder = {
-        'Term 1 - First Quarter': 1,
-        'Term 2 - Second Quarter': 2,
-        'Term 3 - Third Quarter': 3,
+        'Term 1': 1,
+        'Term 2': 2,
+        'Term 3': 3,
         'Supplementary Handouts & Reviewers': 4,
       };
 
-      final folders = (response as List).map<ClassRealmFolder>((row) {
-        final materials = (row['learning_materials'] as List?) ?? [];
-        final activeCount = materials
-            .where((m) => m is Map && m['is_archived'] != true)
-            .length;
-        return ClassRealmFolder.fromMap(row, count: activeCount);
-      }).toList();
+      final folders = (response as List)
+          .map<ClassRealmFolder>((row) {
+            final materials = (row['learning_materials'] as List?) ?? [];
+            final activeCount = materials.where((m) {
+              if (m is! Map) return false;
+              if (m['is_archived'] == true) return false;
+              if (studentOnly && m['is_visible_to_students'] != true) {
+                return false;
+              }
+              return true;
+            }).length;
+            return ClassRealmFolder.fromMap(row, count: activeCount);
+          })
+          .where((f) => !f.folderName.toLowerCase().contains('quarter'))
+          .toList();
 
       if (parentFolderId == null) {
         folders.sort((a, b) {

@@ -40,19 +40,12 @@ class StudentSubmitWorkDialog extends StatefulWidget {
 }
 
 class _StudentSubmitWorkDialogState extends State<StudentSubmitWorkDialog> {
-  final TextEditingController _commentCtrl = TextEditingController();
   Uint8List? _fileBytes;
   String? _fileName;
   int? _fileSizeBytes;
   String? _fileError;
   bool _isSubmitting = false;
   String? _submitError;
-
-  @override
-  void dispose() {
-    _commentCtrl.dispose();
-    super.dispose();
-  }
 
   String _formatFileSize(int bytes) {
     if (bytes < 1024) return '$bytes B';
@@ -183,9 +176,6 @@ class _StudentSubmitWorkDialogState extends State<StudentSubmitWorkDialog> {
         'classwork_id': widget.classwork.id,
         'student_id': user.id,
         'status': 'submitted',
-        'feedback': _commentCtrl.text.trim().isNotEmpty
-            ? _commentCtrl.text.trim()
-            : null,
         'submitted_at': DateTime.now().toUtc().toIso8601String(),
         'updated_at': DateTime.now().toUtc().toIso8601String(),
       };
@@ -209,11 +199,12 @@ class _StudentSubmitWorkDialogState extends State<StudentSubmitWorkDialog> {
         }
 
         try {
-          await client
+          final adminClient = SupabaseService().adminClient;
+          await adminClient
               .from('submission_attachments')
               .delete()
               .eq('submission_id', submissionId);
-          await client.from('submission_attachments').insert({
+          await adminClient.from('submission_attachments').insert({
             'submission_id': submissionId,
             'file_name': _fileName!,
             'storage_url': storagePath,
@@ -258,7 +249,7 @@ class _StudentSubmitWorkDialogState extends State<StudentSubmitWorkDialog> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 520),
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -460,34 +451,6 @@ class _StudentSubmitWorkDialogState extends State<StudentSubmitWorkDialog> {
                   ],
                 ),
               ],
-
-              const SizedBox(height: 16),
-
-              // Remarks field
-              Text(
-                'Student Notes / Remarks (Optional)',
-                style: theme.textTheme.labelMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: _commentCtrl,
-                maxLines: 3,
-                decoration: InputDecoration(
-                  hintText:
-                      'Add an optional note or explanation for your teacher...',
-                  hintStyle: const TextStyle(fontSize: 13),
-                  filled: true,
-                  fillColor: isDark ? Colors.white10 : Colors.grey.shade50,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: BorderSide(
-                      color: isDark ? Colors.white24 : Colors.grey.shade300,
-                    ),
-                  ),
-                ),
-              ),
 
               if (_submitError != null) ...[
                 const SizedBox(height: 12),

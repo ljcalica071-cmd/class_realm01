@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import 'package:class_realm/core/theme/app_theme.dart';
 import 'package:class_realm/core/services/app_data_cache.dart';
+import 'package:class_realm/core/services/local_storage_service.dart';
 import 'package:class_realm/core/services/supabase_service.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/data/repositories/subject_repository.dart';
@@ -1432,7 +1433,10 @@ class _TeacherUnifiedAssessmentsTabState
     _showDeleteConfirmation(
       title: item.title,
       onDelete: () async {
-        setState(() => _isSyncing = true);
+        setState(() {
+          _isSyncing = true;
+          widget.activities.removeWhere((a) => a.id == item.id);
+        });
         if (widget.repository != null) {
           try {
             await widget.repository!.deleteActivity(item.id);
@@ -1632,6 +1636,9 @@ class _TeacherUnifiedAssessmentsTabState
                 );
               }
             }
+            try {
+              await LocalStorageService.clearGradebookSheet(offeringId, termNum);
+            } catch (_) {}
           }
 
           // Clear caches & notify gradebook + student portal

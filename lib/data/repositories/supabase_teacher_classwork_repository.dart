@@ -1,4 +1,5 @@
 import 'package:class_realm/core/services/app_data_cache.dart';
+import 'package:class_realm/core/services/local_storage_service.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -224,11 +225,16 @@ class SupabaseTeacherClassworkRepository implements TeacherClassworkRepository {
         'gradebook_column_index': activity.gradebookColumnIndex,
         'completion_mode': activity.completionMode,
         'allow_late_submission': activity.allowLateSubmission,
-        'storage_path': storagePath,
-        'file_name': fileName,
-        'mime_type': mimeType,
+        'storage_path': ?storagePath,
+        'file_name': ?fileName,
+        'mime_type': ?mimeType,
         if (fileBytes != null) 'file_size_bytes': fileBytes.lengthInBytes,
-        if (removeExistingAttachment) 'storage_path': null,
+        if (removeExistingAttachment) ...{
+          'storage_path': null,
+          'file_name': null,
+          'mime_type': null,
+          'file_size_bytes': null,
+        },
       };
 
       try {
@@ -324,9 +330,16 @@ class SupabaseTeacherClassworkRepository implements TeacherClassworkRepository {
             debugPrint('Notice updating gradebook term sheet on delete: $e');
           }
         }
+        if (offeringId != null) {
+          try {
+            await LocalStorageService.clearGradebookSheet(offeringId, term);
+          } catch (_) {}
+        }
       }
 
+      AppDataCache.instance.invalidatePrefix('gradebook_');
       AppDataCache.instance.invalidatePrefix('teacher_activities_');
+      AppDataCache.instance.invalidatePrefix('teacher_assessments_');
       AppDataCache.instance.invalidatePrefix('student_dashboard_');
     } catch (e) {
       debugPrint('Pure Dart delete classwork notice: $e');
