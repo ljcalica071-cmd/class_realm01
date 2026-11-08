@@ -493,136 +493,120 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
 
   // --- 1. TOP HEADER ---
   Widget _buildTopHeader(bool isDark, ThemeData theme) {
-    final timeStr =
-        '${_refreshedAt.hour.toString().padLeft(2, '0')}:${_refreshedAt.minute.toString().padLeft(2, '0')}';
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final titleSection = ConstrainedBox(
-          constraints: BoxConstraints(maxWidth: constraints.maxWidth),
-          child: Row(
-            children: [
-              Container(
-                width: 38,
-                height: 38,
-                decoration: BoxDecoration(
-                  color: crSteelBlue,
-                  borderRadius: BorderRadius.circular(10),
-                  boxShadow: [
-                    BoxShadow(
-                      color: crSteelBlue.withValues(alpha: 0.25),
-                      blurRadius: 6,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: const Icon(LucideIcons.barChart3, color: Colors.white, size: 20),
+    return Row(
+      children: [
+        Container(
+          width: 38,
+          height: 38,
+          decoration: BoxDecoration(
+            color: crSteelBlue,
+            borderRadius: BorderRadius.circular(10),
+            boxShadow: [
+              BoxShadow(
+                color: crSteelBlue.withValues(alpha: 0.25),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Wrap(
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      spacing: 8,
-                      runSpacing: 4,
+            ],
+          ),
+          child: const Icon(LucideIcons.barChart3, color: Colors.white, size: 20),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Wrap(
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 8,
+                runSpacing: 4,
+                children: [
+                  Text(
+                    'Performance Analytics',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: isDark ? Colors.white : crSlateDark,
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: isDark ? Colors.white10 : const Color(0xFFF1F5F9),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: isDark ? Colors.white12 : crBorder,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
+                        const Icon(LucideIcons.link2, size: 12, color: crSteelBlue),
+                        const SizedBox(width: 4),
                         Text(
-                          'Performance Analytics',
+                          'Synced with Gradebook',
                           style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: isDark ? Colors.white : crSlateDark,
-                          ),
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: isDark ? Colors.white10 : const Color(0xFFF1F5F9),
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(
-                              color: isDark ? Colors.white12 : crBorder,
-                            ),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(LucideIcons.link2, size: 12, color: crSteelBlue),
-                              const SizedBox(width: 4),
-                              Text(
-                                'Synced with Gradebook',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                  color: isDark ? Colors.white70 : crSlateMuted,
-                                ),
-                              ),
-                            ],
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: isDark ? Colors.white70 : crSlateMuted,
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 2),
-                    Text(
-                      'Real-time academic trajectory and transmuted rankings.',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: isDark ? Colors.white60 : crSlateMuted,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        );
-
-        final refreshBtn = Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-          decoration: BoxDecoration(
-            color: isDark ? theme.colorScheme.surface : Colors.white,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: isDark ? Colors.white12 : crBorder),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(LucideIcons.clock, size: 13, color: crSlateMuted),
-              const SizedBox(width: 6),
-              Text(
-                'Refreshed at $timeStr',
-                style: const TextStyle(fontSize: 11, color: crSlateMuted),
-              ),
-              const SizedBox(width: 8),
-              InkWell(
-                onTap: () {
-                  _reloadGradebookData(animate: true);
-                },
-                borderRadius: BorderRadius.circular(4),
-                child: Padding(
-                  padding: const EdgeInsets.all(4),
-                  child: RotationTransition(
-                    turns: _chartAnim,
-                    child: const Icon(LucideIcons.refreshCw, size: 13, color: crSteelBlue),
                   ),
+                ],
+              ),
+              const SizedBox(height: 2),
+              Text(
+                'Real-time academic trajectory and transmuted rankings.',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: isDark ? Colors.white60 : crSlateMuted,
                 ),
               ),
             ],
           ),
-        );
+        ),
+      ],
+    );
+  }
 
-        return Wrap(
-          alignment: WrapAlignment.spaceBetween,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          spacing: 12,
-          runSpacing: 10,
-          children: [
-            titleSection,
-            refreshBtn,
-          ],
-        );
-      },
+  Widget _buildRefreshButton(bool isDark, ThemeData theme) {
+    final timeStr =
+        '${_refreshedAt.hour.toString().padLeft(2, '0')}:${_refreshedAt.minute.toString().padLeft(2, '0')}';
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: isDark ? Colors.white12 : crBorder),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(LucideIcons.clock, size: 12, color: crSlateMuted),
+          const SizedBox(width: 5),
+          Text(
+            'Refreshed at $timeStr',
+            style: const TextStyle(fontSize: 11, color: crSlateMuted),
+          ),
+          const SizedBox(width: 6),
+          InkWell(
+            onTap: () {
+              _reloadGradebookData(animate: true);
+            },
+            borderRadius: BorderRadius.circular(4),
+            child: Padding(
+              padding: const EdgeInsets.all(3),
+              child: RotationTransition(
+                turns: _chartAnim,
+                child: const Icon(LucideIcons.refreshCw, size: 12, color: crSteelBlue),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1427,6 +1411,10 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
             );
           }).toList();
 
+    const chartGridHeight = 150.0;
+    const headroom = 32.0;
+    const plotAreaHeight = chartGridHeight + headroom; // 182.0
+
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
@@ -1444,7 +1432,7 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
             runSpacing: 6,
             children: [
               ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 380),
+                constraints: const BoxConstraints(maxWidth: 360),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -1464,17 +1452,29 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                   ],
                 ),
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF1F5F9),
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: crBorder),
-                ),
-                child: Text(
-                  isCrossTerm ? 'Cross-Term View' : 'Within-Term View',
-                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: crSlateDark),
-                ),
+              Wrap(
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 8,
+                runSpacing: 4,
+                children: [
+                  _buildRefreshButton(isDark, theme),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: isDark ? Colors.white10 : const Color(0xFFF1F5F9),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: isDark ? Colors.white12 : crBorder),
+                    ),
+                    child: Text(
+                      isCrossTerm ? 'Cross-Term View' : 'Within-Term View',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: isDark ? Colors.white70 : crSlateDark,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -1483,141 +1483,244 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
             subtitle,
             style: const TextStyle(fontSize: 11, color: crSlateMuted),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 18),
 
-          // Chart Canvas with Standing Vertical Bars
-          SizedBox(
-            height: 220,
-            child: barData.isEmpty
-                ? const Center(
-                    child: Text(
-                      'No scored assessments encoded yet for this view.',
-                      style: TextStyle(fontSize: 12, color: crSlateMuted),
-                    ),
-                  )
-                : AnimatedBuilder(
-                    animation: _chartAnim,
-                    builder: (context, _) {
-                      return Stack(
+          // Chart Canvas with Mathematically Aligned Standing Vertical Bars
+          if (barData.isEmpty)
+            const SizedBox(
+              height: 220,
+              child: Center(
+                child: Text(
+                  'No scored assessments encoded yet for this view.',
+                  style: TextStyle(fontSize: 12, color: crSlateMuted),
+                ),
+              ),
+            )
+          else
+            LayoutBuilder(
+              builder: (context, constraints) {
+                const yAxisWidth = 32.0;
+                final availableWidth = constraints.maxWidth;
+                final contentMin = barData.length * 68.0;
+                final scrollNeeded = contentMin > (availableWidth - yAxisWidth);
+                final chartWidth = scrollNeeded ? contentMin : (availableWidth - yAxisWidth);
+
+                return AnimatedBuilder(
+                  animation: _chartAnim,
+                  builder: (context, _) {
+                    return SizedBox(
+                      height: 236,
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Y-Axis Horizontal Gridlines
-                          Column(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              _buildGridline('100'),
-                              _buildGridline('80'),
-                              _buildGridline('60'),
-                              _buildGridline('40'),
-                              _buildGridline('20'),
-                              _buildGridline('0'),
-                            ],
-                          ),
-
-                          // Dashed Pass Threshold Line at 75%
-                          Positioned(
-                            left: 32,
-                            right: 0,
-                            bottom: 220 * 0.75,
-                            child: Row(
+                          // Fixed Y-Axis column (pinned on left)
+                          SizedBox(
+                            width: yAxisWidth,
+                            height: plotAreaHeight,
+                            child: Stack(
+                              clipBehavior: Clip.none,
                               children: [
-                                Expanded(
-                                  child: Container(
-                                    height: 1,
-                                    color: crAmber.withValues(alpha: 0.6),
+                                for (final v in const [100, 80, 60, 40, 20, 0])
+                                  Positioned(
+                                    left: 0,
+                                    right: 6,
+                                    bottom: ((v / 100.0) * chartGridHeight) - 6,
+                                    child: Text(
+                                      '$v',
+                                      style: const TextStyle(fontSize: 9, color: crSlateMuted),
+                                      textAlign: TextAlign.right,
+                                    ),
                                   ),
-                                ),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFFFEF3C7),
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                  child: const Text(
-                                    'Pass 75',
-                                    style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Color(0xFFB45309)),
-                                  ),
-                                ),
                               ],
                             ),
                           ),
 
-                          // Standing Bars
-                          Padding(
-                            padding: const EdgeInsets.only(left: 36, right: 16),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceAround,
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              children: barData.map((item) {
-                                final animVal = item.value * _chartAnim.value;
-                                final barHeight = (animVal / 100).clamp(0.08, 1.0) * 180;
-
-                                return Column(
-                                  mainAxisAlignment: MainAxisAlignment.end,
+                          // Scrollable or stretched chart plot & x-axis area
+                          Expanded(
+                            child: SingleChildScrollView(
+                              scrollDirection: Axis.horizontal,
+                              physics: scrollNeeded ? const BouncingScrollPhysics() : const NeverScrollableScrollPhysics(),
+                              child: SizedBox(
+                                width: chartWidth,
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    // Value Label Badge
-                                    Opacity(
-                                      opacity: _chartAnim.value,
-                                      child: Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                                        decoration: BoxDecoration(
-                                          color: const Color(0xFFF1F5F9),
-                                          borderRadius: BorderRadius.circular(4),
-                                          border: Border.all(color: crBorder),
-                                        ),
-                                        child: Text(
-                                          item.value.toStringAsFixed(1),
-                                          style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: crSlateDark),
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(height: 4),
+                                    // Plot Area (Gridlines, Pass 75 line, and Bars)
+                                    SizedBox(
+                                      height: plotAreaHeight,
+                                      child: Stack(
+                                        clipBehavior: Clip.none,
+                                        children: [
+                                          // Horizontal Gridlines (100, 80, 60, 40, 20, 0)
+                                          for (final v in const [100, 80, 60, 40, 20, 0])
+                                            Positioned(
+                                              left: 0,
+                                              right: 0,
+                                              bottom: (v / 100.0) * chartGridHeight,
+                                              child: Container(
+                                                height: 1,
+                                                color: isDark ? Colors.white12 : const Color(0xFFF1F5F9),
+                                              ),
+                                            ),
 
-                                    // Standing Bar
-                                    Container(
-                                      width: 44,
-                                      height: barHeight,
-                                      decoration: BoxDecoration(
-                                        color: item.color,
-                                        borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
-                                        boxShadow: [
-                                          BoxShadow(
-                                            color: item.color.withValues(alpha: 0.3),
-                                            blurRadius: 4,
-                                            offset: const Offset(0, 2),
+                                          // Dashed Pass Threshold Line at 75%
+                                          Positioned(
+                                            left: 0,
+                                            right: 0,
+                                            bottom: (chartGridHeight * 0.75) - 6,
+                                            child: Row(
+                                              children: [
+                                                Expanded(
+                                                  child: Container(
+                                                    height: 1,
+                                                    color: crAmber.withValues(alpha: 0.6),
+                                                  ),
+                                                ),
+                                                Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                                  decoration: BoxDecoration(
+                                                    color: const Color(0xFFFEF3C7),
+                                                    borderRadius: BorderRadius.circular(4),
+                                                  ),
+                                                  child: const Text(
+                                                    'Pass 75',
+                                                    style: TextStyle(
+                                                      fontSize: 9,
+                                                      fontWeight: FontWeight.bold,
+                                                      color: Color(0xFFB45309),
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+
+                                          // Standing Vertical Bars
+                                          Positioned(
+                                            left: 0,
+                                            right: 0,
+                                            bottom: 0,
+                                            height: plotAreaHeight,
+                                            child: Row(
+                                              mainAxisAlignment: MainAxisAlignment.spaceAround,
+                                              crossAxisAlignment: CrossAxisAlignment.end,
+                                              children: barData.map((item) {
+                                                final animVal = item.value * _chartAnim.value;
+                                                final barHeight = (animVal / 100.0).clamp(0.01, 1.0) * chartGridHeight;
+
+                                                return SizedBox(
+                                                  width: 56,
+                                                  child: Column(
+                                                    mainAxisAlignment: MainAxisAlignment.end,
+                                                    children: [
+                                                      // Value Label Badge
+                                                      Opacity(
+                                                        opacity: _chartAnim.value,
+                                                        child: Container(
+                                                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                                                          decoration: BoxDecoration(
+                                                            color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
+                                                            borderRadius: BorderRadius.circular(4),
+                                                            border: Border.all(color: isDark ? Colors.white12 : crBorder),
+                                                          ),
+                                                          child: Text(
+                                                            item.value.toStringAsFixed(1),
+                                                            style: TextStyle(
+                                                              fontSize: 10,
+                                                              fontWeight: FontWeight.bold,
+                                                              color: isDark ? Colors.white : crSlateDark,
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      ),
+                                                      const SizedBox(height: 4),
+
+                                                      // Standing Bar
+                                                      Container(
+                                                        width: 38,
+                                                        height: barHeight,
+                                                        decoration: BoxDecoration(
+                                                          color: item.color,
+                                                          borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
+                                                          boxShadow: [
+                                                            BoxShadow(
+                                                              color: item.color.withValues(alpha: 0.3),
+                                                              blurRadius: 4,
+                                                              offset: const Offset(0, 2),
+                                                            ),
+                                                          ],
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                );
+                                              }).toList(),
+                                            ),
                                           ),
                                         ],
                                       ),
                                     ),
+
+                                    // Baseline Separator
+                                    Container(
+                                      height: 1,
+                                      color: isDark ? Colors.white24 : const Color(0xFFCBD5E1),
+                                    ),
                                     const SizedBox(height: 6),
 
-                                    // X-Axis Label
-                                    Text(
-                                      item.label,
-                                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: crSlateDark),
-                                    ),
-                                    Text(
-                                      item.sub,
-                                      style: const TextStyle(fontSize: 9, color: crSlateMuted),
+                                    // Dedicated X-Axis Labels Row (No Overflow)
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceAround,
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: barData.map((item) {
+                                        return SizedBox(
+                                          width: 56,
+                                          child: Column(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Text(
+                                                item.label,
+                                                style: TextStyle(
+                                                  fontSize: 11,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: isDark ? Colors.white : crSlateDark,
+                                                ),
+                                                textAlign: TextAlign.center,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                              const SizedBox(height: 2),
+                                              Text(
+                                                item.sub,
+                                                style: const TextStyle(fontSize: 9, color: crSlateMuted),
+                                                textAlign: TextAlign.center,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ],
+                                          ),
+                                        );
+                                      }).toList(),
                                     ),
                                   ],
-                                );
-                              }).toList(),
+                                ),
+                              ),
                             ),
                           ),
                         ],
-                      );
-                    },
-                  ),
-          ),
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
           const SizedBox(height: 14),
 
           // Insight Footer
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: const Color(0xFFF8FAFC),
+              color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC),
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: crBorder),
+              border: Border.all(color: isDark ? Colors.white12 : crBorder),
             ),
             child: Row(
               children: [
@@ -1628,7 +1731,10 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                     isCrossTerm
                         ? 'Class transmuted average is tracking across all completed grading terms.'
                         : 'Within-term assessment scores reflect continuous learner mastery in Gradebook items.',
-                    style: const TextStyle(fontSize: 11, color: crSlateDark),
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: isDark ? Colors.white70 : crSlateDark,
+                    ),
                   ),
                 ),
               ],
@@ -1636,28 +1742,6 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildGridline(String label) {
-    return Row(
-      children: [
-        SizedBox(
-          width: 28,
-          child: Text(
-            label,
-            style: const TextStyle(fontSize: 9, color: crSlateMuted),
-            textAlign: TextAlign.right,
-          ),
-        ),
-        const SizedBox(width: 6),
-        Expanded(
-          child: Container(
-            height: 1,
-            color: crBorder.withValues(alpha: 0.8),
-          ),
-        ),
-      ],
     );
   }
 

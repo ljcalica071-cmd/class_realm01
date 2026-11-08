@@ -1,6 +1,11 @@
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:loading_animation_widget/loading_animation_widget.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -42,10 +47,66 @@ class _StudentLearningMaterialsScreenState
   final Set<String> _downloadingIds = {};
   final Set<String> _openingIds = {};
 
+  // Offline cached files: materialId -> localPath
+  Map<String, String> _offlineMaterialPaths = {};
+
   @override
   void initState() {
     super.initState();
+    _loadOfflineMaterialPaths();
     _loadStudentEnrolledClasses();
+  }
+
+  Future<void> _loadOfflineMaterialPaths() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final rawJson = prefs.getString('student_offline_materials_map');
+      if (rawJson != null && rawJson.isNotEmpty) {
+        final decoded = json.decode(rawJson) as Map<String, dynamic>;
+        final verified = <String, String>{};
+        for (final entry in decoded.entries) {
+          final path = entry.value.toString();
+          if (kIsWeb) {
+            verified[entry.key] = path;
+          } else {
+            if (File(path).existsSync()) {
+              verified[entry.key] = path;
+            }
+          }
+        }
+        if (mounted) {
+          setState(() {
+            _offlineMaterialPaths = verified;
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('Error loading offline material paths: $e');
+    }
+  }
+
+  Future<void> _recordDownloadedMaterial(
+    String materialId,
+    String localPath,
+  ) async {
+    try {
+      _offlineMaterialPaths[materialId] = localPath;
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+        'student_offline_materials_map',
+        json.encode(_offlineMaterialPaths),
+      );
+      if (mounted) setState(() {});
+    } catch (e) {
+      debugPrint('Error recording downloaded material: $e');
+    }
+  }
+
+  bool _isMaterialOfflineReady(String materialId) {
+    final path = _offlineMaterialPaths[materialId];
+    if (path == null) return false;
+    if (kIsWeb) return true;
+    return File(path).existsSync();
   }
 
   Future<void> _refreshScreen() async {
@@ -364,6 +425,24 @@ class _StudentLearningMaterialsScreenState
     setState(() => _openingIds.add(material.id));
 
     try {
+      // 1. If downloaded and available offline on native device, open directly from disk!
+      if (!kIsWeb && _isMaterialOfflineReady(material.id)) {
+        final localPath = _offlineMaterialPaths[material.id]!;
+        final localFile = File(localPath);
+        if (localFile.existsSync()) {
+          try {
+            final launched = await launchUrl(
+              Uri.file(localPath),
+              mode: LaunchMode.externalApplication,
+            );
+            if (launched) return;
+          } catch (localErr) {
+            debugPrint('Failed to open local file via URI: $localErr');
+          }
+        }
+      }
+
+      // 2. Otherwise, resolve secure signed URL
       final resolvedUrl = await _resolveMaterialUrl(material);
       if (resolvedUrl == null || resolvedUrl.isEmpty) {
         if (!mounted) return;
@@ -371,14 +450,49 @@ class _StudentLearningMaterialsScreenState
         return;
       }
 
-      final uri = Uri.parse(resolvedUrl);
-      bool launched = false;
-      try {
-        launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
-      } catch (_) {}
+      final ext = material.fileExtension.toLowerCase();
+      final isOfficeDoc =
+          ext == 'doc' || ext == 'docx' || ext == 'ppt' || ext == 'pptx';
 
-      if (!launched) {
-        launched = await launchUrl(uri, mode: LaunchMode.platformDefault);
+      Uri targetUri = Uri.parse(resolvedUrl);
+
+      if (kIsWeb && isOfficeDoc) {
+        // In Web browsers, doc/docx/ppt/pptx cannot be natively viewed without downloading.
+        // Google Docs Viewer renders it inline in a new tab without downloading.
+        targetUri = Uri.parse(
+          'https://docs.google.com/viewer?url=${Uri.encodeComponent(resolvedUrl)}&embedded=true',
+        );
+      }
+
+      bool launched = false;
+      if (kIsWeb) {
+        launched = await launchUrl(targetUri, webOnlyWindowName: '_blank');
+      } else {
+        // Native App (Android / iOS):
+        // 1. Try launching in external application (e.g. Acrobat Reader, Word, Drive)
+        try {
+          launched =
+              await launchUrl(targetUri, mode: LaunchMode.externalApplication);
+        } catch (_) {}
+
+        // 2. Fallback: If no external app is installed or handler fails, open via in-app browser overlay
+        if (!launched) {
+          try {
+            final inAppUri = isOfficeDoc
+                ? Uri.parse(
+                    'https://docs.google.com/viewer?url=${Uri.encodeComponent(resolvedUrl)}&embedded=true',
+                  )
+                : targetUri;
+            launched =
+                await launchUrl(inAppUri, mode: LaunchMode.inAppBrowserView);
+          } catch (_) {}
+        }
+
+        // 3. Last-resort fallback to platform default
+        if (!launched) {
+          launched =
+              await launchUrl(targetUri, mode: LaunchMode.platformDefault);
+        }
       }
 
       if (!launched && mounted) {
@@ -423,8 +537,16 @@ class _StudentLearningMaterialsScreenState
           mimeType: material.mimeType ?? 'application/octet-stream',
         );
 
+        // Record offline path if saved
+        if (result != null && result.startsWith('Saved to ')) {
+          final savedPath = result.replaceFirst('Saved to ', '').trim();
+          await _recordDownloadedMaterial(material.id, savedPath);
+        } else {
+          await _recordDownloadedMaterial(material.id, sanitizedFileName);
+        }
+
         if (mounted) {
-          _showToast(result ?? 'Downloaded $sanitizedFileName');
+          _showToast(result ?? 'Downloaded $sanitizedFileName (Offline Ready)');
         }
       } else {
         // Fallback: launch external URL so browser/device initiates download
@@ -1037,6 +1159,9 @@ class _StudentLearningMaterialsScreenState
     final isOpening = _openingIds.contains(material.id);
     final hasDescription =
         material.description != null && material.description!.trim().isNotEmpty;
+    final isOfflineReady = _isMaterialOfflineReady(material.id);
+    final isNew =
+        DateTime.now().difference(material.createdAt).inHours <= 48;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -1083,6 +1208,65 @@ class _StudentLearningMaterialsScreenState
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
+                      if (isNew || isOfflineReady) ...[
+                        const SizedBox(height: 4),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 4,
+                          children: [
+                            if (isNew)
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.orange.shade700,
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: const Text(
+                                  'NEW',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 9.5,
+                                    fontWeight: FontWeight.bold,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                              ),
+                            if (isOfflineReady)
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.green.shade700,
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.check_circle_rounded,
+                                      color: Colors.white,
+                                      size: 11,
+                                    ),
+                                    SizedBox(width: 3),
+                                    Text(
+                                      'Offline Ready',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 9.5,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                          ],
+                        ),
+                      ],
                       const SizedBox(height: 3),
                       Text(
                         '${material.fileExtension} • ${material.formattedSize}',
@@ -1192,8 +1376,10 @@ class _StudentLearningMaterialsScreenState
                 Expanded(
                   child: ElevatedButton.icon(
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: theme.colorScheme.primary,
-                      foregroundColor: theme.colorScheme.onPrimary,
+                      backgroundColor: isOfflineReady
+                          ? Colors.green.shade700
+                          : theme.colorScheme.primary,
+                      foregroundColor: Colors.white,
                       elevation: 0,
                       padding: const EdgeInsets.symmetric(vertical: 10),
                       shape: RoundedRectangleBorder(
@@ -1205,13 +1391,20 @@ class _StudentLearningMaterialsScreenState
                             width: 14,
                             height: 14,
                             child: LoadingAnimationWidget.staggeredDotsWave(
-                              color: theme.colorScheme.onPrimary,
+                              color: Colors.white,
                               size: 14,
                             ),
                           )
-                        : const Icon(Icons.download_rounded, size: 16),
+                        : Icon(
+                            isOfflineReady
+                                ? Icons.file_download_done_rounded
+                                : Icons.download_rounded,
+                            size: 16,
+                          ),
                     label: Text(
-                      isDownloading ? 'Saving...' : 'Download',
+                      isDownloading
+                          ? 'Saving...'
+                          : (isOfflineReady ? 'Downloaded' : 'Download'),
                       style: const TextStyle(
                         fontSize: 12.5,
                         fontWeight: FontWeight.bold,

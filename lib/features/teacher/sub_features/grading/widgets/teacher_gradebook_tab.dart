@@ -728,6 +728,14 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
                 'status': 'graded',
                 'updated_at': DateTime.now().toUtc().toIso8601String(),
               });
+            } else if (scoreVal == null) {
+              upsertRows.add({
+                'classwork_id': itemId,
+                'student_id': studentId,
+                'score': null,
+                'status': 'submitted',
+                'updated_at': DateTime.now().toUtc().toIso8601String(),
+              });
             }
           }
         }

@@ -1,15 +1,18 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:http/http.dart' as http;
+import 'package:class_realm/core/services/supabase_service.dart';
+import 'package:class_realm/core/utils/file_download_helper.dart';
 import 'package:class_realm/models/academic_models.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/data/repositories/subject_repository.dart';
 import 'package:class_realm/data/repositories/learning_material_repository.dart';
 import 'package:class_realm/data/repositories/supabase_learning_material_repository.dart';
-
-import 'teacher_material_viewer_modal.dart';
 
 import 'package:class_realm/shared/widgets/shimmer_loading.dart';
 
@@ -692,16 +695,20 @@ class _TeacherLearningMaterialsTabState
                       TextFormField(
                         controller: titleController,
                         enabled: !isUploading,
+                        maxLength: 100,
                         autovalidateMode: AutovalidateMode.onUserInteraction,
                         validator: (v) {
                           if (v == null || v.trim().isEmpty) {
                             return 'Document title is required.';
                           }
+                          if (v.trim().length > 100) {
+                            return 'Document title cannot exceed 100 characters.';
+                          }
                           return null;
                         },
                         decoration: _buildInputDecoration(
                           theme: theme,
-                          hint: 'e.g. Lesson 1: Introduction to Functions',
+                          hint: 'e.g. Lesson 1: Introduction to Functions (max 100 chars)',
                         ),
                       ),
                       const SizedBox(height: 14),
@@ -894,7 +901,7 @@ class _TeacherLearningMaterialsTabState
                             setModalState(() {
                               isUploading = false;
                               inModalUploadError =
-                                  'Upload failed: $e. Your inputs are saved. Click "Retry Upload" to try again.';
+                                  getUserFriendlyUploadErrorMessage(e);
                             });
                           }
                         }
@@ -1058,30 +1065,12 @@ class _TeacherLearningMaterialsTabState
   Future<void> _deleteFolderPermanentlyConfirm(ClassRealmFolder folder) async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        title: const Row(
-          children: [
-            Icon(Icons.delete_forever, color: Colors.red, size: 22),
-            SizedBox(width: 8),
-            Text('Permanently Delete Folder?'),
-          ],
-        ),
-        content: Text(
-          'Are you sure you want to permanently delete "${folder.folderName}" from the school system?\n\n'
-          'This will completely remove the folder and all its child documents. This action cannot be undone.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Delete Permanently'),
-          ),
-        ],
+      barrierDismissible: false,
+      builder: (ctx) => _PermanentDeleteConfirmDialog(
+        title: 'Permanently Delete Folder?',
+        itemName: folder.folderName,
+        details:
+            'This will permanently delete the folder "${folder.folderName}" and all of its ${folder.fileCount} materials from the school system.\n\nOnce deleted, these files and folders cannot be recovered.',
       ),
     );
 
@@ -1105,31 +1094,14 @@ class _TeacherLearningMaterialsTabState
   Future<void> _archiveMaterialConfirm(ClassRealmMaterial material) async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        title: const Row(
-          children: [
-            Icon(Icons.archive_outlined, color: Colors.orange, size: 22),
-            SizedBox(width: 8),
-            Text('Archive Material?'),
-          ],
-        ),
-        content: Text(
-          'Archiving "${material.displayName}" will hide it from students and move it to the Archived Items view.\n\nYou can restore it anytime.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.orange.shade800,
-            ),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Archive Material'),
-          ),
-        ],
+      barrierDismissible: false,
+      builder: (ctx) => _ArchiveCooldownDialog(
+        title: 'Archive Material?',
+        content:
+            'Archiving "${material.displayName}" will hide it from students and move it to the Archived Items view.\n\nYou can restore it to active status anytime.',
+        actionLabel: 'Archive Material',
+        actionColor: Colors.orange.shade800,
+        icon: Icons.archive_outlined,
       ),
     );
 
@@ -1154,30 +1126,12 @@ class _TeacherLearningMaterialsTabState
   ) async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        title: const Row(
-          children: [
-            Icon(Icons.delete_forever, color: Colors.red, size: 22),
-            SizedBox(width: 8),
-            Text('Permanently Delete Material?'),
-          ],
-        ),
-        content: Text(
-          'Are you sure you want to permanently delete "${material.displayName}" from the school system?\n\n'
-          'This will completely erase the material record and cloud file. This action cannot be undone.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Delete Permanently'),
-          ),
-        ],
+      barrierDismissible: false,
+      builder: (ctx) => _PermanentDeleteConfirmDialog(
+        title: 'Permanently Delete Material?',
+        itemName: material.displayName,
+        details:
+            'This will permanently erase "${material.displayName}" (${material.fileName}, ${material.formattedSize}) from the school database and purge the physical file from cloud storage.\n\nAll student reading logs and access history linked to this document will be permanently deleted and cannot be recovered.',
       ),
     );
 
@@ -1253,25 +1207,222 @@ class _TeacherLearningMaterialsTabState
     }
   }
 
-  void _openInAppViewerAndEditor(ClassRealmMaterial material) {
-    if (_selectedOffering == null) return;
-    TeacherMaterialViewerModal.show(
-      context: context,
-      material: material,
-      availableFolders: _folders,
-      currentOfferingId: _selectedOffering!['id'] as String,
-      onMaterialUpdated: (updatedMat) {
-        setState(() {
-          final idx = _materials.indexWhere((m) => m.id == updatedMat.id);
-          if (idx != -1) {
-            _materials[idx] = updatedMat;
-          }
-        });
-      },
-      onMaterialDeleted: () {
-        _loadFolderContents();
-      },
-    );
+  // --- Storage Quota & User-Friendly Errors ---
+  int get _totalStorageBytes {
+    final activeBytes =
+        _materials.fold<int>(0, (acc, m) => acc + m.fileSizeBytes);
+    final archivedBytes =
+        _archivedMaterials.fold<int>(0, (acc, m) => acc + m.fileSizeBytes);
+    return activeBytes + archivedBytes;
+  }
+
+  static String getUserFriendlyUploadErrorMessage(dynamic error) {
+    final errStr = error.toString().toLowerCase();
+
+    // 1. Storage Quota Exceeded / Bucket Full
+    if (errStr.contains('quota') ||
+        errStr.contains('storage limit') ||
+        errStr.contains('insufficient_storage') ||
+        errStr.contains('bucket full') ||
+        errStr.contains('507') ||
+        errStr.contains('exceeded your project') ||
+        errStr.contains('resource limit')) {
+      return 'Cloud Storage Full: The school\'s cloud storage capacity has reached its limit. Please notify your administrator to free up space or upgrade storage before uploading new materials.';
+    }
+
+    // 2. File size / Payload too large
+    if (errStr.contains('413') ||
+        errStr.contains('payload too large') ||
+        errStr.contains('file too large') ||
+        errStr.contains('maximum size')) {
+      return 'File Too Large: The selected file exceeds the allowable upload size. Please choose a file smaller than 15 MB.';
+    }
+
+    // 3. Network or timeout issues
+    if (errStr.contains('timeout') ||
+        errStr.contains('socketexception') ||
+        errStr.contains('network') ||
+        errStr.contains('clientexception') ||
+        errStr.contains('failed host lookup')) {
+      return 'Connection Interrupted: Unable to connect to the server. Please check your internet connection and click "Retry Upload".';
+    }
+
+    // 4. Unauthorized / Permission
+    if (errStr.contains('unauthorized') ||
+        errStr.contains('permission denied') ||
+        errStr.contains('row-level security') ||
+        errStr.contains('policy') ||
+        errStr.contains('403') ||
+        errStr.contains('jwt')) {
+      return 'Access Denied: You do not have permission to upload materials to this subject offering. Please make sure you are signed in as the assigned teacher.';
+    }
+
+    // 5. Duplicate filename / Conflict
+    if (errStr.contains('duplicate') ||
+        errStr.contains('already exists') ||
+        errStr.contains('conflict') ||
+        errStr.contains('409')) {
+      return 'A document with this file name already exists in this folder. Please rename the file before uploading.';
+    }
+
+    // Fallback friendly message (NO raw technical stack traces)
+    return 'Upload Encountered an Issue: We could not finish uploading your file right now. Your inputs have been kept intact—please try clicking "Retry Upload".';
+  }
+
+  // --- Material URL & Direct View / Download ---
+  final Set<String> _openingIds = {};
+  final Set<String> _downloadingIds = {};
+
+  Future<String?> _resolveMaterialUrl(ClassRealmMaterial material) async {
+    final raw = material.storagePathUrl;
+    var path = raw.contains('/learning_materials/')
+        ? raw.split('/learning_materials/').last
+        : raw;
+    if (path.contains('?')) {
+      path = path.split('?').first;
+    }
+    path = Uri.decodeComponent(path).trim();
+    if (path.isEmpty) return null;
+
+    try {
+      final url = await SupabaseService().adminClient.storage
+          .from('learning_materials')
+          .createSignedUrl(path, 60 * 60);
+      return url;
+    } catch (e) {
+      debugPrint('Failed to create signed URL: $e');
+      if (raw.startsWith('http://') || raw.startsWith('https://')) {
+        return raw;
+      }
+      return null;
+    }
+  }
+
+  Future<void> _viewMaterial(ClassRealmMaterial material) async {
+    if (_openingIds.contains(material.id)) return;
+    setState(() => _openingIds.add(material.id));
+
+    try {
+      final resolvedUrl = await _resolveMaterialUrl(material);
+      if (resolvedUrl == null || resolvedUrl.isEmpty) {
+        if (!mounted) return;
+        _showFeedbackModal(
+          'Error',
+          'Material file link is not available.',
+          isError: true,
+        );
+        return;
+      }
+
+      final ext = material.fileExtension.toLowerCase();
+      final isOfficeDoc =
+          ext == 'doc' || ext == 'docx' || ext == 'ppt' || ext == 'pptx';
+
+      Uri targetUri = Uri.parse(resolvedUrl);
+
+      if (kIsWeb && isOfficeDoc) {
+        // In Web browsers, doc/docx/ppt/pptx cannot be natively viewed without downloading.
+        // Google Docs Viewer renders it inline in a new tab without downloading.
+        targetUri = Uri.parse(
+          'https://docs.google.com/viewer?url=${Uri.encodeComponent(resolvedUrl)}&embedded=true',
+        );
+      }
+
+      bool launched = false;
+      if (kIsWeb) {
+        launched = await launchUrl(targetUri, webOnlyWindowName: '_blank');
+      } else {
+        // Native App (Android / iOS):
+        // 1. Try launching in external application (e.g. Acrobat Reader, Word, Drive)
+        try {
+          launched =
+              await launchUrl(targetUri, mode: LaunchMode.externalApplication);
+        } catch (_) {}
+
+        // 2. Fallback: If no external app is installed or handler fails, open via in-app browser overlay
+        if (!launched) {
+          try {
+            final inAppUri = isOfficeDoc
+                ? Uri.parse(
+                    'https://docs.google.com/viewer?url=${Uri.encodeComponent(resolvedUrl)}&embedded=true',
+                  )
+                : targetUri;
+            launched =
+                await launchUrl(inAppUri, mode: LaunchMode.inAppBrowserView);
+          } catch (_) {}
+        }
+
+        // 3. Last-resort fallback to platform default
+        if (!launched) {
+          launched =
+              await launchUrl(targetUri, mode: LaunchMode.platformDefault);
+        }
+      }
+
+      if (!launched && mounted) {
+        _showFeedbackModal(
+          'Notice',
+          'Unable to open file in browser or default viewer.',
+          isError: false,
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        _showFeedbackModal('Error', 'Failed to open file: $e', isError: true);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _openingIds.remove(material.id));
+      }
+    }
+  }
+
+  Future<void> _downloadMaterial(ClassRealmMaterial material) async {
+    if (_downloadingIds.contains(material.id)) return;
+    setState(() => _downloadingIds.add(material.id));
+
+    try {
+      final resolvedUrl = await _resolveMaterialUrl(material);
+      if (resolvedUrl == null || resolvedUrl.isEmpty) {
+        if (!mounted) return;
+        _showFeedbackModal('Error', 'Material file link is not available for download.', isError: true);
+        return;
+      }
+
+      final extension = material.fileExtension.toLowerCase();
+      final sanitizedFileName = material.fileName.isNotEmpty
+          ? material.fileName
+          : '${material.displayName}.$extension';
+
+      final response = await http.get(Uri.parse(resolvedUrl));
+      if (response.statusCode == 200) {
+        final result = await FileDownloadHelper.downloadBytes(
+          bytes: response.bodyBytes,
+          fileName: sanitizedFileName,
+          extension: extension,
+          mimeType: material.mimeType ?? 'application/octet-stream',
+        );
+
+        if (mounted && result != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(result),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      } else {
+        await launchUrl(Uri.parse(resolvedUrl), mode: LaunchMode.externalApplication);
+      }
+    } catch (e) {
+      if (mounted) {
+        _showFeedbackModal('Download Error', '$e', isError: true);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _downloadingIds.remove(material.id));
+      }
+    }
   }
 
   void _showFeedbackModal(
@@ -1892,6 +2043,73 @@ class _TeacherLearningMaterialsTabState
           ],
 
           const SizedBox(width: 12),
+
+          // Cloud Storage Meter Indicator (1 GB Cap Monitoring)
+          Builder(
+            builder: (context) {
+              final usedMb = _totalStorageBytes / (1024 * 1024);
+              final isWarning = usedMb >= 800;
+              final isCritical = usedMb >= 950;
+
+              return Tooltip(
+                message: isCritical
+                    ? 'Cloud Storage Full (1 GB reached). Remove unused items to free space.'
+                    : isWarning
+                        ? 'Storage usage is high (${usedMb.toStringAsFixed(1)} MB / 1 GB).'
+                        : 'Free-tier cloud storage usage: ${usedMb.toStringAsFixed(1)} MB of 1 GB used.',
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: isCritical
+                        ? Colors.red.withValues(alpha: 0.12)
+                        : isWarning
+                            ? Colors.amber.withValues(alpha: 0.15)
+                            : theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.25),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: isCritical
+                          ? Colors.red.withValues(alpha: 0.4)
+                          : isWarning
+                              ? Colors.amber.withValues(alpha: 0.4)
+                              : theme.colorScheme.outline.withValues(alpha: 0.15),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        isCritical
+                            ? Icons.cloud_off
+                            : isWarning
+                                ? Icons.cloud_queue
+                                : Icons.cloud_done,
+                        size: 15,
+                        color: isCritical
+                            ? Colors.red
+                            : isWarning
+                                ? Colors.amber.shade800
+                                : const Color(0xFF3A6B88),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Storage: ${usedMb.toStringAsFixed(1)} MB / 1 GB',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: isCritical
+                              ? Colors.red
+                              : isWarning
+                                  ? Colors.amber.shade900
+                                  : theme.colorScheme.onSurface.withValues(alpha: 0.75),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+          const SizedBox(width: 10),
 
           // 4. Archive View Toggle Button (Like Classroom Setup)
           OutlinedButton.icon(
@@ -2579,13 +2797,15 @@ class _TeacherLearningMaterialsTabState
     );
   }
 
-  // --- File Widgets (Opening In-App Viewer Modal) ---
+  // --- File Widgets (Direct View & Download, Archive without Delete Button) ---
   Widget _buildFileCard(ClassRealmMaterial material, ThemeData theme) {
     final ext = material.fileExtension;
     final isVisible = material.isVisibleToStudents;
+    final isOpening = _openingIds.contains(material.id);
+    final isDownloading = _downloadingIds.contains(material.id);
 
     return InkWell(
-      onTap: () => _openInAppViewerAndEditor(material),
+      onTap: () => _viewMaterial(material),
       borderRadius: BorderRadius.circular(12),
       child: Container(
         padding: const EdgeInsets.all(12),
@@ -2603,11 +2823,21 @@ class _TeacherLearningMaterialsTabState
           children: [
             Row(
               children: [
-                Icon(
-                  _getFormatIcon(ext),
-                  color: _getFormatColor(ext),
-                  size: 28,
-                ),
+                if (isOpening)
+                  const SizedBox(
+                    width: 28,
+                    height: 28,
+                    child: Padding(
+                      padding: EdgeInsets.all(4),
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  )
+                else
+                  Icon(
+                    _getFormatIcon(ext),
+                    color: _getFormatColor(ext),
+                    size: 28,
+                  ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
@@ -2688,25 +2918,31 @@ class _TeacherLearningMaterialsTabState
                   ),
                 ),
                 const Spacer(),
-                // Archive button
+                // Direct Download button
+                IconButton(
+                  icon: isDownloading
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(
+                          Icons.download_rounded,
+                          size: 18,
+                          color: Color(0xFF3A6B88),
+                        ),
+                  tooltip: 'Download File',
+                  onPressed: () => _downloadMaterial(material),
+                ),
+                // Archive button (Active materials only have Archive, NO permanent delete)
                 IconButton(
                   icon: const Icon(
                     Icons.archive_outlined,
-                    size: 16,
+                    size: 18,
                     color: Colors.grey,
                   ),
                   tooltip: 'Archive Material',
                   onPressed: () => _archiveMaterialConfirm(material),
-                ),
-                // Delete button
-                IconButton(
-                  icon: const Icon(
-                    Icons.delete_outline,
-                    size: 16,
-                    color: Colors.redAccent,
-                  ),
-                  tooltip: 'Delete Permanently from Database',
-                  onPressed: () => _deleteMaterialPermanentlyConfirm(material),
                 ),
               ],
             ),
@@ -2719,6 +2955,8 @@ class _TeacherLearningMaterialsTabState
   Widget _buildFileListRow(ClassRealmMaterial material, ThemeData theme) {
     final ext = material.fileExtension;
     final isVisible = material.isVisibleToStudents;
+    final isOpening = _openingIds.contains(material.id);
+    final isDownloading = _downloadingIds.contains(material.id);
 
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
@@ -2731,11 +2969,20 @@ class _TeacherLearningMaterialsTabState
         ),
       ),
       child: ListTile(
-        leading: Icon(
-          _getFormatIcon(ext),
-          color: _getFormatColor(ext),
-          size: 28,
-        ),
+        leading: isOpening
+            ? const SizedBox(
+                width: 28,
+                height: 28,
+                child: Padding(
+                  padding: EdgeInsets.all(4),
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              )
+            : Icon(
+                _getFormatIcon(ext),
+                color: _getFormatColor(ext),
+                size: 28,
+              ),
         title: Text(
           material.displayName,
           style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
@@ -2772,7 +3019,23 @@ class _TeacherLearningMaterialsTabState
               ),
             ),
             const SizedBox(width: 8),
-            // Archive action
+            // Direct download button
+            IconButton(
+              icon: isDownloading
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(
+                      Icons.download_rounded,
+                      color: Color(0xFF3A6B88),
+                      size: 20,
+                    ),
+              tooltip: 'Download File',
+              onPressed: () => _downloadMaterial(material),
+            ),
+            // Archive action (Active materials only have Archive, NO permanent delete)
             IconButton(
               icon: const Icon(
                 Icons.archive_outlined,
@@ -2782,20 +3045,11 @@ class _TeacherLearningMaterialsTabState
               tooltip: 'Archive Material',
               onPressed: () => _archiveMaterialConfirm(material),
             ),
-            // Delete action
-            IconButton(
-              icon: const Icon(
-                Icons.delete_outline,
-                color: Colors.redAccent,
-                size: 20,
-              ),
-              tooltip: 'Delete Material Permanently',
-              onPressed: () => _deleteMaterialPermanentlyConfirm(material),
-            ),
-            const Icon(Icons.chevron_right),
+            const SizedBox(width: 4),
+            const Icon(Icons.open_in_new, size: 18, color: Colors.grey),
           ],
         ),
-        onTap: () => _openInAppViewerAndEditor(material),
+        onTap: () => _viewMaterial(material),
       ),
     );
   }
@@ -2827,5 +3081,291 @@ class _TeacherLearningMaterialsTabState
 
   String _formatDate(DateTime dt) {
     return '${dt.month}/${dt.day}/${dt.year}';
+  }
+}
+
+// ============================================================================
+// ARCHIVE COOLDOWN DIALOG (5-Second Safety Countdown before Archive Action)
+// ============================================================================
+class _ArchiveCooldownDialog extends StatefulWidget {
+  final String title;
+  final String content;
+  final String actionLabel;
+  final Color actionColor;
+  final IconData icon;
+
+  const _ArchiveCooldownDialog({
+    required this.title,
+    required this.content,
+    required this.actionLabel,
+    required this.actionColor,
+    required this.icon,
+  });
+
+  @override
+  State<_ArchiveCooldownDialog> createState() => _ArchiveCooldownDialogState();
+}
+
+class _ArchiveCooldownDialogState extends State<_ArchiveCooldownDialog> {
+  int _remainingSeconds = 5;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (_remainingSeconds > 1) {
+        setState(() => _remainingSeconds--);
+      } else {
+        timer.cancel();
+        setState(() => _remainingSeconds = 0);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isLocked = _remainingSeconds > 0;
+
+    return AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      title: Row(
+        children: [
+          Icon(widget.icon, color: widget.actionColor, size: 22),
+          const SizedBox(width: 8),
+          Expanded(child: Text(widget.title)),
+        ],
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            widget.content,
+            style: const TextStyle(fontSize: 13.5, height: 1.45),
+          ),
+          const SizedBox(height: 14),
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 300),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+              color: isLocked ? Colors.orange.shade50 : Colors.green.shade50,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: isLocked ? Colors.orange.shade200 : Colors.green.shade200,
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  isLocked ? Icons.timer_outlined : Icons.check_circle_outline,
+                  size: 16,
+                  color: isLocked ? Colors.orange.shade800 : Colors.green.shade800,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    isLocked
+                        ? 'Safety Cooldown: Please review carefully. Archive unlocks in $_remainingSeconds second${_remainingSeconds > 1 ? 's' : ''}...'
+                        : 'Cooldown complete. You may now confirm archiving.',
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w600,
+                      color: isLocked ? Colors.orange.shade900 : Colors.green.shade900,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: widget.actionColor,
+            foregroundColor: Colors.white,
+            disabledBackgroundColor: Colors.grey.shade300,
+            disabledForegroundColor: Colors.grey.shade600,
+          ),
+          onPressed: isLocked ? null : () => Navigator.pop(context, true),
+          child: Text(
+            isLocked ? '${widget.actionLabel} ($_remainingSeconds s)' : widget.actionLabel,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ============================================================================
+// PERMANENT DELETE CONFIRM DIALOG (Requires typing "CONFIRM" like Maintenance Mode)
+// ============================================================================
+class _PermanentDeleteConfirmDialog extends StatefulWidget {
+  final String title;
+  final String itemName;
+  final String details;
+
+  const _PermanentDeleteConfirmDialog({
+    required this.title,
+    required this.itemName,
+    required this.details,
+  });
+
+  @override
+  State<_PermanentDeleteConfirmDialog> createState() =>
+      _PermanentDeleteConfirmDialogState();
+}
+
+class _PermanentDeleteConfirmDialogState
+    extends State<_PermanentDeleteConfirmDialog> {
+  final _controller = TextEditingController();
+
+  bool get _isConfirmed => _controller.text.trim().toUpperCase() == 'CONFIRM';
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      title: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.red.shade50,
+              shape: BoxShape.circle,
+            ),
+            child: Icon(Icons.delete_forever, color: Colors.red.shade700, size: 22),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              widget.title,
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
+            ),
+          ),
+        ],
+      ),
+      content: SizedBox(
+        width: 440,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.red.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.red.shade200),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.warning_amber_rounded, color: Colors.red.shade700, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'PERMANENT DATA ERASURE: This action is destructive and CANNOT be undone.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.red.shade900,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+            Text(
+              widget.details,
+              style: TextStyle(
+                fontSize: 13,
+                height: 1.45,
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.85),
+              ),
+            ),
+            const SizedBox(height: 16),
+            RichText(
+              text: TextSpan(
+                style: TextStyle(
+                  fontSize: 12.5,
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
+                ),
+                children: const [
+                  TextSpan(text: 'To confirm permanent deletion, please type '),
+                  TextSpan(
+                    text: 'CONFIRM',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.red,
+                    ),
+                  ),
+                  TextSpan(text: ' in the box below:'),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _controller,
+              autofocus: true,
+              textCapitalization: TextCapitalization.characters,
+              onChanged: (_) => setState(() {}),
+              decoration: InputDecoration(
+                hintText: 'Type CONFIRM to proceed',
+                hintStyle: TextStyle(
+                  fontSize: 13,
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
+                ),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide(color: Colors.grey.shade400),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: Colors.red, width: 2),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.red.shade700,
+            foregroundColor: Colors.white,
+            disabledBackgroundColor: Colors.grey.shade300,
+            disabledForegroundColor: Colors.grey.shade600,
+          ),
+          onPressed: _isConfirmed ? () => Navigator.pop(context, true) : null,
+          child: const Text('Delete Permanently'),
+        ),
+      ],
+    );
   }
 }

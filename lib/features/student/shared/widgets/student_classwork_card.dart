@@ -48,8 +48,8 @@ class StudentClassworkCard extends StatelessWidget {
       final alreadySigned =
           rawUrl.contains('token=') || rawUrl.contains('Signature=');
 
+      String cleanPath = rawUrl;
       if (!isFullHttpUrl || !alreadySigned) {
-        String cleanPath = rawUrl;
         if (cleanPath.contains('/classwork-materials/')) {
           cleanPath = cleanPath.split('/classwork-materials/').last;
         } else if (cleanPath.contains('/classwork%20materials/')) {
@@ -71,22 +71,56 @@ class StudentClassworkCard extends StatelessWidget {
           if (isFullHttpUrl) {
             resolvedUrl = rawUrl;
           } else {
-            rethrow;
+            // Bucket classwork-materials is public, fallback to public URL
+            resolvedUrl = SupabaseService().client.storage
+                .from('classwork-materials')
+                .getPublicUrl(cleanPath);
           }
         }
       }
 
+      final lower = resolvedUrl.toLowerCase();
+      final isOfficeDoc = lower.endsWith('.doc') ||
+          lower.endsWith('.docx') ||
+          cleanPath.toLowerCase().endsWith('.doc') ||
+          cleanPath.toLowerCase().endsWith('.docx');
+      Uri targetUri = Uri.parse(resolvedUrl);
+      if (kIsWeb && isOfficeDoc) {
+        // In Web browsers, doc/docx cannot be natively viewed without downloading.
+        // Google Docs Viewer renders it inline in a new tab without downloading.
+        targetUri = Uri.parse(
+          'https://docs.google.com/viewer?url=${Uri.encodeComponent(resolvedUrl)}&embedded=true',
+        );
+      }
+
       bool launched = false;
       if (urlLauncher != null) {
-        launched = await urlLauncher!(resolvedUrl);
+        launched = await urlLauncher!(targetUri.toString());
       } else {
-        final uri = Uri.parse(resolvedUrl);
         if (kIsWeb) {
-          launched = await launchUrl(uri, webOnlyWindowName: '_blank');
+          launched = await launchUrl(targetUri, webOnlyWindowName: '_blank');
         } else {
-          launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+          // Native App (Android / iOS):
+          // 1. Try launching in external application (e.g. Word, Drive, Acrobat Reader)
+          try {
+            launched = await launchUrl(targetUri, mode: LaunchMode.externalApplication);
+          } catch (_) {}
+
+          // 2. Fallback: If no app is installed or handler fails, open via in-app browser overlay
           if (!launched) {
-            launched = await launchUrl(uri, mode: LaunchMode.platformDefault);
+            try {
+              final inAppUri = isOfficeDoc
+                  ? Uri.parse(
+                      'https://docs.google.com/viewer?url=${Uri.encodeComponent(resolvedUrl)}&embedded=true',
+                    )
+                  : targetUri;
+              launched = await launchUrl(inAppUri, mode: LaunchMode.inAppBrowserView);
+            } catch (_) {}
+          }
+
+          // 3. Last-resort fallback to platform default
+          if (!launched) {
+            launched = await launchUrl(targetUri, mode: LaunchMode.platformDefault);
           }
         }
       }

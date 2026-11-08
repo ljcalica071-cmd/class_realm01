@@ -334,7 +334,16 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
       cleanPath = cleanPath.split('?').first;
     }
     cleanPath = Uri.decodeComponent(cleanPath);
-    return SupabaseService().adminClient.storage.from('classwork-materials').createSignedUrl(cleanPath, 60 * 60);
+    try {
+      return await SupabaseService().adminClient.storage
+          .from('classwork-materials')
+          .createSignedUrl(cleanPath, 60 * 60);
+    } catch (_) {
+      // Bucket classwork-materials is public, fallback to public URL
+      return Supabase.instance.client.storage
+          .from('classwork-materials')
+          .getPublicUrl(cleanPath);
+    }
   }
 
   Future<void> _openStudentFile(Map<String, dynamic>? submission) async {
@@ -353,17 +362,45 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
     _isOpeningFile = true;
     try {
       final url = await _sanitizeAndSignClassworkUrl(path); // 1 hour expiry
-      final uri = Uri.parse(url);
+      final lower = path.toLowerCase();
+      final isOfficeDoc = lower.endsWith('.doc') || lower.endsWith('.docx');
+      Uri launchUri = Uri.parse(url);
+      if (kIsWeb && isOfficeDoc) {
+        // In Web browsers, doc/docx cannot be natively viewed without downloading.
+        // Google Docs Viewer renders it inline in a new tab without downloading.
+        launchUri = Uri.parse(
+          'https://docs.google.com/viewer?url=${Uri.encodeComponent(url)}&embedded=true',
+        );
+      }
+
       bool launched = false;
       if (kIsWeb) {
-        launched = await launchUrl(uri, webOnlyWindowName: '_blank');
+        launched = await launchUrl(launchUri, webOnlyWindowName: '_blank');
       } else {
-        launched = await launchUrl(
-          uri,
-          mode: LaunchMode.externalApplication,
-        );
+        // Native App (Android / iOS):
+        // 1. Try launching in external application (e.g. Word, Drive, Acrobat Reader)
+        try {
+          launched = await launchUrl(
+            launchUri,
+            mode: LaunchMode.externalApplication,
+          );
+        } catch (_) {}
+
+        // 2. Fallback: If no app is installed or handler fails, open via in-app browser overlay
         if (!launched) {
-          launched = await launchUrl(uri, mode: LaunchMode.platformDefault);
+          try {
+            final inAppUri = isOfficeDoc
+                ? Uri.parse(
+                    'https://docs.google.com/viewer?url=${Uri.encodeComponent(url)}&embedded=true',
+                  )
+                : launchUri;
+            launched = await launchUrl(inAppUri, mode: LaunchMode.inAppBrowserView);
+          } catch (_) {}
+        }
+
+        // 3. Last-resort fallback to platform default
+        if (!launched) {
+          launched = await launchUrl(launchUri, mode: LaunchMode.platformDefault);
         }
       }
       if (!launched && mounted) {
@@ -410,17 +447,45 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
     _isOpeningFile = true;
     try {
       final url = await _sanitizeAndSignClassworkUrl(path); // 1 hour expiry
-      final uri = Uri.parse(url);
+      final lower = path.toLowerCase();
+      final isOfficeDoc = lower.endsWith('.doc') || lower.endsWith('.docx');
+      Uri launchUri = Uri.parse(url);
+      if (kIsWeb && isOfficeDoc) {
+        // In Web browsers, doc/docx cannot be natively viewed without downloading.
+        // Google Docs Viewer renders it inline in a new tab without downloading.
+        launchUri = Uri.parse(
+          'https://docs.google.com/viewer?url=${Uri.encodeComponent(url)}&embedded=true',
+        );
+      }
+
       bool launched = false;
       if (kIsWeb) {
-        launched = await launchUrl(uri, webOnlyWindowName: '_blank');
+        launched = await launchUrl(launchUri, webOnlyWindowName: '_blank');
       } else {
-        launched = await launchUrl(
-          uri,
-          mode: LaunchMode.externalApplication,
-        );
+        // Native App (Android / iOS):
+        // 1. Try launching in external application (e.g. Word, Drive, Acrobat Reader)
+        try {
+          launched = await launchUrl(
+            launchUri,
+            mode: LaunchMode.externalApplication,
+          );
+        } catch (_) {}
+
+        // 2. Fallback: If no app is installed or handler fails, open via in-app browser overlay
         if (!launched) {
-          launched = await launchUrl(uri, mode: LaunchMode.platformDefault);
+          try {
+            final inAppUri = isOfficeDoc
+                ? Uri.parse(
+                    'https://docs.google.com/viewer?url=${Uri.encodeComponent(url)}&embedded=true',
+                  )
+                : launchUri;
+            launched = await launchUrl(inAppUri, mode: LaunchMode.inAppBrowserView);
+          } catch (_) {}
+        }
+
+        // 3. Last-resort fallback to platform default
+        if (!launched) {
+          launched = await launchUrl(launchUri, mode: LaunchMode.platformDefault);
         }
       }
       if (!launched && mounted) {
@@ -1157,26 +1222,12 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          _formatStudentName(student),
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        Text(
-                          student.lrn?.isNotEmpty == true
-                              ? 'LRN: ${student.lrn}'
-                              : 'Student Submission Review',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: theme.colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                      ],
+                    child: Text(
+                      _formatStudentName(student),
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
                   _buildStatusBadgeWidget(status, isDark),
@@ -1667,8 +1718,7 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
         final q = _searchQuery.toLowerCase();
         final name = _formatStudentName(student).toLowerCase();
         final rawName = student.fullName.toLowerCase();
-        final lrn = (student.lrn ?? '').toLowerCase();
-        if (!name.contains(q) && !rawName.contains(q) && !lrn.contains(q)) return false;
+        if (!name.contains(q) && !rawName.contains(q)) return false;
       }
 
       if (_selectedStatus != 'All') {
@@ -2610,29 +2660,15 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
           ),
           const SizedBox(width: 12),
 
-          // Student Name & LRN (Lastname, Firstname M.I.)
+          // Student Name (Lastname, Firstname M.I.)
           Expanded(
             flex: 3,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  _formatStudentName(student),
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                  ),
-                ),
-                Text(
-                  student.lrn?.isNotEmpty == true
-                      ? 'LRN: ${student.lrn}'
-                      : 'Student',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
+            child: Text(
+              _formatStudentName(student),
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 14,
+              ),
             ),
           ),
 

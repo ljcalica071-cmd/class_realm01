@@ -92,9 +92,9 @@ class LegalDocumentsModal {
           'We collect only the minimum personal, academic, and technical data necessary to deliver academic management services:\n'
           '• Students: Full Name, Learner Reference Number (LRN), School/Personal Email Address, Date of Birth, Gender, Grade Level, and Section.\n'
           '• Parents/Guardians: Full Name, Email Address, Contact/Mobile Number, Relationship to the linked student(s), and linked Student LRN(s).\n'
-          '• Teachers & Administrators: Full Name, Employee/Teacher ID, Email Address, Contact Number, Subject Specialization, Consultation Hours, and optional public directory links.\n'
+          '• Teachers & Administrators: Full Name, Email Address, Contact Number, Subject Specialization, Consultation Hours, and optional public directory links.\n'
           '• RFID and Attendance Data: Assigned RFID Card Unique Identifier (UID), daily time-in/time-out scan timestamps, attendance status (Present, Late, Absent, Excused), and scanner device logs captured via classroom ESP32 RFID readers or teacher NFC devices.\n'
-          '• Academic and Classwork Data: Written Works (WW), Performance Tasks (PT), Quarterly Examination (EX) scores, uploaded activity submissions/files, computed initial and transmuted grades (DepEd Order No. 8, s. 2015 / MATATAG standards), and teacher feedback.\n'
+          '• Academic and Classwork Data: Written Works (WW), Performance Tasks (PT), Quarterly Examination (EX) scores, uploaded activity submissions/files, computed initial and transmuted grades (Strengthened Senior High School Curriculum under DepEd Order No. 15, s. 2026), and teacher feedback.\n'
           '• Assessment Integrity Telemetry: During active online quizzes and exams only, the System logs app lifecycle changes (tab switches, window minimize/focus loss, and copy attempts) to uphold examination integrity. ClassRealm does NOT record camera video, microphone audio, personal photos, contacts, or GPS location.\n'
           '• Device Security Metadata: Anonymous device installation identifiers, login timestamps, and failed authentication counters used solely to prevent brute-force attacks and unauthorized account access.',
     ),

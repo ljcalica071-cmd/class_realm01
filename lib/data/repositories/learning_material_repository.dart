@@ -3,7 +3,7 @@ import 'dart:typed_data';
 /// Validator and utility for learning material files and uploads.
 class MaterialFileValidator {
   static const int maxFileSizeBytes =
-      3145728; // Strict 3 MB limit (3 * 1024 * 1024)
+      15728640; // Strict 15 MB limit (15 * 1024 * 1024)
   static const int maxFileNameLength = 100;
 
   // Allowed file extensions
@@ -36,12 +36,25 @@ class MaterialFileValidator {
   /// PK/ZIP (used by .docx and .pptx): 0x50, 0x4B, 0x03, 0x04
   static const List<int> magicZip = [0x50, 0x4B, 0x03, 0x04];
 
-  /// Sanitize display filename: strip control characters, restrict to safe chars, truncate to 100 chars
+  /// Sanitize display filename: strip control characters, emojis, illegal symbols, truncate to 100 chars
   static String sanitizeFileName(String name) {
-    var clean = name.replaceAll(RegExp(r'[\x00-\x1F\x7F]'), '').trim();
+    // 1. Strip emojis and non-standard symbol blocks
+    var clean = name
+        .replaceAll(
+          RegExp(
+            r'[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]',
+            unicode: true,
+          ),
+          '',
+        )
+        // 2. Strip filesystem & URL reserved chars (# % { } \ / : * ? " < > | ~)
+        .replaceAll(RegExp(r'[\\/:*?"<>|#%{}~]'), '_')
+        .replaceAll(RegExp(r'[\x00-\x1F\x7F]'), '')
+        .trim();
+
     if (clean.isEmpty) clean = 'Document';
 
-    // Keep extension if possible when truncating
+    // 3. Keep extension if possible when truncating to 100 characters
     if (clean.length > maxFileNameLength) {
       final dotIndex = clean.lastIndexOf('.');
       if (dotIndex != -1 && dotIndex > clean.length - 10) {
@@ -55,23 +68,28 @@ class MaterialFileValidator {
     return clean;
   }
 
-  /// Validates file extension, size, and magic bytes.
+  /// Validates file extension, size, magic bytes, and 100-character name limit.
   /// Returns null if valid; returns an error string if invalid.
   static String? validateFile({
     required String fileName,
     required Uint8List fileBytes,
     required int byteSize,
   }) {
-    // 1. Size check
+    // 1. Filename length check (100 characters max)
+    if (fileName.trim().length > maxFileNameLength) {
+      return 'File name is too long (${fileName.trim().length} characters). The maximum allowed length is $maxFileNameLength characters.';
+    }
+
+    // 2. Size check
     if (byteSize > maxFileSizeBytes || fileBytes.length > maxFileSizeBytes) {
-      return 'File size exceeds the 3 MB (3,145,728 bytes) limit.';
+      return 'File size exceeds the 15 MB (15,728,640 bytes) limit.';
     }
 
     if (byteSize == 0 || fileBytes.isEmpty) {
       return 'The selected file is empty (0 bytes).';
     }
 
-    // 2. Extension check
+    // 3. Extension check
     final dotIdx = fileName.lastIndexOf('.');
     if (dotIdx == -1 || dotIdx == fileName.length - 1) {
       return 'Unsupported file format. Only PDF, DOC, DOCX, PPT, and PPTX files are allowed.';
@@ -82,7 +100,7 @@ class MaterialFileValidator {
       return 'Unsupported file format. Only PDF, DOC, DOCX, PPT, and PPTX files are allowed.';
     }
 
-    // 3. Magic-byte verification
+    // 4. Magic-byte verification
     if (ext == 'pdf') {
       if (!_matchesBytes(fileBytes, magicPdf)) {
         return 'Corrupted or invalid PDF file. Header verification failed.';

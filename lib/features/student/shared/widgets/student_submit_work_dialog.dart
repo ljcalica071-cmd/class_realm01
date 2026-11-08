@@ -68,7 +68,16 @@ class _StudentSubmitWorkDialogState extends State<StudentSubmitWorkDialog> {
 
       if (!['pdf', 'doc', 'docx'].contains(ext)) {
         setState(() {
-          _fileError = 'Invalid file type. Only PDF and Word Documents (.pdf, .doc, .docx) are accepted.';
+          _fileError =
+              'Invalid file format. Only PDF and Word documents (.pdf, .doc, .docx) are accepted.';
+        });
+        return;
+      }
+
+      if (file.name.length > 80) {
+        setState(() {
+          _fileError =
+              'File name is too long (${file.name.length} characters). Maximum allowed is 80 characters. Please rename your file before uploading.';
         });
         return;
       }
@@ -79,7 +88,8 @@ class _StudentSubmitWorkDialogState extends State<StudentSubmitWorkDialog> {
       }
 
       if (file.size > 15 * 1024 * 1024) {
-        setState(() => _fileError = 'File size exceeds maximum 15 MB limit.');
+        setState(() => _fileError =
+            'File size exceeds 15 MB limit (${_formatFileSize(file.size)}). Please compress or choose a smaller file.');
         return;
       }
 
@@ -128,14 +138,16 @@ class _StudentSubmitWorkDialogState extends State<StudentSubmitWorkDialog> {
     try {
       final client = Supabase.instance.client;
 
-      // Check if classwork item still exists in database (handle stale cache / deletion scenario)
+      // Check if classwork item still exists in database and deadline has not passed
       final existingItem = await client
           .from('classwork_items')
-          .select('id')
+          .select('id, deadline, is_archived, is_published')
           .eq('id', widget.classwork.id)
           .maybeSingle();
 
-      if (existingItem == null) {
+      if (existingItem == null ||
+          existingItem['is_archived'] == true ||
+          existingItem['is_published'] == false) {
         AppDataCache.instance.invalidatePrefix('student_dashboard_${user.id}');
         if (mounted) {
           Navigator.of(context).pop();
@@ -143,10 +155,27 @@ class _StudentSubmitWorkDialogState extends State<StudentSubmitWorkDialog> {
             context: context,
             title: 'Classwork Unavailable',
             message:
-                'This activity or performance task has already been deleted or removed by your teacher. Your submission cannot be accepted.',
+                'This activity or performance task has already been deleted or closed by your teacher. Your submission cannot be accepted.',
           );
         }
         return;
+      }
+
+      // Check if deadline passed while dialog was open
+      final deadlineStr = existingItem['deadline']?.toString();
+      if (deadlineStr != null) {
+        final deadline = DateTime.tryParse(deadlineStr);
+        if (deadline != null && DateTime.now().toUtc().isAfter(deadline.toUtc())) {
+          AppDataCache.instance.invalidatePrefix('student_dashboard_${user.id}');
+          if (mounted) {
+            setState(() {
+              _submitError =
+                  'The deadline has passed and submission is now closed. Your file could not be submitted.';
+              _isSubmitting = false;
+            });
+          }
+          return;
+        }
       }
 
       String? storagePath;
@@ -154,8 +183,15 @@ class _StudentSubmitWorkDialogState extends State<StudentSubmitWorkDialog> {
       // 1. Upload file if attached
       if (_fileBytes != null && _fileName != null) {
         final safeName = _fileName!.replaceAll(RegExp(r'[^a-zA-Z0-9._-]'), '_');
+        final baseName = safeName.contains('.')
+            ? safeName.substring(0, safeName.lastIndexOf('.'))
+            : safeName;
+        final ext = safeName.contains('.') ? safeName.split('.').last : 'pdf';
+        final truncatedBase = baseName.length > 50 ? baseName.substring(0, 50) : baseName;
+        final finalFileName = '$truncatedBase.$ext';
+
         storagePath =
-            'submissions/${widget.classwork.id}/${user.id}_${DateTime.now().millisecondsSinceEpoch}_$safeName';
+            'submissions/${widget.classwork.id}/${user.id}_${DateTime.now().millisecondsSinceEpoch}_$finalFileName';
 
         try {
           await SupabaseService().adminClient.storage
@@ -164,10 +200,27 @@ class _StudentSubmitWorkDialogState extends State<StudentSubmitWorkDialog> {
                 storagePath,
                 _fileBytes!,
                 fileOptions: const FileOptions(upsert: true),
-              );
+              )
+              .timeout(const Duration(seconds: 45));
         } catch (uploadErr) {
-          debugPrint('Storage upload error: $uploadErr');
-          throw Exception('Failed to upload file: $uploadErr');
+          debugPrint('Notice on admin storage upload: $uploadErr. Retrying with client storage...');
+          try {
+            await Supabase.instance.client.storage
+                .from('classwork-materials')
+                .uploadBinary(
+                  storagePath,
+                  _fileBytes!,
+                  fileOptions: const FileOptions(upsert: true),
+                )
+                .timeout(const Duration(seconds: 45));
+          } catch (clientErr) {
+            debugPrint('Storage upload error: $clientErr');
+            final errStr = clientErr.toString().toLowerCase();
+            if (errStr.contains('timeout')) {
+              throw Exception('Upload timed out. Please check your internet connection and try again.');
+            }
+            throw Exception('Failed to upload file: $clientErr');
+          }
         }
       }
 
@@ -192,10 +245,11 @@ class _StudentSubmitWorkDialogState extends State<StudentSubmitWorkDialog> {
       if (submissionId != null && storagePath != null && _fileName != null) {
         String mimeType = 'application/pdf';
         final ext = _fileName!.split('.').last.toLowerCase();
-        if (ext == 'doc') {
+        if (ext == 'doc' || ext == 'docx') {
+          // Note: submission_attachments column mime_type has varchar(50) with
+          // CHECK constraint allowing 'application/msword'. 'application/msword'
+          // safely fits within 50 chars for both .doc and .docx files.
           mimeType = 'application/msword';
-        } else if (ext == 'docx') {
-          mimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
         }
 
         try {
@@ -306,6 +360,55 @@ class _StudentSubmitWorkDialogState extends State<StudentSubmitWorkDialog> {
               ),
               const SizedBox(height: 18),
 
+              // Upfront Submission Guidance (Golden Rule: Prevent errors by showing requirements upfront)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(
+                  color: isDark ? Colors.white.withValues(alpha: 0.05) : const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: isDark ? Colors.white12 : const Color(0xFFE2E8F0),
+                  ),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      Icons.info_outline,
+                      size: 16,
+                      color: theme.colorScheme.primary,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Submission Guidelines & Requirements',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: isDark ? Colors.white : const Color(0xFF1E293B),
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            '• Accepted Formats: PDF (.pdf) or Word (.doc, .docx)\n• Max File Size: 15 MB per submission\n• File Name: Up to 80 characters',
+                            style: TextStyle(
+                              fontSize: 11.5,
+                              height: 1.35,
+                              color: isDark ? Colors.white70 : const Color(0xFF475569),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 14),
+
               // File upload container
               Text(
                 'Attach Your File *',
@@ -351,13 +454,26 @@ class _StudentSubmitWorkDialogState extends State<StudentSubmitWorkDialog> {
                             color: theme.colorScheme.onSurface,
                           ),
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Accepts PDF and Word Documents only (.pdf, .doc, .docx)',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                            color: theme.colorScheme.onSurfaceVariant,
+                        const SizedBox(height: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.primary.withValues(
+                              alpha: 0.08,
+                            ),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            'Formats: .pdf, .doc, .docx  •  Max: 15 MB  •  Filename: up to 80 chars',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w600,
+                              color: theme.colorScheme.primary,
+                            ),
                           ),
                         ),
                       ],
