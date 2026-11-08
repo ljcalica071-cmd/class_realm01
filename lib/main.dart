@@ -637,7 +637,8 @@ class _ClassRealmAppState extends State<ClassRealmApp> {
           theme: AppTheme.lightTheme,
           darkTheme: AppTheme.darkTheme,
           themeMode: themeMode,
-          themeAnimationDuration: Duration.zero,
+          themeAnimationDuration: const Duration(milliseconds: 250),
+          themeAnimationCurve: Curves.easeOutCubic,
           initialRoute: initialDestination,
           onGenerateInitialRoutes: (String initialRouteName) {
             final normalizedRoute = _normalizeRoutePath(initialRouteName);

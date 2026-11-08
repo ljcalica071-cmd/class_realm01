@@ -182,12 +182,13 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
     final onlineClasswork = classwork
         .where((item) => item.completionMode != 'in_person')
         .toList();
-    final pages = [
-      _buildHomeTab(context, student, onlineClasswork, enrollments),
-      _buildClassworkTab(context, onlineClasswork, enrollments),
-      const StudentNotificationsTab(),
-      _buildProfileTab(context, student),
-    ];
+    final activeTabIndex = _currentIndex.clamp(0, 3);
+    final Widget activePage = switch (activeTabIndex) {
+      0 => _buildHomeTab(context, student, onlineClasswork, enrollments),
+      1 => _buildClassworkTab(context, onlineClasswork, enrollments),
+      2 => const StudentNotificationsTab(),
+      _ => _buildProfileTab(context, student),
+    };
 
     return SessionActivityTracker(
       child: Scaffold(
@@ -204,11 +205,21 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
           ),
           actions: [
             IconButton(
-              tooltip: 'Toggle theme',
-              icon: Icon(
-                theme.brightness == Brightness.dark
-                    ? Icons.light_mode_outlined
-                    : Icons.dark_mode_outlined,
+              tooltip: theme.brightness == Brightness.dark
+                  ? 'Switch to Light Mode'
+                  : 'Switch to Dark Mode',
+              icon: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 250),
+                transitionBuilder: (child, anim) => RotationTransition(
+                  turns: Tween<double>(begin: 0.85, end: 1.0).animate(anim),
+                  child: FadeTransition(opacity: anim, child: child),
+                ),
+                child: Icon(
+                  theme.brightness == Brightness.dark
+                      ? Icons.light_mode_outlined
+                      : Icons.dark_mode_outlined,
+                  key: ValueKey<bool>(theme.brightness == Brightness.dark),
+                ),
               ),
               onPressed: () {
                 final isDark = theme.brightness != Brightness.dark;
@@ -229,10 +240,10 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
         body: _mobileFrame(
           context,
           StaggeredEntrance(
-            key: ValueKey(_currentIndex),
+            key: ValueKey(activeTabIndex),
             index: 0,
             duration: const Duration(milliseconds: 280),
-            child: pages[_currentIndex.clamp(0, 3)],
+            child: activePage,
           ),
         ),
         bottomNavigationBar: BottomNavigationBar(
@@ -501,21 +512,30 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
   ) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final pending =
+    final now = DateTime.now();
+    final todoItems =
         classwork
-            .where(
-              (item) =>
+            .where((item) {
+              // 1. Must be unsubmitted / pending / returned (not already submitted, graded, or excused)
+              final isPending =
                   item.status == null ||
                   item.status == 'pending' ||
-                  item.status == 'returned',
-            )
+                  item.status == 'returned';
+              if (!isPending) return false;
+
+              // 2. Only show upcoming items where the set deadline or date has NOT passed yet
+              if (item.deadline != null && item.deadline!.isBefore(now)) {
+                return false;
+              }
+
+              return true;
+            })
             .toList()
           ..sort((a, b) {
             if (a.deadline == null) return 1;
             if (b.deadline == null) return -1;
             return a.deadline!.compareTo(b.deadline!);
           });
-    final todoItems = pending;
     final enrollmentLabel = [
       if (student.gradeLevel?.isNotEmpty == true) 'Grade ${student.gradeLevel}',
       if (student.departmentOrSection?.isNotEmpty == true)
@@ -716,7 +736,7 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
                               child: _buildHeroMetric(
                                 icon: Icons.pending_actions_rounded,
                                 label: 'To-Do',
-                                value: '${pending.length} Pending',
+                                value: '${todoItems.length} Pending',
                               ),
                             ),
                           ],
@@ -800,8 +820,8 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
           _buildSectionHeader(
             theme: theme,
             title: 'To-do list',
-            badgeText: '${pending.length} pending',
-            subtitle: 'Activities and assignments from your enrolled classes.',
+            badgeText: '${todoItems.length} pending',
+            subtitle: 'Upcoming activities and tasks from your enrolled classes.',
           ),
           const SizedBox(height: 14),
           if (todoItems.isEmpty)

@@ -552,11 +552,22 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
               if (!isMobile) const SizedBox(width: 16),
               // THEME TOGGLE
               IconButton(
-                icon: Icon(
-                  theme.brightness == Brightness.dark
-                      ? LucideIcons.sun
-                      : LucideIcons.moon,
-                  color: theme.colorScheme.onSurface,
+                tooltip: theme.brightness == Brightness.dark
+                    ? 'Switch to Light Mode'
+                    : 'Switch to Dark Mode',
+                icon: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 250),
+                  transitionBuilder: (child, anim) => RotationTransition(
+                    turns: Tween<double>(begin: 0.85, end: 1.0).animate(anim),
+                    child: FadeTransition(opacity: anim, child: child),
+                  ),
+                  child: Icon(
+                    theme.brightness == Brightness.dark
+                        ? LucideIcons.sun
+                        : LucideIcons.moon,
+                    key: ValueKey<bool>(theme.brightness == Brightness.dark),
+                    color: theme.colorScheme.onSurface,
+                  ),
                 ),
                 onPressed: () {
                   final isDark = theme.brightness == Brightness.dark;

@@ -600,12 +600,22 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
           actions: [
             IconButton(
               visualDensity: VisualDensity.compact,
-              icon: Icon(
-                theme.brightness == Brightness.dark
-                    ? Icons.light_mode_outlined
-                    : Icons.dark_mode_outlined,
+              tooltip: theme.brightness == Brightness.dark
+                  ? 'Switch to Light Mode'
+                  : 'Switch to Dark Mode',
+              icon: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 250),
+                transitionBuilder: (child, anim) => RotationTransition(
+                  turns: Tween<double>(begin: 0.85, end: 1.0).animate(anim),
+                  child: FadeTransition(opacity: anim, child: child),
+                ),
+                child: Icon(
+                  theme.brightness == Brightness.dark
+                      ? Icons.light_mode_outlined
+                      : Icons.dark_mode_outlined,
+                  key: ValueKey<bool>(theme.brightness == Brightness.dark),
+                ),
               ),
-              tooltip: 'Toggle Theme',
               onPressed: () {
                 final isDark = theme.brightness != Brightness.dark;
                 AppTheme.themeModeNotifier.value = isDark

@@ -63,10 +63,21 @@ class AdminTopbar extends StatelessWidget {
           ),
           if (!isMobile) const Spacer(),
           IconButton(
-            icon: Icon(
-              theme.brightness == Brightness.dark
-                  ? Icons.light_mode
-                  : Icons.dark_mode,
+            tooltip: theme.brightness == Brightness.dark
+                ? 'Switch to Light Mode'
+                : 'Switch to Dark Mode',
+            icon: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 250),
+              transitionBuilder: (child, anim) => RotationTransition(
+                turns: Tween<double>(begin: 0.85, end: 1.0).animate(anim),
+                child: FadeTransition(opacity: anim, child: child),
+              ),
+              child: Icon(
+                theme.brightness == Brightness.dark
+                    ? Icons.light_mode
+                    : Icons.dark_mode,
+                key: ValueKey<bool>(theme.brightness == Brightness.dark),
+              ),
             ),
             onPressed: () {
               final notifier = AppTheme.themeModeNotifier;
