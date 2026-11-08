@@ -87,6 +87,8 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         return AppRoutes.teacherNotifications;
       case 16:
         return AppRoutes.teacherProfile;
+      case 10:
+        return AppRoutes.teacherSettings;
       default:
         return AppRoutes.teacherDashboard;
     }
@@ -249,9 +251,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         curve: Curves.easeInOutCubic,
-        decoration: BoxDecoration(
-          color: theme.colorScheme.surface,
-        ),
+        decoration: const BoxDecoration(),
         clipBehavior: Clip.hardEdge,
         width: isMobile ? 260 : (_isSidebarExpanded ? 260 : 76),
         child: Column(
@@ -650,17 +650,22 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                 if (!_loadedTabIndices.contains(idx)) {
                   return const SizedBox.shrink();
                 }
-                return _buildTeacherBodyContent(
-                  idx,
-                  activeStudents,
-                  archivedStudents,
-                  parents,
-                  activities,
-                  quizzesAndExams,
-                  lessonPlans,
-                  materials,
-                  criteria,
-                  examReviews,
+                return TickerMode(
+                  enabled: idx == _selectedIndex,
+                  child: RepaintBoundary(
+                    child: _buildTeacherBodyContent(
+                      idx,
+                      activeStudents,
+                      archivedStudents,
+                      parents,
+                      activities,
+                      quizzesAndExams,
+                      lessonPlans,
+                      materials,
+                      criteria,
+                      examReviews,
+                    ),
+                  ),
                 );
               }),
             ),

@@ -114,6 +114,26 @@ Future<UserModel?> _bootstrapClassRealmServices(
   return await _restoreUserSession();
 }
 
+void _applySavedUserTheme(UserModel? user) {
+  if (user == null) {
+    AppTheme.themeModeNotifier.value = ThemeMode.light;
+    return;
+  }
+  final isDark = LocalStorageService.isUserDarkMode(
+    user.id,
+    email: user.email,
+  );
+  AppTheme.themeModeNotifier.value = isDark ? ThemeMode.dark : ThemeMode.light;
+}
+
+String _normalizeRoutePath(String rawPath) {
+  var clean = rawPath.split('?').first.split('#').first.trim();
+  if (clean.length > 1 && clean.endsWith('/')) {
+    clean = clean.substring(0, clean.length - 1);
+  }
+  return clean.isEmpty ? '/' : clean;
+}
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   usePathUrlStrategy(); // Removes the # from the URL
@@ -164,6 +184,7 @@ void main() async {
     // Render target screen IMMEDIATELY on Frame 1 using cached UserModel & SWR data,
     // and revalidate session + local SQLite sync in the background.
     // -----------------------------------------------------------------------
+    _applySavedUserTheme(cachedUser);
     if (!warmTab) {
       updatePreBootstrapProgress(1.0, 'ClassRealm Ready! Welcome.');
     }
@@ -203,6 +224,7 @@ void main() async {
       'SessionRestore',
       timeout: const Duration(milliseconds: 2200),
     );
+    _applySavedUserTheme(AuthRepository.instance.currentUser);
 
     updatePreBootstrapProgress(1.0, 'ClassRealm Ready! Welcome.');
     markWarmSession();
@@ -238,6 +260,8 @@ class _ClassRealmAppState extends State<ClassRealmApp> {
   late bool _isBootstrapped = widget.isWarmBoot;
   UserModel? _bootstrappedUser;
   String? _targetRoute;
+  late final Map<String, WidgetBuilder> _appRoutes = _buildAppRoutes();
+  late String _initialDestination;
 
   @override
   void initState() {
@@ -250,7 +274,7 @@ class _ClassRealmAppState extends State<ClassRealmApp> {
       removePreBootstrapLoader();
     });
 
-    final initialPath = getBrowserUrlPath();
+    final initialPath = _normalizeRoutePath(getBrowserUrlPath());
     const restorableRoutes = {
       AppRoutes.adminDashboard,
       AppRoutes.adminBroadcasts,
@@ -271,6 +295,7 @@ class _ClassRealmAppState extends State<ClassRealmApp> {
       AppRoutes.teacherSchedule,
       AppRoutes.teacherNotifications,
       AppRoutes.teacherProfile,
+      AppRoutes.teacherSettings,
       AppRoutes.studentHome,
       AppRoutes.studentClasswork,
       AppRoutes.studentAlerts,
@@ -289,6 +314,10 @@ class _ClassRealmAppState extends State<ClassRealmApp> {
     };
     if (restorableRoutes.contains(initialPath)) {
       _targetRoute = initialPath;
+    }
+    _initialDestination = _determineInitialDestination();
+    if (widget.isWarmBoot) {
+      updateBrowserUrl(_initialDestination);
     }
   }
 
@@ -320,6 +349,7 @@ class _ClassRealmAppState extends State<ClassRealmApp> {
         user ??
         AuthRepository.instance.currentUser ??
         LocalStorageService.getCachedUser();
+    _applySavedUserTheme(activeUser);
     if (activeUser != null) {
       final String dest;
       final savedRoute = LocalStorageService.getLastActiveRoute();
@@ -515,6 +545,10 @@ class _ClassRealmAppState extends State<ClassRealmApp> {
         allowedRoles: [UserRole.teacher],
         child: TeacherDashboardScreen(initialSelectedIndex: 16),
       ),
+      AppRoutes.teacherSettings: (context) => const AuthGuard(
+        allowedRoles: [UserRole.teacher],
+        child: TeacherDashboardScreen(initialSelectedIndex: 10),
+      ),
       // Student Routes with sub-route support
       AppRoutes.studentHome: (context) => const AuthGuard(
         allowedRoles: [UserRole.student],
@@ -585,11 +619,8 @@ class _ClassRealmAppState extends State<ClassRealmApp> {
     return ValueListenableBuilder<ThemeMode>(
       valueListenable: AppTheme.themeModeNotifier,
       builder: (context, themeMode, _) {
-        final initialDestination = _determineInitialDestination();
-        if (widget.isWarmBoot) {
-          updateBrowserUrl(initialDestination);
-        }
-        final appRoutes = _buildAppRoutes();
+        final initialDestination = _initialDestination;
+        final appRoutes = _appRoutes;
 
         return MaterialApp(
           navigatorKey: AppRoutes.navigatorKey,
@@ -606,13 +637,13 @@ class _ClassRealmAppState extends State<ClassRealmApp> {
           theme: AppTheme.lightTheme,
           darkTheme: AppTheme.darkTheme,
           themeMode: themeMode,
-          themeAnimationDuration: const Duration(milliseconds: 600),
-          themeAnimationCurve: Curves.easeInOut,
+          themeAnimationDuration: Duration.zero,
           initialRoute: initialDestination,
           onGenerateInitialRoutes: (String initialRouteName) {
-            final validBuilder = appRoutes[initialRouteName];
+            final normalizedRoute = _normalizeRoutePath(initialRouteName);
+            final validBuilder = appRoutes[normalizedRoute];
             final actualRouteName = validBuilder != null
-                ? initialRouteName
+                ? normalizedRoute
                 : initialDestination;
             final builder =
                 validBuilder ??

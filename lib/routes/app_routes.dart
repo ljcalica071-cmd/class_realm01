@@ -33,6 +33,7 @@ class AppRoutes {
   static const String teacherSchedule = '/teacher/schedule';
   static const String teacherNotifications = '/teacher/notifications';
   static const String teacherProfile = '/teacher/profile';
+  static const String teacherSettings = '/teacher/settings';
 
   // Student Sub-Routes
   static const String studentHome = '/student/home';

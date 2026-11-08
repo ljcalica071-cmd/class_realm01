@@ -46,8 +46,10 @@ class AppTheme {
   static const Color catPink = Color(0xFFDB2777); // Parent features
   static const Color catSlate = Color(0xFF475569); // Neutral, Excused, N/A
 
-  // --- LIGHT THEME ---
-  static ThemeData get lightTheme {
+  // --- LIGHT THEME (Cached once to avoid rebuilding GoogleFonts on every frame) ---
+  static final ThemeData lightTheme = _buildLightTheme();
+
+  static ThemeData _buildLightTheme() {
     return ThemeData(
       brightness: Brightness.light,
       primaryColor: _lightAccent,
@@ -175,8 +177,10 @@ class AppTheme {
     );
   }
 
-  // --- DARK THEME ---
-  static ThemeData get darkTheme {
+  // --- DARK THEME (Cached once to avoid rebuilding GoogleFonts on every frame) ---
+  static final ThemeData darkTheme = _buildDarkTheme();
+
+  static ThemeData _buildDarkTheme() {
     return ThemeData(
       brightness: Brightness.dark,
       primaryColor: _darkAccent,
