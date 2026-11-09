@@ -1410,6 +1410,27 @@ class AuthRepository {
   int _changePasswordAttempts = 0;
   bool _changePasswordVerified = false;
 
+  @visibleForTesting
+  String? get changePasswordOtpCodeForTesting => _changePasswordOtpCode;
+
+  @visibleForTesting
+  bool get changePasswordVerifiedForTesting => _changePasswordVerified;
+
+  @visibleForTesting
+  void setChangePasswordOtpForTesting({
+    String? code,
+    DateTime? expiry,
+    String? email,
+    int attempts = 0,
+    bool verified = false,
+  }) {
+    _changePasswordOtpCode = code;
+    _changePasswordOtpExpiry = expiry;
+    _changePasswordEmail = email;
+    _changePasswordAttempts = attempts;
+    _changePasswordVerified = verified;
+  }
+
   /// Look up a user profile by email in Supabase.
   Future<custom.UserModel?> getUserByEmail(String email) async {
     final cleanEmail = email.trim().toLowerCase();
@@ -2075,39 +2096,43 @@ class AuthRepository {
     }
 
     if (cleanCode != _changePasswordOtpCode) {
+      _changePasswordAttempts++;
       if (email.isNotEmpty) {
-        final failStatus = await RateLimitService.instance.recordFailure(
-          feature: 'change_password',
-          targetIdentifier: email,
-          maxAttempts: 5,
-        );
-        _changePasswordAttempts = failStatus.failedAttempts;
+        try {
+          final failStatus = await RateLimitService.instance.recordFailure(
+            feature: 'change_password',
+            targetIdentifier: email,
+            maxAttempts: 5,
+          );
+          if (failStatus.failedAttempts > _changePasswordAttempts) {
+            _changePasswordAttempts = failStatus.failedAttempts;
+          }
 
-        if (failStatus.isLocked) {
-          _changePasswordOtpCode = null;
-          _changePasswordVerified = false;
-          return FirstLoginOtpVerification(
-            verified: false,
-            reason: 'locked',
-            retryAfter: failStatus.remainingSeconds,
-          );
-        }
-      } else {
-        _changePasswordAttempts++;
-        if (_changePasswordAttempts >= 5) {
-          _changePasswordOtpCode = null;
-          _changePasswordVerified = false;
-          return const FirstLoginOtpVerification(
-            verified: false,
-            reason: 'locked',
-            retryAfter: 300,
-          );
-        }
+          if (failStatus.isLocked || _changePasswordAttempts >= 5) {
+            _changePasswordOtpCode = null;
+            _changePasswordVerified = false;
+            return FirstLoginOtpVerification(
+              verified: false,
+              reason: 'locked',
+              retryAfter: failStatus.remainingSeconds > 0 ? failStatus.remainingSeconds : 300,
+            );
+          }
+        } catch (_) {}
+      }
+
+      if (_changePasswordAttempts >= 5) {
+        _changePasswordOtpCode = null;
+        _changePasswordVerified = false;
+        return const FirstLoginOtpVerification(
+          verified: false,
+          reason: 'locked',
+          retryAfter: 300,
+        );
       }
 
       return FirstLoginOtpVerification(
         verified: false,
-        attemptsRemaining: 5 - _changePasswordAttempts,
+        attemptsRemaining: (5 - _changePasswordAttempts).clamp(0, 5),
       );
     }
 
