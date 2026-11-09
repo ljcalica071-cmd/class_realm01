@@ -12,6 +12,8 @@ import 'package:class_realm/core/services/rate_limit_service.dart';
 import 'package:class_realm/widgets/common/expandable_notification_card.dart';
 import 'package:loading_animation_widget/loading_animation_widget.dart';
 import 'package:class_realm/shared/widgets/shimmer_loading.dart';
+import 'package:class_realm/core/services/app_data_cache.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 class AdminBroadcastsTab extends StatefulWidget {
   const AdminBroadcastsTab({super.key});
@@ -48,6 +50,8 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
   List<AppNotificationModel> _broadcasts = [];
   bool _isLoadingBroadcasts = true;
   bool _isInitialLoading = true;
+  int _currentPage = 1;
+  static const int _pageSize = 10;
 
   RealtimeChannel? _realtimeChannel;
 
@@ -142,6 +146,25 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
   }
 
   Future<void> _loadInitialData() async {
+    // SWR Instant Frame 1 Cache Restoration
+    final cachedBroadcasts = AppDataCache.instance.getCached<List<AppNotificationModel>>(
+      'admin_broadcasts_history',
+      (json) => (json as List)
+          .map((e) => AppNotificationModel.fromJson(e as Map<String, dynamic>))
+          .toList(),
+    );
+    if (cachedBroadcasts != null && cachedBroadcasts.isNotEmpty) {
+      _broadcasts = cachedBroadcasts;
+      _isLoadingBroadcasts = false;
+      _isInitialLoading = false;
+    }
+
+    final cachedCounts = AppDataCache.instance.get<Map<String, int>>('admin_broadcasts_user_counts');
+    if (cachedCounts != null) {
+      _userCounts = Map<String, int>.from(cachedCounts);
+      _adjustSelectedAudience();
+    }
+
     await Future.wait([
       _loadMaintenanceState(),
       _loadBroadcastHistory(),
@@ -159,6 +182,7 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
         _userCounts = counts;
         _adjustSelectedAudience();
       });
+      AppDataCache.instance.set('admin_broadcasts_user_counts', counts);
     }
   }
 
@@ -222,7 +246,15 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
       setState(() {
         _broadcasts = list;
         _isLoadingBroadcasts = false;
+        final maxPages = (list.length / _pageSize).ceil();
+        if (_currentPage > (maxPages > 0 ? maxPages : 1)) {
+          _currentPage = 1;
+        }
       });
+      AppDataCache.instance.setCache(
+        'admin_broadcasts_history',
+        list.map((e) => e.toJson()).toList(),
+      );
     }
   }
 
@@ -342,42 +374,89 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
 
   Future<bool?> _showDisableMaintenanceModal() {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     return showDialog<bool>(
       context: context,
       builder: (ctx) {
-        return AlertDialog(
+        return Dialog(
+          backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
           ),
-          title: Row(
-            children: [
-              Icon(
-                Icons.lock_open_rounded,
-                color: theme.colorScheme.primary,
-                size: 26,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 420),
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.primary.withValues(alpha: 0.1),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          Icons.lock_open_rounded,
+                          color: theme.colorScheme.primary,
+                          size: 22,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'Disable Maintenance Mode?',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: theme.colorScheme.onSurface,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(LucideIcons.x, size: 20),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                        tooltip: 'Close',
+                        onPressed: () => Navigator.of(ctx).pop(false),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'This will restore normal system access. Teachers, Students, and Parents will be able to log in again immediately.',
+                    style: TextStyle(
+                      fontSize: 13.5,
+                      height: 1.4,
+                      color: isDark ? Colors.white70 : const Color(0xFF475569),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  Center(
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: theme.colorScheme.primary,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      onPressed: () => Navigator.of(ctx).pop(true),
+                      child: const Text(
+                        'Restore System Access',
+                        style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13.5),
+                      ),
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(width: 12),
-              const Text('Disable Maintenance Mode?'),
-            ],
-          ),
-          content: const Text(
-            'This will restore normal system access. Teachers, Students, and Parents will be able to log in again immediately.',
-            style: TextStyle(fontSize: 14, height: 1.4),
-          ),
-          actions: [
-            OutlinedButton(
-              onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('Cancel'),
             ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: theme.colorScheme.primary,
-                foregroundColor: Colors.white,
-              ),
-              onPressed: () => Navigator.of(ctx).pop(true),
-              child: const Text('Restore System Access'),
-            ),
-          ],
+          ),
         );
       },
     );
@@ -479,8 +558,13 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
       if (mounted) {
         setState(() {
           _broadcasts.insert(0, sent);
+          _currentPage = 1;
           _isSubmittingAnnouncement = false;
         });
+        AppDataCache.instance.setCache(
+          'admin_broadcasts_history',
+          _broadcasts.map((e) => e.toJson()).toList(),
+        );
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             backgroundColor: AppTheme.catGreen,
@@ -697,42 +781,22 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
                     size: 22,
                   )
                 else
-                  Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Transform.scale(
-                        scale: 0.95,
-                        child: Switch(
-                          value: _isMaintenanceMode,
-                          activeTrackColor: const Color(0xFFEF4444),
-                          activeThumbColor: Colors.white,
-                          inactiveThumbColor:
-                              isDark ? Colors.grey.shade400 : Colors.white,
-                          inactiveTrackColor: isDark
-                              ? Colors.grey.shade700
-                              : const Color(0xFFCBD5E1),
-                          onChanged: (_isTogglingMaintenance ||
-                                  _cooldownRemainingSeconds > 0)
-                              ? null
-                              : (val) => _handleMaintenanceToggle(val),
-                        ),
-                      ),
-                      if (_cooldownRemainingSeconds > 0)
-                        Padding(
-                          padding: const EdgeInsets.only(right: 4),
-                          child: Text(
-                            'Locked (${_formatCooldown(_cooldownRemainingSeconds)})',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
-                              color: isDark
-                                  ? const Color(0xFFFBBF24)
-                                  : const Color(0xFFB45309),
-                            ),
-                          ),
-                        ),
-                    ],
+                  Transform.scale(
+                    scale: 0.95,
+                    child: Switch(
+                      value: _isMaintenanceMode,
+                      activeTrackColor: const Color(0xFFEF4444),
+                      activeThumbColor: Colors.white,
+                      inactiveThumbColor:
+                          isDark ? Colors.grey.shade400 : Colors.white,
+                      inactiveTrackColor: isDark
+                          ? Colors.grey.shade700
+                          : const Color(0xFFCBD5E1),
+                      onChanged: (_isTogglingMaintenance ||
+                              _cooldownRemainingSeconds > 0)
+                          ? null
+                          : (val) => _handleMaintenanceToggle(val),
+                    ),
                   ),
               ],
             ),
@@ -1238,20 +1302,132 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
                 ],
               ),
             )
-          else
-            ListView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: _broadcasts.length,
-              itemBuilder: (context, i) {
-                final b = _broadcasts[i];
-                return ExpandableNotificationCard(
-                  notification: b,
-                  showDelete: false,
+          else ...[
+            Builder(
+              builder: (context) {
+                final totalPages = (_broadcasts.length / _pageSize).ceil();
+                final safePage = _currentPage.clamp(1, totalPages > 0 ? totalPages : 1);
+                final startIndex = (safePage - 1) * _pageSize;
+                final endIndex = (startIndex + _pageSize > _broadcasts.length)
+                    ? _broadcasts.length
+                    : startIndex + _pageSize;
+                final pagedBroadcasts = _broadcasts.sublist(startIndex, endIndex);
+
+                return Column(
+                  children: [
+                    ListView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: pagedBroadcasts.length,
+                      itemBuilder: (context, i) {
+                        final b = pagedBroadcasts[i];
+                        return ExpandableNotificationCard(
+                          notification: b,
+                          showDelete: false,
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    Container(
+                      height: 52,
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      decoration: BoxDecoration(
+                        color: isDark
+                            ? const Color(0xFF1E293B)
+                            : const Color(0xFFF8FAFC),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: isDark ? Colors.white10 : const Color(0xFFE2E8F0),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Showing ${_broadcasts.isEmpty ? 0 : startIndex + 1} to $endIndex of ${_broadcasts.length} entries',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                              color: isDark
+                                  ? const Color(0xFF94A3B8)
+                                  : const Color(0xFF64748B),
+                            ),
+                          ),
+                          if (totalPages > 1)
+                            Row(
+                              children: [
+                                _buildPageButton(
+                                  'First',
+                                  () => setState(() => _currentPage = 1),
+                                  safePage > 1,
+                                ),
+                                _buildPageButton(
+                                  '<',
+                                  () => setState(() => _currentPage = safePage - 1),
+                                  safePage > 1,
+                                ),
+                                for (int p = 1; p <= totalPages; p++)
+                                  if (p >= safePage - 2 && p <= safePage + 2)
+                                    _buildPageButton(
+                                      p.toString(),
+                                      () => setState(() => _currentPage = p),
+                                      true,
+                                      isActive: p == safePage,
+                                    ),
+                                _buildPageButton(
+                                  '>',
+                                  () => setState(() => _currentPage = safePage + 1),
+                                  safePage < totalPages,
+                                ),
+                                _buildPageButton(
+                                  'Last',
+                                  () => setState(() => _currentPage = totalPages),
+                                  safePage < totalPages,
+                                ),
+                              ],
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
                 );
               },
             ),
+          ],
         ],
+      ),
+    );
+  }
+
+  Widget _buildPageButton(
+    String label,
+    VoidCallback onTap,
+    bool enabled, {
+    bool isActive = false,
+  }) {
+    final theme = Theme.of(context);
+    return InkWell(
+      onTap: enabled && !isActive ? onTap : null,
+      borderRadius: BorderRadius.circular(4),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        margin: const EdgeInsets.symmetric(horizontal: 2),
+        decoration: BoxDecoration(
+          color: isActive ? theme.colorScheme.primary : Colors.transparent,
+          borderRadius: BorderRadius.circular(4),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: isActive ? FontWeight.bold : FontWeight.w500,
+            color: isActive
+                ? theme.colorScheme.onPrimary
+                : enabled
+                    ? theme.colorScheme.onSurface
+                    : theme.colorScheme.onSurface.withValues(alpha: 0.3),
+          ),
+        ),
       ),
     );
   }

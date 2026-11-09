@@ -34,14 +34,95 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
   String? _selectedTeacherId; // null = all teachers
 
   static const List<Color> _teacherColorPalette = [
-    AppTheme.catGreen, // Emerald
-    Color(0xFF6366F1), // Indigo
-    Color(0xFFF59E0B), // Amber
-    Color(0xFF8B5CF6), // Purple
+    AppTheme.catGreen, // Emerald (#10B981) - Sir Naruto Uzumaki
+    Color(0xFF8B5CF6), // Purple / Violet - Ma'am Jhon Calantina
+    Color(0xFFF59E0B), // Amber - Sir Rex San Juan
     Color(0xFF06B6D4), // Cyan
     Color(0xFFF43F5E), // Coral / Rose
     Color(0xFF3B82F6), // Blue
+    Color(0xFF14B8A6), // Teal
+    Color(0xFFEC4899), // Pink
   ];
+
+  static final Map<String, Color> _cachedTeacherColors = {};
+
+  /// Returns a permanent, deterministic color for each teacher that NEVER changes across filters
+  static Color getTeacherColor(String teacherId, [String? teacherName]) {
+    if (_cachedTeacherColors.containsKey(teacherId)) {
+      return _cachedTeacherColors[teacherId]!;
+    }
+
+    final nameLower = (teacherName ?? '').toLowerCase();
+    final idLower = teacherId.toLowerCase();
+
+    // 1. Permanent canonical assignments for primary teachers
+    if (nameLower.contains('naruto') || idLower.contains('naruto')) {
+      _cachedTeacherColors[teacherId] = _teacherColorPalette[0]; // Always Emerald Green
+      return _teacherColorPalette[0];
+    }
+    if (nameLower.contains('calantina') ||
+        nameLower.contains('jhon') ||
+        idLower.contains('calantina') ||
+        idLower.contains('jhon')) {
+      _cachedTeacherColors[teacherId] = _teacherColorPalette[1]; // Always Purple
+      return _teacherColorPalette[1];
+    }
+    if (nameLower.contains('rex') ||
+        nameLower.contains('san juan') ||
+        idLower.contains('rex')) {
+      _cachedTeacherColors[teacherId] = _teacherColorPalette[2]; // Always Amber
+      return _teacherColorPalette[2];
+    }
+
+    // 2. Persistent storage in AppDataCache
+    try {
+      final savedRegistry =
+          AppDataCache.instance.getCached<Map<String, dynamic>>(
+        'admin_teacher_color_registry',
+        (raw) => Map<String, dynamic>.from(raw as Map),
+      );
+      if (savedRegistry != null && savedRegistry.containsKey(teacherId)) {
+        final idx = (savedRegistry[teacherId] as num).toInt();
+        final color = _teacherColorPalette[idx % _teacherColorPalette.length];
+        _cachedTeacherColors[teacherId] = color;
+        return color;
+      }
+    } catch (_) {}
+
+    // 3. Deterministically pick next available distinct color
+    final usedColors = _cachedTeacherColors.values.toSet();
+    Color? assignedColor;
+    int assignedIdx = 0;
+    for (int i = 0; i < _teacherColorPalette.length; i++) {
+      if (!usedColors.contains(_teacherColorPalette[i])) {
+        assignedColor = _teacherColorPalette[i];
+        assignedIdx = i;
+        break;
+      }
+    }
+    assignedColor ??= _teacherColorPalette[
+        teacherId.hashCode.abs() % _teacherColorPalette.length];
+
+    _cachedTeacherColors[teacherId] = assignedColor;
+
+    try {
+      final savedRegistry =
+          AppDataCache.instance.getCached<Map<String, dynamic>>(
+                'admin_teacher_color_registry',
+                (raw) => Map<String, dynamic>.from(raw as Map),
+              ) ??
+              <String, dynamic>{};
+      savedRegistry[teacherId] = assignedIdx;
+      unawaited(
+        AppDataCache.instance.setCache(
+          'admin_teacher_color_registry',
+          savedRegistry,
+        ),
+      );
+    } catch (_) {}
+
+    return assignedColor;
+  }
 
   List<UserSessionLog> _sessionLogs = [];
   List<TeacherWorkloadSummary> _workloadSummaries = [];
@@ -229,13 +310,13 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
       startDate = DateTime(now.year, now.month, now.day);
       endDate = DateTime(now.year, now.month, now.day);
     } else if (_activeFilter == 'week') {
-      // Monday of current week
+      // Monday to Sunday of current week
       startDate = DateTime(
         now.year,
         now.month,
         now.day,
       ).subtract(Duration(days: now.weekday - 1));
-      endDate = DateTime(now.year, now.month, now.day);
+      endDate = startDate.add(const Duration(days: 6));
     } else if (_activeFilter == 'custom' && _selectedCustomDate != null) {
       final d = _selectedCustomDate!;
       startDate = DateTime(d.year, d.month, d.day);
@@ -385,6 +466,12 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
     return '';
   }
 
+  static String _shortWeekday(int weekday) {
+    const days = ['', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    if (weekday >= 1 && weekday <= 7) return days[weekday];
+    return '';
+  }
+
   static String _formatTooltipDuration(int totalSeconds) {
     if (totalSeconds <= 0) return '00h 00m';
     final h = totalSeconds ~/ 3600;
@@ -397,39 +484,52 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
   }
 
   List<_TeacherInfo> _getTeacherInfoList() {
-    if (_workloadSummaries.isNotEmpty) {
-      return List.generate(_workloadSummaries.length, (i) {
-        final w = _workloadSummaries[i];
-        return _TeacherInfo(
+    final teachersMap = <String, _TeacherInfo>{};
+
+    for (final w in _workloadSummaries) {
+      if (!teachersMap.containsKey(w.teacherId)) {
+        teachersMap[w.teacherId] = _TeacherInfo(
           id: w.teacherId,
           name: w.teacherName,
-          color: _teacherColorPalette[i % _teacherColorPalette.length],
+          color: getTeacherColor(w.teacherId, w.teacherName),
         );
-      });
-    }
-
-    final uniqueTeacherIds = <String>{};
-    final teachers = <_TeacherInfo>[];
-    int colorIdx = 0;
-    for (final log in _sessionLogs) {
-      if (!uniqueTeacherIds.contains(log.userId)) {
-        uniqueTeacherIds.add(log.userId);
-        teachers.add(
-          _TeacherInfo(
-            id: log.userId,
-            name: log.teacherName ?? 'Teacher',
-            color: _teacherColorPalette[colorIdx % _teacherColorPalette.length],
-          ),
-        );
-        colorIdx++;
       }
     }
 
-    if (teachers.isEmpty) {
+    for (final log in _sessionLogs) {
+      if (!teachersMap.containsKey(log.userId)) {
+        teachersMap[log.userId] = _TeacherInfo(
+          id: log.userId,
+          name: log.teacherName ?? 'Teacher',
+          color: getTeacherColor(log.userId, log.teacherName),
+        );
+      }
+    }
+
+    if (teachersMap.isEmpty) {
       return const [
         _TeacherInfo(id: 'faculty', name: 'Faculty', color: AppTheme.catGreen),
       ];
     }
+
+    final teachers = teachersMap.values.toList();
+    // Deterministic sort: Naruto first, Jhon second, then alphabetical
+    teachers.sort((a, b) {
+      final aIsNaruto = a.name.toLowerCase().contains('naruto');
+      final bIsNaruto = b.name.toLowerCase().contains('naruto');
+      if (aIsNaruto && !bIsNaruto) return -1;
+      if (!aIsNaruto && bIsNaruto) return 1;
+
+      final aIsJhon = a.name.toLowerCase().contains('jhon') ||
+          a.name.toLowerCase().contains('calantina');
+      final bIsJhon = b.name.toLowerCase().contains('jhon') ||
+          b.name.toLowerCase().contains('calantina');
+      if (aIsJhon && !bIsJhon) return -1;
+      if (!aIsJhon && bIsJhon) return 1;
+
+      return a.name.compareTo(b.name);
+    });
+
     return teachers;
   }
 
@@ -480,11 +580,11 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
         tooltip: 'Filter by Teacher',
         offset: const Offset(0, 36),
         onSelected: (String? teacherId) {
-          setState(() => _selectedTeacherId = teacherId);
+          setState(() => _selectedTeacherId = (teacherId == null || teacherId == '__ALL_FACULTY__') ? null : teacherId);
         },
         itemBuilder: (context) => [
           PopupMenuItem<String?>(
-            value: null,
+            value: '__ALL_FACULTY__',
             child: Row(
               children: [
                 Icon(
@@ -616,15 +716,21 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
     }
 
     final currentNow = DateTime.now();
-    final activeNowCount = _sessionLogs
+    final effectiveDisplayLogs = _selectedTeacherId != null
+        ? _sessionLogs.where((s) => s.userId == _selectedTeacherId).toList()
+        : _sessionLogs;
+
+    final activeNowCount = effectiveDisplayLogs
         .where((s) => s.isActive)
         .map((s) => s.userId)
         .toSet()
         .length;
-    final totalTrackedTeachers = _workloadSummaries.isNotEmpty
-        ? _workloadSummaries.length
-        : math.max(activeNowCount, 1);
-    final totalDurationSeconds = _sessionLogs.fold<int>(0, (sum, s) {
+    final totalTrackedTeachers = _selectedTeacherId != null
+        ? 1
+        : (_workloadSummaries.isNotEmpty
+            ? _workloadSummaries.length
+            : math.max(activeNowCount, 1));
+    final totalDurationSeconds = effectiveDisplayLogs.fold<int>(0, (sum, s) {
       if (s.isActive) {
         final liveSec = currentNow.difference(s.loginAt).inSeconds;
         return sum +
@@ -1412,9 +1518,9 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
       for (final log in relevantLogs) {
         allDatesSet.add(
           DateTime(
-            log.sessionDate.year,
-            log.sessionDate.month,
-            log.sessionDate.day,
+            log.loginAt.year,
+            log.loginAt.month,
+            log.loginAt.day,
           ),
         );
       }
@@ -1423,23 +1529,34 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
       List<DateTime> displayDates;
       if (sortedDates.isEmpty) {
         displayDates = List.generate(
-          5,
+          7,
           (i) => DateTime(
             currentNow.year,
             currentNow.month,
             currentNow.day,
-          ).subtract(Duration(days: 4 - i)),
+          ).subtract(Duration(days: 6 - i)),
         );
       } else if (sortedDates.length == 1) {
         final singleDate = sortedDates.first;
         displayDates = List.generate(
-          5,
-          (i) => singleDate.subtract(Duration(days: 4 - i)),
+          7,
+          (i) => singleDate.subtract(Duration(days: 6 - i)),
         );
-      } else if (sortedDates.length > 7) {
-        displayDates = sortedDates.sublist(sortedDates.length - 7);
       } else {
-        displayDates = sortedDates;
+        final firstDate = sortedDates.first;
+        final lastDate = sortedDates.last;
+        final spanDays = lastDate.difference(firstDate).inDays;
+        if (spanDays <= 14) {
+          // Generate continuous calendar days so the timeline does not skip dates
+          displayDates = List.generate(
+            spanDays + 1,
+            (i) => firstDate.add(Duration(days: i)),
+          );
+        } else if (sortedDates.length > 10) {
+          displayDates = sortedDates.sublist(sortedDates.length - 10);
+        } else {
+          displayDates = sortedDates;
+        }
       }
 
       return targetTeachers.map((teacher) {
@@ -1449,9 +1566,9 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
         final points = displayDates.map((date) {
           int sec = 0;
           for (final log in teacherLogs) {
-            if (log.sessionDate.year == date.year &&
-                log.sessionDate.month == date.month &&
-                log.sessionDate.day == date.day) {
+            if (log.loginAt.year == date.year &&
+                log.loginAt.month == date.month &&
+                log.loginAt.day == date.day) {
               int sessionSec = log.durationSeconds;
               if (log.isActive) {
                 final activeSec = currentNow.difference(log.loginAt).inSeconds;
@@ -1483,15 +1600,24 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
 
     if (_activeFilter == 'week') {
       final days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+      final monday = DateTime(
+        currentNow.year,
+        currentNow.month,
+        currentNow.day,
+      ).subtract(Duration(days: currentNow.weekday - 1));
 
       return targetTeachers.map((teacher) {
         final teacherLogs = relevantLogs
             .where((s) => s.userId == teacher.id)
             .toList();
         final points = List.generate(7, (weekdayIdx) {
+          final dayDate = monday.add(Duration(days: weekdayIdx));
           int sec = 0;
           for (final log in teacherLogs) {
-            if (log.sessionDate.weekday - 1 == weekdayIdx) {
+            // Strictly match the EXACT calendar date of this week
+            if (log.loginAt.year == dayDate.year &&
+                log.loginAt.month == dayDate.month &&
+                log.loginAt.day == dayDate.day) {
               int sessionSec = log.durationSeconds;
               if (log.isActive) {
                 final activeSec = currentNow.difference(log.loginAt).inSeconds;
@@ -1502,11 +1628,12 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
           }
           final hoursVal = sec / 3600.0;
           return _ChartPoint(
-            label: days[weekdayIdx],
+            label: '${days[weekdayIdx]} ${dayDate.day}',
             value: hoursVal,
             totalSeconds: sec,
             teacherId: teacher.id,
             teacherName: teacher.name,
+            date: dayDate,
           );
         });
 
@@ -1519,7 +1646,11 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
       }).toList();
     }
 
-    // Default to Hourly buckets (8 AM to 6 PM) for 'today' and 'custom'
+    // Hourly buckets (8 AM to 6 PM) for 'today' and 'custom'
+    final targetDate = _activeFilter == 'custom' && _selectedCustomDate != null
+        ? _selectedCustomDate!
+        : currentNow;
+    final targetDay = DateTime(targetDate.year, targetDate.month, targetDate.day);
     final hours = ['8 AM', '10 AM', '12 PM', '2 PM', '4 PM', '6 PM'];
     final hourBuckets = [8, 10, 12, 14, 16, 18];
 
@@ -1535,6 +1666,13 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
             : 24;
 
         for (final log in teacherLogs) {
+          final logDay = DateTime(
+            log.loginAt.year,
+            log.loginAt.month,
+            log.loginAt.day,
+          );
+          if (logDay != targetDay) continue;
+
           final h = log.loginAt.hour;
           bool inBucket = false;
           if (i == 0 && h < hourBuckets[0]) {
@@ -1562,6 +1700,7 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
           totalSeconds: sec,
           teacherId: teacher.id,
           teacherName: teacher.name,
+          date: targetDay,
         );
       });
 
@@ -1624,10 +1763,33 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
                     ),
                   ),
                 )
-              : Wrap(
-                  spacing: 12,
-                  runSpacing: 12,
-                  children: _workloadSummaries.map((w) {
+              : () {
+                  final sortedSummaries =
+                      List<TeacherWorkloadSummary>.from(_workloadSummaries)
+                        ..sort((a, b) {
+                          final aIsNaruto =
+                              a.teacherName.toLowerCase().contains('naruto');
+                          final bIsNaruto =
+                              b.teacherName.toLowerCase().contains('naruto');
+                          if (aIsNaruto && !bIsNaruto) return -1;
+                          if (!aIsNaruto && bIsNaruto) return 1;
+
+                          final aIsJhon =
+                              a.teacherName.toLowerCase().contains('jhon') ||
+                              a.teacherName.toLowerCase().contains('calantina');
+                          final bIsJhon =
+                              b.teacherName.toLowerCase().contains('jhon') ||
+                              b.teacherName.toLowerCase().contains('calantina');
+                          if (aIsJhon && !bIsJhon) return -1;
+                          if (!aIsJhon && bIsJhon) return 1;
+
+                          return a.teacherName.compareTo(b.teacherName);
+                        });
+
+                  return Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    children: sortedSummaries.map((w) {
                     final teacherSessions = _sessionLogs
                         .where((s) => s.userId == w.teacherId)
                         .toList();
@@ -1782,7 +1944,8 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
                       ),
                     );
                   }).toList(),
-                ),
+                );
+              }(),
         ),
       ],
     );
@@ -2698,37 +2861,57 @@ class _TeacherActivityCurveChartState extends State<_TeacherActivityCurveChart>
         Expanded(
           child: LayoutBuilder(
             builder: (context, constraints) {
+              const leftPadding = 42.0;
+              const rightPadding = 18.0;
+              const topPadding = 20.0;
+              const bottomPadding = 26.0;
+
               return MouseRegion(
                 onHover: (event) {
                   final x = event.localPosition.dx;
                   final width = constraints.maxWidth;
+                  final innerWidth = width - leftPadding - rightPadding;
                   final dxPerPoint = pointsCount > 1
-                      ? width / (pointsCount - 1)
-                      : width;
+                      ? innerWidth / (pointsCount - 1)
+                      : innerWidth;
 
-                  final nearestPointIndex = (x / dxPerPoint).round().clamp(
-                    0,
-                    pointsCount - 1,
-                  );
+                  final nearestPointIndex = ((x - leftPadding) / dxPerPoint)
+                      .round()
+                      .clamp(0, pointsCount - 1);
 
                   // If multiple series, determine which series line is closest in Y
                   int nearestSeriesIndex = 0;
                   if (effectiveSeries.length > 1) {
                     double minDiff = double.infinity;
-                    final chartHeight = constraints.maxHeight - 44.0;
-                    double maxVal = 0.0;
+                    final chartHeight =
+                        constraints.maxHeight - topPadding - bottomPadding;
+                    double peakVal = 0.0;
                     for (final s in effectiveSeries) {
                       for (final p in s.points) {
-                        if (p.value > maxVal) maxVal = p.value;
+                        if (p.value > peakVal) peakVal = p.value;
                       }
                     }
-                    if (maxVal <= 0.0) maxVal = 4.0;
-                    maxVal = maxVal * 1.25;
+                    final double ceiling;
+                    if (peakVal <= 2.5) {
+                      ceiling = 3.0;
+                    } else if (peakVal <= 5.0) {
+                      ceiling = 6.0;
+                    } else if (peakVal <= 7.5) {
+                      ceiling = 9.0;
+                    } else if (peakVal <= 10.0) {
+                      ceiling = 12.0;
+                    } else if (peakVal <= 15.0) {
+                      ceiling = 18.0;
+                    } else if (peakVal <= 24.0) {
+                      ceiling = 24.0;
+                    } else {
+                      ceiling = (peakVal / 3.0).ceil() * 3.0;
+                    }
 
                     for (int sIdx = 0; sIdx < effectiveSeries.length; sIdx++) {
                       final p = effectiveSeries[sIdx].points[nearestPointIndex];
-                      final normalizedY = p.value / maxVal;
-                      final ptY = 20.0 + chartHeight * (1.0 - normalizedY);
+                      final normalizedY = (p.value / ceiling).clamp(0.0, 1.0);
+                      final ptY = topPadding + chartHeight * (1.0 - normalizedY);
                       final diff = (event.localPosition.dy - ptY).abs();
                       if (diff < minDiff) {
                         minDiff = diff;
@@ -2870,33 +3053,73 @@ class _CurveChartPainter extends CustomPainter {
 
     if (effectiveSeries.isEmpty || effectiveSeries.first.points.isEmpty) return;
 
-    const bottomPadding = 24.0;
+    const leftPadding = 42.0;
+    const rightPadding = 18.0;
+    const bottomPadding = 26.0;
     const topPadding = 20.0;
     final chartHeight = size.height - bottomPadding - topPadding;
-    final chartWidth = size.width;
+    final innerWidth = size.width - leftPadding - rightPadding;
 
-    double maxVal = 0.0;
+    double peakVal = 0.0;
     for (final s in effectiveSeries) {
       for (final p in s.points) {
-        if (p.value > maxVal) maxVal = p.value;
+        if (p.value > peakVal) peakVal = p.value;
       }
     }
-    if (maxVal <= 0.0) maxVal = 4.0; // Default scale ceiling
-    maxVal = maxVal * 1.25; // Top breathing room
+    final double ceiling;
+    if (peakVal <= 2.5) {
+      ceiling = 3.0;
+    } else if (peakVal <= 5.0) {
+      ceiling = 6.0;
+    } else if (peakVal <= 7.5) {
+      ceiling = 9.0;
+    } else if (peakVal <= 10.0) {
+      ceiling = 12.0;
+    } else if (peakVal <= 15.0) {
+      ceiling = 18.0;
+    } else if (peakVal <= 24.0) {
+      ceiling = 24.0;
+    } else {
+      ceiling = (peakVal / 3.0).ceil() * 3.0;
+    }
 
-    // Horizontal grid lines
+    // Horizontal grid lines and Y-axis level labels
     final gridPaint = Paint()
       ..color = isDark ? Colors.white10 : const Color(0xFFE2E8F0)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.0;
 
+    final yAxisStyle = TextStyle(
+      fontSize: 10.5,
+      fontWeight: FontWeight.w600,
+      fontFamily: 'monospace',
+      color: isDark ? Colors.white38 : const Color(0xFF94A3B8),
+    );
+
     for (int i = 0; i <= 3; i++) {
-      final y = topPadding + (chartHeight / 3) * i;
-      canvas.drawLine(Offset(0, y), Offset(chartWidth, y), gridPaint);
+      final y = topPadding + (chartHeight / 3.0) * i;
+      // Draw grid line across the plot area
+      canvas.drawLine(
+        Offset(leftPadding, y),
+        Offset(size.width - rightPadding, y),
+        gridPaint,
+      );
+
+      // Y-axis scale value label (e.g. 12h, 8h, 4h, 0h)
+      final levelVal = ceiling * (1.0 - (i / 3.0));
+      final levelText = '${levelVal.round()}h';
+      final tpLevel = TextPainter(
+        text: TextSpan(text: levelText, style: yAxisStyle),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      tpLevel.paint(
+        canvas,
+        Offset(leftPadding - tpLevel.width - 8, y - tpLevel.height / 2),
+      );
     }
 
     final pointsCount = effectiveSeries.first.points.length;
-    final dx = pointsCount > 1 ? chartWidth / (pointsCount - 1) : chartWidth;
+    final dx = pointsCount > 1 ? innerWidth / (pointsCount - 1) : innerWidth;
 
     // Collect coordinates for every series
     final allSeriesCoords = <List<Offset>>[];
@@ -2906,8 +3129,8 @@ class _CurveChartPainter extends CustomPainter {
       final pointCoords = <Offset>[];
 
       for (int i = 0; i < pointsCount; i++) {
-        final x = dx * i;
-        final normalizedY = (series.points[i].value / maxVal).clamp(0.0, 1.0);
+        final x = leftPadding + (dx * i);
+        final normalizedY = (series.points[i].value / ceiling).clamp(0.0, 1.0);
         final y = topPadding + chartHeight * (1.0 - normalizedY);
         pointCoords.add(Offset(x, y));
       }
@@ -2943,7 +3166,9 @@ class _CurveChartPainter extends CustomPainter {
                 series.color.withValues(alpha: isDark ? 0.32 : 0.20),
                 series.color.withValues(alpha: 0.0),
               ],
-            ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
+            ).createShader(
+              Rect.fromLTWH(leftPadding, topPadding, innerWidth, chartHeight),
+            );
           canvas.drawPath(fillPath, gradientPaint);
         }
 
@@ -3071,12 +3296,20 @@ class _CurveChartPainter extends CustomPainter {
         textDirection: TextDirection.ltr,
       )..layout();
 
-      // If activeFilter is 'all', show the date label in subtle text
+      // Show the date label if available
       TextPainter? tpDate;
-      if (activeFilter == 'all') {
+      String? dateText;
+      if (targetPoint.date != null) {
+        final d = targetPoint.date!;
+        dateText =
+            '${_AdminActivityAnalyticsTabState._shortWeekday(d.weekday)}, ${_AdminActivityAnalyticsTabState._shortMonth(d.month)} ${d.day}';
+      } else if (activeFilter == 'all') {
+        dateText = targetPoint.label;
+      }
+      if (dateText != null) {
         tpDate = TextPainter(
           text: TextSpan(
-            text: targetPoint.label,
+            text: dateText,
             style: TextStyle(
               fontSize: 9.5,
               fontWeight: FontWeight.w600,
@@ -3107,7 +3340,7 @@ class _CurveChartPainter extends CustomPainter {
 
       final badgeCenterX = pt.dx.clamp(
         badgeWidth / 2 + 6,
-        chartWidth - badgeWidth / 2 - 6,
+        size.width - badgeWidth / 2 - 6,
       );
 
       canvas.save();
@@ -3204,15 +3437,16 @@ class _CurveChartPainter extends CustomPainter {
 
     final firstPoints = effectiveSeries.first.points;
     for (int i = 0; i < firstPoints.length; i++) {
-      final x = dx * i;
+      final x = leftPadding + (dx * i);
       final tp = TextPainter(
         text: TextSpan(text: firstPoints[i].label, style: textStyle),
         textDirection: TextDirection.ltr,
       )..layout();
 
-      double drawX = x - (tp.width / 2);
-      if (i == 0) drawX = 0;
-      if (i == firstPoints.length - 1) drawX = chartWidth - tp.width;
+      final drawX = (x - (tp.width / 2)).clamp(
+        leftPadding - 8,
+        size.width - rightPadding - tp.width + 8,
+      );
 
       tp.paint(canvas, Offset(drawX, size.height - bottomPadding + 6));
     }

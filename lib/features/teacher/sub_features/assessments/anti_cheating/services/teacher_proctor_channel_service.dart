@@ -26,17 +26,26 @@ class TeacherProctorChannelService {
       _studentStates.values.toList();
 
   /// Initialize channel with the enrolled student roster
-  void initializeRoster(List<Map<String, String>> enrolledStudents) {
+  void initializeRoster(List<Map<String, dynamic>> enrolledStudents) {
     for (final s in enrolledStudents) {
-      final studentId = s['id'] ?? '';
+      final studentId = s['id']?.toString() ?? '';
       if (studentId.isEmpty) continue;
       _studentStates[studentId] = StudentLiveProctorState(
         studentId: studentId,
-        studentName: s['name'] ?? 'Student',
-        lrn: s['lrn'] ?? 'N/A',
-        section: s['section'] ?? '',
-        status: ProctorSessionStatus.notStarted,
-        violationCount: 0,
+        studentName: s['name']?.toString() ?? 'Student',
+        lrn: s['lrn']?.toString() ?? 'N/A',
+        section: s['section']?.toString() ?? '',
+        status: (s['status'] as ProctorSessionStatus?) ?? ProctorSessionStatus.notStarted,
+        violationCount: (s['violation_count'] as num?)?.toInt() ?? 0,
+        gender: s['gender']?.toString(),
+        lastName: s['last_name']?.toString(),
+        firstName: s['first_name']?.toString(),
+        middleName: s['middle_name']?.toString(),
+        score: (s['score'] as num?)?.toDouble(),
+        totalPoints: (s['total_points'] as num?)?.toDouble(),
+        isEntryAllowed: s['is_entry_allowed'] != false,
+        isMissing: s['is_missing'] == true,
+        currentQuestionNumber: (s['current_question_number'] as num?)?.toInt(),
       );
     }
     _broadcast();
@@ -109,8 +118,14 @@ class TeacherProctorChannelService {
       registerStudentSubmitted(studentId);
     } else if (eventType == 'kicked') {
       kickStudent(studentId, details, writeToDb: false);
-    } else if (eventType == 'retake_authorized') {
+    } else if (eventType == 'retake_authorized' || eventType == 'reset') {
       authorizeRetake(studentId, writeToDb: false);
+    } else if (eventType == 'force_submit') {
+      forceSubmitStudent(studentId, writeToDb: false);
+    } else if (eventType == 'entry_allowed') {
+      toggleAllowStudent(studentId, true, writeToDb: false);
+    } else if (eventType == 'entry_disallowed') {
+      toggleAllowStudent(studentId, false, writeToDb: false);
     } else {
       // Focus lost / blur / tab switch violation
       final current = _studentStates[studentId];
@@ -220,6 +235,9 @@ class TeacherProctorChannelService {
         violationCount: 0,
         violations: const [],
         kickedReason: null,
+        currentQuestionNumber: 1,
+        score: null,
+        isMissing: false,
         lastActiveAt: DateTime.now(),
       );
       _broadcast();
@@ -243,9 +261,50 @@ class TeacherProctorChannelService {
             .update({
               'status': 'in_progress',
               'score_earned': 0,
+              'current_question_index': 0,
             })
             .eq('assessment_id', assessmentId)
             .eq('student_id', studentId)
+            .catchError((_) {});
+
+        SupabaseService().client
+            .from('student_assessment_responses')
+            .delete()
+            .eq('assessment_id', assessmentId)
+            .eq('student_id', studentId)
+            .catchError((_) {});
+      } catch (_) {}
+    }
+  }
+
+  /// Teacher Action: Allow or disallow student taking test
+  void toggleAllowStudent(
+    String studentId,
+    bool allow, {
+    bool writeToDb = true,
+  }) {
+    final current = _studentStates[studentId];
+    if (current != null) {
+      _studentStates[studentId] = current.copyWith(
+        isEntryAllowed: allow,
+        lastActiveAt: DateTime.now(),
+      );
+      _broadcast();
+    }
+
+    if (writeToDb) {
+      try {
+        SupabaseService().client
+            .from('anti_cheating_logs')
+            .insert({
+              'assessment_id': assessmentId,
+              'student_id': studentId,
+              'event_type': allow ? 'entry_allowed' : 'entry_disallowed',
+              'details': allow
+                  ? 'Instructor granted test access'
+                  : 'Instructor disallowed test access',
+              'event_at': DateTime.now().toUtc().toIso8601String(),
+            })
             .catchError((_) {});
       } catch (_) {}
     }

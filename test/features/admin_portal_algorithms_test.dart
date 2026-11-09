@@ -6,28 +6,28 @@ import 'package:class_realm/widgets/common/expandable_notification_card.dart';
 void main() {
   group('Admin Portal Core Algorithms & Validations', () {
     test('1. Human-readable duration formatting strictly adheres to specification', () {
-      // 01hr 01min 1sec
+      // 01h 01m 01s
       expect(
         AdminRepository.formatHumanReadableDuration(1 * 3600 + 1 * 60 + 1),
-        equals('01hr 01min 1sec'),
+        equals('01h 01m 01s'),
       );
 
-      // 2hrs 57mins 05secs
+      // 02h 57m 05s
       expect(
         AdminRepository.formatHumanReadableDuration(2 * 3600 + 57 * 60 + 5),
-        equals('2hrs 57mins 05secs'),
+        equals('02h 57m 05s'),
       );
 
-      // 00hr 57mins 1sec
+      // 00h 57m 01s
       expect(
         AdminRepository.formatHumanReadableDuration(0 * 3600 + 57 * 60 + 1),
-        equals('00hr 57mins 1sec'),
+        equals('00h 57m 01s'),
       );
 
-      // 00hr 00min 40secs
+      // 00h 00m 40s
       expect(
         AdminRepository.formatHumanReadableDuration(40),
-        equals('00hr 00min 40secs'),
+        equals('00h 00m 40s'),
       );
     });
 

@@ -534,11 +534,6 @@ class EmailService {
                           <div style="color: #FFFFFF; font-size: 17px; font-weight: 800; letter-spacing: 0.4px; line-height: 1.2;">CLASSREALM</div>
                           <div style="color: #E0F2FE; font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.7px; margin-top: 3px; line-height: 1.25;">$portalAdvisoryLabel</div>
                         </td>
-                        <td valign="middle" align="right" style="white-space: nowrap; padding-left: 10px;">
-                          <span style="display: inline-block; white-space: nowrap; text-align: center; vertical-align: middle; background-color: #FEF3C7; color: #92400E; border: 1px solid #FDE68A; font-size: 10.5px; font-weight: 700; line-height: 1.2; padding: 6px 11px; border-radius: 999px; letter-spacing: 0.3px;">
-                            MAINTENANCE ACTIVE
-                          </span>
-                        </td>
                       </tr>
                     </table>
                   </td>
@@ -620,11 +615,6 @@ class EmailService {
                         <td valign="middle" align="left">
                           <div style="color: #FFFFFF; font-size: 17px; font-weight: 800; letter-spacing: 0.4px; line-height: 1.2;">CLASSREALM</div>
                           <div style="color: #E0F2FE; font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.7px; margin-top: 3px; line-height: 1.25;">$portalAdvisoryLabel</div>
-                        </td>
-                        <td valign="middle" align="right" style="white-space: nowrap; padding-left: 10px;">
-                          <span style="display: inline-block; white-space: nowrap; text-align: center; vertical-align: middle; background-color: #ECFDF5; color: #065F46; border: 1px solid #A7F3D0; font-size: 10.5px; font-weight: 700; line-height: 1.2; padding: 6px 11px; border-radius: 999px; letter-spacing: 0.3px;">
-                            SYSTEM ONLINE
-                          </span>
                         </td>
                       </tr>
                     </table>

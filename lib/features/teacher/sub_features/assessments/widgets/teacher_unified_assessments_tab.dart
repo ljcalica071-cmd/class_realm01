@@ -21,7 +21,6 @@ import 'package:class_realm/features/teacher/sub_features/assessments/screens/cr
 import 'package:class_realm/features/teacher/sub_features/assessments/screens/create_requirement_flow.dart';
 import 'package:class_realm/features/teacher/sub_features/assessments/screens/edit_assessment_flow.dart';
 import 'package:class_realm/features/teacher/sub_features/assessments/anti_cheating/anti_cheating.dart';
-import 'package:class_realm/features/teacher/sub_features/assessments/item_analysis/item_analysis.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 class TeacherUnifiedAssessmentsTab extends StatefulWidget {
@@ -56,6 +55,7 @@ class _TeacherUnifiedAssessmentsTabState
   String? _selectedClassSection;
   List<Map<String, dynamic>> _teacherSubjects = [];
   bool _isSyncing = false;
+  QuizOrExamModel? _monitoringAssessment;
 
   @override
   void initState() {
@@ -235,6 +235,13 @@ class _TeacherUnifiedAssessmentsTabState
 
   @override
   Widget build(BuildContext context) {
+    if (_monitoringAssessment != null) {
+      return AssessmentProctoringScreen(
+        assessment: _monitoringAssessment!,
+        onBack: () => setState(() => _monitoringAssessment = null),
+      );
+    }
+
     final theme = Theme.of(context);
 
     final writtenWork = <Widget>[
@@ -911,12 +918,9 @@ class _TeacherUnifiedAssessmentsTabState
               }
             }
           : () {
-              AppModals.showUpcomingFeatureDialog(
-                context,
-                featureName: 'Assessment Score Summary',
-              );
+              setState(() => _monitoringAssessment = item);
             },
-      actionLabel: isInPerson ? 'Record Scores' : 'View Scores (Next Update)',
+      actionLabel: isInPerson ? 'Record Scores' : null,
       onEdit: () => EditAssessmentFlowDialog.show(
         context,
         assessment: item,
@@ -927,29 +931,9 @@ class _TeacherUnifiedAssessmentsTabState
       ),
       onDelete: () => _confirmDeleteAssessment(item),
       onReschedule: () => _showRescheduleAssessmentDialog(item),
-      onProctor: isInPerson
-          ? null
-          : () => LiveProctorMonitorModal.show(
-              context: context,
-              assessmentId: item.id,
-              assessmentTitle: item.title,
-              section: item.section,
-            ),
+      onProctor: null,
       isItemAnalysisLocked: !isTestingFinished,
-      onItemAnalysis: isInPerson
-          ? null
-          : () {
-              if (!isTestingFinished) {
-                AppModals.showWarningDialog(
-                  context: context,
-                  title: 'Item Analysis Locked',
-                  message:
-                      'Under DepEd assessment standards, Item Analysis and difficulty index computation are finalized after the testing window concludes to ensure sample integrity.\n\nTesting Window Closes: ${_monthName(examEndTime.month)} ${examEndTime.day}, ${_formatTime(examEndTime)}.',
-                );
-                return;
-              }
-              _showItemAnalysisDialog(item);
-            },
+      onItemAnalysis: null,
     );
   }
 
@@ -1003,7 +987,7 @@ class _TeacherUnifiedAssessmentsTabState
     required String details,
     required IconData icon,
     required VoidCallback onPressed,
-    required String actionLabel,
+    String? actionLabel,
     VoidCallback? onEdit,
     VoidCallback? onDelete,
     VoidCallback? onReschedule,
@@ -1027,16 +1011,21 @@ class _TeacherUnifiedAssessmentsTabState
         ? AppTheme.catPurple
         : AppTheme.catBlue;
 
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
+    return Material(
+      color: theme.colorScheme.surface,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: theme.colorScheme.onSurface.withValues(alpha: 0.12),
-        ),
-      ),
-      child: Row(
+        onTap: onPressed,
+        child: Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.12),
+            ),
+          ),
+          child: Row(
         children: [
           Icon(icon, color: theme.colorScheme.primary, size: 34),
           const SizedBox(width: 16),
@@ -1143,12 +1132,13 @@ class _TeacherUnifiedAssessmentsTabState
           Wrap(
             spacing: 4,
             children: [
-              AppButton.outline(
-                label: actionLabel,
-                icon: Icons.open_in_new,
-                isSmall: true,
-                onPressed: onPressed,
-              ),
+              if (actionLabel != null && actionLabel.isNotEmpty)
+                AppButton.outline(
+                  label: actionLabel,
+                  icon: Icons.open_in_new,
+                  isSmall: true,
+                  onPressed: onPressed,
+                ),
               if (onToggleReleaseKey != null && resultsReleased != null)
                 IconButton(
                   tooltip: resultsReleased
@@ -1216,129 +1206,9 @@ class _TeacherUnifiedAssessmentsTabState
           ),
         ],
       ),
+    ),
+    ),
     );
-  }
-
-  Future<void> _showItemAnalysisDialog(QuizOrExamModel item) async {
-    try {
-      final client = SupabaseService().client;
-      // Fetch real assessment questions from database
-      final questionsResponse = await client
-          .from('assessment_questions')
-          .select('id, question_text, position')
-          .eq('assessment_id', item.id)
-          .order('position', ascending: true);
-
-      final questionRows = List<Map<String, dynamic>>.from(
-        questionsResponse as List? ?? [],
-      );
-
-      // Fetch real submitted attempts for this assessment
-      final attemptsResponse = await client
-          .from('assessment_attempts')
-          .select('id, status')
-          .eq('assessment_id', item.id)
-          .inFilter('status', ['submitted', 'auto_submitted']);
-      final attemptList = List<Map<String, dynamic>>.from(
-        attemptsResponse as List? ?? [],
-      );
-      final totalAttempts = attemptList.length;
-
-      final stats = <ItemDifficultyStat>[];
-
-      if (questionRows.isNotEmpty) {
-        final qIds = questionRows.map((q) => q['id'].toString()).toList();
-        final responsesData = totalAttempts > 0
-            ? await client
-                  .from('assessment_responses')
-                  .select('question_id, is_correct')
-                  .inFilter('question_id', qIds)
-            : [];
-        final responseList = List<Map<String, dynamic>>.from(
-          responsesData as List? ?? [],
-        );
-
-        for (int i = 0; i < questionRows.length; i++) {
-          final q = questionRows[i];
-          final qId = q['id'].toString();
-          final qResponses = responseList.where(
-            (r) => r['question_id']?.toString() == qId,
-          );
-          final correctCount = qResponses
-              .where((r) => r['is_correct'] == true)
-              .length;
-
-          stats.add(
-            ItemDifficultyStat(
-              itemNumber: (q['position'] as num?)?.toInt() ?? (i + 1),
-              questionText:
-                  q['question_text']?.toString() ?? 'Question ${i + 1}',
-              totalAttempts: totalAttempts,
-              correctCount: correctCount,
-            ),
-          );
-        }
-      } else if (item.questions.isNotEmpty) {
-        for (int i = 0; i < item.questions.length; i++) {
-          final q = item.questions[i];
-          stats.add(
-            ItemDifficultyStat(
-              itemNumber: i + 1,
-              questionText: q.questionText,
-              totalAttempts: totalAttempts,
-              correctCount: 0,
-            ),
-          );
-        }
-      }
-
-      if (!mounted) return;
-
-      ItemAnalysisModal.show(
-        context,
-        assessmentTitle: item.title,
-        stats: stats,
-        initialResultsReleased: item.resultsReleased,
-        onToggleRelease: (released) async {
-          try {
-            await client
-                .from('digital_assessments')
-                .update({'results_released': released})
-                .eq('id', item.id);
-            if (mounted) {
-              setState(() {
-                final index = widget.assessments.indexWhere((a) => a.id == item.id);
-                if (index != -1) {
-                  widget.assessments[index] = item.copyWith(resultsReleased: released);
-                }
-              });
-            }
-          } catch (_) {}
-        },
-      );
-    } catch (e) {
-      debugPrint('Item analysis query notice: $e');
-      if (mounted) {
-        ItemAnalysisModal.show(
-          context,
-          assessmentTitle: item.title,
-          stats: item.questions
-              .asMap()
-              .entries
-              .map(
-                (e) => ItemDifficultyStat(
-                  itemNumber: e.key + 1,
-                  questionText: e.value.questionText,
-                  totalAttempts: 0,
-                  correctCount: 0,
-                ),
-              )
-              .toList(),
-          initialResultsReleased: item.resultsReleased,
-          onToggleRelease: (released) async {},
-        );
-      }
-    }
   }
 
   Widget _buildAssessmentCategoryBadge(

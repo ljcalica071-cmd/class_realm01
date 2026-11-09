@@ -80,36 +80,30 @@ class _ChangePasswordModalState extends State<ChangePasswordModal> {
       _hasNumber = result.hasNumber;
       _passwordsMatch = result.passwordsMatch;
 
-      // Clear field errors as user types
+      // Real-time live validation for confirm new password (matching forgot pass design)
+      if (confirm.isNotEmpty) {
+        if (!_passwordsMatch) {
+          _confirmPassError = 'Passwords do not match';
+        } else {
+          _confirmPassError = null;
+        }
+      } else {
+        _confirmPassError = null;
+      }
+
+      // Real-time check for same password
+      if (password.isNotEmpty && current.isNotEmpty && password == current) {
+        _newPassError = 'New password must be different from your current password.';
+      } else if (_newPassError == 'New password must be different from your current password.' &&
+          password != current) {
+        _newPassError = null;
+      }
+
+      // Clear current password error when typing
       if (_currentPassError != null && current.isNotEmpty) {
         _currentPassError = null;
       }
-      if (_newPassError != null) {
-        if (password.isNotEmpty && password != current) {
-          _newPassError = null;
-        }
-      }
-      if (_confirmPassError != null) {
-        if (confirm == password) {
-          _confirmPassError = null;
-        }
-      }
     });
-  }
-
-  bool get _isFormValid {
-    final current = _currentPassCtrl.text.trim();
-    final newPass = _newPassCtrl.text;
-    final confirm = _confirmPassCtrl.text;
-
-    return current.isNotEmpty &&
-        _hasMinLength &&
-        _hasUpper &&
-        _hasLower &&
-        _hasNumber &&
-        _passwordsMatch &&
-        newPass != current &&
-        confirm == newPass;
   }
 
   @override
@@ -137,34 +131,39 @@ class _ChangePasswordModalState extends State<ChangePasswordModal> {
       _confirmPassError = null;
     });
 
+    bool hasClientError = false;
+
     if (current.isEmpty) {
       setState(() => _currentPassError = 'Current password is required.');
-      return;
+      hasClientError = true;
     }
 
     if (newPass.isEmpty) {
       setState(() => _newPassError = 'New password is required.');
-      return;
-    }
-
-    if (newPass == current) {
+      hasClientError = true;
+    } else if (newPass == current) {
       setState(() {
         _newPassError = 'New password must be different from your current password.';
       });
-      return;
-    }
-
-    if (!_hasMinLength || !_hasUpper || !_hasLower || !_hasNumber) {
+      hasClientError = true;
+    } else if (!_hasMinLength || !_hasUpper || !_hasLower || !_hasNumber) {
       setState(() {
         _newPassError = 'Password does not meet all complexity requirements.';
       });
-      return;
+      hasClientError = true;
     }
 
-    if (confirm != newPass) {
+    if (confirm.isEmpty) {
+      setState(() => _confirmPassError = 'Please confirm your new password.');
+      hasClientError = true;
+    } else if (confirm != newPass) {
       setState(() {
         _confirmPassError = 'Passwords do not match.';
       });
+      hasClientError = true;
+    }
+
+    if (hasClientError) {
       return;
     }
 
@@ -401,6 +400,7 @@ class _ChangePasswordModalState extends State<ChangePasswordModal> {
                 errorText: _confirmPassError,
                 isDark: isDark,
                 textInputAction: TextInputAction.done,
+                isConfirmField: true,
               ),
               const SizedBox(height: 18),
 
@@ -437,7 +437,7 @@ class _ChangePasswordModalState extends State<ChangePasswordModal> {
                     child: AppPrimaryButton(
                       label: _isParent ? 'Update Password' : 'Continue to Verification',
                       isLoading: _isLoading,
-                      onPressed: (_isLoading || !_isFormValid) ? null : _handleSubmit,
+                      onPressed: _isLoading ? null : _handleSubmit,
                     ),
                   ),
                 ],
@@ -458,24 +458,47 @@ class _ChangePasswordModalState extends State<ChangePasswordModal> {
     required String? errorText,
     required bool isDark,
     required TextInputAction textInputAction,
+    bool isConfirmField = false,
   }) {
     final hasError = errorText != null && errorText.isNotEmpty;
     const errorColor = Color(0xFFDC2626);
+    const successColor = Color(0xFF16A34A);
+    final isConfirmSuccess = isConfirmField && controller.text.isNotEmpty && !hasError && _passwordsMatch;
+
     final borderColor = hasError
         ? errorColor
-        : (isDark ? const Color(0xFF374151) : const Color(0xFFCBD5E1));
-    final focusedBorderColor = hasError ? errorColor : const Color(0xFF2563EB);
+        : (isConfirmSuccess
+            ? successColor
+            : (isDark ? const Color(0xFF374151) : const Color(0xFFCBD5E1)));
+    final focusedBorderColor = hasError
+        ? errorColor
+        : (isConfirmSuccess ? successColor : const Color(0xFF2563EB));
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 12.5,
-            fontWeight: FontWeight.w600,
-            color: isDark ? const Color(0xFFE5E7EB) : const Color(0xFF334155),
-          ),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w600,
+                color: isDark ? const Color(0xFFE5E7EB) : const Color(0xFF334155),
+              ),
+            ),
+            Text(
+              '${controller.text.length}/50',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: controller.text.length >= 50
+                    ? errorColor
+                    : (isDark ? const Color(0xFF9CA3AF) : const Color(0xFF64748B)),
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: 6),
         Container(
@@ -484,13 +507,16 @@ class _ChangePasswordModalState extends State<ChangePasswordModal> {
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
               color: borderColor,
-              width: hasError ? 1.5 : 1.0,
+              width: (hasError || isConfirmSuccess) ? 1.5 : 1.0,
             ),
           ),
           child: TextField(
             controller: controller,
             focusNode: focusNode,
             obscureText: obscureText,
+            maxLength: 50,
+            buildCounter: (_, {required currentLength, required isFocused, maxLength}) => null,
+            inputFormatters: AppValidators.passwordFormatters,
             textInputAction: textInputAction,
             style: TextStyle(
               fontSize: 14,
@@ -499,6 +525,7 @@ class _ChangePasswordModalState extends State<ChangePasswordModal> {
             ),
             decoration: InputDecoration(
               isDense: true,
+              counterText: '',
               contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
               border: InputBorder.none,
               focusedBorder: OutlineInputBorder(
@@ -518,22 +545,25 @@ class _ChangePasswordModalState extends State<ChangePasswordModal> {
           ),
         ),
         if (hasError) ...[
-          const SizedBox(height: 4),
-          Row(
-            children: [
-              const Icon(LucideIcons.alertCircle, size: 13, color: errorColor),
-              const SizedBox(width: 4),
-              Expanded(
-                child: Text(
-                  errorText,
-                  style: const TextStyle(
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w500,
-                    color: errorColor,
+          const SizedBox(height: 5),
+          Padding(
+            padding: const EdgeInsets.only(left: 2),
+            child: Row(
+              children: [
+                const Icon(LucideIcons.alertCircle, size: 13, color: errorColor),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    errorText,
+                    style: const TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w500,
+                      color: errorColor,
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ],
       ],

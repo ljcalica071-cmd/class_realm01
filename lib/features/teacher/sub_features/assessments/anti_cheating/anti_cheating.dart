@@ -9,3 +9,5 @@ export 'widgets/student_proctor_card.dart';
 export 'widgets/kick_student_alert_dialog.dart';
 export 'widgets/retake_confirmation_dialog.dart';
 export 'widgets/live_proctor_monitor_modal.dart';
+export 'widgets/proctoring_roster_table.dart';
+export 'screens/assessment_proctoring_screen.dart';

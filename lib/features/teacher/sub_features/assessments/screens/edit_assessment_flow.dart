@@ -1,20 +1,10 @@
 import 'dart:async';
-
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:class_realm/core/services/app_data_cache.dart';
 import 'package:class_realm/core/services/supabase_service.dart';
-import 'package:class_realm/core/utils/validators.dart';
-import 'package:class_realm/data/repositories/subject_repository.dart';
-import 'package:class_realm/features/teacher/sub_features/grading/widgets/teacher_gradebook_tab.dart';
+import 'package:class_realm/core/theme/app_theme.dart';
 import 'package:class_realm/models/academic_models.dart';
-import 'package:class_realm/widgets/common/app_buttons.dart';
-import 'package:class_realm/widgets/common/app_date_picker_field.dart';
-import 'package:class_realm/widgets/common/app_duration_picker_field.dart';
 import 'package:class_realm/widgets/common/app_modals.dart';
-import 'package:class_realm/widgets/common/app_text_field.dart';
-import 'package:class_realm/widgets/common/app_time_picker_field.dart';
-import 'package:class_realm/widgets/common/expandable_instructions_text.dart';
 
 class EditAssessmentFlowDialog extends StatefulWidget {
   final QuizOrExamModel assessment;
@@ -46,791 +36,1185 @@ class EditAssessmentFlowDialog extends StatefulWidget {
       _EditAssessmentFlowDialogState();
 }
 
-class _EditAssessmentFlowDialogState extends State<EditAssessmentFlowDialog> {
-  final _formKey = GlobalKey<FormState>();
-  late final TextEditingController _titleCtrl;
-  late final TextEditingController _descCtrl;
-  late final TextEditingController _durationCtrl;
-  late final TextEditingController _hpsCtrl;
-  late List<QuestionModel> _questions;
+class _EditPlannedQuestion {
+  final String id;
+  final int position;
+  final QuestionType type;
+  final int points;
+  String questionText;
+  List<String> choices;
+  String correctAnswer;
+  List<String> optionIds;
 
-  late DateTime _selectedDate;
-  late TimeOfDay _selectedTime;
-  String? _scheduleError;
+  _EditPlannedQuestion({
+    required this.id,
+    required this.position,
+    required this.type,
+    required this.points,
+    required this.questionText,
+    required this.choices,
+    required this.correctAnswer,
+    this.optionIds = const [],
+  });
+
+  bool get isComplete {
+    if (questionText.trim().isEmpty) return false;
+    if (type == QuestionType.multipleChoice) {
+      if (choices.length < 4) return false;
+      if (choices.any((c) => c.trim().isEmpty)) return false;
+      if (correctAnswer.trim().isEmpty) return false;
+      return true;
+    } else if (type == QuestionType.trueFalse) {
+      return correctAnswer.trim().isNotEmpty;
+    } else if (type == QuestionType.identification) {
+      final ans = correctAnswer.trim();
+      return ans.length >= 2 && ans.length <= 50;
+    }
+    return true;
+  }
+}
+
+class _EditAssessmentFlowDialogState extends State<EditAssessmentFlowDialog> {
+  final List<_EditPlannedQuestion> _questions = [];
+  int _activeQuestionIndex = 0;
+  bool _isLoading = true;
   bool _isSaving = false;
 
-  bool get _isInPerson => widget.assessment.completionMode == 'in_person';
+  // Active question input controllers
+  late final TextEditingController _statementCtrl;
+  late final List<TextEditingController> _choiceCtrls;
+  late final TextEditingController _qIdAnswerCtrl;
+  String? _selectedMcqChoice;
+  String? _selectedTfAnswer;
+
+  // Inline error strings
+  String? _statementError;
+  String? _choicesError;
+  String? _answerKeyError;
+  String? _editorError;
 
   @override
   void initState() {
     super.initState();
-    _titleCtrl = TextEditingController(text: widget.assessment.title);
-    _descCtrl = TextEditingController(text: widget.assessment.description);
-    _durationCtrl = TextEditingController(
-      text: widget.assessment.durationMinutes.toString(),
-    );
-    _hpsCtrl = TextEditingController(
-      text: widget.assessment.totalPoints.toInt().toString(),
-    );
-    _questions = List.from(widget.assessment.questions);
-
-    final localSched = widget.assessment.scheduleDate.toLocal();
-    _selectedDate = DateTime(localSched.year, localSched.month, localSched.day);
-    _selectedTime = TimeOfDay.fromDateTime(localSched);
-    _titleCtrl.addListener(_onFieldChanged);
-    _descCtrl.addListener(_onFieldChanged);
-    _durationCtrl.addListener(_onFieldChanged);
-    _hpsCtrl.addListener(_onFieldChanged);
-  }
-
-  void _onFieldChanged() {
-    if (mounted) setState(() {});
-  }
-
-  bool get _hasEditChanges {
-    final a = widget.assessment;
-    if (_titleCtrl.text.trim() != a.title.trim()) return true;
-    if (_descCtrl.text.trim() != a.description.trim()) return true;
-    if (_isInPerson) {
-      final hps = int.tryParse(_hpsCtrl.text.trim());
-      if (hps != a.totalPoints.toInt()) return true;
-    } else {
-      final dur = int.tryParse(_durationCtrl.text.trim());
-      if (dur != a.durationMinutes) return true;
-    }
-    if (!isSameClassworkSchedule(
-      a.scheduleDate,
-      _candidateSchedule,
-      isInPerson: _isInPerson,
-    )) {
-      return true;
-    }
-    return false;
+    _statementCtrl = TextEditingController();
+    _choiceCtrls = List.generate(4, (_) => TextEditingController());
+    _qIdAnswerCtrl = TextEditingController();
+    _loadQuestionsFromDb();
   }
 
   @override
   void dispose() {
-    _titleCtrl.removeListener(_onFieldChanged);
-    _descCtrl.removeListener(_onFieldChanged);
-    _durationCtrl.removeListener(_onFieldChanged);
-    _hpsCtrl.removeListener(_onFieldChanged);
-    _titleCtrl.dispose();
-    _descCtrl.dispose();
-    _durationCtrl.dispose();
-    _hpsCtrl.dispose();
+    _statementCtrl.dispose();
+    for (final c in _choiceCtrls) {
+      c.dispose();
+    }
+    _qIdAnswerCtrl.dispose();
     super.dispose();
   }
 
-  String get _slotDisplayLabel {
-    final col = widget.assessment.gradebookColumnIndex;
-    if (widget.assessment.isExam) {
-      if (col == 1 || widget.assessment.examType == 'st1') return 'ST1';
-      if (col == 2 || widget.assessment.examType == 'st2') return 'ST2';
-      if (col == 3 || widget.assessment.examType == 'term_exam') return 'TE';
-      return 'Exam';
-    }
-    return col != null ? 'WW $col' : 'WW';
-  }
+  Future<void> _loadQuestionsFromDb() async {
+    try {
+      final client = SupabaseService().client;
+      final questionsData = await client
+          .from('assessment_questions')
+          .select("""
+            id,
+            position,
+            question_type,
+            question_text,
+            points,
+            assessment_question_options (
+              id,
+              position,
+              option_text,
+              is_correct
+            )
+          """)
+          .eq('assessment_id', widget.assessment.id)
+          .order('position', ascending: true);
 
-  DateTime get _candidateSchedule {
-    if (_isInPerson) {
-      return DateTime(
-        _selectedDate.year,
-        _selectedDate.month,
-        _selectedDate.day,
-        23,
-        59,
+      final questionRows = List<Map<String, dynamic>>.from(
+        questionsData as List? ?? [],
       );
+
+      _questions.clear();
+
+      if (questionRows.isNotEmpty) {
+        for (int i = 0; i < questionRows.length; i++) {
+          final row = questionRows[i];
+          final rawType = row['question_type']?.toString().toLowerCase() ?? '';
+          QuestionType qType = QuestionType.multipleChoice;
+          if (rawType.contains('true') || rawType.contains('tf')) {
+            qType = QuestionType.trueFalse;
+          } else if (rawType.contains('ident')) {
+            qType = QuestionType.identification;
+          }
+
+          final rawOptions = List<Map<String, dynamic>>.from(
+            row['assessment_question_options'] as List? ?? [],
+          );
+          rawOptions.sort(
+            (a, b) => ((a['position'] as num?)?.toInt() ?? 0)
+                .compareTo((b['position'] as num?)?.toInt() ?? 0),
+          );
+
+          final choices = <String>[];
+          final optionIds = <String>[];
+          String correctAnswer = '';
+
+          for (final opt in rawOptions) {
+            final optText = opt['option_text']?.toString() ?? '';
+            final optId = opt['id']?.toString() ?? '';
+            choices.add(optText);
+            optionIds.add(optId);
+            if (opt['is_correct'] == true) {
+              correctAnswer = optText;
+            }
+          }
+
+          _questions.add(
+            _EditPlannedQuestion(
+              id: row['id']?.toString() ?? '',
+              position: (row['position'] as num?)?.toInt() ?? (i + 1),
+              type: qType,
+              points: (row['points'] as num?)?.toInt() ?? 1,
+              questionText: row['question_text']?.toString() ?? '',
+              choices: choices,
+              correctAnswer: correctAnswer,
+              optionIds: optionIds,
+            ),
+          );
+        }
+      } else {
+        // Fallback to widget.assessment.questions
+        for (int i = 0; i < widget.assessment.questions.length; i++) {
+          final q = widget.assessment.questions[i];
+          _questions.add(
+            _EditPlannedQuestion(
+              id: q.id,
+              position: i + 1,
+              type: q.type,
+              points: q.points.toInt(),
+              questionText: q.questionText,
+              choices: List<String>.from(q.choices),
+              correctAnswer: q.correctAnswer,
+            ),
+          );
+        }
+      }
+
+      if (mounted) {
+        setState(() => _isLoading = false);
+        if (_questions.isNotEmpty) {
+          _loadQuestionIntoEditor(0);
+        }
+      }
+    } catch (e) {
+      debugPrint('Error loading questions for edit: $e');
+      if (mounted) setState(() => _isLoading = false);
     }
-    return DateTime(
-      _selectedDate.year,
-      _selectedDate.month,
-      _selectedDate.day,
-      _selectedTime.hour,
-      _selectedTime.minute,
-    );
   }
 
-  String? _validateOnlineScheduleIfChanged(DateTime candidate) {
-    if (_isInPerson) return null;
-    final isChanged = !isSameClassworkSchedule(
-      widget.assessment.scheduleDate,
-      candidate,
-      isInPerson: false,
-    );
-    if (!isChanged) return null;
-    if (!candidate.isAfter(DateTime.now())) {
-      return 'Updated schedule must be in the future.';
-    }
-    return null;
+  void _loadQuestionIntoEditor(int index) {
+    if (index < 0 || index >= _questions.length) return;
+    final q = _questions[index];
+    setState(() {
+      _activeQuestionIndex = index;
+      _statementCtrl.text = q.questionText;
+      _statementError = null;
+      _choicesError = null;
+      _answerKeyError = null;
+      _editorError = null;
+
+      if (q.type == QuestionType.multipleChoice) {
+        for (int i = 0; i < 4; i++) {
+          _choiceCtrls[i].text = i < q.choices.length ? q.choices[i] : '';
+        }
+        _selectedMcqChoice = q.correctAnswer.isNotEmpty ? q.correctAnswer : null;
+        _selectedTfAnswer = null;
+        _qIdAnswerCtrl.clear();
+      } else if (q.type == QuestionType.trueFalse) {
+        for (final c in _choiceCtrls) {
+          c.clear();
+        }
+        _selectedMcqChoice = null;
+        _selectedTfAnswer = q.correctAnswer.isNotEmpty ? q.correctAnswer : null;
+        _qIdAnswerCtrl.clear();
+      } else if (q.type == QuestionType.identification) {
+        for (final c in _choiceCtrls) {
+          c.clear();
+        }
+        _selectedMcqChoice = null;
+        _selectedTfAnswer = null;
+        _qIdAnswerCtrl.text = q.correctAnswer;
+      }
+    });
   }
 
-  Future<void> _saveChanges() async {
+  bool _saveCurrentEditorState() {
+    if (_activeQuestionIndex < 0 || _activeQuestionIndex >= _questions.length) {
+      return true;
+    }
+    final q = _questions[_activeQuestionIndex];
+    final statement = _statementCtrl.text.trim();
+
+    if (statement.isEmpty) {
+      setState(() => _statementError = 'Question statement is required.');
+      return false;
+    }
+    if (statement.length > 500) {
+      setState(
+        () => _statementError = 'Statement must not exceed 500 characters.',
+      );
+      return false;
+    }
+    _statementError = null;
+
+    if (q.type == QuestionType.multipleChoice) {
+      final choices = _choiceCtrls.map((c) => c.text.trim()).toList();
+      if (choices.any((c) => c.isEmpty)) {
+        setState(
+          () => _choicesError = 'All 4 multiple choice options must be filled.',
+        );
+        return false;
+      }
+
+      // Check duplicates
+      final lower = choices.map((c) => c.toLowerCase()).toSet();
+      if (lower.length < 4) {
+        setState(() => _choicesError = 'Duplicate choices are not allowed.');
+        return false;
+      }
+      _choicesError = null;
+
+      if (_selectedMcqChoice == null || _selectedMcqChoice!.trim().isEmpty) {
+        setState(
+          () => _answerKeyError =
+              'Select the radio corresponding to the correct answer.',
+        );
+        return false;
+      }
+      _answerKeyError = null;
+
+      q.questionText = statement;
+      q.choices = choices;
+      q.correctAnswer = _selectedMcqChoice!;
+    } else if (q.type == QuestionType.trueFalse) {
+      if (_selectedTfAnswer == null || _selectedTfAnswer!.isEmpty) {
+        setState(() => _answerKeyError = 'Select either True or False.');
+        return false;
+      }
+      _answerKeyError = null;
+      q.questionText = statement;
+      q.choices = ['True', 'False'];
+      q.correctAnswer = _selectedTfAnswer!;
+    } else if (q.type == QuestionType.identification) {
+      final ans = _qIdAnswerCtrl.text.trim();
+      if (ans.length < 2 || ans.length > 50) {
+        setState(
+          () => _answerKeyError =
+              'Correct answer must be between 2 and 50 characters.',
+        );
+        return false;
+      }
+      _answerKeyError = null;
+      q.questionText = statement;
+      q.choices = const [];
+      q.correctAnswer = ans;
+    }
+
+    return true;
+  }
+
+  Future<void> _saveAllQuestionsToDb() async {
     if (_isSaving) return;
-    final formValid = _formKey.currentState?.validate() ?? false;
-    final candidate = _candidateSchedule;
-    final schedErr = _validateOnlineScheduleIfChanged(candidate);
-    setState(() => _scheduleError = schedErr);
-    if (!formValid || schedErr != null) return;
+    if (!_saveCurrentEditorState()) return;
 
-    final title = _titleCtrl.text.trim();
-    final instructions = _descCtrl.text.trim();
-    final duration = _isInPerson
-        ? 0
-        : (int.tryParse(_durationCtrl.text.trim()) ??
-              widget.assessment.durationMinutes);
-    final hpsPoints = _isInPerson
-        ? (int.tryParse(_hpsCtrl.text.trim()) ??
-              widget.assessment.totalPoints.toInt())
-        : widget.assessment.totalPoints.toInt();
+    // Validate that all questions are complete
+    for (int i = 0; i < _questions.length; i++) {
+      if (!_questions[i].isComplete) {
+        _loadQuestionIntoEditor(i);
+        setState(() {
+          _editorError = 'Please complete Question ${i + 1} before saving.';
+        });
+        return;
+      }
+    }
 
     setState(() => _isSaving = true);
 
     try {
       final client = SupabaseService().client;
-      if (_isInPerson) {
-        final existing = await client
-            .from('classwork_items')
-            .select(
-              'id, subject_offering_id, term_number, gradebook_column_index, grading_category',
-            )
-            .eq('id', widget.assessment.id)
-            .eq('is_archived', false)
-            .maybeSingle();
 
-        if (existing == null) {
-          AppDataCache.instance.invalidatePrefix('teacher_assessments_');
-          AppDataCache.instance.invalidatePrefix('teacher_activities_');
-          AppDataCache.instance.invalidatePrefix('student_dashboard_');
-          AppDataCache.instance.invalidatePrefix('gradebook_');
-          if (!mounted) return;
-          Navigator.of(context).pop();
-          await AppModals.showWarningDialog(
-            context: context,
-            title: 'Assessment Removed',
-            message:
-                'This assessment was already deleted from the database and can no longer be edited.',
-          );
-          return;
+      for (final q in _questions) {
+        // Update question statement
+        if (q.id.isNotEmpty) {
+          await client
+              .from('assessment_questions')
+              .update({'question_text': q.questionText})
+              .eq('id', q.id);
+
+          // Update options
+          if (q.type == QuestionType.multipleChoice) {
+            for (int i = 0; i < q.choices.length; i++) {
+              final choiceText = q.choices[i];
+              final isCorrect = choiceText == q.correctAnswer;
+              if (i < q.optionIds.length) {
+                await client
+                    .from('assessment_question_options')
+                    .update({
+                      'option_text': choiceText,
+                      'is_correct': isCorrect,
+                    })
+                    .eq('id', q.optionIds[i]);
+              }
+            }
+          } else if (q.type == QuestionType.trueFalse) {
+            for (int i = 0; i < q.choices.length; i++) {
+              final choiceText = q.choices[i];
+              final isCorrect = choiceText == q.correctAnswer;
+              if (i < q.optionIds.length) {
+                await client
+                    .from('assessment_question_options')
+                    .update({
+                      'option_text': choiceText,
+                      'is_correct': isCorrect,
+                    })
+                    .eq('id', q.optionIds[i]);
+              }
+            }
+          } else if (q.type == QuestionType.identification) {
+            if (q.optionIds.isNotEmpty) {
+              await client
+                  .from('assessment_question_options')
+                  .update({
+                    'option_text': q.correctAnswer,
+                    'is_correct': true,
+                  })
+                  .eq('id', q.optionIds.first);
+            }
+          }
         }
-
-        await client
-            .from('classwork_items')
-            .update({
-              'title': title,
-              'description': instructions,
-              'instructions': instructions,
-              'max_score': hpsPoints,
-              'deadline': candidate.toUtc().toIso8601String(),
-              'updated_instructions_at': DateTime.now()
-                  .toUtc()
-                  .toIso8601String(),
-            })
-            .eq('id', widget.assessment.id);
-
-        final offeringId =
-            existing['subject_offering_id']?.toString() ??
-            widget.assessment.subjectOfferingId;
-        final termNum =
-            (existing['term_number'] as num?)?.toInt() ??
-            widget.assessment.termNumber;
-        final colIdx =
-            (existing['gradebook_column_index'] as num?)?.toInt() ??
-            widget.assessment.gradebookColumnIndex;
-        final catKey =
-            existing['grading_category']?.toString().toLowerCase() ??
-            (widget.assessment.isExam ? 'ex' : 'ww');
-
-        if (offeringId != null && colIdx != null) {
-          final sheet =
-              await SubjectRepository.instance.getGradebookTermSheet(
-                offeringId,
-                termNum,
-              ) ??
-              <String, dynamic>{};
-          final hps = Map<String, dynamic>.from(sheet['hps'] as Map? ?? {});
-          final catHps = Map<String, dynamic>.from(hps[catKey] as Map? ?? {});
-          final colKey = catKey == 'ex'
-              ? (colIdx == 1 ? 'st1' : (colIdx == 2 ? 'st2' : 'te'))
-              : colIdx.toString();
-          catHps[colKey] = hpsPoints;
-          hps[catKey] = catHps;
-          sheet['hps'] = hps;
-          await SubjectRepository.instance.saveGradebookTermSheet(
-            offeringId,
-            termNum,
-            sheet,
-          );
-        }
-      } else {
-        final existing = await client
-            .from('digital_assessments')
-            .select('id')
-            .eq('id', widget.assessment.id)
-            .eq('is_archived', false)
-            .maybeSingle();
-
-        if (existing == null) {
-          AppDataCache.instance.invalidatePrefix('teacher_assessments_');
-          AppDataCache.instance.invalidatePrefix('teacher_activities_');
-          AppDataCache.instance.invalidatePrefix('student_dashboard_');
-          AppDataCache.instance.invalidatePrefix('gradebook_');
-          if (!mounted) return;
-          Navigator.of(context).pop();
-          await AppModals.showWarningDialog(
-            context: context,
-            title: 'Assessment Removed',
-            message:
-                'This assessment was already deleted from the database and can no longer be edited.',
-          );
-          return;
-        }
-
-        final newDeadlineUtc = candidate
-            .add(Duration(minutes: duration))
-            .toUtc()
-            .toIso8601String();
-
-        await client
-            .from('digital_assessments')
-            .update({
-              'title': title,
-              'description': instructions,
-              'instructions': instructions,
-              'time_limit_minutes': duration,
-              'available_from': candidate.toUtc().toIso8601String(),
-              'deadline': newDeadlineUtc,
-            })
-            .eq('id', widget.assessment.id);
-
-        await client
-            .from('classwork_items')
-            .update({
-              'title': title,
-              'description': instructions,
-              'instructions': instructions,
-              'deadline': newDeadlineUtc,
-              'updated_instructions_at': DateTime.now()
-                  .toUtc()
-                  .toIso8601String(),
-            })
-            .eq('id', widget.assessment.id);
       }
 
       AppDataCache.instance.invalidatePrefix('teacher_assessments_');
-      AppDataCache.instance.invalidatePrefix('teacher_activities_');
       AppDataCache.instance.invalidatePrefix('student_dashboard_');
-      AppDataCache.instance.invalidatePrefix('gradebook_');
-      TeacherGradebookTab.gradebookRefreshNotifier.value++;
-
       await widget.onAssessmentUpdated();
+
       if (!mounted) return;
-      final rootCtx = Navigator.of(context).context;
       Navigator.of(context).pop();
 
-      if (rootCtx.mounted) {
-        await AppModals.showSuccessDialog(
-          context: rootCtx,
-          title: 'Assessment Updated',
-          message: 'Changes to "$title" have been saved and synchronized.',
+      await AppModals.showSuccessDialog(
+        context: context,
+        title: 'Questions Updated',
+        message:
+            'All ${widget.assessment.title} questions and answer keys have been saved and synchronized.',
+      );
+    } catch (e) {
+      debugPrint('Save questions error: $e');
+      if (mounted) {
+        setState(() => _isSaving = false);
+        await AppModals.showErrorDialog(
+          context: context,
+          title: 'Save Failed',
+          message: 'Could not update questions: $e',
         );
       }
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _isSaving = false);
-      await AppModals.showErrorDialog(
-        context: context,
-        title: 'Save Failed',
-        message: 'Could not save assessment changes: $e',
-      );
     }
-  }
-
-  Widget _buildLockedField(
-    BuildContext context, {
-    required String label,
-    required String value,
-  }) {
-    final theme = Theme.of(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-            color: theme.colorScheme.onSurface,
-          ),
-        ),
-        const SizedBox(height: 6),
-        Container(
-          height: 46,
-          padding: const EdgeInsets.symmetric(horizontal: 14),
-          decoration: BoxDecoration(
-            color: theme.colorScheme.onSurface.withValues(alpha: 0.04),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: theme.colorScheme.outline.withValues(alpha: 0.25),
-            ),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                child: Text(
-                  value,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.75),
-                  ),
-                ),
-              ),
-              Icon(
-                Icons.lock_outline,
-                size: 16,
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.45),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final originalLocal = widget.assessment.scheduleDate.toLocal();
-    final isSelectedToday =
-        _selectedDate.year == today.year &&
-        _selectedDate.month == today.month &&
-        _selectedDate.day == today.day;
 
     return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      backgroundColor: theme.colorScheme.surface,
-      insetPadding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Container(
-        width: 750,
-        constraints: const BoxConstraints(maxHeight: 720),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 18,
-                ),
-                decoration: BoxDecoration(
-                  border: Border(
-                    bottom: BorderSide(
-                      color: theme.colorScheme.onSurface.withValues(
-                        alpha: 0.12,
-                      ),
-                    ),
+        width: 980,
+        height: 680,
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          children: [
+            // Header (Red Document Icon + Title + Close X)
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: AppTheme.catRed.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(
+                    Icons.description_outlined,
+                    color: AppTheme.catRed,
+                    size: 26,
                   ),
                 ),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.edit_note,
-                      color: theme.colorScheme.primary,
-                      size: 24,
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Edit ${widget.assessment.isExam ? "Periodical Examination" : "Unit Quiz"}',
-                            style: const TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          Text(
-                            _isInPerson
-                                ? 'Update title, scheduled date, total points (HPS), and instructions'
-                                : 'Update title, schedule, duration, and instructions',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: theme.colorScheme.onSurface.withValues(
-                                alpha: 0.6,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.close),
-                      onPressed: _isSaving
-                          ? null
-                          : () => Navigator.of(context).pop(),
-                    ),
-                  ],
-                ),
-              ),
-              Expanded(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(24),
+                const SizedBox(width: 14),
+                Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      AppTextField(
-                        label: widget.assessment.isExam
-                            ? 'Examination Title *'
-                            : 'Quiz Title *',
-                        controller: _titleCtrl,
-                        autovalidateMode: AutovalidateMode.onUserInteraction,
-                        validator: (val) {
-                          if (val == null || val.trim().isEmpty) {
-                            return 'Assessment title is required.';
-                          }
-                          return null;
-                        },
+                      Text(
+                        'Configure ${widget.assessment.isExam ? "Periodical Examination" : "Classroom Quiz"}',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: theme.colorScheme.onSurface,
+                        ),
                       ),
-                      const SizedBox(height: 16),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _buildLockedField(
-                              context,
-                              label: 'Section (Locked)',
-                              value: widget.assessment.section,
-                            ),
-                          ),
-                          const SizedBox(width: 14),
-                          Expanded(
-                            child: _buildLockedField(
-                              context,
-                              label: 'Gradebook Term (Locked)',
-                              value: 'Term ${widget.assessment.termNumber}',
-                            ),
-                          ),
-                          const SizedBox(width: 14),
-                          Expanded(
-                            child: _buildLockedField(
-                              context,
-                              label: 'Gradebook Slot (Locked)',
-                              value: _slotDisplayLabel,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(
-                            flex: 2,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  _isInPerson
-                                      ? 'Update Date *'
-                                      : 'Update Schedule Date *',
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w600,
-                                    color: theme.colorScheme.onSurface,
-                                  ),
-                                ),
-                                const SizedBox(height: 6),
-                                InkWell(
-                                  onTap: _isSaving
-                                      ? null
-                                      : () async {
-                                          final tNow = DateTime.now();
-                                          final tToday = DateTime(
-                                            tNow.year,
-                                            tNow.month,
-                                            tNow.day,
-                                          );
-                                          final picked =
-                                              await showAppDatePickerDialog(
-                                                context,
-                                                initialDate: _selectedDate,
-                                                firstDate: _isInPerson
-                                                    ? DateTime(
-                                                        tToday.year - 1,
-                                                        1,
-                                                        1,
-                                                      )
-                                                    : tToday,
-                                                lastDate: DateTime(
-                                                  tToday.year + 5,
-                                                  12,
-                                                  31,
-                                                ),
-                                                title: _isInPerson
-                                                    ? 'Update Date'
-                                                    : 'Update Schedule',
-                                                icon: Icons
-                                                    .event_available_outlined,
-                                                highlightDate: originalLocal,
-                                                highlightLabel: _isInPerson
-                                                    ? 'Current Date'
-                                                    : 'Current Schedule',
-                                              );
-                                          if (picked != null && mounted) {
-                                            setState(() {
-                                              _selectedDate = picked;
-                                              _scheduleError =
-                                                  _validateOnlineScheduleIfChanged(
-                                                    _candidateSchedule,
-                                                  );
-                                            });
-                                          }
-                                        },
-                                  borderRadius: BorderRadius.circular(10),
-                                  child: Container(
-                                    height: 46,
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 14,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: theme.colorScheme.surface,
-                                      borderRadius: BorderRadius.circular(10),
-                                      border: Border.all(
-                                        color: _scheduleError != null
-                                            ? const Color(0xFFDC2626)
-                                            : theme.colorScheme.outline
-                                                  .withValues(alpha: 0.3),
-                                      ),
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        const Icon(
-                                          Icons.calendar_today_outlined,
-                                          size: 18,
-                                          color: Color(0xFF0F8A48),
-                                        ),
-                                        const SizedBox(width: 10),
-                                        Text(
-                                          '${_selectedDate.month.toString().padLeft(2, '0')}/${_selectedDate.day.toString().padLeft(2, '0')}/${_selectedDate.year}',
-                                          style: const TextStyle(
-                                            fontSize: 13,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          if (!_isInPerson) ...[
-                            const SizedBox(width: 14),
-                            Expanded(
-                              flex: 2,
-                              child: AppTimePickerField(
-                                key: ValueKey(
-                                  '${_selectedDate.year}-${_selectedDate.month}-${_selectedDate.day}-${_selectedTime.hour}-${_selectedTime.minute}',
-                                ),
-                                label: 'Start Time *',
-                                initialTime: _selectedTime,
-                                minTime: isSelectedToday
-                                    ? TimeOfDay.fromDateTime(
-                                        DateTime.now().add(
-                                          const Duration(minutes: 1),
-                                        ),
-                                      )
-                                    : null,
-                                onTimeSelected: (t) {
-                                  setState(() {
-                                    _selectedTime = t;
-                                    _scheduleError =
-                                        _validateOnlineScheduleIfChanged(
-                                          _candidateSchedule,
-                                        );
-                                  });
-                                },
-                              ),
-                            ),
-                            const SizedBox(width: 14),
-                            Expanded(
-                              flex: 2,
-                              child: AppDurationPickerField(
-                                label: 'Duration (Mins) *',
-                                initialDurationMinutes:
-                                    int.tryParse(_durationCtrl.text.trim()) ??
-                                    60,
-                                onDurationSelected: (m) {
-                                  setState(() {
-                                    _durationCtrl.text = m.toString();
-                                  });
-                                },
-                              ),
-                            ),
-                          ] else ...[
-                            const SizedBox(width: 14),
-                            Expanded(
-                              flex: 2,
-                              child: AppTextField(
-                                label: 'Total Points (HPS) *',
-                                controller: _hpsCtrl,
-                                keyboardType: TextInputType.number,
-                                inputFormatters: [
-                                  FilteringTextInputFormatter.digitsOnly,
-                                ],
-                                autovalidateMode:
-                                    AutovalidateMode.onUserInteraction,
-                                validator: (val) {
-                                  if (val == null || val.trim().isEmpty) {
-                                    return 'Total points is required.';
-                                  }
-                                  final p = int.tryParse(val.trim());
-                                  if (p == null || p < 1 || p > 100) {
-                                    return 'Enter 1 to 100 points.';
-                                  }
-                                  return null;
-                                },
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                      if (_scheduleError != null) ...[
-                        const SizedBox(height: 6),
-                        Text(
-                          _scheduleError!,
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: Color(0xFFDC2626),
-                            fontWeight: FontWeight.w600,
+                      const SizedBox(height: 2),
+                      Text(
+                        'Question Builder — Author statements and mandatory answer keys',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: theme.colorScheme.onSurface.withValues(
+                            alpha: 0.6,
                           ),
                         ),
-                      ],
-                      const SizedBox(height: 16),
-                      ExpandableInstructionsInputField(
-                        label: 'Instructions & Guidelines *',
-                        hint:
-                            'Provide test-taking guidelines or instructions...',
-                        controller: _descCtrl,
-                        autovalidateMode: AutovalidateMode.onUserInteraction,
-                        validator: AppValidators.validateClassworkInstructions,
                       ),
-                      if (!_isInPerson) ...[
-                        const SizedBox(height: 24),
-                        Text(
-                          'Questions & Answer Keys (${_questions.length})',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 15,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        ..._questions.asMap().entries.map((entry) {
-                          final i = entry.key + 1;
-                          final q = entry.value;
-                          return Container(
-                            margin: const EdgeInsets.only(bottom: 8),
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: theme.scaffoldBackgroundColor,
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(
-                                color: theme.colorScheme.onSurface.withValues(
-                                  alpha: 0.12,
-                                ),
-                              ),
-                            ),
-                            child: Row(
-                              children: [
-                                CircleAvatar(
-                                  radius: 12,
-                                  backgroundColor: theme.colorScheme.primary,
-                                  child: Text(
-                                    '$i',
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Text(
-                                    q.questionText,
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 13,
-                                    ),
-                                  ),
-                                ),
-                                Text(
-                                  'Key: ${q.correctAnswer} (${q.points} pts)',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: theme.colorScheme.onSurface
-                                        .withValues(alpha: 0.6),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          );
-                        }),
-                      ],
                     ],
                   ),
                 ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 16,
+                IconButton(
+                  icon: const Icon(Icons.close),
+                  onPressed: () => Navigator.of(context).pop(),
                 ),
-                decoration: BoxDecoration(
-                  color: theme.brightness == Brightness.dark
-                      ? Colors.white.withValues(alpha: 0.03)
-                      : const Color(0xFFF8FAFC),
-                  border: Border(
-                    top: BorderSide(
-                      color: theme.colorScheme.onSurface.withValues(
-                        alpha: 0.12,
+              ],
+            ),
+            const Divider(height: 24),
+
+            // Content Area
+            Expanded(
+              child: _isLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : _questions.isEmpty
+                  ? Center(
+                      child: Text(
+                        'No questions found for this assessment.',
+                        style: TextStyle(
+                          color: theme.colorScheme.onSurface.withValues(
+                            alpha: 0.5,
+                          ),
+                        ),
+                      ),
+                    )
+                  : Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Left Column: Active Question Editor (Flex 6)
+                        Expanded(
+                          flex: 6,
+                          child: SingleChildScrollView(
+                            padding: const EdgeInsets.only(right: 20),
+                            child: _buildQuestionEditor(context),
+                          ),
+                        ),
+
+                        // Vertical Divider
+                        Container(
+                          width: 1,
+                          color: theme.colorScheme.onSurface.withValues(
+                            alpha: 0.1,
+                          ),
+                        ),
+
+                        // Right Column: Question Navigator Matrix (Flex 4)
+                        Expanded(
+                          flex: 4,
+                          child: Padding(
+                            padding: const EdgeInsets.only(left: 20),
+                            child: _buildQuestionNavigator(context),
+                          ),
+                        ),
+                      ],
+                    ),
+            ),
+
+            const Divider(height: 24),
+
+            // Bottom Footer (Back / Cancel on left, Save Changes on right)
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                OutlinedButton.icon(
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.arrow_back, size: 16),
+                  label: const Text('Back to Details'),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                ),
+                ElevatedButton.icon(
+                  onPressed: _isSaving ? null : _saveAllQuestionsToDb,
+                  icon: _isSaving
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Icon(Icons.check_circle_outline, size: 18),
+                  label: Text(_isSaving ? 'Saving...' : 'Save & Update Questions'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: theme.colorScheme.primary,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 12,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildQuestionEditor(BuildContext context) {
+    if (_activeQuestionIndex < 0 || _activeQuestionIndex >= _questions.length) {
+      return const SizedBox.shrink();
+    }
+    final q = _questions[_activeQuestionIndex];
+    final theme = Theme.of(context);
+
+    String typeLabel = 'MULTIPLE CHOICE';
+    if (q.type == QuestionType.trueFalse) {
+      typeLabel = 'TRUE OR FALSE';
+    } else if (q.type == QuestionType.identification) {
+      typeLabel = 'IDENTIFICATION';
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Top Question Chip & Points
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primary.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    'Q${q.position}',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: theme.colorScheme.primary,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Question ${q.position} of ${_questions.length}',
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.06),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    typeLabel,
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            Text(
+              '${q.points} Point',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 14),
+
+        // Statement Header & Counter
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'Question Statement *',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: theme.colorScheme.onSurface,
+              ),
+            ),
+            Text(
+              '${_statementCtrl.text.length} / 500',
+              style: TextStyle(
+                fontSize: 11,
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+
+        // Statement TextField
+        TextField(
+          controller: _statementCtrl,
+          maxLines: 3,
+          maxLength: 500,
+          buildCounter: (_, {required currentLength, required isFocused, maxLength}) =>
+              const SizedBox.shrink(),
+          onChanged: (_) {
+            q.questionText = _statementCtrl.text;
+            setState(() {
+              _statementError = null;
+              _editorError = null;
+            });
+          },
+          decoration: InputDecoration(
+            hintText: 'Enter question text or problem statement...',
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide(
+                color: _statementError != null
+                    ? const Color(0xFFDC2626)
+                    : theme.colorScheme.onSurface.withValues(alpha: 0.2),
+              ),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide(
+                color: _statementError != null
+                    ? const Color(0xFFDC2626)
+                    : theme.colorScheme.primary,
+                width: 1.5,
+              ),
+            ),
+          ),
+        ),
+        if (_statementError != null) ...[
+          const SizedBox(height: 4),
+          Text(
+            _statementError!,
+            style: const TextStyle(fontSize: 12, color: Color(0xFFDC2626)),
+          ),
+        ],
+
+        const SizedBox(height: 18),
+
+        // Options & Answer Key Section
+        if (q.type == QuestionType.multipleChoice) ...[
+          Text(
+            'Options & Answer Key (Fill all 4 and select the correct radio):',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: theme.colorScheme.onSurface,
+            ),
+          ),
+          const SizedBox(height: 10),
+          for (int i = 0; i < 4; i++) ...[
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                children: [
+                  Radio<String>(
+                    value: _choiceCtrls[i].text.trim().isNotEmpty
+                        ? _choiceCtrls[i].text.trim()
+                        : 'option_$i',
+                    groupValue: _selectedMcqChoice,
+                    activeColor: theme.colorScheme.primary,
+                    onChanged: (val) {
+                      setState(() {
+                        _selectedMcqChoice = _choiceCtrls[i].text.trim();
+                        _answerKeyError = null;
+                        _editorError = null;
+                      });
+                    },
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: TextField(
+                      controller: _choiceCtrls[i],
+                      onChanged: (val) {
+                        setState(() {
+                          _choicesError = null;
+                          _editorError = null;
+                        });
+                      },
+                      decoration: InputDecoration(
+                        isDense: true,
+                        hintText: 'Choice ${String.fromCharCode(65 + i)}',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide(
+                            color: _choicesError != null
+                                ? const Color(0xFFDC2626)
+                                : theme.colorScheme.onSurface.withValues(
+                                    alpha: 0.2,
+                                  ),
+                          ),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide(
+                            color: _choicesError != null
+                                ? const Color(0xFFDC2626)
+                                : theme.colorScheme.primary,
+                            width: 1.5,
+                          ),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
                       ),
                     ),
                   ),
-                  borderRadius: const BorderRadius.only(
-                    bottomLeft: Radius.circular(20),
-                    bottomRight: Radius.circular(20),
+                ],
+              ),
+            ),
+          ],
+          if (_choicesError != null) ...[
+            Text(
+              _choicesError!,
+              style: const TextStyle(fontSize: 12, color: Color(0xFFDC2626)),
+            ),
+            const SizedBox(height: 4),
+          ],
+          if (_answerKeyError != null) ...[
+            Text(
+              _answerKeyError!,
+              style: const TextStyle(fontSize: 12, color: Color(0xFFDC2626)),
+            ),
+          ],
+        ] else if (q.type == QuestionType.trueFalse) ...[
+          Text(
+            'Answer Key (Select the correct answer):',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: theme.colorScheme.onSurface,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: InkWell(
+                  onTap: () => setState(() {
+                    _selectedTfAnswer = 'True';
+                    _answerKeyError = null;
+                    _editorError = null;
+                  }),
+                  borderRadius: BorderRadius.circular(8),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    decoration: BoxDecoration(
+                      color: _selectedTfAnswer == 'True'
+                          ? theme.colorScheme.primary.withValues(alpha: 0.1)
+                          : Colors.transparent,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: _selectedTfAnswer == 'True'
+                            ? theme.colorScheme.primary
+                            : theme.colorScheme.onSurface.withValues(alpha: 0.2),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Radio<String>(
+                          value: 'True',
+                          groupValue: _selectedTfAnswer,
+                          activeColor: theme.colorScheme.primary,
+                          onChanged: (val) => setState(() {
+                            _selectedTfAnswer = val;
+                            _answerKeyError = null;
+                          }),
+                        ),
+                        const Text(
+                          'True',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    TextButton(
-                      onPressed: _isSaving
-                          ? null
-                          : () => Navigator.of(context).pop(),
-                      child: const Text('Cancel'),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: InkWell(
+                  onTap: () => setState(() {
+                    _selectedTfAnswer = 'False';
+                    _answerKeyError = null;
+                    _editorError = null;
+                  }),
+                  borderRadius: BorderRadius.circular(8),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    decoration: BoxDecoration(
+                      color: _selectedTfAnswer == 'False'
+                          ? theme.colorScheme.primary.withValues(alpha: 0.1)
+                          : Colors.transparent,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: _selectedTfAnswer == 'False'
+                            ? theme.colorScheme.primary
+                            : theme.colorScheme.onSurface.withValues(alpha: 0.2),
+                      ),
                     ),
-                    const SizedBox(width: 12),
-                    AppPrimaryButton(
-                      label: _isSaving ? 'Saving...' : 'Save Changes',
-                      height: 40,
-                      onPressed: (_isSaving || !_hasEditChanges)
-                          ? null
-                          : _saveChanges,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Radio<String>(
+                          value: 'False',
+                          groupValue: _selectedTfAnswer,
+                          activeColor: theme.colorScheme.primary,
+                          onChanged: (val) => setState(() {
+                            _selectedTfAnswer = val;
+                            _answerKeyError = null;
+                          }),
+                        ),
+                        const Text(
+                          'False',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
               ),
             ],
           ),
+          if (_answerKeyError != null) ...[
+            const SizedBox(height: 6),
+            Text(
+              _answerKeyError!,
+              style: const TextStyle(fontSize: 12, color: Color(0xFFDC2626)),
+            ),
+          ],
+        ] else if (q.type == QuestionType.identification) ...[
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Answer Key (Enter the exact correct answer):',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: theme.colorScheme.onSurface,
+                ),
+              ),
+              Text(
+                '${_qIdAnswerCtrl.text.length} / 50 chars',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _qIdAnswerCtrl,
+            maxLength: 50,
+            buildCounter: (_, {required currentLength, required isFocused, maxLength}) =>
+                const SizedBox.shrink(),
+            onChanged: (val) => setState(() {
+              _answerKeyError = null;
+              _editorError = null;
+            }),
+            decoration: InputDecoration(
+              isDense: true,
+              hintText: 'Enter correct term or phrase (2-50 chars)...',
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: BorderSide(
+                  color: _answerKeyError != null
+                      ? const Color(0xFFDC2626)
+                      : theme.colorScheme.onSurface.withValues(alpha: 0.2),
+                ),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: BorderSide(
+                  color: _answerKeyError != null
+                      ? const Color(0xFFDC2626)
+                      : theme.colorScheme.primary,
+                  width: 1.5,
+                ),
+              ),
+            ),
+          ),
+          if (_answerKeyError != null) ...[
+            const SizedBox(height: 4),
+            Text(
+              _answerKeyError!,
+              style: const TextStyle(fontSize: 12, color: Color(0xFFDC2626)),
+            ),
+          ],
+        ],
+
+        if (_editorError != null) ...[
+          const SizedBox(height: 12),
+          Text(
+            _editorError!,
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFFDC2626),
+            ),
+          ),
+        ],
+
+        const SizedBox(height: 20),
+
+        // Navigation Stepper Buttons (Previous / Next)
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            if (_activeQuestionIndex > 0)
+              OutlinedButton.icon(
+                onPressed: () {
+                  if (_saveCurrentEditorState()) {
+                    _loadQuestionIntoEditor(_activeQuestionIndex - 1);
+                  }
+                },
+                icon: const Icon(Icons.arrow_back, size: 16),
+                label: const Text('Previous Question'),
+                style: OutlinedButton.styleFrom(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              )
+            else
+              const SizedBox.shrink(),
+            if (_activeQuestionIndex < _questions.length - 1)
+              ElevatedButton.icon(
+                onPressed: () {
+                  if (_saveCurrentEditorState()) {
+                    _loadQuestionIntoEditor(_activeQuestionIndex + 1);
+                  }
+                },
+                icon: const Icon(Icons.arrow_forward, size: 16),
+                label: const Text('Next Question'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: theme.colorScheme.primary,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              )
+            else
+              ElevatedButton.icon(
+                onPressed: () {
+                  _saveCurrentEditorState();
+                },
+                icon: const Icon(Icons.check, size: 16),
+                label: const Text('Review Complete'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.catGreen,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              ),
+          ],
         ),
-      ),
+      ],
+    );
+  }
+
+  Widget _buildQuestionNavigator(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Question Navigator (${_questions.length} Items)',
+          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Click any question number to edit. Delete is prohibited to preserve test integrity.',
+          style: TextStyle(
+            fontSize: 11,
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+          ),
+        ),
+        const SizedBox(height: 14),
+
+        // Grouped Categories
+        Expanded(
+          child: ListView(
+            children: [
+              _buildCategoryChips(
+                'Multiple Choice',
+                QuestionType.multipleChoice,
+              ),
+              const SizedBox(height: 12),
+              _buildCategoryChips('True or False', QuestionType.trueFalse),
+              const SizedBox(height: 12),
+              _buildCategoryChips(
+                'Identification',
+                QuestionType.identification,
+              ),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 10),
+        // Legend
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: [
+            _buildLegendItem('Done', AppTheme.catGreen),
+            _buildLegendItem('Active', theme.colorScheme.primary),
+            _buildLegendItem('Pending', Colors.grey),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCategoryChips(String title, QuestionType type) {
+    final categoryIndices = <int>[];
+    for (int i = 0; i < _questions.length; i++) {
+      if (_questions[i].type == type) {
+        categoryIndices.add(i);
+      }
+    }
+    if (categoryIndices.isEmpty) return const SizedBox.shrink();
+
+    final theme = Theme.of(context);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+          ),
+        ),
+        const SizedBox(height: 6),
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: categoryIndices.map((idx) {
+            final q = _questions[idx];
+            final isActive = idx == _activeQuestionIndex;
+            final isDone = q.isComplete;
+
+            final Color chipBg = isActive
+                ? theme.colorScheme.primary
+                : (isDone
+                    ? AppTheme.catGreen.withValues(alpha: 0.12)
+                    : Colors.grey.shade200);
+
+            final Color chipBorder = isActive
+                ? theme.colorScheme.primary
+                : (isDone ? AppTheme.catGreen : Colors.grey.shade300);
+
+            final Color chipTextColor = isActive
+                ? Colors.white
+                : (isDone ? AppTheme.catGreen : Colors.black87);
+
+            return InkWell(
+              onTap: () {
+                if (_saveCurrentEditorState()) {
+                  _loadQuestionIntoEditor(idx);
+                }
+              },
+              borderRadius: BorderRadius.circular(8),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 150),
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: chipBg,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: chipBorder,
+                    width: isActive ? 2 : 1,
+                  ),
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  '${q.position}',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: chipTextColor,
+                  ),
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLegendItem(String label, Color color) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 5),
+        Text(
+          label,
+          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
+        ),
+      ],
     );
   }
 }

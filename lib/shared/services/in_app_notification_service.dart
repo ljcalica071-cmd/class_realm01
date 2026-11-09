@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:class_realm/core/services/local_storage_service.dart';
 
 enum InAppNotificationSeverity {
@@ -34,6 +35,7 @@ class InAppNotificationService {
       ValueNotifier<InAppPushBannerData?>(null);
 
   static Timer? _autoDismissTimer;
+  static RealtimeChannel? _announcementsChannel;
 
   /// Shows an in-app push notification banner at the top of the viewport.
   /// If notifications are disabled in local storage/settings, this call is safely ignored.
@@ -74,6 +76,74 @@ class InAppNotificationService {
     _autoDismissTimer?.cancel();
     _autoDismissTimer = null;
     currentBannerNotifier.value = null;
+  }
+
+  /// Subscribes to institutional broadcast announcements via Supabase Realtime.
+  /// When a new broadcast announcement is inserted that matches the user's role:
+  /// - Automatically verifies [LocalStorageService.arePushNotificationsEnabled()]
+  /// - If enabled, displays the in-app push banner at the top of the viewport
+  static void subscribeToAnnouncements({required String role}) {
+    if (_announcementsChannel != null) {
+      Supabase.instance.client.removeChannel(_announcementsChannel!);
+      _announcementsChannel = null;
+    }
+
+    final normalizedRole = role.toLowerCase().trim();
+
+    _announcementsChannel = Supabase.instance.client
+        .channel('global_announcements_channel_${DateTime.now().millisecondsSinceEpoch}')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.insert,
+          schema: 'public',
+          table: 'notifications',
+          callback: (payload) {
+            try {
+              final newRecord = payload.newRecord;
+              if (newRecord.isEmpty) return;
+
+              final isArchived = newRecord['is_archived'] as bool? ?? false;
+              if (isArchived) return;
+
+              final targetAudience = (newRecord['target_audience'] as String? ?? 'all').toLowerCase();
+              final title = newRecord['title'] as String? ?? 'School Announcement';
+              final message = newRecord['message'] as String? ?? '';
+
+              bool audienceMatches = false;
+              if (targetAudience == 'all') {
+                audienceMatches = true;
+              } else if (normalizedRole == 'teacher' && targetAudience == 'teachers') {
+                audienceMatches = true;
+              } else if (normalizedRole == 'student' &&
+                  (targetAudience == 'students' || targetAudience == 'students_parents')) {
+                audienceMatches = true;
+              } else if (normalizedRole == 'parent' &&
+                  (targetAudience == 'parents' || targetAudience == 'students_parents')) {
+                audienceMatches = true;
+              }
+
+              if (audienceMatches) {
+                showBanner(
+                  title: title,
+                  message: message,
+                  subtitle: 'School Announcement',
+                  severity: InAppNotificationSeverity.info,
+                  duration: const Duration(seconds: 6),
+                );
+              }
+            } catch (e) {
+              debugPrint('Error handling realtime broadcast announcement: $e');
+            }
+          },
+        )
+        .subscribe();
+  }
+
+  /// Unsubscribes from realtime announcements
+  static void unsubscribeFromAnnouncements() {
+    if (_announcementsChannel != null) {
+      Supabase.instance.client.removeChannel(_announcementsChannel!);
+      _announcementsChannel = null;
+    }
   }
 }
 

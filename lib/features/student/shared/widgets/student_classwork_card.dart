@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:class_realm/core/services/app_data_cache.dart';
 import 'package:class_realm/core/services/supabase_service.dart';
 import 'package:class_realm/core/theme/app_theme.dart';
+import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/models/academic_models.dart';
 import 'package:class_realm/models/student_dashboard_models.dart';
 import 'package:class_realm/features/student/shared/widgets/student_submit_work_dialog.dart';
@@ -526,25 +527,84 @@ class StudentClassworkCard extends StatelessWidget {
                   ),
                 ),
               ] else ...[
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: FilledButton.icon(
-                    style: FilledButton.styleFrom(
-                      backgroundColor: const Color(0xFFDC2626),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 10,
-                      ),
-                    ),
-                    onPressed: () => _startAssessmentFlow(context),
-                    icon: const Icon(Icons.play_arrow_rounded, size: 18),
-                    label: Text(
-                      classwork.type == 'quiz'
-                          ? 'Take Quiz (App)'
-                          : 'Take Examination (App)',
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                  ),
+                Builder(
+                  builder: (context) {
+                    final sched = classwork.assignedAt;
+                    final isEntranceClosed = sched != null &&
+                        DateTime.now().isAfter(
+                          sched.add(const Duration(minutes: 15)),
+                        );
+
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        if (isEntranceClosed) ...[
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 6,
+                            ),
+                            margin: const EdgeInsets.only(bottom: 8),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFDC2626).withValues(
+                                alpha: 0.08,
+                              ),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(
+                                color: const Color(0xFFDC2626).withValues(
+                                  alpha: 0.25,
+                                ),
+                              ),
+                            ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.lock_clock_outlined,
+                                  size: 14,
+                                  color: Color(0xFFDC2626),
+                                ),
+                                SizedBox(width: 6),
+                                Text(
+                                  'Entrance Window Expired (15 mins past start) • Instructor authorization required',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFFDC2626),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: FilledButton.icon(
+                            style: FilledButton.styleFrom(
+                              backgroundColor: const Color(0xFFDC2626),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 10,
+                              ),
+                            ),
+                            onPressed: () => _startAssessmentFlow(context),
+                            icon: const Icon(
+                              Icons.play_arrow_rounded,
+                              size: 18,
+                            ),
+                            label: Text(
+                              classwork.type == 'quiz'
+                                  ? 'Take Quiz (App)'
+                                  : 'Take Examination (App)',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    );
+                  },
                 ),
               ],
             ] else ...[
@@ -1086,6 +1146,74 @@ class StudentClassworkCard extends StatelessWidget {
           );
         }
         return;
+      }
+
+      final schedStart = availLocal ?? classwork.assignedAt;
+      final studentId = AuthRepository.instance.currentUser?.id;
+      final assessmentDbId = rawAssess['id']?.toString() ?? classwork.id;
+
+      // Check if student has an existing active or submitted attempt
+      var hasActiveAttempt = false;
+      if (studentId != null) {
+        final existingAttempt = await client
+            .from('assessment_attempts')
+            .select('status')
+            .eq('assessment_id', assessmentDbId)
+            .eq('student_id', studentId)
+            .maybeSingle();
+        if (existingAttempt != null &&
+            (existingAttempt['status'] == 'in_progress' ||
+                existingAttempt['status'] == 'submitted' ||
+                existingAttempt['status'] == 'auto_submitted')) {
+          hasActiveAttempt = true;
+        }
+      }
+
+      // 15-Minute Entrance Window Policy:
+      // If start time has passed by > 15 minutes, student cannot begin unless:
+      // 1. They already started prior to 15 mins (hasActiveAttempt)
+      // 2. Instructor explicitly allowed entry (entry_allowed event in anti_cheating_logs)
+      if (schedStart != null && !hasActiveAttempt) {
+        final entranceWindowClose = schedStart.add(const Duration(minutes: 15));
+        final isEntrancePast = DateTime.now().isAfter(entranceWindowClose);
+
+        if (isEntrancePast) {
+          bool isTeacherAllowed = false;
+          if (studentId != null) {
+            final overrideLog = await client
+                .from('anti_cheating_logs')
+                .select('event_type')
+                .eq('assessment_id', assessmentDbId)
+                .eq('student_id', studentId)
+                .inFilter('event_type', ['entry_allowed', 'entry_disallowed'])
+                .order('event_at', ascending: false)
+                .limit(1)
+                .maybeSingle();
+            if (overrideLog != null &&
+                overrideLog['event_type'] == 'entry_allowed') {
+              isTeacherAllowed = true;
+            }
+          }
+
+          if (!isTeacherAllowed) {
+            if (context.mounted) {
+              final h = schedStart.hour == 0
+                  ? 12
+                  : (schedStart.hour > 12
+                        ? schedStart.hour - 12
+                        : schedStart.hour);
+              final minStr = schedStart.minute.toString().padLeft(2, '0');
+              final ampm = schedStart.hour >= 12 ? 'PM' : 'AM';
+              await AppModals.showWarningDialog(
+                context: context,
+                title: 'Entrance Window Closed',
+                message:
+                    'Under examination protocol, students must enter within 15 minutes of the scheduled start time ($h:$minStr $ampm).\n\nThe 15-minute entrance window has closed. You cannot start this assessment unless your teacher allows entry.',
+              );
+            }
+            return;
+          }
+        }
       }
 
       final qRows = (rawAssess['assessment_questions'] as List? ?? [])

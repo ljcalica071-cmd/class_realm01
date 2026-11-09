@@ -52,8 +52,9 @@
       position: fixed;
       inset: 0;
       z-index: 9999;
-      display: grid;
-      place-items: center;
+      display: flex;
+      align-items: center;
+      justify-content: center;
       overflow: hidden;
       padding: 24px 20px;
       color: #111827;
@@ -70,18 +71,20 @@
       display: none !important;
     }
 
-    /* Frosted glass card */
+    /* Frosted glass card - locked width so status text changes never shift card size */
     .cr-card {
       position: relative;
-      width: min(100%, 450px);
-      padding: 40px 36px 32px;
-      border-radius: 28px;
+      width: 100%;
+      max-width: 420px;
+      flex-shrink: 0;
+      padding: 36px 32px 28px;
+      border-radius: 24px;
       text-align: center;
-      background: linear-gradient(155deg, rgba(255, 255, 255, .76), rgba(255, 255, 255, .44));
-      border: 1px solid rgba(255, 255, 255, .88);
+      background: linear-gradient(155deg, rgba(255, 255, 255, .82), rgba(255, 255, 255, .52));
+      border: 1px solid rgba(255, 255, 255, .90);
       box-shadow:
-        0 28px 70px -15px rgba(41, 72, 94, .24),
-        0 10px 26px -5px rgba(41, 72, 94, .10),
+        0 24px 60px -15px rgba(41, 72, 94, .20),
+        0 8px 22px -5px rgba(41, 72, 94, .08),
         inset 0 1px 1px rgba(255, 255, 255, .95);
       -webkit-backdrop-filter: blur(20px) saturate(160%);
       backdrop-filter: blur(20px) saturate(160%);
@@ -161,14 +164,17 @@
 
     /* Progress header: status & percentage */
     .cr-progress-head {
+      width: 100%;
       display: flex;
-      align-items: flex-end;
+      align-items: center;
       justify-content: space-between;
       gap: 12px;
-      margin-bottom: 12px;
+      margin-bottom: 10px;
+      min-height: 24px;
     }
 
     .cr-status {
+      flex: 1 1 auto;
       display: flex;
       align-items: center;
       gap: 8px;
@@ -195,8 +201,10 @@
 
     .cr-percent {
       flex: none;
+      min-width: 54px;
+      text-align: right;
       color: #2f5872;
-      font-size: 22px;
+      font-size: 20px;
       font-weight: 800;
       font-variant-numeric: tabular-nums;
       letter-spacing: -.5px;
@@ -204,16 +212,17 @@
     }
 
     .cr-percent small {
-      font-size: 13px;
+      font-size: 12px;
       font-weight: 700;
       opacity: .75;
       margin-left: 1px;
     }
 
-    /* High-tech track & GPU-composited fill */
+    /* High-tech track & 1:1 synchronized fill (zero lag between % text and bar) */
     .cr-track {
       position: relative;
-      height: 11px;
+      width: 100%;
+      height: 10px;
       overflow: hidden;
       border-radius: 999px;
       background: rgba(255, 255, 255, .65);
@@ -227,7 +236,7 @@
       height: 100%;
       border-radius: inherit;
       background: linear-gradient(90deg, #3a6a88, #487898 50%, #60a5fa);
-      transition: width .16s linear;
+      transition: none;
     }
 
     .cr-foot {
@@ -382,21 +391,23 @@
           if (isRemoved) return;
           isRemoved = true;
           clearInterval(timerId);
+          currentProgress = 100;
           render(100);
           setStatus("ClassRealm Ready! Welcome.");
+          // Force synchronous layout flush so the 100% bar fill paints before fade-out
+          if (fill) void fill.offsetWidth;
           setTimeout(() => {
             if (!loader) return;
             loader.style.opacity = "0";
-            loader.style.transform = "scale(1.015)";
             loader.style.pointerEvents = "none";
             setTimeout(() => {
               if (loader && loader.parentNode) loader.parentNode.removeChild(loader);
-            }, 300);
-          }, 80);
+            }, 260);
+          }, 120);
         };
 
         const computeTempoSpeed = (p) => {
-          if (isCompleting) return 190.0;
+          if (isCompleting) return 220.0;
           if (p < 28) return 5.5;   // Phase 1: SLOW (0 - 28%)
           if (p < 50) return 10.5;  // Phase 2: MODERATE (28 - 50%)
           if (p < 88) return 26.0;  // Phase 3: BOOST FAST (50 - 88%)
@@ -405,11 +416,11 @@
         };
 
         const updateContextualStatus = (p) => {
-          if (isCompleting || p >= 100) {
+          if (p >= 100) {
             setStatus("ClassRealm Ready! Welcome.");
             return;
           }
-          if (customDartStatus && p < 92) {
+          if (customDartStatus && p < 95) {
             setStatus(customDartStatus);
             return;
           }
@@ -445,18 +456,22 @@
           if (isCompleting && currentProgress >= 100) {
             finalizeAndRemove();
           }
-        }, 160);
+        }, 60);
 
         window.updatePreBootstrapProgress = function (fraction, statusText) {
           const pct = fraction <= 1.0 ? Math.round(fraction * 100) : Math.round(fraction);
           dartMilestone = Math.max(dartMilestone, pct);
-          if (statusText) {
+          if (statusText && pct < 100) {
             customDartStatus = statusText;
             setStatus(statusText);
           }
           if (pct >= 100) {
             isCompleting = true;
+            dartMilestone = 100;
             finalizeAndRemove();
+          } else if (pct > currentProgress) {
+            currentProgress = pct;
+            render(currentProgress);
           }
         };
 

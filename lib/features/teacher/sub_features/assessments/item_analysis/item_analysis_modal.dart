@@ -269,7 +269,7 @@ class _ItemAnalysisModalState extends State<ItemAnalysisModal> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('Close'),
+          child: const Text('Okay'),
         ),
       ],
     );

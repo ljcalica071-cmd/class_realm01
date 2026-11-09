@@ -19,6 +19,7 @@ import 'package:loading_animation_widget/loading_animation_widget.dart';
 import 'package:class_realm/features/student/sub_features/profile/widgets/student_notifications_tab.dart';
 import 'package:class_realm/core/services/session_activity_tracker.dart';
 import 'package:class_realm/shared/widgets/shared_widgets.dart';
+import 'package:class_realm/shared/services/in_app_notification_service.dart';
 import 'package:class_realm/routes/app_routes.dart';
 
 class StudentHomeScreen extends StatefulWidget {
@@ -79,6 +80,13 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
       _checkAndAutoResumeAssessment(initialStudentId);
     }
     _loadDashboard();
+    InAppNotificationService.subscribeToAnnouncements(role: 'student');
+  }
+
+  @override
+  void dispose() {
+    InAppNotificationService.unsubscribeFromAnnouncements();
+    super.dispose();
   }
 
   Future<void> _checkAndAutoResumeAssessment(String studentId) async {
@@ -207,13 +215,10 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
     final student = _dashboard!.student;
     final classwork = _dashboard!.classwork;
     final enrollments = _dashboard!.enrollments;
-    final onlineClasswork = classwork
-        .where((item) => item.completionMode != 'in_person')
-        .toList();
     final activeTabIndex = _currentIndex.clamp(0, 3);
     final Widget activePage = switch (activeTabIndex) {
-      0 => _buildHomeTab(context, student, onlineClasswork, enrollments),
-      1 => _buildClassworkTab(context, onlineClasswork, enrollments),
+      0 => _buildHomeTab(context, student, classwork, enrollments),
+      1 => _buildClassworkTab(context, classwork, enrollments),
       2 => const StudentNotificationsTab(),
       _ => _buildProfileTab(context, student),
     };

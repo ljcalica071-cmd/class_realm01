@@ -154,19 +154,25 @@ class UserSessionLog {
         ? DateTime.tryParse(json['logout_at'].toString())?.toLocal()
         : (!effectiveIsActive && rawActive ? lastActive : null);
 
+    final parsedLoginAt = json['login_at'] != null
+        ? DateTime.tryParse(json['login_at'].toString())?.toLocal() ??
+              DateTime.now()
+        : DateTime.now();
+
+    final parsedSessionDate = json['login_at'] != null
+        ? DateTime(parsedLoginAt.year, parsedLoginAt.month, parsedLoginAt.day)
+        : (json['session_date'] != null
+            ? DateTime.tryParse(json['session_date'].toString())?.toLocal() ??
+                  DateTime(parsedLoginAt.year, parsedLoginAt.month, parsedLoginAt.day)
+            : DateTime(parsedLoginAt.year, parsedLoginAt.month, parsedLoginAt.day));
+
     return UserSessionLog(
       id: json['id']?.toString() ?? '',
       userId: json['user_id']?.toString() ?? '',
       teacherName: teacherName ?? json['teacher_name']?.toString(),
       role: json['role']?.toString() ?? '',
-      sessionDate: json['session_date'] != null
-          ? DateTime.tryParse(json['session_date'].toString())?.toLocal() ??
-                DateTime.now()
-          : DateTime.now(),
-      loginAt: json['login_at'] != null
-          ? DateTime.tryParse(json['login_at'].toString())?.toLocal() ??
-                DateTime.now()
-          : DateTime.now(),
+      sessionDate: parsedSessionDate,
+      loginAt: parsedLoginAt,
       lastActiveAt: lastActive,
       logoutAt: parsedLogout,
       logoutReason:

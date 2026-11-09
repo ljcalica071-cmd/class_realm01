@@ -180,9 +180,9 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
         if (mounted) {
           AppModals.showSuccessDialog(
             context: context,
-            title: 'Teacher Restoreed',
+            title: 'Teacher Restored',
             message:
-                '${t.fullName} has been successfully restoreed from archives.',
+                '${t.fullName} has been successfully restored from archives.',
             onConfirm: widget.onDataChanged,
           );
         }
@@ -220,7 +220,7 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
           '• This action is permanent and IRREVERSIBLE.\n'
           '• Teacher profile, credentials, and account records will be permanently erased.\n'
           '• All associated class schedules, activities, and teacher files will be removed from the system.\n'
-          '• Enrolled students will remain in the school directory, but this teacher cannot be restoreed.',
+          '• Enrolled students will remain in the school directory, but this teacher cannot be restored.',
     );
     if (confirm == true) {
       final success = await AuthRepository.instance.deleteTeacherRecord(t.id);

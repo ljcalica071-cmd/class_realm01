@@ -12,6 +12,7 @@ import 'package:class_realm/data/repositories/supabase_parent_repository.dart';
 import 'package:class_realm/core/services/session_activity_tracker.dart';
 import 'package:class_realm/core/utils/browser_url_helper.dart';
 import 'package:class_realm/shared/widgets/shared_widgets.dart';
+import 'package:class_realm/shared/services/in_app_notification_service.dart';
 import 'package:class_realm/routes/app_routes.dart';
 
 class ParentHomeScreen extends StatefulWidget {
@@ -68,6 +69,13 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
     updateBrowserUrl(route);
     _hydrateLinkedStudentsFromCache();
     _loadLinkedStudents();
+    InAppNotificationService.subscribeToAnnouncements(role: 'parent');
+  }
+
+  @override
+  void dispose() {
+    InAppNotificationService.unsubscribeFromAnnouncements();
+    super.dispose();
   }
 
   void _hydrateLinkedStudentsFromCache() {

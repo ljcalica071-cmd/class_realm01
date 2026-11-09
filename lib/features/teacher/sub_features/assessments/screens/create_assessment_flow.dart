@@ -5,6 +5,7 @@
 
 import 'dart:convert';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -12,6 +13,7 @@ import 'package:class_realm/core/theme/app_theme.dart';
 import 'package:class_realm/core/utils/validators.dart';
 import 'package:class_realm/core/services/supabase_service.dart';
 import 'package:class_realm/core/services/app_data_cache.dart';
+import 'package:class_realm/core/services/gemini_service.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/data/repositories/subject_repository.dart';
 import 'package:class_realm/data/repositories/teacher_classwork_repository.dart';
@@ -26,6 +28,7 @@ import 'package:class_realm/widgets/common/app_time_picker_field.dart';
 import 'package:class_realm/widgets/common/app_duration_picker_field.dart';
 import 'package:class_realm/widgets/common/expandable_instructions_text.dart';
 import 'package:class_realm/features/teacher/sub_features/assessments/widgets/anti_cheating_documentation_modal.dart';
+import 'package:class_realm/features/teacher/sub_features/assessments/services/lecture_document_extractor.dart';
 
 /// Active draft of an individual question during step 2 authoring.
 class QuestionDraft {
@@ -36,6 +39,7 @@ class QuestionDraft {
   String
   correctAnswer; // 'A'/'B'/'C'/'D', 'True'/'False', or identification text
   double points;
+  String? sourceExcerpt;
 
   QuestionDraft({
     required this.position,
@@ -44,20 +48,23 @@ class QuestionDraft {
     List<String>? choices,
     this.correctAnswer = '',
     this.points = 1.0,
+    this.sourceExcerpt,
   }) : choices = choices ?? ['', '', '', ''];
 
   bool get isComplete {
-    if (statement.trim().length < 2) return false;
+    final trimmedStmt = statement.trim();
+    if (trimmedStmt.length < 2 || trimmedStmt.length > 500) return false;
     if (points <= 0) return false;
     if (type == QuestionType.multipleChoice) {
-      if (choices.length < 4 || choices.any((c) => c.trim().length < 2)) {
+      if (AppValidators.validateMcqChoices(choices) != null) {
         return false;
       }
-      return correctAnswer.isNotEmpty;
+      return const ['A', 'B', 'C', 'D'].contains(correctAnswer);
     } else if (type == QuestionType.trueFalse) {
       return correctAnswer == 'True' || correctAnswer == 'False';
     } else if (type == QuestionType.identification) {
-      return correctAnswer.trim().length >= 2;
+      return AppValidators.validateIdentificationAnswerKey(correctAnswer) ==
+          null;
     }
     return false;
   }
@@ -72,6 +79,8 @@ class CreateAssessmentFlowDialog extends StatefulWidget {
   final TeacherClassworkRepository? repository;
   final bool initialIsExam;
   final bool skipTypeSelection;
+  final GeminiService? geminiService;
+  final ExtractedLectureDocument? initialLectureDocument;
 
   const CreateAssessmentFlowDialog({
     super.key,
@@ -83,6 +92,8 @@ class CreateAssessmentFlowDialog extends StatefulWidget {
     this.repository,
     this.initialIsExam = false,
     this.skipTypeSelection = true,
+    this.geminiService,
+    this.initialLectureDocument,
   });
 
   static Future<void> show(
@@ -95,6 +106,8 @@ class CreateAssessmentFlowDialog extends StatefulWidget {
     TeacherClassworkRepository? repository,
     bool initialIsExam = false,
     bool skipTypeSelection = true,
+    GeminiService? geminiService,
+    ExtractedLectureDocument? initialLectureDocument,
   }) {
     return showDialog(
       context: context,
@@ -108,6 +121,8 @@ class CreateAssessmentFlowDialog extends StatefulWidget {
         repository: repository,
         initialIsExam: initialIsExam,
         skipTypeSelection: skipTypeSelection,
+        geminiService: geminiService,
+        initialLectureDocument: initialLectureDocument,
       ),
     );
   }
@@ -168,6 +183,15 @@ class _CreateAssessmentFlowDialogState
   String? _hpsPointsError;
   String? _distributionError;
 
+  // Document-Grounded AI Question Generator State
+  ExtractedLectureDocument? _uploadedLectureDoc;
+  String? _aiFileError;
+  String? _aiGenerationError;
+  String? _aiWarningBanner;
+  AssessmentDifficulty _selectedDifficulty = AssessmentDifficulty.medium;
+  AssessmentFocus _selectedFocus = AssessmentFocus.comprehensive;
+  bool _isGeneratingAiQuestions = false;
+
   // Question distributions (3 types only, max 3 digits)
   final _mcCountCtrl = TextEditingController(text: '');
   final _tfCountCtrl = TextEditingController(text: '');
@@ -187,6 +211,9 @@ class _CreateAssessmentFlowDialogState
   String? _selectedMcAnswer; // 'A', 'B', 'C', 'D'
   String? _selectedTfAnswer; // 'True', 'False'
   final _qIdAnswerCtrl = TextEditingController();
+  String? _statementError;
+  String? _choicesError;
+  String? _answerKeyError;
   String? _editorError;
 
   bool _isPublishing = false;
@@ -213,6 +240,7 @@ class _CreateAssessmentFlowDialogState
   @override
   void initState() {
     super.initState();
+    _uploadedLectureDoc = widget.initialLectureDocument;
     _instructionsCtrl.addListener(() {
       if (_instructionsError != null) {
         setState(() => _instructionsError = null);
@@ -224,7 +252,9 @@ class _CreateAssessmentFlowDialogState
         final d = int.tryParse(text);
         if (d != null && d > 180) {
           if (_durationError != 'Duration cannot exceed 180 minutes.') {
-            setState(() => _durationError = 'Duration cannot exceed 180 minutes.');
+            setState(
+              () => _durationError = 'Duration cannot exceed 180 minutes.',
+            );
           }
         } else if (_durationError != null) {
           setState(() => _durationError = null);
@@ -239,12 +269,35 @@ class _CreateAssessmentFlowDialogState
       setState(() {});
     }
 
-    _qStatementCtrl.addListener(syncDraft);
-    _choiceACtrl.addListener(syncDraft);
-    _choiceBCtrl.addListener(syncDraft);
-    _choiceCCtrl.addListener(syncDraft);
-    _choiceDCtrl.addListener(syncDraft);
-    _qIdAnswerCtrl.addListener(syncDraft);
+    _qStatementCtrl.addListener(() {
+      if (!_isLoadingQuestion &&
+          (_statementError != null || _editorError != null)) {
+        _statementError = null;
+        _editorError = null;
+      }
+      syncDraft();
+    });
+    void clearChoiceErrAndSync() {
+      if (!_isLoadingQuestion &&
+          (_choicesError != null || _editorError != null)) {
+        _choicesError = null;
+        _editorError = null;
+      }
+      syncDraft();
+    }
+
+    _choiceACtrl.addListener(clearChoiceErrAndSync);
+    _choiceBCtrl.addListener(clearChoiceErrAndSync);
+    _choiceCCtrl.addListener(clearChoiceErrAndSync);
+    _choiceDCtrl.addListener(clearChoiceErrAndSync);
+    _qIdAnswerCtrl.addListener(() {
+      if (!_isLoadingQuestion &&
+          (_answerKeyError != null || _editorError != null)) {
+        _answerKeyError = null;
+        _editorError = null;
+      }
+      syncDraft();
+    });
     if (widget.initialOfferings != null) {
       _teacherSubjects = List<Map<String, dynamic>>.from(
         widget.initialOfferings!,
@@ -568,14 +621,21 @@ class _CreateAssessmentFlowDialogState
       return;
     }
 
-    final instrErr = AppValidators.validateClassworkInstructions(
-      _instructionsCtrl.text,
-    );
-    if (instrErr != null) {
-      setState(() {
-        _instructionsError = instrErr;
-      });
-      return;
+    if (_completionMode == 'online') {
+      final instrErr = AppValidators.validateClassworkInstructions(
+        _instructionsCtrl.text,
+      );
+      if (instrErr != null) {
+        setState(() {
+          _instructionsError = instrErr;
+        });
+        return;
+      }
+    } else {
+      if (_instructionsCtrl.text.trim().isEmpty) {
+        _instructionsCtrl.text =
+            'In-person classroom assessment administered on paper.';
+      }
     }
 
     if (_completionMode == 'in_person') {
@@ -734,6 +794,7 @@ class _CreateAssessmentFlowDialogState
             choices: exMc[i].choices,
             correctAnswer: exMc[i].correctAnswer,
             points: exMc[i].points,
+            sourceExcerpt: exMc[i].sourceExcerpt,
           ),
         );
       } else {
@@ -753,6 +814,7 @@ class _CreateAssessmentFlowDialogState
             statement: exTf[i].statement,
             correctAnswer: exTf[i].correctAnswer,
             points: exTf[i].points,
+            sourceExcerpt: exTf[i].sourceExcerpt,
           ),
         );
       } else {
@@ -772,6 +834,7 @@ class _CreateAssessmentFlowDialogState
             statement: exId[i].statement,
             correctAnswer: exId[i].correctAnswer,
             points: exId[i].points,
+            sourceExcerpt: exId[i].sourceExcerpt,
           ),
         );
       } else {
@@ -880,6 +943,9 @@ class _CreateAssessmentFlowDialogState
     setState(() {
       _activeQuestionIndex = index;
       _qStatementCtrl.text = q.statement;
+      _statementError = null;
+      _choicesError = null;
+      _answerKeyError = null;
       _editorError = null;
 
       if (q.type == QuestionType.multipleChoice) {
@@ -905,10 +971,19 @@ class _CreateAssessmentFlowDialogState
     final q = _plannedQuestions[_activeQuestionIndex];
     final statement = _qStatementCtrl.text.trim();
     if (statement.length < 2) {
-      setState(
-        () =>
-            _editorError = 'Question statement must be at least 2 characters.',
-      );
+      const msg = 'Question statement must be at least 2 characters.';
+      setState(() {
+        _statementError = msg;
+        _editorError = msg;
+      });
+      return false;
+    }
+    if (statement.length > 500) {
+      const msg = 'Question statement must not exceed 500 characters.';
+      setState(() {
+        _statementError = msg;
+        _editorError = msg;
+      });
       return false;
     }
 
@@ -919,17 +994,20 @@ class _CreateAssessmentFlowDialogState
       final b = _choiceBCtrl.text.trim();
       final c = _choiceCCtrl.text.trim();
       final d = _choiceDCtrl.text.trim();
-      if (a.length < 2 || b.length < 2 || c.length < 2 || d.length < 2) {
-        setState(
-          () => _editorError =
-              'All 4 choices (A, B, C, D) are required (min 2 characters each).',
-        );
+      final choicesErr = AppValidators.validateMcqChoices([a, b, c, d]);
+      if (choicesErr != null) {
+        setState(() {
+          _choicesError = choicesErr;
+          _editorError = choicesErr;
+        });
         return false;
       }
       if (_selectedMcAnswer == null || _selectedMcAnswer!.isEmpty) {
-        setState(
-          () => _editorError = 'Please select the correct answer radio.',
-        );
+        const msg = 'Please select the correct answer radio.';
+        setState(() {
+          _choicesError = msg;
+          _editorError = msg;
+        });
         return false;
       }
       q.statement = statement;
@@ -937,9 +1015,11 @@ class _CreateAssessmentFlowDialogState
       q.correctAnswer = _selectedMcAnswer!;
     } else if (q.type == QuestionType.trueFalse) {
       if (_selectedTfAnswer == null || _selectedTfAnswer!.isEmpty) {
-        setState(
-          () => _editorError = 'Please select True or False as the answer key.',
-        );
+        const msg = 'Please select True or False as the answer key.';
+        setState(() {
+          _answerKeyError = msg;
+          _editorError = msg;
+        });
         return false;
       }
       q.statement = statement;
@@ -947,18 +1027,24 @@ class _CreateAssessmentFlowDialogState
       q.correctAnswer = _selectedTfAnswer!;
     } else if (q.type == QuestionType.identification) {
       final key = _qIdAnswerCtrl.text.trim();
-      if (key.length < 2) {
-        setState(
-          () => _editorError =
-              'Please specify the official answer key for identification (min 2 characters).',
-        );
+      final idErr = AppValidators.validateIdentificationAnswerKey(key);
+      if (idErr != null) {
+        setState(() {
+          _answerKeyError = idErr;
+          _editorError = idErr;
+        });
         return false;
       }
       q.statement = statement;
       q.correctAnswer = key;
     }
 
-    setState(() => _editorError = null);
+    setState(() {
+      _statementError = null;
+      _choicesError = null;
+      _answerKeyError = null;
+      _editorError = null;
+    });
     _saveDraftLocally();
     return true;
   }
@@ -1437,11 +1523,242 @@ class _CreateAssessmentFlowDialogState
     }
   }
 
-  void _openAiGeneration() {
-    AppModals.showUpcomingFeatureDialog(
-      context,
-      featureName: 'AI Exam Question Generator',
-    );
+  String _formatFileSize(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    final kb = bytes / 1024;
+    if (kb < 1024) return '${kb.toStringAsFixed(1)} KB';
+    final mb = kb / 1024;
+    return '${mb.toStringAsFixed(2)} MB';
+  }
+
+  Future<void> _pickAiLectureFile() async {
+    setState(() {
+      _aiFileError = null;
+      _aiGenerationError = null;
+    });
+
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: AppValidators.allowedAiLectureExtensions,
+        withData: true,
+      );
+
+      if (result == null || result.files.isEmpty) {
+        return;
+      }
+
+      final file = result.files.first;
+      final fileValidationError = AppValidators.validateAiLectureFile(
+        fileName: file.name,
+        fileSizeBytes: file.size,
+      );
+      if (fileValidationError != null) {
+        if (mounted) {
+          setState(() => _aiFileError = fileValidationError);
+        }
+        return;
+      }
+
+      if (file.bytes == null) {
+        if (mounted) {
+          setState(
+            () => _aiFileError =
+                'Unable to read file bytes. Please select another PDF or PowerPoint file.',
+          );
+        }
+        return;
+      }
+
+      final extracted = LectureDocumentExtractor.extract(
+        fileName: file.name,
+        bytes: file.bytes!,
+      );
+
+      if (mounted) {
+        setState(() {
+          _uploadedLectureDoc = extracted;
+          _aiFileError = null;
+          _aiGenerationError = null;
+        });
+      }
+    } on FormatException catch (e) {
+      if (mounted) {
+        setState(() => _aiFileError = e.message);
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _aiFileError = 'Error reading lecture file: $e');
+      }
+    }
+  }
+
+  void _removeAiLectureFile() {
+    setState(() {
+      _uploadedLectureDoc = null;
+      _aiFileError = null;
+      _aiGenerationError = null;
+    });
+  }
+
+  Future<void> _generateQuestionsWithAi() async {
+    if (_isGeneratingAiQuestions) return;
+
+    setState(() {
+      _aiFileError = null;
+      _aiGenerationError = null;
+      _distributionError = null;
+    });
+
+    bool hasValidationErr = false;
+
+    if (_uploadedLectureDoc == null) {
+      setState(() {
+        _aiFileError =
+            'Please upload a PDF (.pdf) or PowerPoint (.ppt, .pptx) lecture file first (Max 15 MB).';
+      });
+      hasValidationErr = true;
+    }
+
+    final mc = int.tryParse(_mcCountCtrl.text.trim()) ?? 0;
+    final tf = int.tryParse(_tfCountCtrl.text.trim()) ?? 0;
+    final id = int.tryParse(_idCountCtrl.text.trim()) ?? 0;
+    final total = mc + tf + id;
+
+    if (total == 0) {
+      setState(() {
+        _distributionError =
+            'Please configure at least 1 question in Question Distributions before generating with AI.';
+      });
+      hasValidationErr = true;
+    } else if (total > 100) {
+      setState(() {
+        _distributionError =
+            'Total questions cannot exceed 100 items ($total / 100).';
+      });
+      hasValidationErr = true;
+    }
+
+    if (hasValidationErr) return;
+
+    setState(() => _isGeneratingAiQuestions = true);
+
+    try {
+      final service = widget.geminiService ?? GeminiService.instance;
+      final subjectName =
+          _selectedOffering?['subject_name']?.toString().trim() ??
+          widget.initialSubject ??
+          'Senior High School Subject';
+      final title = _titleCtrl.text.trim().isNotEmpty
+          ? _titleCtrl.text.trim()
+          : (_isExam ? 'Periodical Examination ($_examCategory)' : 'Quiz $_quizSlotIndex');
+
+      final res = await service.generateAssessmentQuestions(
+        subject: subjectName,
+        assessmentTitle: title,
+        assessmentTypeLabel:
+            _isExam ? 'Periodical Examination' : 'Written Work Quiz',
+        assessmentSlotLabel: _isExam ? _examCategory : 'WW $_quizSlotIndex',
+        difficulty: _selectedDifficulty,
+        focus: _selectedFocus,
+        mcqCount: mc,
+        tfCount: tf,
+        identificationCount: id,
+        documentFileName: _uploadedLectureDoc!.fileName,
+        extractedDocumentText: _uploadedLectureDoc!.extractedText,
+        rawFileBytes: _uploadedLectureDoc!.rawBytes,
+        fileMimeType: _uploadedLectureDoc!.mimeType,
+      );
+
+      if (!mounted) return;
+
+      if (!res.isSuccess) {
+        setState(() {
+          _isGeneratingAiQuestions = false;
+          _aiGenerationError =
+              res.errorMessage ?? 'Failed to generate questions from document.';
+        });
+        return;
+      }
+
+      final drafts = <QuestionDraft>[];
+      int pos = 1;
+
+      for (final item in res.multipleChoice) {
+        drafts.add(
+          QuestionDraft(
+            position: pos++,
+            type: QuestionType.multipleChoice,
+            statement: item.statement,
+            choices: List<String>.from(item.choices),
+            correctAnswer: item.correctAnswer,
+            points: 1.0,
+            sourceExcerpt: item.sourceExcerpt,
+          ),
+        );
+      }
+
+      for (final item in res.trueFalse) {
+        drafts.add(
+          QuestionDraft(
+            position: pos++,
+            type: QuestionType.trueFalse,
+            statement: item.statement,
+            choices: ['True', 'False'],
+            correctAnswer: item.correctAnswer,
+            points: 1.0,
+            sourceExcerpt: item.sourceExcerpt,
+          ),
+        );
+      }
+
+      for (final item in res.identification) {
+        drafts.add(
+          QuestionDraft(
+            position: pos++,
+            type: QuestionType.identification,
+            statement: item.statement,
+            correctAnswer: item.correctAnswer,
+            points: 1.0,
+            sourceExcerpt: item.sourceExcerpt,
+          ),
+        );
+      }
+
+      // Auto-fill default instructions if empty so the teacher is ready to publish after review
+      if (_instructionsCtrl.text.trim().isEmpty) {
+        _instructionsCtrl.text =
+            'Read each question carefully and select or type the correct answer based on the lecture material.';
+        _instructionsError = null;
+      }
+
+      setState(() {
+        _mcCountCtrl.text = res.multipleChoice.isEmpty
+            ? ''
+            : res.multipleChoice.length.toString();
+        _tfCountCtrl.text = res.trueFalse.isEmpty
+            ? ''
+            : res.trueFalse.length.toString();
+        _idCountCtrl.text = res.identification.isEmpty
+            ? ''
+            : res.identification.length.toString();
+        _plannedQuestions = drafts;
+        _activeQuestionIndex = 0;
+        _aiWarningBanner = res.warningMessage;
+        _isGeneratingAiQuestions = false;
+        _currentStep = 2;
+      });
+
+      _loadQuestionIntoEditor(0);
+      _saveDraftLocally();
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isGeneratingAiQuestions = false;
+          _aiGenerationError = 'Unexpected error during AI generation: $e';
+        });
+      }
+    }
   }
 
   String _formatDate(DateTime d) {
@@ -1644,110 +1961,126 @@ class _CreateAssessmentFlowDialogState
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // AI Generation Promo Card (Upfront at the top)
-          Container(
-            margin: const EdgeInsets.only(bottom: 20),
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  AppTheme.catPurple.withValues(alpha: 0.12),
-                  theme.colorScheme.primary.withValues(alpha: 0.08),
-                ],
-              ),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(
-                color: AppTheme.catPurple.withValues(alpha: 0.28),
-              ),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(9),
-                  decoration: BoxDecoration(
-                    color: AppTheme.catPurple.withValues(alpha: 0.15),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.auto_awesome,
-                    color: AppTheme.catPurple,
-                    size: 20,
-                  ),
+          // AI Generation Banner (Upfront at the top in Online Mode)
+          if (_completionMode == 'online')
+            Container(
+              margin: const EdgeInsets.only(bottom: 20),
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    AppTheme.catPurple.withValues(alpha: 0.12),
+                    theme.colorScheme.primary.withValues(alpha: 0.08),
+                  ],
                 ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Flexible(
-                            child: Text(
-                              _isExam
-                                  ? 'Generate Examination with Gemini AI'
-                                  : 'Generate Quiz with Gemini AI',
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 13,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: AppTheme.catPurple.withValues(alpha: 0.28),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(9),
+                    decoration: BoxDecoration(
+                      color: AppTheme.catPurple.withValues(alpha: 0.15),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.auto_awesome,
+                      color: AppTheme.catPurple,
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                _isExam
+                                    ? 'Generate Examination with Gemini AI'
+                                    : 'Generate Quiz with Gemini AI',
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13,
+                                ),
                               ),
                             ),
-                          ),
-                          const SizedBox(width: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 6,
-                              vertical: 2,
-                            ),
-                            decoration: BoxDecoration(
-                              color: AppTheme.catPurple.withValues(alpha: 0.15),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: const Text(
-                              'NEXT UPDATE',
-                              style: TextStyle(
-                                fontSize: 9,
-                                fontWeight: FontWeight.bold,
-                                color: AppTheme.catPurple,
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppTheme.catPurple.withValues(
+                                  alpha: 0.15,
+                                ),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: const Text(
+                                'DOCUMENT-GROUNDED',
+                                style: TextStyle(
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppTheme.catPurple,
+                                ),
                               ),
                             ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        'Upload syllabus files (.pdf, .docx) to auto-generate questions and answer keys.',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: theme.colorScheme.onSurface.withValues(
-                            alpha: 0.7,
+                          ],
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Upload lecture files (.pdf, .ppt, .pptx • Max 15 MB) to auto-generate strictly grounded questions and answer keys.',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: theme.colorScheme.onSurface.withValues(
+                              alpha: 0.7,
+                            ),
                           ),
                         ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  ElevatedButton.icon(
+                    icon: Icon(
+                      _uploadedLectureDoc == null
+                          ? Icons.upload_file_outlined
+                          : Icons.auto_awesome,
+                      size: 14,
+                    ),
+                    label: Text(
+                      _uploadedLectureDoc == null
+                          ? 'Upload Lecture (.pdf/.pptx)'
+                          : 'Generate with AI',
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.catPurple,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 10,
                       ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 12),
-                ElevatedButton.icon(
-                  icon: const Icon(Icons.auto_awesome, size: 14),
-                  label: const Text('Generate with AI (Next Update)'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.catPurple,
-                    foregroundColor: Colors.white,
-                    elevation: 0,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 10,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
                     ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
+                    onPressed: _isGeneratingAiQuestions
+                        ? null
+                        : (_uploadedLectureDoc == null
+                              ? _pickAiLectureFile
+                              : _generateQuestionsWithAi),
                   ),
-                  onPressed: _openAiGeneration,
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
 
           // 1. Method Segmented Selector: Online vs In-Person
           Container(
@@ -2335,15 +2668,15 @@ class _CreateAssessmentFlowDialogState
           ],
           const SizedBox(height: 18),
 
-          // 5. Instructions & Guidelines (2 lines + See more / See less + min 2 chars)
-          ExpandableInstructionsInputField(
-            controller: _instructionsCtrl,
-            label: 'Instructions & Guidelines *',
-            hint:
-                'e.g. Provide test-taking guidelines, no calculators allowed...',
-            errorText: _instructionsError,
-          ),
+          // 5. Instructions & Guidelines (Only in Online Mode)
           if (_completionMode == 'online') ...[
+            ExpandableInstructionsInputField(
+              controller: _instructionsCtrl,
+              label: 'Instructions & Guidelines *',
+              hint:
+                  'e.g. Provide test-taking guidelines, no calculators allowed...',
+              errorText: _instructionsError,
+            ),
             const SizedBox(height: 4),
             Align(
               alignment: Alignment.centerRight,
@@ -2363,8 +2696,8 @@ class _CreateAssessmentFlowDialogState
                 ),
               ),
             ),
+            const SizedBox(height: 18),
           ],
-          const SizedBox(height: 18),
 
           // 6. Question Distributions (Only in Online Mode, 3 types max 3 digits)
           if (_completionMode == 'online') ...[
@@ -2432,6 +2765,466 @@ class _CreateAssessmentFlowDialogState
                     color: _totalPlannedQuestions > 100
                         ? const Color(0xFFDC2626)
                         : theme.colorScheme.primary,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    'Tip: Any category can be 0 (e.g., Identification only)',
+                    textAlign: TextAlign.right,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 18),
+            _buildAiQuestionGeneratorSection(theme, isDark),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAiQuestionGeneratorSection(ThemeData theme, bool isDark) {
+    final hasFileErr = _aiFileError != null;
+    final hasGenErr = _aiGenerationError != null;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isDark
+            ? AppTheme.catPurple.withValues(alpha: 0.08)
+            : AppTheme.catPurple.withValues(alpha: 0.04),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: (hasFileErr || hasGenErr)
+              ? const Color(0xFFDC2626)
+              : AppTheme.catPurple.withValues(alpha: 0.3),
+          width: (hasFileErr || hasGenErr) ? 1.5 : 1.0,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.auto_awesome,
+                size: 18,
+                color: AppTheme.catPurple,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'AI Document-Grounded Question Generator (Optional)',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: theme.colorScheme.onSurface,
+                  ),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: AppTheme.catPurple.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: const Text(
+                  'Strict Grounding',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.catPurple,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Upload a lecture document (.pdf, .ppt, .pptx • Max 15 MB) to auto-fill Step 2 with questions strictly grounded in the file. No outside knowledge is used.',
+            style: TextStyle(
+              fontSize: 12,
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          // 1. Lecture Document Upload Container (Golden Rule: upfront format & size rules)
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Flexible(
+                child: Text(
+                  'Lecture Document (.pdf, .ppt, .pptx)',
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: theme.colorScheme.onSurface,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  'Allowed: PDF, PPT, PPTX • Max 15 MB',
+                  textAlign: TextAlign.right,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: theme.colorScheme.primary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          InkWell(
+            onTap: _isGeneratingAiQuestions ? null : _pickAiLectureFile,
+            borderRadius: BorderRadius.circular(10),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(
+                color: isDark
+                    ? theme.colorScheme.surfaceContainerHighest.withValues(
+                        alpha: 0.35,
+                      )
+                    : Colors.white,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: hasFileErr
+                      ? const Color(0xFFDC2626)
+                      : (_uploadedLectureDoc != null
+                            ? AppTheme.catGreen
+                            : theme.colorScheme.outline.withValues(alpha: 0.3)),
+                  width: (hasFileErr || _uploadedLectureDoc != null)
+                      ? 1.5
+                      : 1.0,
+                ),
+              ),
+              child: _uploadedLectureDoc == null
+                  ? Row(
+                      children: [
+                        Icon(
+                          Icons.upload_file_outlined,
+                          size: 20,
+                          color: hasFileErr
+                              ? const Color(0xFFDC2626)
+                              : AppTheme.catPurple,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Select Lecture File (.pdf, .ppt, .pptx)',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: theme.colorScheme.onSurface,
+                                ),
+                              ),
+                              Text(
+                                'Supports PDF and PowerPoint presentations up to 15 MB',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: theme.colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const Icon(
+                          Icons.folder_open_outlined,
+                          size: 18,
+                          color: AppTheme.catPurple,
+                        ),
+                      ],
+                    )
+                  : Row(
+                      children: [
+                        Icon(
+                          _uploadedLectureDoc!.isPdf
+                              ? Icons.picture_as_pdf_outlined
+                              : Icons.slideshow_outlined,
+                          size: 20,
+                          color: AppTheme.catGreen,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                _uploadedLectureDoc!.fileName,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold,
+                                  color: theme.colorScheme.onSurface,
+                                ),
+                              ),
+                              Text(
+                                '${_formatFileSize(_uploadedLectureDoc!.sizeBytes)} • Ready for strict document grounding',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: isDark
+                                      ? const Color(0xFF4ADE80)
+                                      : AppTheme.catGreen,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: 'Remove lecture file',
+                          icon: const Icon(Icons.close, size: 18),
+                          onPressed: _isGeneratingAiQuestions
+                              ? null
+                              : _removeAiLectureFile,
+                        ),
+                      ],
+                    ),
+            ),
+          ),
+          if (hasFileErr) ...[
+            const SizedBox(height: 5),
+            Row(
+              children: [
+                const Icon(
+                  Icons.error_outline,
+                  size: 14,
+                  color: Color(0xFFDC2626),
+                ),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    _aiFileError!,
+                    style: const TextStyle(
+                      color: Color(0xFFDC2626),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+
+          const SizedBox(height: 12),
+
+          // 2. Difficulty Level Selector (Easy, Medium, Hard)
+          Text(
+            'Difficulty Level',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: theme.colorScheme.onSurface,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Row(
+            children: AssessmentDifficulty.values.map((diff) {
+              final isSelected = _selectedDifficulty == diff;
+              return Expanded(
+                child: Padding(
+                  padding: EdgeInsets.only(
+                    right: diff != AssessmentDifficulty.values.last ? 8.0 : 0.0,
+                  ),
+                  child: InkWell(
+                    onTap: _isGeneratingAiQuestions
+                        ? null
+                        : () => setState(() => _selectedDifficulty = diff),
+                    borderRadius: BorderRadius.circular(8),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      decoration: BoxDecoration(
+                        color: isSelected
+                            ? AppTheme.catPurple.withValues(alpha: 0.15)
+                            : (isDark
+                                  ? theme.colorScheme.surfaceContainerHighest
+                                        .withValues(alpha: 0.3)
+                                  : Colors.white),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: isSelected
+                              ? AppTheme.catPurple
+                              : theme.colorScheme.outline.withValues(
+                                  alpha: 0.25,
+                                ),
+                          width: isSelected ? 1.5 : 1.0,
+                        ),
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(
+                        diff.label,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: isSelected
+                              ? FontWeight.bold
+                              : FontWeight.w500,
+                          color: isSelected
+                              ? AppTheme.catPurple
+                              : theme.colorScheme.onSurface,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+
+          const SizedBox(height: 12),
+
+          // 3. Target Focus Selector (Memorization, Comprehensive, Critical Thinking)
+          Text(
+            'Target Assessment Focus',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: theme.colorScheme.onSurface,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Row(
+            children: AssessmentFocus.values.map((focus) {
+              final isSelected = _selectedFocus == focus;
+              return Expanded(
+                child: Padding(
+                  padding: EdgeInsets.only(
+                    right: focus != AssessmentFocus.values.last ? 8.0 : 0.0,
+                  ),
+                  child: InkWell(
+                    onTap: _isGeneratingAiQuestions
+                        ? null
+                        : () => setState(() => _selectedFocus = focus),
+                    borderRadius: BorderRadius.circular(8),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 8,
+                        horizontal: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: isSelected
+                            ? AppTheme.catPurple.withValues(alpha: 0.15)
+                            : (isDark
+                                  ? theme.colorScheme.surfaceContainerHighest
+                                        .withValues(alpha: 0.3)
+                                  : Colors.white),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: isSelected
+                              ? AppTheme.catPurple
+                              : theme.colorScheme.outline.withValues(
+                                  alpha: 0.25,
+                                ),
+                          width: isSelected ? 1.5 : 1.0,
+                        ),
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(
+                        focus.label,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: isSelected
+                              ? FontWeight.bold
+                              : FontWeight.w500,
+                          color: isSelected
+                              ? AppTheme.catPurple
+                              : theme.colorScheme.onSurface,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            _selectedFocus.description,
+            style: TextStyle(
+              fontSize: 11,
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+
+          const SizedBox(height: 14),
+
+          // 4. Generate Questions Button
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              icon: _isGeneratingAiQuestions
+                  ? const SizedBox(
+                      width: 15,
+                      height: 15,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Icon(Icons.auto_awesome, size: 16),
+              label: Text(
+                _isGeneratingAiQuestions
+                    ? 'Generating Grounded Questions from Document...'
+                    : (_isExam
+                          ? 'Generate Exam Questions with AI'
+                          : 'Generate Quiz Questions with AI'),
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                ),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.catPurple,
+                foregroundColor: Colors.white,
+                elevation: 0,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              onPressed: (_areAllSlotsFilled || _isGeneratingAiQuestions)
+                  ? null
+                  : _generateQuestionsWithAi,
+            ),
+          ),
+
+          if (hasGenErr) ...[
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                const Icon(
+                  Icons.error_outline,
+                  size: 14,
+                  color: Color(0xFFDC2626),
+                ),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    _aiGenerationError!,
+                    style: const TextStyle(
+                      color: Color(0xFFDC2626),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
                 ),
               ],
@@ -2720,7 +3513,9 @@ class _CreateAssessmentFlowDialogState
               FilteringTextInputFormatter.digitsOnly,
               LengthLimitingTextInputFormatter(3),
             ],
-            onChanged: (_) => setState(() {}),
+            onChanged: (_) => setState(() {
+              _distributionError = null;
+            }),
             decoration: InputDecoration(
               hintText: '0',
               hintStyle: TextStyle(
@@ -2783,62 +3578,104 @@ class _CreateAssessmentFlowDialogState
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Top Editor Card Header
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Row(
+                if (_aiWarningBanner != null) ...[
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 14),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFD97706).withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: const Color(0xFFD97706).withValues(alpha: 0.4),
+                      ),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: theme.colorScheme.primary.withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                              color: theme.colorScheme.primary.withValues(alpha: 0.25),
-                            ),
-                          ),
-                          child: Text(
-                            'Q${currentDraft.position}',
-                            style: TextStyle(
-                              color: theme.colorScheme.primary,
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Text(
-                          'Question ${currentDraft.position} of ${_plannedQuestions.length}',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 15,
-                            color: theme.colorScheme.onSurface,
-                          ),
+                        const Icon(
+                          Icons.info_outline,
+                          size: 16,
+                          color: Color(0xFFD97706),
                         ),
                         const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 3,
-                          ),
-                          decoration: BoxDecoration(
-                            color: theme.colorScheme.primary.withValues(
-                              alpha: 0.1,
-                            ),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
+                        Expanded(
                           child: Text(
-                            qTypeLabel.toUpperCase(),
+                            _aiWarningBanner!,
                             style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                              color: theme.colorScheme.primary,
+                              fontSize: 12,
+                              color: theme.colorScheme.onSurface,
+                              height: 1.35,
                             ),
                           ),
                         ),
                       ],
                     ),
+                  ),
+                ],
+
+                // Top Editor Card Header
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Flexible(
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: theme.colorScheme.primary.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: theme.colorScheme.primary.withValues(alpha: 0.25),
+                              ),
+                            ),
+                            child: Text(
+                              'Q${currentDraft.position}',
+                              style: TextStyle(
+                                color: theme.colorScheme.primary,
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Flexible(
+                            child: Text(
+                              'Question ${currentDraft.position} of ${_plannedQuestions.length}',
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 15,
+                                color: theme.colorScheme.onSurface,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 3,
+                            ),
+                            decoration: BoxDecoration(
+                              color: theme.colorScheme.primary.withValues(
+                                alpha: 0.1,
+                              ),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              qTypeLabel.toUpperCase(),
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: theme.colorScheme.primary,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                       decoration: BoxDecoration(
@@ -2857,6 +3694,43 @@ class _CreateAssessmentFlowDialogState
                   ],
                 ),
                 const SizedBox(height: 16),
+
+                if (currentDraft.sourceExcerpt != null &&
+                    currentDraft.sourceExcerpt!.trim().isNotEmpty) ...[
+                  Container(
+                    width: double.infinity,
+                    margin: const EdgeInsets.only(bottom: 14),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.primary.withValues(alpha: 0.06),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: theme.colorScheme.primary.withValues(alpha: 0.2),
+                      ),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(
+                          Icons.menu_book_outlined,
+                          size: 15,
+                          color: theme.colorScheme.primary,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Document Grounding: ${currentDraft.sourceExcerpt!}',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: theme.colorScheme.onSurfaceVariant,
+                              fontStyle: FontStyle.italic,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
 
                 // Question Statement Input
                 Row(
@@ -2892,7 +3766,10 @@ class _CreateAssessmentFlowDialogState
                   }) => const SizedBox.shrink(),
                   onChanged: (_) {
                     _syncCurrentDraftFromInputs();
-                    setState(() {});
+                    setState(() {
+                      _statementError = null;
+                      _editorError = null;
+                    });
                   },
                   style: TextStyle(
                     color: theme.colorScheme.onSurface,
@@ -2914,26 +3791,54 @@ class _CreateAssessmentFlowDialogState
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
                       borderSide: BorderSide(
-                        color: theme.colorScheme.outline.withValues(
-                          alpha: theme.brightness == Brightness.dark ? 0.3 : 0.2,
-                        ),
+                        color: _statementError != null
+                            ? const Color(0xFFDC2626)
+                            : theme.colorScheme.outline.withValues(
+                                alpha: theme.brightness == Brightness.dark ? 0.3 : 0.2,
+                              ),
+                        width: _statementError != null ? 1.5 : 1.0,
                       ),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
                       borderSide: BorderSide(
-                        color: theme.colorScheme.primary,
+                        color: _statementError != null
+                            ? const Color(0xFFDC2626)
+                            : theme.colorScheme.primary,
                         width: 1.5,
                       ),
                     ),
                   ),
                 ),
+                if (_statementError != null) ...[
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.error_outline,
+                        size: 15,
+                        color: Color(0xFFDC2626),
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          _statementError!,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: Color(0xFFDC2626),
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
                 const SizedBox(height: 16),
 
                 // Dynamic Choices & Answer Key Setup based on type
                 if (currentDraft.type == QuestionType.multipleChoice) ...[
                   Text(
-                    'Options & Answer Key (Fill all 4 and select the correct radio):',
+                    'Options & Answer Key (Fill all 4 unique options and select the correct radio):',
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
@@ -2948,6 +3853,29 @@ class _CreateAssessmentFlowDialogState
                   _buildMcChoiceRow('C', _choiceCCtrl),
                   const SizedBox(height: 8),
                   _buildMcChoiceRow('D', _choiceDCtrl),
+                  if (_choicesError != null) ...[
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.error_outline,
+                          size: 15,
+                          color: Color(0xFFDC2626),
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            _choicesError!,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Color(0xFFDC2626),
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ] else if (currentDraft.type == QuestionType.trueFalse) ...[
                   Text(
                     'Correct Answer Key (Mandatory):',
@@ -2965,6 +3893,8 @@ class _CreateAssessmentFlowDialogState
                           onTap: () {
                             setState(() {
                               _selectedTfAnswer = 'True';
+                              _answerKeyError = null;
+                              _editorError = null;
                               _syncCurrentDraftFromInputs();
                             });
                           },
@@ -2980,10 +3910,14 @@ class _CreateAssessmentFlowDialogState
                                       : theme.colorScheme.surface),
                               borderRadius: BorderRadius.circular(8),
                               border: Border.all(
-                                color: _selectedTfAnswer == 'True'
-                                    ? theme.colorScheme.primary
-                                    : theme.colorScheme.outline.withValues(alpha: 0.3),
-                                width: _selectedTfAnswer == 'True' ? 1.8 : 1.0,
+                                color: _answerKeyError != null
+                                    ? const Color(0xFFDC2626)
+                                    : (_selectedTfAnswer == 'True'
+                                        ? theme.colorScheme.primary
+                                        : theme.colorScheme.outline.withValues(alpha: 0.3)),
+                                width: _selectedTfAnswer == 'True' || _answerKeyError != null
+                                    ? 1.8
+                                    : 1.0,
                               ),
                             ),
                             child: Row(
@@ -2995,6 +3929,8 @@ class _CreateAssessmentFlowDialogState
                                   onChanged: (val) {
                                     setState(() {
                                       _selectedTfAnswer = val;
+                                      _answerKeyError = null;
+                                      _editorError = null;
                                       _syncCurrentDraftFromInputs();
                                     });
                                   },
@@ -3021,6 +3957,8 @@ class _CreateAssessmentFlowDialogState
                           onTap: () {
                             setState(() {
                               _selectedTfAnswer = 'False';
+                              _answerKeyError = null;
+                              _editorError = null;
                               _syncCurrentDraftFromInputs();
                             });
                           },
@@ -3036,10 +3974,14 @@ class _CreateAssessmentFlowDialogState
                                       : theme.colorScheme.surface),
                               borderRadius: BorderRadius.circular(8),
                               border: Border.all(
-                                color: _selectedTfAnswer == 'False'
-                                    ? theme.colorScheme.primary
-                                    : theme.colorScheme.outline.withValues(alpha: 0.3),
-                                width: _selectedTfAnswer == 'False' ? 1.8 : 1.0,
+                                color: _answerKeyError != null
+                                    ? const Color(0xFFDC2626)
+                                    : (_selectedTfAnswer == 'False'
+                                        ? theme.colorScheme.primary
+                                        : theme.colorScheme.outline.withValues(alpha: 0.3)),
+                                width: _selectedTfAnswer == 'False' || _answerKeyError != null
+                                    ? 1.8
+                                    : 1.0,
                               ),
                             ),
                             child: Row(
@@ -3051,6 +3993,8 @@ class _CreateAssessmentFlowDialogState
                                   onChanged: (val) {
                                     setState(() {
                                       _selectedTfAnswer = val;
+                                      _answerKeyError = null;
+                                      _editorError = null;
                                       _syncCurrentDraftFromInputs();
                                     });
                                   },
@@ -3073,36 +4017,89 @@ class _CreateAssessmentFlowDialogState
                       ),
                     ],
                   ),
+                  if (_answerKeyError != null) ...[
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.error_outline,
+                          size: 15,
+                          color: Color(0xFFDC2626),
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            _answerKeyError!,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Color(0xFFDC2626),
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ] else if (currentDraft.type ==
                     QuestionType.identification) ...[
-                  Text(
-                    'Official Correct Answer Key *',
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: theme.colorScheme.onSurface,
-                    ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Flexible(
+                        child: Text(
+                          'Official Correct Answer Key (Short term/phrase) *',
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: theme.colorScheme.onSurface,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        '${_qIdAnswerCtrl.text.trim().length} / 50 chars',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: _answerKeyError != null
+                              ? const Color(0xFFDC2626)
+                              : theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 6),
                   TextField(
                     controller: _qIdAnswerCtrl,
+                    maxLength: 50,
+                    buildCounter: (
+                      _, {
+                      required currentLength,
+                      required isFocused,
+                      maxLength,
+                    }) => const SizedBox.shrink(),
                     onChanged: (_) {
                       _syncCurrentDraftFromInputs();
-                      setState(() {});
+                      setState(() {
+                        _answerKeyError = null;
+                        _editorError = null;
+                      });
                     },
                     style: TextStyle(
                       color: theme.colorScheme.onSurface,
                       fontSize: 13,
                     ),
                     decoration: InputDecoration(
-                      hintText: 'e.g. Mitochondria, Republic Act 10533, etc.',
+                      hintText: 'e.g. Mitochondria, Republic Act 10533 (2-50 chars)',
                       hintStyle: TextStyle(
                         color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
                       ),
                       prefixIcon: Icon(
                         Icons.vpn_key_outlined,
                         size: 18,
-                        color: theme.colorScheme.primary,
+                        color: _answerKeyError != null
+                            ? const Color(0xFFDC2626)
+                            : theme.colorScheme.primary,
                       ),
                       filled: true,
                       fillColor: theme.brightness == Brightness.dark
@@ -3114,23 +4111,54 @@ class _CreateAssessmentFlowDialogState
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(10),
                         borderSide: BorderSide(
-                          color: theme.colorScheme.outline.withValues(
-                            alpha: theme.brightness == Brightness.dark ? 0.3 : 0.2,
-                          ),
+                          color: _answerKeyError != null
+                              ? const Color(0xFFDC2626)
+                              : theme.colorScheme.outline.withValues(
+                                  alpha: theme.brightness == Brightness.dark ? 0.3 : 0.2,
+                                ),
+                          width: _answerKeyError != null ? 1.5 : 1.0,
                         ),
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(10),
                         borderSide: BorderSide(
-                          color: theme.colorScheme.primary,
+                          color: _answerKeyError != null
+                              ? const Color(0xFFDC2626)
+                              : theme.colorScheme.primary,
                           width: 1.5,
                         ),
                       ),
                     ),
                   ),
+                  if (_answerKeyError != null) ...[
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.error_outline,
+                          size: 15,
+                          color: Color(0xFFDC2626),
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            _answerKeyError!,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Color(0xFFDC2626),
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ],
 
-                if (_editorError != null) ...[
+                if (_editorError != null &&
+                    _statementError == null &&
+                    _choicesError == null &&
+                    _answerKeyError == null) ...[
                   const SizedBox(height: 12),
                   Row(
                     children: [
@@ -3394,6 +4422,7 @@ class _CreateAssessmentFlowDialogState
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final isCorrect = _selectedMcAnswer == label;
+    final hasError = _choicesError != null;
 
     return Row(
       children: [
@@ -3404,6 +4433,8 @@ class _CreateAssessmentFlowDialogState
           onChanged: (val) {
             setState(() {
               _selectedMcAnswer = val;
+              _choicesError = null;
+              _editorError = null;
               _syncCurrentDraftFromInputs();
             });
           },
@@ -3411,9 +4442,19 @@ class _CreateAssessmentFlowDialogState
         Expanded(
           child: TextField(
             controller: controller,
+            maxLength: 180,
+            buildCounter: (
+              _, {
+              required currentLength,
+              required isFocused,
+              maxLength,
+            }) => const SizedBox.shrink(),
             onChanged: (_) {
               _syncCurrentDraftFromInputs();
-              setState(() {});
+              setState(() {
+                _choicesError = null;
+                _editorError = null;
+              });
             },
             style: TextStyle(
               color: theme.colorScheme.onSurface,
@@ -3422,7 +4463,9 @@ class _CreateAssessmentFlowDialogState
             decoration: InputDecoration(
               labelText: 'Choice $label',
               labelStyle: TextStyle(
-                color: theme.colorScheme.onSurfaceVariant,
+                color: hasError
+                    ? const Color(0xFFDC2626)
+                    : theme.colorScheme.onSurfaceVariant,
               ),
               isDense: true,
               contentPadding: const EdgeInsets.symmetric(
@@ -3435,17 +4478,22 @@ class _CreateAssessmentFlowDialogState
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
                 borderSide: BorderSide(
-                  color: isCorrect
-                      ? theme.colorScheme.primary
-                      : theme.colorScheme.outline.withValues(
-                          alpha: isDark ? 0.3 : 0.2,
-                        ),
+                  color: hasError
+                      ? const Color(0xFFDC2626)
+                      : (isCorrect
+                          ? theme.colorScheme.primary
+                          : theme.colorScheme.outline.withValues(
+                              alpha: isDark ? 0.3 : 0.2,
+                            )),
+                  width: hasError || isCorrect ? 1.5 : 1.0,
                 ),
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
                 borderSide: BorderSide(
-                  color: theme.colorScheme.primary,
+                  color: hasError
+                      ? const Color(0xFFDC2626)
+                      : theme.colorScheme.primary,
                   width: 1.5,
                 ),
               ),

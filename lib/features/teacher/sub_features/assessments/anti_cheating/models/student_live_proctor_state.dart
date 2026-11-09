@@ -68,6 +68,15 @@ class StudentLiveProctorState {
   final List<ProctorViolationLog> violations;
   final DateTime? lastActiveAt;
   final String? kickedReason;
+  final String? gender;
+  final double? score;
+  final double? totalPoints;
+  final bool isEntryAllowed;
+  final int? currentQuestionNumber;
+  final bool isMissing;
+  final String? lastName;
+  final String? firstName;
+  final String? middleName;
 
   const StudentLiveProctorState({
     required this.studentId,
@@ -79,6 +88,15 @@ class StudentLiveProctorState {
     this.violations = const [],
     this.lastActiveAt,
     this.kickedReason,
+    this.gender,
+    this.score,
+    this.totalPoints,
+    this.isEntryAllowed = true,
+    this.currentQuestionNumber,
+    this.isMissing = false,
+    this.lastName,
+    this.firstName,
+    this.middleName,
   });
 
   bool get hasViolations => violationCount > 0;
@@ -94,6 +112,15 @@ class StudentLiveProctorState {
     List<ProctorViolationLog>? violations,
     DateTime? lastActiveAt,
     String? kickedReason,
+    String? gender,
+    double? score,
+    double? totalPoints,
+    bool? isEntryAllowed,
+    int? currentQuestionNumber,
+    bool? isMissing,
+    String? lastName,
+    String? firstName,
+    String? middleName,
   }) {
     return StudentLiveProctorState(
       studentId: studentId ?? this.studentId,
@@ -105,6 +132,15 @@ class StudentLiveProctorState {
       violations: violations ?? this.violations,
       lastActiveAt: lastActiveAt ?? this.lastActiveAt,
       kickedReason: kickedReason ?? this.kickedReason,
+      gender: gender ?? this.gender,
+      score: score ?? this.score,
+      totalPoints: totalPoints ?? this.totalPoints,
+      isEntryAllowed: isEntryAllowed ?? this.isEntryAllowed,
+      currentQuestionNumber: currentQuestionNumber ?? this.currentQuestionNumber,
+      isMissing: isMissing ?? this.isMissing,
+      lastName: lastName ?? this.lastName,
+      firstName: firstName ?? this.firstName,
+      middleName: middleName ?? this.middleName,
     );
   }
 
@@ -119,6 +155,15 @@ class StudentLiveProctorState {
       'violations': violations.map((v) => v.toJson()).toList(),
       'last_active_at': lastActiveAt?.toIso8601String(),
       'kicked_reason': kickedReason,
+      'gender': gender,
+      'score': score,
+      'total_points': totalPoints,
+      'is_entry_allowed': isEntryAllowed,
+      'current_question_number': currentQuestionNumber,
+      'is_missing': isMissing,
+      'last_name': lastName,
+      'first_name': firstName,
+      'middle_name': middleName,
     };
   }
 
@@ -143,6 +188,15 @@ class StudentLiveProctorState {
           ? DateTime.tryParse(json['last_active_at'].toString())
           : null,
       kickedReason: json['kicked_reason']?.toString(),
+      gender: json['gender']?.toString(),
+      score: (json['score'] as num?)?.toDouble(),
+      totalPoints: (json['total_points'] as num?)?.toDouble(),
+      isEntryAllowed: json['is_entry_allowed'] != false,
+      currentQuestionNumber: (json['current_question_number'] as num?)?.toInt(),
+      isMissing: json['is_missing'] == true,
+      lastName: json['last_name']?.toString(),
+      firstName: json['first_name']?.toString(),
+      middleName: json['middle_name']?.toString(),
     );
   }
 }

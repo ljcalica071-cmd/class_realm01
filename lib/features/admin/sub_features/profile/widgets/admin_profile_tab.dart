@@ -101,47 +101,10 @@ class AdminProfileTab extends StatelessWidget {
                         color: theme.colorScheme.outlineVariant,
                       ),
                     ),
-                    child: Wrap(
-                      spacing: 20,
-                      runSpacing: 16,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      children: [
-                        CircleAvatar(
-                          radius: 34,
-                          backgroundColor: theme.colorScheme.primaryContainer,
-                          foregroundColor: theme.colorScheme.onPrimaryContainer,
-                          child: Text(
-                            initial,
-                            style: theme.textTheme.headlineMedium?.copyWith(
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                        SizedBox(
-                          width: (constraints.maxWidth - 180)
-                              .clamp(160, 700)
-                              .toDouble(),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                displayName,
-                                style: theme.textTheme.titleLarge?.copyWith(
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                email,
-                                style: theme.textTheme.bodyLarge?.copyWith(
-                                  color: theme.colorScheme.onSurfaceVariant,
-                                ),
-                                softWrap: true,
-                              ),
-                            ],
-                          ),
-                        ),
-                        ElevatedButton.icon(
+                    child: LayoutBuilder(
+                      builder: (context, cardConstraints) {
+                        final isCompact = cardConstraints.maxWidth < 600;
+                        final changePassBtn = ElevatedButton.icon(
                           onPressed: () => ChangePasswordModal.show(context, user: user),
                           icon: const Icon(LucideIcons.lock, size: 16),
                           label: const Text('Change Password'),
@@ -154,8 +117,100 @@ class AdminProfileTab extends StatelessWidget {
                               borderRadius: BorderRadius.circular(10),
                             ),
                           ),
-                        ),
-                      ],
+                        );
+
+                        if (isCompact) {
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  CircleAvatar(
+                                    radius: 32,
+                                    backgroundColor: theme.colorScheme.primary,
+                                    foregroundColor: Colors.white,
+                                    child: Text(
+                                      initial,
+                                      style: theme.textTheme.headlineMedium?.copyWith(
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 16),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          displayName,
+                                          style: theme.textTheme.titleLarge?.copyWith(
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          email,
+                                          style: theme.textTheme.bodyLarge?.copyWith(
+                                            color: theme.colorScheme.onSurfaceVariant,
+                                          ),
+                                          softWrap: true,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 16),
+                              Align(
+                                alignment: Alignment.centerRight,
+                                child: changePassBtn,
+                              ),
+                            ],
+                          );
+                        }
+
+                        return Row(
+                          children: [
+                            CircleAvatar(
+                              radius: 34,
+                              backgroundColor: theme.colorScheme.primary,
+                              foregroundColor: Colors.white,
+                              child: Text(
+                                initial,
+                                style: theme.textTheme.headlineMedium?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 20),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    displayName,
+                                    style: theme.textTheme.titleLarge?.copyWith(
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    email,
+                                    style: theme.textTheme.bodyLarge?.copyWith(
+                                      color: theme.colorScheme.onSurfaceVariant,
+                                    ),
+                                    softWrap: true,
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 20),
+                            changePassBtn,
+                          ],
+                        );
+                      },
                     ),
                   ),
                   const SizedBox(height: 24),

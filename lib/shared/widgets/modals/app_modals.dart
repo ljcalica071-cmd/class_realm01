@@ -281,7 +281,7 @@ class AppModals {
     required BuildContext context,
     required String title,
     required String message,
-    String confirmLabel = 'Close',
+    String confirmLabel = 'Okay',
     VoidCallback? onConfirm,
   }) {
     final theme = Theme.of(context);

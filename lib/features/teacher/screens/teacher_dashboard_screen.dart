@@ -20,6 +20,7 @@ import 'package:class_realm/data/repositories/supabase_teacher_classwork_reposit
 import 'package:class_realm/core/services/local_storage_service.dart';
 import 'package:class_realm/core/services/session_activity_tracker.dart';
 import 'package:class_realm/shared/widgets/shared_widgets.dart';
+import 'package:class_realm/shared/services/in_app_notification_service.dart';
 import 'package:class_realm/routes/app_routes.dart';
 
 class TeacherDashboardScreen extends StatefulWidget {
@@ -135,10 +136,12 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     _loadData();
     _loadActivities();
     _checkGradebookLockStatus();
+    InAppNotificationService.subscribeToAnnouncements(role: 'teacher');
   }
 
   @override
   void dispose() {
+    InAppNotificationService.unsubscribeFromAnnouncements();
     TeacherGradebookTab.classworkSyncNotifier.removeListener(
       _onClassworkSyncTriggered,
     );

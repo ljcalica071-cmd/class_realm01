@@ -111,7 +111,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     super.dispose();
   }
 
-  void _showParentRestoreyDialog() {
+  void _showParentRecoveryDialog() {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -138,7 +138,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
               ),
               const SizedBox(height: 20),
               const Text(
-                'Parent Account Restorey',
+                'Parent Account Recovery',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 20,
@@ -176,7 +176,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
     // Check if parent account domain
     if (ParentCredentialHelper.isParentDomain(email)) {
-      _showParentRestoreyDialog();
+      _showParentRecoveryDialog();
       return;
     }
 
@@ -217,7 +217,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       if (user.role == UserRole.parent) {
         if (!mounted) return;
         setState(() => _isLoading = false);
-        _showParentRestoreyDialog();
+        _showParentRecoveryDialog();
         return;
       }
 

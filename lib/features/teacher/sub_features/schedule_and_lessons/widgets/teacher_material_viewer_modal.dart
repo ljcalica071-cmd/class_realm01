@@ -65,7 +65,7 @@ class _TeacherMaterialViewerModalState
   bool _isSaving = false;
   bool _isReplacingFile = false;
   bool _isOpeningMaterial = false;
-  String? _draftRestoreedText;
+  String? _draftRestoredText;
   DateTime? _lastAutoSavedAt;
   Timer? _autoSaveTimer;
 
@@ -117,7 +117,7 @@ class _TeacherMaterialViewerModalState
           savedDraft.trim().isNotEmpty &&
           savedDraft != (_currentMaterial.description ?? '')) {
         setState(() {
-          _draftRestoreedText = savedDraft;
+          _draftRestoredText = savedDraft;
         });
       }
     } catch (e) {
@@ -152,10 +152,10 @@ class _TeacherMaterialViewerModalState
   }
 
   void _restoreDraft() {
-    if (_draftRestoreedText != null) {
+    if (_draftRestoredText != null) {
       setState(() {
-        _descController.text = _draftRestoreedText!;
-        _draftRestoreedText = null;
+        _descController.text = _draftRestoredText!;
+        _draftRestoredText = null;
       });
       _showToast('Local draft restored!', isError: false);
     }
@@ -164,7 +164,7 @@ class _TeacherMaterialViewerModalState
   void _discardDraft() {
     _clearSavedDraft();
     setState(() {
-      _draftRestoreedText = null;
+      _draftRestoredText = null;
     });
     _showToast('Local draft discarded.', isError: false);
   }
@@ -546,9 +546,9 @@ class _TeacherMaterialViewerModalState
               // Top Bar: Title & Close
               _buildTopBar(theme),
 
-              if (_draftRestoreedText != null) ...[
+              if (_draftRestoredText != null) ...[
                 const SizedBox(height: 10),
-                _buildDraftRestoreyBanner(theme),
+                _buildDraftRestorationBanner(theme),
               ],
 
               const SizedBox(height: 16),
@@ -627,7 +627,7 @@ class _TeacherMaterialViewerModalState
     );
   }
 
-  Widget _buildDraftRestoreyBanner(ThemeData theme) {
+  Widget _buildDraftRestorationBanner(ThemeData theme) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       decoration: BoxDecoration(

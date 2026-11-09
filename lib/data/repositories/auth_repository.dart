@@ -752,7 +752,7 @@ class AuthRepository {
           .insert({
             'user_id': user.id,
             'role': roleStr,
-            'session_date': now.toIso8601String().split('T').first,
+            'session_date': now.toLocal().toIso8601String().split('T').first,
             'login_at': now.toIso8601String(),
             'last_active_at': now.toIso8601String(),
             'is_active': true,
@@ -1454,7 +1454,7 @@ class AuthRepository {
     return null;
   }
 
-  /// Sends a secure pure Dart 6-digit OTP code to the requested email for password restorey.
+  /// Sends a secure pure Dart 6-digit OTP code to the requested email for password recovery.
   Future<Map<String, dynamic>> sendForgotPasswordOtp({
     required String email,
     String? recipientName,
@@ -1667,7 +1667,7 @@ class AuthRepository {
     };
   }
 
-  /// Verifies the 6-digit OTP code entered by the user during password restorey.
+  /// Verifies the 6-digit OTP code entered by the user during password recovery.
   Future<FirstLoginOtpVerification> verifyForgotPasswordOtp(String code) async {
     final cleanCode = code.trim();
     final email = _forgotPasswordEmail ?? '';

@@ -56,6 +56,11 @@ class AppValidators {
   static const int maxClassworkFileSizeBytes =
       15 * 1024 * 1024; // 15 MB (15,728,640 bytes)
   static const List<String> allowedClassworkExtensions = ['pdf', 'doc', 'docx'];
+  static const List<String> allowedAiLectureExtensions = ['pdf', 'ppt', 'pptx'];
+  static const int minIdentificationAnswerLength = 2;
+  static const int maxIdentificationAnswerLength = 50;
+  static const int minMcqChoiceLength = 1;
+  static const int maxMcqChoiceLength = 180;
 
   /// Validates Performance Task / Activity titles (2 to 100 characters)
   static String? validateClassworkTitle(String? value) {
@@ -137,6 +142,64 @@ class AppValidators {
     if (fileSizeBytes > maxClassworkFileSizeBytes) {
       final mb = (fileSizeBytes / (1024 * 1024)).toStringAsFixed(2);
       return 'File size exceeds the 15 MB limit ($mb MB > 15 MB).';
+    }
+    return null;
+  }
+
+  /// Validates AI Lecture Document upload format (.pdf, .ppt, .pptx) and size (Max 15 MB)
+  static String? validateAiLectureFile({
+    required String fileName,
+    required int fileSizeBytes,
+  }) {
+    final dot = fileName.lastIndexOf('.');
+    final ext = dot == -1 ? '' : fileName.substring(dot + 1).toLowerCase();
+    if (!allowedAiLectureExtensions.contains(ext)) {
+      return "Unsupported file format '.$ext'. Only PDF (.pdf) and PowerPoint (.ppt, .pptx) lecture files are allowed.";
+    }
+    if (fileSizeBytes <= 0) {
+      return 'The selected file is empty (0 bytes). Please choose a valid lecture document.';
+    }
+    if (fileSizeBytes > maxClassworkFileSizeBytes) {
+      final mb = (fileSizeBytes / (1024 * 1024)).toStringAsFixed(2);
+      return 'File size exceeds the 15 MB limit ($mb MB > 15 MB).';
+    }
+    return null;
+  }
+
+  /// Validates Identification Answer Key (short term or phrase only: 2 to 50 characters)
+  static String? validateIdentificationAnswerKey(String? value) {
+    final text = (value ?? '').trim();
+    if (text.isEmpty) {
+      return 'Official answer key is required for Identification (2 to 50 characters).';
+    }
+    if (text.length < minIdentificationAnswerLength) {
+      return 'Identification answer key must be at least $minIdentificationAnswerLength characters.';
+    }
+    if (text.length > maxIdentificationAnswerLength) {
+      return 'Identification answer key must be a short term or phrase ($minIdentificationAnswerLength to $maxIdentificationAnswerLength characters max).';
+    }
+    return null;
+  }
+
+  /// Validates Multiple Choice options (all 4 non-empty, 1 to 180 chars, no duplicates)
+  static String? validateMcqChoices(List<String> choices) {
+    if (choices.length < 4) {
+      return 'All 4 choices (A, B, C, D) are required.';
+    }
+    final normalized = <String>{};
+    for (int i = 0; i < 4; i++) {
+      final trimmed = choices[i].trim();
+      final label = const ['A', 'B', 'C', 'D'][i];
+      if (trimmed.length < minMcqChoiceLength) {
+        return 'Choice $label cannot be empty.';
+      }
+      if (trimmed.length > maxMcqChoiceLength) {
+        return 'Choice $label must not exceed $maxMcqChoiceLength characters.';
+      }
+      final lower = trimmed.toLowerCase();
+      if (!normalized.add(lower)) {
+        return 'Duplicate choices are not allowed. All 4 options (A, B, C, D) must be unique.';
+      }
     }
     return null;
   }

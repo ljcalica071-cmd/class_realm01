@@ -865,7 +865,30 @@ class AdminRepository {
         return b.loginAt.compareTo(a.loginAt);
       });
 
-      return deduplicatedLogs;
+      // Filter strictly by local calendar date bounds to guarantee zero timezone leakage
+      final localStartDate = startDate != null
+          ? DateTime(startDate.year, startDate.month, startDate.day)
+          : null;
+      final localEndDate = endDate != null
+          ? DateTime(endDate.year, endDate.month, endDate.day)
+          : null;
+
+      final boundedLogs = deduplicatedLogs.where((log) {
+        final logDay = DateTime(
+          log.loginAt.year,
+          log.loginAt.month,
+          log.loginAt.day,
+        );
+        if (localStartDate != null && logDay.isBefore(localStartDate)) {
+          return false;
+        }
+        if (localEndDate != null && logDay.isAfter(localEndDate)) {
+          return false;
+        }
+        return true;
+      }).toList();
+
+      return boundedLogs;
     } catch (e) {
       debugPrint('AdminRepository getTeacherSessionLogs error: $e');
       return [];
@@ -901,7 +924,21 @@ class AdminRepository {
           .eq('users.is_archived', false)
           .inFilter('teacher_id', activeTeacherIds);
 
-      final teachers = (teachersRes as List);
+      final teachers = (teachersRes as List).toList();
+      teachers.sort((a, b) {
+        final fnA = (a['first_name']?.toString() ?? '').toLowerCase();
+        final fnB = (b['first_name']?.toString() ?? '').toLowerCase();
+        final aIsNaruto = fnA.contains('naruto');
+        final bIsNaruto = fnB.contains('naruto');
+        if (aIsNaruto && !bIsNaruto) return -1;
+        if (!aIsNaruto && bIsNaruto) return 1;
+
+        final lnA = (a['last_name']?.toString() ?? '').toLowerCase();
+        final lnB = (b['last_name']?.toString() ?? '').toLowerCase();
+        final cmp = lnA.compareTo(lnB);
+        if (cmp != 0) return cmp;
+        return fnA.compareTo(fnB);
+      });
 
       // 2. Get subject offerings counts for active school year
       final offeringsRes = await _client

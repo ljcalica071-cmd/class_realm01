@@ -73,7 +73,7 @@ class StudentAssessmentScreen extends StatefulWidget {
       final client = SupabaseService().client;
       final activeAttempt = await client
           .from('assessment_attempts')
-          .select('assessment_id, started_at, active_session_id')
+          .select('assessment_id, started_at')
           .eq('student_id', studentId)
           .eq('status', 'in_progress')
           .order('started_at', ascending: false)
@@ -412,7 +412,7 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
       if (!_isSupabaseReady) return;
       final prior = await SupabaseService().client
           .from('assessment_attempts')
-          .select('status, started_at, active_session_id')
+          .select('status, started_at')
           .eq('assessment_id', widget.assessment.id)
           .eq('student_id', studentId)
           .maybeSingle();
@@ -425,8 +425,7 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
         setState(() {
           _rulesAccepted = true;
           _currentStep = 1;
-          _mySessionId =
-              prior['active_session_id']?.toString() ??
+          _mySessionId ??=
               'sess_${DateTime.now().millisecondsSinceEpoch}_${Random().nextInt(999999)}';
           if (serverStart != null) {
             _startTime = serverStart.toLocal();
@@ -535,11 +534,11 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
     try {
       final row = await SupabaseService().client
           .from('assessment_attempts')
-          .select('status, active_session_id')
+          .select('status')
           .eq('assessment_id', widget.assessment.id)
           .eq('student_id', studentId)
           .maybeSingle()
-          .timeout(const Duration(seconds: 2));
+          .timeout(const Duration(seconds: 4));
 
       if (!mounted) return;
       if (_isOffline || _isConnectionFrozen) {
@@ -563,17 +562,23 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
             'This $_assessmentLabel session was disqualified by your proctor.',
           );
           return;
-        } else if (_mySessionId != null &&
-            row['active_session_id'] != null &&
-            row['active_session_id'] != _mySessionId &&
-            st == 'in_progress') {
-          _handleDualDeviceDetected();
-          return;
         }
       }
 
       if (_pendingOfflineSync && !_isSubmitting) {
         _submitAssessment(autoSubmit: true);
+      }
+    } on PostgrestException catch (_) {
+      // Database/schema/RLS response means the device IS connected to the server
+      if (!mounted) return;
+      if (_isOffline || _isConnectionFrozen) {
+        setState(() {
+          _isOffline = false;
+          _isConnectionFrozen = false;
+          _offlineSeconds = 0;
+          _reconnectWindowSeconds = 60;
+          _isReconnectTimedOut = false;
+        });
       }
     } catch (_) {
       if (!mounted) return;
@@ -660,11 +665,6 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
                   _handleTeacherReset(
                     'Instructor reset attempt.',
                   );
-                } else if (_mySessionId != null &&
-                    rec['active_session_id'] != null &&
-                    rec['active_session_id'] != _mySessionId &&
-                    rec['status'] == 'in_progress') {
-                  _handleDualDeviceDetected();
                 }
               }
             },
@@ -710,50 +710,6 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
             },
             child: const Text(
               'Return to Dashboard',
-              style: TextStyle(color: Colors.white),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _handleDualDeviceDetected() {
-    if (!mounted) return;
-    _timer?.cancel();
-    _heartbeatTimer?.cancel();
-    _offlineRetryTimer?.cancel();
-    _clearVault();
-    setState(() {
-      _isSubmitting = true;
-    });
-    _recordViolation('Concurrent login session detected on another device');
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        title: const Row(
-          children: [
-            Icon(Icons.devices_other, color: AppTheme.catRed),
-            SizedBox(width: 8),
-            Text(
-              'Session Conflict',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-          ],
-        ),
-        content: Text(
-          'Another device has logged into this $_assessmentLabel session. Concurrent device testing is strictly prohibited for test security. Your session on this device has been halted.',
-        ),
-        actions: [
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.catRed),
-            onPressed: () {
-              Navigator.of(ctx).pop();
-              Navigator.of(context).pop();
-            },
-            child: const Text(
-              'Exit Assessment',
               style: TextStyle(color: Colors.white),
             ),
           ),
@@ -1310,91 +1266,123 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final isMobile = screenWidth < 600;
+    final primaryColor = Theme.of(context).colorScheme.primary;
+    final onSurface = Theme.of(context).colorScheme.onSurface;
+
     return Scaffold(
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        title: Text(widget.assessment.title),
-        backgroundColor: widget.assessment.isExam
-            ? AppTheme.catRed
-            : Theme.of(context).colorScheme.primary,
-        foregroundColor: Theme.of(context).colorScheme.onPrimary,
+        toolbarHeight: 50,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        backgroundColor: isDark ? const Color(0xFF1F2937) : Colors.white,
+        foregroundColor: onSurface,
+        titleSpacing: 4,
+        title: Text(
+          widget.assessment.title,
+          style: TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w700,
+            color: onSurface,
+          ),
+        ),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Container(
+            height: 1,
+            color: onSurface.withValues(alpha: 0.08),
+          ),
+        ),
       ),
       body: PopScope(
         canPop: _currentStep != 1,
         onPopInvokedWithResult: (didPop, _) {
-          if (didPop) return;
-          AppModals.showWarningDialog(
-            context: context,
-            title: '$_assessmentTitleLabel In Progress',
-            message:
-                'You cannot leave the assessment while the $_assessmentLabel timer is actively running. Please complete or submit your $_assessmentLabel.',
-          );
+          // Non-intrusive: prevent back navigation while answering without showing a blocking modal
         },
-        child: Stack(
-          children: [
-            Container(
-              color: Theme.of(context).scaffoldBackgroundColor,
-              child: Center(
-                child: Container(
-                  constraints: const BoxConstraints(maxWidth: 800),
-                  margin: const EdgeInsets.all(24),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.surface,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color: Theme.of(context).colorScheme.onSurface
-                          .withValues(alpha: 0.12),
-                    ),
-                  ),
-                  child: Column(
-                    children: [
-                      if (_currentStep == 0) _buildRulesView(),
-                      if (_currentStep == 1) _buildAnsweringView(),
-                      if (_currentStep == 2) _buildResultView(),
-                    ],
-                  ),
+        child: Container(
+          color: Theme.of(context).scaffoldBackgroundColor,
+          child: Center(
+            child: Container(
+              constraints: const BoxConstraints(maxWidth: 760),
+              margin: EdgeInsets.symmetric(
+                horizontal: isMobile ? 12 : 24,
+                vertical: isMobile ? 12 : 20,
+              ),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surface,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: onSurface.withValues(alpha: 0.1),
                 ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: isDark ? 0.18 : 0.04),
+                    blurRadius: 16,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: Column(
+                children: [
+                  if (_currentStep == 0) _buildRulesView(isMobile, primaryColor, onSurface),
+                  if (_currentStep == 1) _buildAnsweringView(isMobile, primaryColor, onSurface),
+                  if (_currentStep == 2) _buildResultView(isMobile, primaryColor, onSurface),
+                ],
               ),
             ),
-          ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildRulesView() {
+  Widget _buildRulesView(bool isMobile, Color primaryColor, Color onSurface) {
     return Expanded(
       child: SingleChildScrollView(
-        padding: const EdgeInsets.all(32),
+        padding: EdgeInsets.all(isMobile ? 18 : 28),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                Icon(
-                  widget.assessment.isExam ? Icons.description : Icons.quiz,
-                  color: widget.assessment.isExam
-                      ? AppTheme.catRed
-                      : Theme.of(context).colorScheme.primary,
-                  size: 32,
+                Container(
+                  width: 38,
+                  height: 38,
+                  decoration: BoxDecoration(
+                    color: primaryColor.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(
+                    widget.assessment.isExam
+                        ? Icons.assignment_outlined
+                        : Icons.quiz_outlined,
+                    color: primaryColor,
+                    size: 20,
+                  ),
                 ),
-                const SizedBox(width: 14),
+                const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         widget.assessment.title,
-                        style: const TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: onSurface,
                         ),
                       ),
+                      const SizedBox(height: 2),
                       Text(
-                        'Subject: ${widget.assessment.subject} • Section: ${widget.assessment.section}',
+                        '${widget.assessment.subject} • ${widget.assessment.section}',
                         style: TextStyle(
-                          color: Theme.of(context).colorScheme.onSurface
-                              .withValues(alpha: 0.6),
-                          fontSize: 13,
+                          color: onSurface.withValues(alpha: 0.6),
+                          fontSize: 12,
                         ),
                       ),
                     ],
@@ -1402,25 +1390,25 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
                 ),
               ],
             ),
-            const Divider(height: 32),
+            const Divider(height: 24),
             if (widget.assessment.description.trim().isNotEmpty) ...[
-              const Text(
-                'Teacher Instructions & Guidelines:',
-                style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+              Text(
+                'Teacher Instructions & Guidelines',
+                style: TextStyle(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w700,
+                  color: onSurface,
+                ),
               ),
               const SizedBox(height: 6),
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Theme.of(
-                    context,
-                  ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+                  color: onSurface.withValues(alpha: 0.03),
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.outlineVariant.withValues(alpha: 0.5),
+                    color: onSurface.withValues(alpha: 0.08),
                   ),
                 ),
                 child: ExpandableInstructionsText(
@@ -1429,11 +1417,15 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
               ),
               const SizedBox(height: 16),
             ],
-            const Text(
+            Text(
               'Assessment Rules & Guidelines:',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                color: onSurface,
+              ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 10),
             _buildRuleBullet(
               'Time Limit: ${widget.assessment.durationMinutes} minutes timer.',
             ),
@@ -1441,7 +1433,7 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
               'Total Questions: ${_orderedQuestions.length} items (${widget.assessment.totalPoints.toInt()} total points).',
             ),
             _buildRuleBullet(
-              'Mandatory Answers: Blank questions cannot be submitted manually. For identification questions where you do not know the answer, please enter "N/A".',
+              'Mandatory Answers: Blank questions cannot be submitted manually. For identification questions where you do not know the answer, enter "N/A".',
             ),
             _buildRuleBullet(
               'Internet Requirement: Active internet connection required throughout the assessment.',
@@ -1449,29 +1441,38 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
             _buildRuleBullet(
               'Anti-Cheating Policy: Switching tabs or minimizing the browser will be recorded as a violation for teacher review.',
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 18),
             Material(
               color: Colors.transparent,
               child: CheckboxListTile(
                 contentPadding: EdgeInsets.zero,
-                title: const Text(
+                dense: true,
+                controlAffinity: ListTileControlAffinity.leading,
+                title: Text(
                   'I have read and understood the assessment rules and guidelines.',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 12.5,
+                    color: onSurface,
+                  ),
                 ),
                 value: _rulesAccepted,
-                activeColor: Theme.of(context).colorScheme.primary,
+                activeColor: primaryColor,
                 onChanged: (val) => setState(() => _rulesAccepted = val ?? false),
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 14),
             SizedBox(
               width: double.infinity,
-              height: 48,
+              height: 40,
               child: ElevatedButton(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: widget.assessment.isExam
-                      ? AppTheme.catRed
-                      : Theme.of(context).colorScheme.primary,
+                  backgroundColor: primaryColor,
+                  foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
                 ),
                 onPressed: _rulesAccepted
                     ? () async {
@@ -1480,20 +1481,20 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
                           AppModals.showErrorDialog(
                             context: context,
                             title: 'Assessment Locked',
-                            message: 'You cannot start this assessment yet. It is scheduled to begin later.',
+                            message:
+                                'You cannot start this assessment yet. It is scheduled to begin later.',
                           );
                           return;
                         }
 
                         final user = AuthRepository.instance.currentUser;
                         final studentId = user?.id ?? 'student';
-                        // Check prior attempt status to prevent multiple submissions or bypass
                         if (_isSupabaseReady) {
                           try {
                             final client = SupabaseService().client;
                             final prior = await client
                                 .from('assessment_attempts')
-                                .select('status, active_session_id')
+                                .select('status')
                                 .eq('assessment_id', widget.assessment.id)
                                 .eq('student_id', studentId)
                                 .maybeSingle();
@@ -1505,7 +1506,8 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
                                 AppModals.showWarningDialog(
                                   context: context,
                                   title: 'Assessment Already Submitted',
-                                  message: 'You have already completed and submitted this assessment.',
+                                  message:
+                                      'You have already completed and submitted this assessment.',
                                 );
                                 return;
                               } else if (st == 'disqualified') {
@@ -1513,23 +1515,27 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
                                 AppModals.showErrorDialog(
                                   context: context,
                                   title: 'Session Disqualified',
-                                  message: 'This assessment attempt was previously disqualified by your proctor.',
+                                  message:
+                                      'This assessment attempt was previously disqualified by your proctor.',
                                 );
                                 return;
                               }
                             }
 
-                            _mySessionId = 'sess_${DateTime.now().millisecondsSinceEpoch}_${Random().nextInt(999999)}';
+                            _mySessionId =
+                                'sess_${DateTime.now().millisecondsSinceEpoch}_${Random().nextInt(999999)}';
                             await client.from('assessment_attempts').upsert({
                               'assessment_id': widget.assessment.id,
                               'student_id': studentId,
                               'attempt_number': 1,
                               'status': 'in_progress',
-                              'active_session_id': _mySessionId,
-                              'started_at': DateTime.now().toUtc().toIso8601String(),
+                              'started_at':
+                                  DateTime.now().toUtc().toIso8601String(),
                             }, onConflict: 'assessment_id,student_id,attempt_number');
                           } catch (sessErr) {
-                            debugPrint('Notice establishing active exam session: $sessErr');
+                            debugPrint(
+                              'Notice establishing active exam session: $sessErr',
+                            );
                           }
                         }
 
@@ -1559,8 +1565,9 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
                 child: const Text(
                   'START ASSESSMENT',
                   style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1.2,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.5,
                   ),
                 ),
               ),
@@ -1572,20 +1579,31 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
   }
 
   Widget _buildRuleBullet(String text) {
+    final onSurface = Theme.of(context).colorScheme.onSurface;
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.only(bottom: 6),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.arrow_right, color: Theme.of(context).colorScheme.primary),
-          const SizedBox(width: 6),
+          Padding(
+            padding: const EdgeInsets.only(top: 5),
+            child: Container(
+              width: 5,
+              height: 5,
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.primary,
+                shape: BoxShape.circle,
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
           Expanded(
             child: Text(
               text,
               style: TextStyle(
-                fontSize: 14,
-                color: Theme.of(context).colorScheme.onSurface
-                    .withValues(alpha: 0.6),
+                fontSize: 13,
+                height: 1.4,
+                color: onSurface.withValues(alpha: 0.72),
               ),
             ),
           ),
@@ -1594,7 +1612,11 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
     );
   }
 
-  Widget _buildAnsweringView() {
+  Widget _buildAnsweringView(
+    bool isMobile,
+    Color primaryColor,
+    Color onSurface,
+  ) {
     final q = _orderedQuestions[_currentQuestionIndex];
     final totalQ = _orderedQuestions.length;
     final answeredCount = _orderedQuestions
@@ -1603,308 +1625,705 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
     final unansweredCount = totalQ - answeredCount;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final canSubmit = answeredCount == totalQ;
+    final isLowTime = _secondsRemaining <= 60;
 
     return Expanded(
-      child: Column(
+      child: Stack(
         children: [
-          // Top Navigation Bar inside assessment: Question indicator, Answered/Unanswered chips, Timer
-          Container(
-            padding: const EdgeInsets.fromLTRB(20, 12, 20, 10),
-            decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC),
-              border: Border(
-                bottom: BorderSide(
-                  color: Theme.of(context).colorScheme.onSurface
-                      .withValues(alpha: 0.1),
+          Column(
+            children: [
+              // 30% Secondary Surface Header Bar: Question indicator, Answered/Unanswered chips, Timer
+              Container(
+                padding: EdgeInsets.fromLTRB(
+                  isMobile ? 14 : 20,
+                  10,
+                  isMobile ? 14 : 20,
+                  10,
                 ),
-              ),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Top Row: Question Counter, Answered Badge, Unanswered Badge, Timer
-                Wrap(
-                  alignment: WrapAlignment.spaceBetween,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  spacing: 10,
-                  runSpacing: 8,
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? const Color(0xFF1F2937)
+                      : const Color(0xFFF8FAFC),
+                  border: Border(
+                    bottom: BorderSide(
+                      color: onSurface.withValues(alpha: 0.08),
+                    ),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Wrap(
+                      alignment: WrapAlignment.spaceBetween,
+                      crossAxisAlignment: WrapCrossAlignment.center,
                       spacing: 8,
                       runSpacing: 6,
-                      crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
-                        Text(
-                          'Question ${_currentQuestionIndex + 1} of $totalQ',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
-                          ),
-                        ),
-                        // Answered Badge
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 3,
-                          ),
-                          decoration: BoxDecoration(
-                            color: answeredCount == totalQ
-                                ? AppTheme.catGreen.withValues(alpha: 0.12)
-                                : AppTheme.catOrange.withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                              color: answeredCount == totalQ
-                                  ? AppTheme.catGreen.withValues(alpha: 0.3)
-                                  : AppTheme.catOrange.withValues(alpha: 0.3),
-                            ),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                Icons.check_circle_outline,
-                                size: 13,
-                                color: answeredCount == totalQ
-                                    ? AppTheme.catGreen
-                                    : AppTheme.catOrange,
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            Text(
+                              'Question ${_currentQuestionIndex + 1} of $totalQ',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 13,
+                                color: onSurface,
                               ),
-                              const SizedBox(width: 4),
-                              Text(
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 7,
+                                vertical: 2.5,
+                              ),
+                              decoration: BoxDecoration(
+                                color: primaryColor.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
                                 '$answeredCount / $totalQ answered',
                                 style: TextStyle(
                                   fontSize: 11,
-                                  fontWeight: FontWeight.bold,
-                                  color: answeredCount == totalQ
-                                      ? AppTheme.catGreen
-                                      : AppTheme.catOrange,
+                                  fontWeight: FontWeight.w600,
+                                  color: primaryColor,
                                 ),
                               ),
-                            ],
-                          ),
-                        ),
-                        // Unanswered Badge
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 3,
-                          ),
-                          decoration: BoxDecoration(
-                            color: unansweredCount > 0
-                                ? AppTheme.catOrange.withValues(alpha: 0.12)
-                                : AppTheme.catSlate.withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                              color: unansweredCount > 0
-                                  ? AppTheme.catOrange.withValues(alpha: 0.3)
-                                  : AppTheme.catSlate.withValues(alpha: 0.3),
                             ),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                unansweredCount > 0
-                                    ? Icons.radio_button_unchecked
-                                    : Icons.task_alt,
-                                size: 13,
-                                color: unansweredCount > 0
-                                    ? AppTheme.catOrange
-                                    : AppTheme.catSlate,
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                '$unansweredCount unanswered',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.bold,
-                                  color: unansweredCount > 0
-                                      ? AppTheme.catOrange
-                                      : AppTheme.catSlate,
+                            if (unansweredCount > 0)
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 7,
+                                  vertical: 2.5,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: onSurface.withValues(alpha: 0.06),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  '$unansweredCount left',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: onSurface.withValues(alpha: 0.65),
+                                  ),
                                 ),
                               ),
-                            ],
-                          ),
+                          ],
+                        ),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.timer_outlined,
+                              size: 14,
+                              color: isLowTime
+                                  ? AppTheme.catRed
+                                  : primaryColor,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              _formatTime(_secondsRemaining),
+                              style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 12,
+                                color: isLowTime
+                                    ? AppTheme.catRed
+                                    : onSurface.withValues(alpha: 0.85),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Text(
+                              'Violations: $_violations',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 11,
+                                color: _violations > 0
+                                    ? AppTheme.catRed
+                                    : onSurface.withValues(alpha: 0.5),
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(
-                          Icons.timer_outlined,
-                          size: 16,
-                          color: AppTheme.catOrange,
-                        ),
-                        const SizedBox(width: 5),
-                        Text(
-                          '${_formatTime(_secondsRemaining)} remaining',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 13,
-                            color: AppTheme.catOrange,
-                          ),
-                        ),
-                        const SizedBox(width: 14),
-                        Text(
-                          'Violations: $_violations',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12,
-                            color: AppTheme.catRed,
-                          ),
-                        ),
-                      ],
+                    const SizedBox(height: 8),
+                    // Compact Question Pill Navigator
+                    SizedBox(
+                      height: 28,
+                      child: ListView.separated(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: totalQ,
+                        separatorBuilder: (_, _) => const SizedBox(width: 5),
+                        itemBuilder: (ctx, idx) {
+                          final itemQ = _orderedQuestions[idx];
+                          final isAnswered =
+                              (_studentAnswers[itemQ.id] ?? '')
+                                  .trim()
+                                  .isNotEmpty;
+                          final isCurrent = idx == _currentQuestionIndex;
+
+                          Color pillBg;
+                          Color pillBorder;
+                          Color pillText;
+
+                          if (isCurrent) {
+                            pillBg = primaryColor;
+                            pillBorder = primaryColor;
+                            pillText = Theme.of(context).colorScheme.onPrimary;
+                          } else if (isAnswered) {
+                            pillBg = primaryColor.withValues(alpha: 0.12);
+                            pillBorder = primaryColor.withValues(alpha: 0.35);
+                            pillText = primaryColor;
+                          } else {
+                            pillBg = isDark
+                                ? const Color(0xFF111827)
+                                : Colors.white;
+                            pillBorder = onSurface.withValues(alpha: 0.14);
+                            pillText = onSurface.withValues(alpha: 0.65);
+                          }
+
+                          return InkWell(
+                            onTap: () {
+                              setState(() => _currentQuestionIndex = idx);
+                              _saveVault();
+                            },
+                            borderRadius: BorderRadius.circular(6),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 9,
+                              ),
+                              alignment: Alignment.center,
+                              decoration: BoxDecoration(
+                                color: pillBg,
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(
+                                  color: pillBorder,
+                                  width: isCurrent ? 1.4 : 1.0,
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (isAnswered && !isCurrent) ...[
+                                    Icon(
+                                      Icons.check,
+                                      size: 11,
+                                      color: primaryColor,
+                                    ),
+                                    const SizedBox(width: 2),
+                                  ],
+                                  Text(
+                                    'Q${idx + 1}',
+                                    style: TextStyle(
+                                      color: pillText,
+                                      fontWeight: isCurrent
+                                          ? FontWeight.w700
+                                          : FontWeight.w600,
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 10),
-                // Horizontal Question Indicator Bar (Scrollable Dot/Pill Navigator)
-                SizedBox(
-                  height: 32,
-                  child: ListView.separated(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: totalQ,
-                    separatorBuilder: (_, _) => const SizedBox(width: 6),
-                    itemBuilder: (ctx, idx) {
-                      final itemQ = _orderedQuestions[idx];
-                      final isAnswered =
-                          (_studentAnswers[itemQ.id] ?? '').trim().isNotEmpty;
-                      final isCurrent = idx == _currentQuestionIndex;
+              ),
 
-                      Color pillBg;
-                      Color pillBorder;
-                      Color pillText;
-
-                      if (isCurrent) {
-                        pillBg = Theme.of(context).colorScheme.primary;
-                        pillBorder = Theme.of(context).colorScheme.primary;
-                        pillText = Theme.of(context).colorScheme.onPrimary;
-                      } else if (isAnswered) {
-                        pillBg = AppTheme.catGreen.withValues(alpha: 0.12);
-                        pillBorder = AppTheme.catGreen.withValues(alpha: 0.4);
-                        pillText = AppTheme.catGreen;
-                      } else {
-                        pillBg = isDark
-                            ? const Color(0xFF0F172A)
-                            : const Color(0xFFFFFFFF);
-                        pillBorder = Theme.of(context).colorScheme.onSurface
-                            .withValues(alpha: 0.18);
-                        pillText = Theme.of(context).colorScheme.onSurface
-                            .withValues(alpha: 0.7);
-                      }
-
-                      return InkWell(
-                        onTap: () {
-                          setState(() => _currentQuestionIndex = idx);
-                          _saveVault();
-                        },
-                        borderRadius: BorderRadius.circular(6),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10),
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            color: pillBg,
-                            borderRadius: BorderRadius.circular(6),
-                            border: Border.all(
-                              color: pillBorder,
-                              width: isCurrent ? 1.8 : 1.0,
+              // Question Content
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: EdgeInsets.fromLTRB(
+                    isMobile ? 16 : 24,
+                    isMobile ? 16 : 22,
+                    isMobile ? 16 : 24,
+                    12,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 3,
+                            ),
+                            decoration: BoxDecoration(
+                              color: primaryColor.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              '${q.points.round()} ${q.points.round() == 1 ? 'Point' : 'Points'}',
+                              style: TextStyle(
+                                color: primaryColor,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 11,
+                              ),
                             ),
                           ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              if (isAnswered && !isCurrent) ...[
-                                const Icon(
-                                  Icons.check,
-                                  size: 12,
-                                  color: AppTheme.catGreen,
+                          const SizedBox(width: 8),
+                          Text(
+                            q.type.name.toUpperCase(),
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: onSurface.withValues(alpha: 0.5),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        q.questionText,
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          height: 1.45,
+                          color: onSurface,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Choices or text input
+                      if (q.type == QuestionType.multipleChoice ||
+                          q.type == QuestionType.trueFalse) ...[
+                        ...q.choices.map((choice) {
+                          final isSelected = _studentAnswers[q.id] == choice;
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: InkWell(
+                              onTap: () {
+                                setState(() {
+                                  _studentAnswers[q.id] = choice;
+                                  _saveVault();
+                                });
+                              },
+                              borderRadius: BorderRadius.circular(10),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                  vertical: 11,
                                 ),
-                                const SizedBox(width: 3),
-                              ],
-                              Text(
-                                'Q${idx + 1}',
-                                style: TextStyle(
-                                  color: pillText,
-                                  fontWeight: isCurrent
-                                      ? FontWeight.w800
-                                      : FontWeight.bold,
-                                  fontSize: 11,
+                                decoration: BoxDecoration(
+                                  color: isSelected
+                                      ? primaryColor.withValues(alpha: 0.08)
+                                      : (isDark
+                                            ? const Color(0xFF1F2937)
+                                                  .withValues(alpha: 0.5)
+                                            : Colors.white),
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(
+                                    color: isSelected
+                                        ? primaryColor
+                                        : onSurface.withValues(alpha: 0.12),
+                                    width: isSelected ? 1.5 : 1,
+                                  ),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      width: 18,
+                                      height: 18,
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        border: Border.all(
+                                          color: isSelected
+                                              ? primaryColor
+                                              : onSurface.withValues(
+                                                  alpha: 0.35,
+                                                ),
+                                          width: isSelected ? 5 : 1.5,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Text(
+                                        choice,
+                                        style: TextStyle(
+                                          fontSize: 13.5,
+                                          height: 1.35,
+                                          fontWeight: isSelected
+                                              ? FontWeight.w600
+                                              : FontWeight.w400,
+                                          color: onSurface,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
-                            ],
-                          ),
+                            ),
+                          );
+                        }),
+                      ] else if (q.type == QuestionType.matching) ...[
+                        Column(
+                          children: q.matchingPairs.keys.map((left) {
+                            final options = q.matchingPairs.values.toList();
+                            final current = _studentAnswers[q.id]
+                                ?.split('|')
+                                .firstWhere(
+                                  (entry) => entry.startsWith('$left='),
+                                  orElse: () => '',
+                                )
+                                .split('=')
+                                .skip(1)
+                                .join('=');
+                            return DropdownButtonFormField<String>(
+                              initialValue: options.contains(current)
+                                  ? current
+                                  : null,
+                              decoration: InputDecoration(labelText: left),
+                              items: options
+                                  .map(
+                                    (option) => DropdownMenuItem(
+                                      value: option,
+                                      child: Text(option),
+                                    ),
+                                  )
+                                  .toList(),
+                              onChanged: (value) {
+                                if (value == null) return;
+                                final answers = (_studentAnswers[q.id] ?? '')
+                                    .split('|')
+                                    .where(
+                                      (entry) =>
+                                          entry.isNotEmpty &&
+                                          !entry.startsWith('$left='),
+                                    )
+                                    .toList();
+                                answers.add('$left=$value');
+                                setState(() {
+                                  _studentAnswers[q.id] = answers.join('|');
+                                  _saveVault();
+                                });
+                              },
+                            );
+                          }).toList(),
                         ),
-                      );
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          if ((_isOffline || _pendingOfflineSync) && !_isConnectionFrozen)
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-              decoration: BoxDecoration(
-                color: _pendingOfflineSync
-                    ? AppTheme.catRed.withValues(alpha: 0.14)
-                    : AppTheme.catOrange.withValues(alpha: 0.14),
-                border: Border(
-                  bottom: BorderSide(
-                    color: _pendingOfflineSync
-                        ? AppTheme.catRed.withValues(alpha: 0.35)
-                        : AppTheme.catOrange.withValues(alpha: 0.35),
+                      ] else ...[
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Wrap(
+                              alignment: WrapAlignment.spaceBetween,
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: [
+                                Text(
+                                  'Your Answer:',
+                                  style: TextStyle(
+                                    fontSize: 12.5,
+                                    fontWeight: FontWeight.w600,
+                                    color: onSurface,
+                                  ),
+                                ),
+                                InkWell(
+                                  onTap: () {
+                                    final ctrl = _getTextController(q.id);
+                                    ctrl.text = 'N/A';
+                                    ctrl.selection = TextSelection.fromPosition(
+                                      const TextPosition(offset: 3),
+                                    );
+                                    setState(() {
+                                      _studentAnswers[q.id] = 'N/A';
+                                      _saveVault();
+                                    });
+                                  },
+                                  borderRadius: BorderRadius.circular(6),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 9,
+                                      vertical: 4,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: primaryColor.withValues(
+                                        alpha: 0.1,
+                                      ),
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(
+                                        color: primaryColor.withValues(
+                                          alpha: 0.25,
+                                        ),
+                                      ),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          Icons.not_interested,
+                                          size: 12,
+                                          color: primaryColor,
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          "Insert 'N/A' (I don't know)",
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w600,
+                                            color: primaryColor,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            TextField(
+                              controller: _getTextController(q.id),
+                              style: const TextStyle(fontSize: 13.5),
+                              onChanged: (val) {
+                                setState(() {
+                                  _studentAnswers[q.id] = val;
+                                  _saveVault();
+                                });
+                              },
+                              decoration: InputDecoration(
+                                isDense: true,
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                  vertical: 12,
+                                ),
+                                labelText: 'Type your answer here',
+                                labelStyle: const TextStyle(fontSize: 13),
+                                hintText:
+                                    "Enter answer (or type 'N/A' if unknown)",
+                                hintStyle: const TextStyle(fontSize: 12.5),
+                                helperText:
+                                    "Blank answers are prohibited on submission. Enter 'N/A' if unknown.",
+                                helperMaxLines: 2,
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ],
                   ),
                 ),
               ),
-              child: Row(
-                children: [
-                  SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(
-                        _pendingOfflineSync
-                            ? AppTheme.catRed
-                            : AppTheme.catOrange,
+
+              // Unboxed Previous / Next Navigation Row (directly in layout flow, no bottom box)
+              Padding(
+                padding: EdgeInsets.fromLTRB(
+                  isMobile ? 16 : 24,
+                  6,
+                  isMobile ? 16 : 24,
+                  isMobile ? 14 : 18,
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    SizedBox(
+                      height: 36,
+                      child: OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: _currentQuestionIndex > 0
+                              ? onSurface.withValues(alpha: 0.85)
+                              : onSurface.withValues(alpha: 0.3),
+                          side: BorderSide.none,
+                          backgroundColor: Colors.transparent,
+                          elevation: 0,
+                          padding: const EdgeInsets.symmetric(horizontal: 10),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        icon: const Icon(Icons.arrow_back_rounded, size: 15),
+                        label: const Text(
+                          'Previous',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        onPressed: _currentQuestionIndex > 0
+                            ? () {
+                                setState(() => _currentQuestionIndex--);
+                                _saveVault();
+                              }
+                            : null,
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 10),
-                  Icon(
-                    Icons.wifi_off_rounded,
-                    size: 18,
-                    color: _pendingOfflineSync
-                        ? AppTheme.catRed
-                        : AppTheme.catOrange,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      _pendingOfflineSync
-                          ? 'No or poor internet connection — Reconnecting to submit your $_assessmentLabel... Your answers are safely saved on this device.'
-                          : 'Unstable internet connection — Reconnecting... (${_offlineSeconds}s)',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: _pendingOfflineSync
-                            ? AppTheme.catRed
-                            : AppTheme.catOrange,
+                    Flexible(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        child: Text(
+                          canSubmit
+                              ? 'All $totalQ answered'
+                              : '${_currentQuestionIndex + 1} / $totalQ',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w600,
+                            color: onSurface.withValues(alpha: 0.5),
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
                     ),
+                    if (_currentQuestionIndex < totalQ - 1)
+                      SizedBox(
+                        height: 36,
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: primaryColor,
+                            foregroundColor:
+                                Theme.of(context).colorScheme.onPrimary,
+                            elevation: 0,
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                          onPressed: () {
+                            setState(() => _currentQuestionIndex++);
+                            _saveVault();
+                          },
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                'Next',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              SizedBox(width: 6),
+                              Icon(Icons.arrow_forward_rounded, size: 15),
+                            ],
+                          ),
+                        ),
+                      )
+                    else
+                      SizedBox(
+                        height: 36,
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: canSubmit
+                                ? primaryColor
+                                : onSurface.withValues(alpha: 0.12),
+                            foregroundColor: canSubmit
+                                ? Theme.of(context).colorScheme.onPrimary
+                                : onSurface.withValues(alpha: 0.45),
+                            elevation: 0,
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                          icon: Icon(
+                            canSubmit
+                                ? Icons.check_circle_outline_rounded
+                                : Icons.lock_outline_rounded,
+                            size: 15,
+                          ),
+                          label: Text(
+                            _isSubmitting
+                                ? 'Submitting...'
+                                : (canSubmit
+                                      ? 'Submit Assessment'
+                                      : 'Submit ($unansweredCount Left)'),
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          onPressed: (canSubmit && !_isSubmitting)
+                              ? () => _submitAssessment(autoSubmit: false)
+                              : null,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+
+          // Calm Freeze + Loading Indicator when genuinely disconnected or syncing
+          if (_isConnectionFrozen || _pendingOfflineSync)
+            _buildConnectionFrozenOverlay(primaryColor, onSurface),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildConnectionFrozenOverlay(Color primaryColor, Color onSurface) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Positioned.fill(
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+        child: Container(
+          color: (isDark ? const Color(0xCC111827) : const Color(0xCCFFFFFF)),
+          alignment: Alignment.center,
+          padding: const EdgeInsets.all(24),
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 320),
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF1F2937) : Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: onSurface.withValues(alpha: 0.1),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.08),
+                  blurRadius: 20,
+                  offset: const Offset(0, 6),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(
+                  width: 26,
+                  height: 26,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.5,
+                    valueColor: AlwaysStoppedAnimation<Color>(primaryColor),
                   ),
-                  const SizedBox(width: 8),
-                  TextButton.icon(
+                ),
+                const SizedBox(height: 14),
+                Text(
+                  _pendingOfflineSync
+                      ? 'Syncing your responses...'
+                      : 'Reconnecting to server...',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w600,
+                    color: onSurface,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Your progress is safely saved. Please wait a moment.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: onSurface.withValues(alpha: 0.6),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  height: 32,
+                  child: TextButton.icon(
                     style: TextButton.styleFrom(
-                      foregroundColor: _pendingOfflineSync
-                          ? AppTheme.catRed
-                          : AppTheme.catOrange,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 4,
-                      ),
+                      foregroundColor: primaryColor,
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
                     ),
                     onPressed: _isSubmitting
                         ? null
@@ -1915,494 +2334,17 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
                               _checkConnectivityAndSessionStatus();
                             }
                           },
-                    icon: const Icon(Icons.sync_rounded, size: 15),
-                    label: Text(
-                      _pendingOfflineSync ? 'Retry Sync Now' : 'Reconnect',
-                      style: const TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-          // Question Body and Pagination Bar wrapped in Stack with Connection Freeze Overlay
-          Expanded(
-            child: Stack(
-              children: [
-                Column(
-                  children: [
-                    Expanded(
-                      child: SingleChildScrollView(
-                        padding: const EdgeInsets.all(32),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).colorScheme.primary
-                              .withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          '${q.points.round()} ${q.points.round() == 1 ? 'Point' : 'Points'}',
-                          style: TextStyle(
-                            color: Theme.of(context).colorScheme.primary,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 11,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Text(
-                        q.type.name.toUpperCase(),
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          color: Theme.of(context).colorScheme.onSurface
-                              .withValues(alpha: 0.6),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    q.questionText,
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Theme.of(context).colorScheme.onSurface,
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-
-                  // Choices or text input
-                  if (q.type == QuestionType.multipleChoice ||
-                      q.type == QuestionType.trueFalse) ...[
-                    ...q.choices.map((choice) {
-                      final isSelected = _studentAnswers[q.id] == choice;
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 12),
-                        decoration: BoxDecoration(
-                          color: isSelected
-                              ? Theme.of(context).colorScheme.primary
-                                    .withValues(alpha: 0.08)
-                              : Theme.of(context).colorScheme.surface,
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
-                            color: isSelected
-                                ? Theme.of(context).colorScheme.primary
-                                : Theme.of(context).colorScheme.onSurface
-                                      .withValues(alpha: 0.12),
-                            width: isSelected ? 2 : 1,
-                          ),
-                        ),
-                        child: Material(
-                          color: Colors.transparent,
-                          child: RadioListTile<String>(
-                            title: Text(
-                              choice,
-                              style: TextStyle(
-                                fontWeight: isSelected
-                                    ? FontWeight.bold
-                                    : FontWeight.normal,
-                              ),
-                            ),
-                            value: choice,
-                            // ignore: deprecated_member_use
-                            groupValue: _studentAnswers[q.id],
-                            activeColor: Theme.of(context).colorScheme.primary,
-                            // ignore: deprecated_member_use
-                            onChanged: (val) {
-                              setState(() {
-                                _studentAnswers[q.id] = val ?? '';
-                                _saveVault();
-                              });
-                            },
-                          ),
-                        ),
-                      );
-                    }),
-                  ] else if (q.type == QuestionType.matching) ...[
-                    Column(
-                      children: q.matchingPairs.keys.map((left) {
-                        final options = q.matchingPairs.values.toList();
-                        final current = _studentAnswers[q.id]
-                            ?.split('|')
-                            .firstWhere(
-                              (entry) => entry.startsWith('$left='),
-                              orElse: () => '',
-                            )
-                            .split('=')
-                            .skip(1)
-                            .join('=');
-                        return DropdownButtonFormField<String>(
-                          initialValue: options.contains(current)
-                              ? current
-                              : null,
-                          decoration: InputDecoration(labelText: left),
-                          items: options
-                              .map(
-                                (option) => DropdownMenuItem(
-                                  value: option,
-                                  child: Text(option),
-                                ),
-                              )
-                              .toList(),
-                          onChanged: (value) {
-                            if (value == null) return;
-                            final answers = (_studentAnswers[q.id] ?? '')
-                                .split('|')
-                                .where(
-                                  (entry) =>
-                                      entry.isNotEmpty &&
-                                      !entry.startsWith('$left='),
-                                )
-                                .toList();
-                            answers.add('$left=$value');
-                            setState(() {
-                              _studentAnswers[q.id] = answers.join('|');
-                              _saveVault();
-                            });
-                          },
-                        );
-                      }).toList(),
-                    ),
-                  ] else ...[
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Wrap(
-                          alignment: WrapAlignment.spaceBetween,
-                          crossAxisAlignment: WrapCrossAlignment.center,
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: [
-                            Text(
-                              'Your Answer:',
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: Theme.of(context).colorScheme.onSurface,
-                              ),
-                            ),
-                            InkWell(
-                              onTap: () {
-                                final ctrl = _getTextController(q.id);
-                                ctrl.text = 'N/A';
-                                ctrl.selection = TextSelection.fromPosition(
-                                  const TextPosition(offset: 3),
-                                );
-                                setState(() {
-                                  _studentAnswers[q.id] = 'N/A';
-                                  _saveVault();
-                                });
-                              },
-                              borderRadius: BorderRadius.circular(6),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 10,
-                                  vertical: 5,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Theme.of(context).colorScheme.primary
-                                      .withValues(alpha: 0.1),
-                                  borderRadius: BorderRadius.circular(6),
-                                  border: Border.all(
-                                    color: Theme.of(context).colorScheme.primary
-                                        .withValues(alpha: 0.3),
-                                  ),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      Icons.not_interested,
-                                      size: 13,
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .primary,
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      "Insert 'N/A' (I don't know)",
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.bold,
-                                        color: Theme.of(context)
-                                            .colorScheme
-                                            .primary,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 10),
-                        TextField(
-                          controller: _getTextController(q.id),
-                          onChanged: (val) {
-                            setState(() {
-                              _studentAnswers[q.id] = val;
-                              _saveVault();
-                            });
-                          },
-                          decoration: InputDecoration(
-                            labelText: 'Type your answer here',
-                            hintText: "Enter answer (or type 'N/A' if unknown)",
-                            helperText: "Required: Blank answers are prohibited on submission. If you do not know the answer, enter 'N/A'.",
-                            helperMaxLines: 2,
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
-
-          // Question Bottom Navigation Bar
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-            decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC),
-              border: Border(
-                top: BorderSide(
-                  color: Theme.of(context).colorScheme.onSurface
-                      .withValues(alpha: 0.12),
-                ),
-              ),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                OutlinedButton.icon(
-                  icon: const Icon(Icons.arrow_back, size: 16),
-                  label: const Text('Previous'),
-                  onPressed: _currentQuestionIndex > 0
-                      ? () {
-                          setState(() => _currentQuestionIndex--);
-                          _saveVault();
-                        }
-                      : null,
-                ),
-                Flexible(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    child: Text(
-                      canSubmit
-                          ? 'All $totalQ items answered'
-                          : '$unansweredCount of $totalQ remaining',
-                      textAlign: TextAlign.center,
+                    icon: const Icon(Icons.refresh_rounded, size: 14),
+                    label: const Text(
+                      'Retry',
                       style: TextStyle(
                         fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: canSubmit ? AppTheme.catGreen : AppTheme.catOrange,
+                        fontWeight: FontWeight.w600,
                       ),
-                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                 ),
-                if (_currentQuestionIndex < totalQ - 1)
-                  AppPrimaryButton(
-                    label: 'Next',
-                    icon: Icons.arrow_forward,
-                    height: 40,
-                    width: 110,
-                    onPressed: () {
-                      setState(() => _currentQuestionIndex++);
-                      _saveVault();
-                    },
-                  )
-                else
-                  AppPrimaryButton(
-                    label: _isSubmitting
-                        ? 'Submitting...'
-                        : (canSubmit
-                            ? 'Submit Assessment'
-                            : 'Submit ($unansweredCount Left)'),
-                    backgroundColor: canSubmit
-                        ? AppTheme.catGreen
-                        : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.12),
-                    icon: canSubmit
-                        ? Icons.check_circle
-                        : Icons.lock_outline,
-                    height: 40,
-                    width: canSubmit ? 180 : 195,
-                    onPressed: (canSubmit && !_isSubmitting)
-                        ? () => _submitAssessment(autoSubmit: false)
-                        : null,
-                  ),
               ],
-            ),
-          ),
-                  ],
-                ),
-                if (_isConnectionFrozen)
-                  _buildConnectionFrozenOverlay(),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildConnectionFrozenOverlay() {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Positioned.fill(
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(16),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-          child: Container(
-            color: (isDark ? const Color(0xF20F172A) : const Color(0xF2FFFFFF)),
-            padding: const EdgeInsets.all(28),
-            child: Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 480),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: AppTheme.catRed.withValues(alpha: 0.12),
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: AppTheme.catRed.withValues(alpha: 0.3),
-                          width: 1.5,
-                        ),
-                      ),
-                      child: const Icon(
-                        Icons.wifi_off_rounded,
-                        size: 44,
-                        color: AppTheme.catRed,
-                      ),
-                    ),
-                    const SizedBox(height: 18),
-                    Text(
-                      'Connection Lost — $_assessmentTitleLabel Paused',
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Offline answering is prohibited to maintain test integrity and prevent unauthorized offline assistance. Question content is temporarily frozen.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 13,
-                        height: 1.45,
-                        color: Theme.of(context)
-                            .colorScheme
-                            .onSurface
-                            .withValues(alpha: 0.75),
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    if (_isReconnectTimedOut) ...[
-                      Container(
-                        padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(
-                          color: AppTheme.catRed.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
-                            color: AppTheme.catRed.withValues(alpha: 0.3),
-                          ),
-                        ),
-                        child: const Row(
-                          children: [
-                            Icon(Icons.lock_clock, size: 20, color: AppTheme.catRed),
-                            SizedBox(width: 10),
-                            Expanded(
-                              child: Text(
-                                'Reconnection grace window expired (60s). This session has been halted for instructor review.',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                  color: AppTheme.catRed,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ] else ...[
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 12,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppTheme.catOrange.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
-                            color: AppTheme.catOrange.withValues(alpha: 0.3),
-                          ),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const SizedBox(
-                              width: 14,
-                              height: 14,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                valueColor: AlwaysStoppedAnimation<Color>(
-                                  AppTheme.catOrange,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Text(
-                              'Reconnection Window: ${_reconnectWindowSeconds}s remaining',
-                              style: const TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.bold,
-                                color: AppTheme.catOrange,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                    const SizedBox(height: 18),
-                    ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.catRed,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 24,
-                          vertical: 12,
-                        ),
-                      ),
-                      onPressed: _checkConnectivityAndSessionStatus,
-                      icon: const Icon(Icons.refresh_rounded, size: 18),
-                      label: const Text(
-                        'Check Connection Now',
-                        style: TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
             ),
           ),
         ),
@@ -2410,7 +2352,7 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
     );
   }
 
-  Widget _buildResultView() {
+  Widget _buildResultView(bool isMobile, Color primaryColor, Color onSurface) {
     final student =
         AuthRepository.instance.currentUser ??
         UserModel(
@@ -2440,150 +2382,157 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
 
     return Expanded(
       child: SingleChildScrollView(
-        padding: const EdgeInsets.all(32),
+        padding: EdgeInsets.all(isMobile ? 20 : 28),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: AppTheme.catGreen.withValues(alpha: 0.1),
+                color: primaryColor.withValues(alpha: 0.12),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(
-                Icons.check_circle,
-                size: 56,
-                color: AppTheme.catGreen,
+              child: Icon(
+                Icons.check_circle_rounded,
+                size: 42,
+                color: primaryColor,
               ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 16),
             Text(
               '$_assessmentTitleLabel Completed & Submitted!',
-              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+              style: TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.w700,
+                color: onSurface,
+              ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 4),
             Text(
               widget.assessment.title,
               style: TextStyle(
-                fontSize: 14,
-                color: Theme.of(context).colorScheme.onSurface
-                    .withValues(alpha: 0.6),
+                fontSize: 13,
+                color: onSurface.withValues(alpha: 0.6),
               ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 20),
 
-            // ALWAYS DISPLAY STUDENT'S OFFICIAL SCORE CARD IMMEDIATELY
+            // Score Card in 60-30-10 Palette
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
               decoration: BoxDecoration(
-                color: Theme.of(context).scaffoldBackgroundColor,
-                borderRadius: BorderRadius.circular(16),
+                color: isDark
+                    ? const Color(0xFF1F2937)
+                    : const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color: const Color(0xFF0F8A48).withValues(alpha: isDark ? 0.4 : 0.25),
-                  width: 1.5,
+                  color: onSurface.withValues(alpha: 0.1),
                 ),
-                boxShadow: [
-                  BoxShadow(
-                    color: const Color(0xFF0F8A48).withValues(alpha: 0.05),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
               ),
               child: Column(
                 children: [
                   Text(
                     'Score Obtained: ${result.scoreEarned.round()} / ${result.totalPoints.round()} pts',
                     style: TextStyle(
-                      fontSize: 26,
-                      fontWeight: FontWeight.bold,
-                      color: isDark ? const Color(0xFF4ADE80) : const Color(0xFF0F8A48),
+                      fontSize: 20,
+                      fontWeight: FontWeight.w700,
+                      color: primaryColor,
                     ),
                   ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 4),
                   Text(
                     'Percentage: ${result.percentage.round()}%',
                     style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.bold,
-                      color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: onSurface.withValues(alpha: 0.7),
                     ),
                   ),
-                  const SizedBox(height: 20),
-                  const Divider(height: 1),
                   const SizedBox(height: 16),
+                  const Divider(height: 1),
+                  const SizedBox(height: 14),
 
-                  // ANSWER KEY REVIEW SECTION: CONTROLLED STRICTLY BY TEACHER TOGGLE
                   if (isReleased) ...[
-                    OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: isDark ? const Color(0xFF4ADE80) : const Color(0xFF0F8A48),
-                        side: BorderSide(
-                          color: isDark ? const Color(0xFF4ADE80) : const Color(0xFF0F8A48),
+                    SizedBox(
+                      height: 36,
+                      child: OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: primaryColor,
+                          side: BorderSide(color: primaryColor),
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
                         ),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 20,
-                          vertical: 12,
-                        ),
-                      ),
-                      onPressed: () {
-                        StudentExamReviewModal.show(
-                          context,
-                          assessmentId: widget.assessment.id,
-                          title: widget.assessment.title,
-                          subjectName: widget.assessment.subject,
-                          maxScore: widget.assessment.totalPoints,
-                        );
-                      },
-                      icon: const Icon(Icons.fact_check_outlined, size: 18),
-                      label: const Text(
-                        'Review Questions & Answer Key',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
+                        onPressed: () {
+                          StudentExamReviewModal.show(
+                            context,
+                            assessmentId: widget.assessment.id,
+                            title: widget.assessment.title,
+                            subjectName: widget.assessment.subject,
+                            maxScore: widget.assessment.totalPoints,
+                          );
+                        },
+                        icon: const Icon(Icons.fact_check_outlined, size: 16),
+                        label: const Text(
+                          'Review Questions & Answer Key',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                          ),
                         ),
                       ),
                     ),
                   ] else ...[
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                      decoration: BoxDecoration(
-                        color: AppTheme.catOrange.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                          color: AppTheme.catOrange.withValues(alpha: 0.3),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.lock_outline,
+                          size: 15,
+                          color: onSurface.withValues(alpha: 0.55),
                         ),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.lock_outline, size: 18, color: AppTheme.catOrange),
-                          const SizedBox(width: 8),
-                          Flexible(
-                            child: Text(
-                              'Answer Key Locked: Your teacher has not released the item-by-item answer key review yet.',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.8),
-                              ),
+                        const SizedBox(width: 6),
+                        Flexible(
+                          child: Text(
+                            'Answer Key Locked: Your teacher has not released the item-by-item answer key review yet.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: onSurface.withValues(alpha: 0.65),
                             ),
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
                   ],
                 ],
               ),
             ),
 
-            const SizedBox(height: 32),
-            AppPrimaryButton(
-              label: 'Return to Student Portal',
-              onPressed: () => Navigator.of(context).pop(),
-              width: 220,
+            const SizedBox(height: 20),
+            SizedBox(
+              height: 38,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: primaryColor,
+                  foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                  elevation: 0,
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text(
+                  'Return to Student Portal',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
             ),
           ],
         ),
