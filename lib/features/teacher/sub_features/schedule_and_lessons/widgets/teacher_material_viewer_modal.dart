@@ -806,10 +806,30 @@ class _TeacherMaterialViewerModalState
 
                 _isOpeningMaterial = true;
                 try {
-                  final url = await SupabaseService().adminClient.storage
-                      .from('learning_materials')
-                      .createSignedUrl(path, 60 * 60);
-                  final uri = Uri.parse(url);
+                  String? targetUrl;
+                  try {
+                    targetUrl = await SupabaseService().adminClient.storage
+                        .from('learning_materials')
+                        .createSignedUrl(path, 60 * 60);
+                  } catch (_) {}
+
+                  try {
+                    targetUrl ??= await SupabaseService().client.storage
+                        .from('learning_materials')
+                        .createSignedUrl(path, 60 * 60);
+                  } catch (_) {}
+
+                  if (targetUrl == null || targetUrl.isEmpty) {
+                    if (raw.startsWith('http://') || raw.startsWith('https://')) {
+                      targetUrl = raw;
+                    } else {
+                      targetUrl = SupabaseService().client.storage
+                          .from('learning_materials')
+                          .getPublicUrl(path);
+                    }
+                  }
+
+                  final uri = Uri.parse(targetUrl);
                   await launchUrl(uri, mode: LaunchMode.externalApplication);
                 } catch (e) {
                   final errStr = e.toString().toLowerCase();

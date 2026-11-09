@@ -1274,28 +1274,54 @@ class _TeacherLearningMaterialsTabState
   final Set<String> _downloadingIds = {};
 
   Future<String?> _resolveMaterialUrl(ClassRealmMaterial material) async {
-    final raw = material.storagePathUrl;
-    var path = raw.contains('/learning_materials/')
-        ? raw.split('/learning_materials/').last
-        : raw;
-    if (path.contains('?')) {
-      path = path.split('?').first;
-    }
-    path = Uri.decodeComponent(path).trim();
-    if (path.isEmpty) return null;
+    final raw = material.storagePathUrl.trim();
+    if (raw.isEmpty) return null;
+    if (material.isEmbedUrl) return raw;
+    if (raw.startsWith('lesson://')) return null;
 
-    try {
-      final url = await SupabaseService().adminClient.storage
-          .from('learning_materials')
-          .createSignedUrl(path, 60 * 60);
-      return url;
-    } catch (e) {
-      debugPrint('Failed to create signed URL: $e');
-      if (raw.startsWith('http://') || raw.startsWith('https://')) {
-        return raw;
-      }
-      return null;
+    if (raw.contains('token=') || raw.contains('Signature=')) {
+      return raw;
     }
+
+    var cleanPath = raw;
+    if (cleanPath.contains('/learning_materials/')) {
+      cleanPath = cleanPath.split('/learning_materials/').last;
+    }
+    if (cleanPath.contains('?')) {
+      cleanPath = cleanPath.split('?').first;
+    }
+    cleanPath = Uri.decodeComponent(cleanPath).trim();
+
+    // 1. Try adminClient signed URL (if service role key is configured)
+    try {
+      final signedUrl = await SupabaseService().adminClient.storage
+          .from('learning_materials')
+          .createSignedUrl(cleanPath, 60 * 60);
+      if (signedUrl.isNotEmpty) return signedUrl;
+    } catch (_) {}
+
+    // 2. Try client signed URL
+    try {
+      final signedUrl = await SupabaseService().client.storage
+          .from('learning_materials')
+          .createSignedUrl(cleanPath, 60 * 60);
+      if (signedUrl.isNotEmpty) return signedUrl;
+    } catch (_) {}
+
+    // 3. If raw path is already an absolute HTTP/HTTPS URL, return directly
+    if (raw.startsWith('http://') || raw.startsWith('https://')) {
+      return raw;
+    }
+
+    // 4. Reliable fallback: Public URL from bucket
+    try {
+      final publicUrl = SupabaseService().client.storage
+          .from('learning_materials')
+          .getPublicUrl(cleanPath);
+      if (publicUrl.isNotEmpty) return publicUrl;
+    } catch (_) {}
+
+    return null;
   }
 
   Future<void> _viewMaterial(ClassRealmMaterial material) async {
@@ -3045,8 +3071,6 @@ class _TeacherLearningMaterialsTabState
               tooltip: 'Archive Material',
               onPressed: () => _archiveMaterialConfirm(material),
             ),
-            const SizedBox(width: 4),
-            const Icon(Icons.open_in_new, size: 18, color: Colors.grey),
           ],
         ),
         onTap: () => _viewMaterial(material),
