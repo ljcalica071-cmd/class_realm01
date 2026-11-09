@@ -155,11 +155,17 @@ class StudentAssessmentScreen extends StatefulWidget {
 
   @override
   State<StudentAssessmentScreen> createState() =>
-      _StudentAssessmentScreenState();
+      StudentAssessmentScreenState();
 }
 
-class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
+class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
     with WidgetsBindingObserver {
+  @visibleForTesting
+  void handleTeacherResetForTesting(String reason) => _handleTeacherReset(reason);
+
+  @visibleForTesting
+  void handleTeacherForceSubmitForTesting(String reason) => _handleTeacherForceSubmit(reason);
+
   int _currentStep =
       0; // 0: Rules Acknowledgment, 1: Answering Questions, 2: Result Summary
   bool _rulesAccepted = false;
@@ -240,6 +246,33 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
       ...idQuestions,
       ...otherQuestions,
     ];
+
+    // Deterministically shuffle choices per Multiple Choice question (anti-collusion)
+    for (var i = 0; i < _orderedQuestions.length; i++) {
+      final q = _orderedQuestions[i];
+      if (q.type == QuestionType.multipleChoice && q.choices.length > 1) {
+        // Resolve original correct answer text before shuffling so scoring is rock-solid
+        String resolvedCorrectText = q.correctAnswer;
+        const letters = ['a', 'b', 'c', 'd'];
+        final origIdx = letters.indexOf(q.correctAnswer.trim().toLowerCase());
+        if (origIdx != -1 && origIdx < q.choices.length) {
+          resolvedCorrectText = q.choices[origIdx];
+        }
+
+        final choiceSeed = seed ^ q.id.hashCode;
+        final shuffledChoices = List<String>.from(q.choices)
+          ..shuffle(Random(choiceSeed));
+        _orderedQuestions[i] = QuestionModel(
+          id: q.id,
+          questionText: q.questionText,
+          type: q.type,
+          choices: shuffledChoices,
+          correctAnswer: resolvedCorrectText,
+          points: q.points,
+          matchingPairs: q.matchingPairs,
+        );
+      }
+    }
 
     for (var q in _orderedQuestions) {
       _studentAnswers[q.id] = '';
@@ -376,6 +409,7 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
       }
 
       // Fallback: check if server has an in_progress attempt for this student & assessment
+      if (!_isSupabaseReady) return;
       final prior = await SupabaseService().client
           .from('assessment_attempts')
           .select('status, started_at, active_session_id')
@@ -582,11 +616,22 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
             ),
             callback: (payload) {
               final rec = payload.newRecord;
-              if (rec['assessment_id'] == widget.assessment.id &&
-                  rec['event_type'] == 'kicked') {
-                _handleDisqualified(
-                  rec['details']?.toString() ?? 'Violation of examination rules.',
-                );
+              if (rec['assessment_id'] == widget.assessment.id) {
+                final ev = rec['event_type']?.toString();
+                final details = rec['details']?.toString() ?? '';
+                if (ev == 'kicked') {
+                  _handleDisqualified(
+                    details.isNotEmpty ? details : 'Violation of examination rules.',
+                  );
+                } else if (ev == 'reset' || ev == 'retake_authorized') {
+                  _handleTeacherReset(
+                    details.isNotEmpty ? details : 'Instructor authorized fresh attempt.',
+                  );
+                } else if (ev == 'force_submit') {
+                  _handleTeacherForceSubmit(
+                    details.isNotEmpty ? details : 'Instructor finalized submission.',
+                  );
+                }
               }
             },
           )
@@ -602,9 +647,18 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
             callback: (payload) {
               final rec = payload.newRecord;
               if (rec['assessment_id'] == widget.assessment.id) {
-                if (rec['status'] == 'disqualified') {
+                final st = rec['status']?.toString();
+                if (st == 'disqualified') {
                   _handleDisqualified(
                     'This examination session was disqualified by your proctor.',
+                  );
+                } else if (st == 'auto_submitted') {
+                  _handleTeacherForceSubmit(
+                    'Instructor finalized submission.',
+                  );
+                } else if (st == 'reset') {
+                  _handleTeacherReset(
+                    'Instructor reset attempt.',
                   );
                 } else if (_mySessionId != null &&
                     rec['active_session_id'] != null &&
@@ -706,6 +760,121 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
         ],
       ),
     );
+  }
+
+  void _handleTeacherReset(String reason) {
+    if (!mounted) return;
+    _timer?.cancel();
+    _heartbeatTimer?.cancel();
+    _offlineRetryTimer?.cancel();
+    _clearVault();
+
+    // Reset local answering state
+    setState(() {
+      _studentAnswers.clear();
+      for (final controller in _textControllers.values) {
+        controller.clear();
+      }
+      _currentQuestionIndex = 0;
+      _violations = 0;
+      _violationLog.clear();
+      _isSubmitting = false;
+      _isConnectionFrozen = false;
+      _isReconnectTimedOut = false;
+      _secondsRemaining = widget.assessment.durationMinutes * 60;
+    });
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.restart_alt_rounded, color: AppTheme.catOrange, size: 28),
+            SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Session Reset by Instructor',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Your $_assessmentLabel session was reset by your instructor.',
+              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+            ),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppTheme.catOrange.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppTheme.catOrange.withValues(alpha: 0.3)),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.info_outline, size: 16, color: AppTheme.catOrange),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Instructor authorized fresh attempt.',
+                      style: TextStyle(fontSize: 13, color: Colors.black87),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'All prior recorded answers have been wiped. You may now start your attempt fresh from Question 1.',
+              style: TextStyle(fontSize: 13, color: Colors.grey),
+            ),
+          ],
+        ),
+        actions: [
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.catOrange,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              if (mounted) {
+                setState(() {
+                  _currentStep = 1;
+                });
+                _startTimer();
+              }
+            },
+            child: const Text('Start Over Fresh', style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _handleTeacherForceSubmit(String reason) {
+    if (!mounted || _currentStep == 2) return;
+    _timer?.cancel();
+    _heartbeatTimer?.cancel();
+    _offlineRetryTimer?.cancel();
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Session auto-submitted by instructor: $reason'),
+        backgroundColor: AppTheme.catBlue,
+        duration: const Duration(seconds: 4),
+      ),
+    );
+
+    _submitAssessment(autoSubmit: true);
   }
 
   @override
@@ -877,7 +1046,8 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
         );
 
     // Persist attempt record, question responses, and submissions to Supabase
-    try {
+    if (_isSupabaseReady) {
+      try {
       final user = AuthRepository.instance.currentUser;
       final studentId = user?.id ?? student.id;
       final attemptStatus = autoSubmit ? 'auto_submitted' : 'submitted';
@@ -1097,8 +1267,19 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
       });
       return;
     }
+  } else {
+    await _clearVault();
+    _heartbeatTimer?.cancel();
+    _offlineRetryTimer?.cancel();
+    if (mounted) {
+      setState(() {
+        _isOffline = false;
+        _pendingOfflineSync = false;
+      });
+    }
+  }
 
-    if (!mounted) return;
+  if (!mounted) return;
     setState(() {
       _isSubmitting = false;
       _currentStep = 2;
@@ -1182,7 +1363,7 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
 
   Widget _buildRulesView() {
     return Expanded(
-      child: Padding(
+      child: SingleChildScrollView(
         padding: const EdgeInsets.all(32),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1268,16 +1449,19 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
             _buildRuleBullet(
               'Anti-Cheating Policy: Switching tabs or minimizing the browser will be recorded as a violation for teacher review.',
             ),
-            const Spacer(),
-            CheckboxListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text(
-                'I have read and understood the assessment rules and guidelines.',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+            const SizedBox(height: 24),
+            Material(
+              color: Colors.transparent,
+              child: CheckboxListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text(
+                  'I have read and understood the assessment rules and guidelines.',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                ),
+                value: _rulesAccepted,
+                activeColor: Theme.of(context).colorScheme.primary,
+                onChanged: (val) => setState(() => _rulesAccepted = val ?? false),
               ),
-              value: _rulesAccepted,
-              activeColor: Theme.of(context).colorScheme.primary,
-              onChanged: (val) => setState(() => _rulesAccepted = val ?? false),
             ),
             const SizedBox(height: 16),
             SizedBox(
@@ -1303,49 +1487,50 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
 
                         final user = AuthRepository.instance.currentUser;
                         final studentId = user?.id ?? 'student';
-                        final client = SupabaseService().client;
-
                         // Check prior attempt status to prevent multiple submissions or bypass
-                        try {
-                          final prior = await client
-                              .from('assessment_attempts')
-                              .select('status, active_session_id')
-                              .eq('assessment_id', widget.assessment.id)
-                              .eq('student_id', studentId)
-                              .maybeSingle();
+                        if (_isSupabaseReady) {
+                          try {
+                            final client = SupabaseService().client;
+                            final prior = await client
+                                .from('assessment_attempts')
+                                .select('status, active_session_id')
+                                .eq('assessment_id', widget.assessment.id)
+                                .eq('student_id', studentId)
+                                .maybeSingle();
 
-                          if (prior != null) {
-                            final st = prior['status']?.toString();
-                            if (st == 'submitted' || st == 'auto_submitted') {
-                              if (!mounted) return;
-                              AppModals.showWarningDialog(
-                                context: context,
-                                title: 'Assessment Already Submitted',
-                                message: 'You have already completed and submitted this assessment.',
-                              );
-                              return;
-                            } else if (st == 'disqualified') {
-                              if (!mounted) return;
-                              AppModals.showErrorDialog(
-                                context: context,
-                                title: 'Session Disqualified',
-                                message: 'This assessment attempt was previously disqualified by your proctor.',
-                              );
-                              return;
+                            if (prior != null) {
+                              final st = prior['status']?.toString();
+                              if (st == 'submitted' || st == 'auto_submitted') {
+                                if (!mounted) return;
+                                AppModals.showWarningDialog(
+                                  context: context,
+                                  title: 'Assessment Already Submitted',
+                                  message: 'You have already completed and submitted this assessment.',
+                                );
+                                return;
+                              } else if (st == 'disqualified') {
+                                if (!mounted) return;
+                                AppModals.showErrorDialog(
+                                  context: context,
+                                  title: 'Session Disqualified',
+                                  message: 'This assessment attempt was previously disqualified by your proctor.',
+                                );
+                                return;
+                              }
                             }
-                          }
 
-                          _mySessionId = 'sess_${DateTime.now().millisecondsSinceEpoch}_${Random().nextInt(999999)}';
-                          await client.from('assessment_attempts').upsert({
-                            'assessment_id': widget.assessment.id,
-                            'student_id': studentId,
-                            'attempt_number': 1,
-                            'status': 'in_progress',
-                            'active_session_id': _mySessionId,
-                            'started_at': DateTime.now().toUtc().toIso8601String(),
-                          }, onConflict: 'assessment_id,student_id,attempt_number');
-                        } catch (sessErr) {
-                          debugPrint('Notice establishing active exam session: $sessErr');
+                            _mySessionId = 'sess_${DateTime.now().millisecondsSinceEpoch}_${Random().nextInt(999999)}';
+                            await client.from('assessment_attempts').upsert({
+                              'assessment_id': widget.assessment.id,
+                              'student_id': studentId,
+                              'attempt_number': 1,
+                              'status': 'in_progress',
+                              'active_session_id': _mySessionId,
+                              'started_at': DateTime.now().toUtc().toIso8601String(),
+                            }, onConflict: 'assessment_id,student_id,attempt_number');
+                          } catch (sessErr) {
+                            debugPrint('Notice establishing active exam session: $sessErr');
+                          }
                         }
 
                         if (!mounted) return;
@@ -1353,20 +1538,22 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
                         _startTimer();
                         _startHeartbeat();
                         _saveVault();
-                        try {
-                          client
-                              .from('anti_cheating_logs')
-                              .insert({
-                                'event_type': 'session_started',
-                                'details': 'Started assessment session',
-                                'student_id': user?.id,
-                                'assessment_id': widget.assessment.id,
-                                'event_at': DateTime.now()
-                                    .toUtc()
-                                    .toIso8601String(),
-                              })
-                              .catchError((_) {});
-                        } catch (_) {}
+                        if (_isSupabaseReady) {
+                          try {
+                            SupabaseService().client
+                                .from('anti_cheating_logs')
+                                .insert({
+                                  'event_type': 'session_started',
+                                  'details': 'Started assessment session',
+                                  'student_id': user?.id,
+                                  'assessment_id': widget.assessment.id,
+                                  'event_at': DateTime.now()
+                                      .toUtc()
+                                      .toIso8601String(),
+                                })
+                                .catchError((_) {});
+                          } catch (_) {}
+                        }
                       }
                     : null,
                 child: const Text(
@@ -1413,92 +1600,245 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
     final answeredCount = _orderedQuestions
         .where((item) => (_studentAnswers[item.id] ?? '').trim().isNotEmpty)
         .length;
+    final unansweredCount = totalQ - answeredCount;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final canSubmit = answeredCount == totalQ;
 
     return Expanded(
       child: Column(
         children: [
-          // Top Navigation Bar inside assessment
+          // Top Navigation Bar inside assessment: Question indicator, Answered/Unanswered chips, Timer
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 10),
             decoration: BoxDecoration(
-              color: Theme.of(context).brightness == Brightness.dark
-                  ? const Color(0xFF1E293B)
-                  : const Color(0xFFF8FAFC),
+              color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC),
               border: Border(
                 bottom: BorderSide(
                   color: Theme.of(context).colorScheme.onSurface
-                      .withValues(alpha: 0.12),
+                      .withValues(alpha: 0.1),
                 ),
               ),
             ),
-            child: SizedBox(
-              width: double.infinity,
-              child: Wrap(
-                alignment: WrapAlignment.spaceBetween,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                spacing: 12,
-                runSpacing: 8,
-                children: [
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        'Question ${_currentQuestionIndex + 1} of $totalQ',
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      const SizedBox(width: 12),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 3,
-                        ),
-                        decoration: BoxDecoration(
-                          color: answeredCount == totalQ
-                              ? AppTheme.catGreen.withValues(alpha: 0.12)
-                              : AppTheme.catOrange.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          '$answeredCount / $totalQ answered',
-                          style: TextStyle(
-                            fontSize: 11,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Top Row: Question Counter, Answered Badge, Unanswered Badge, Timer
+                Wrap(
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 10,
+                  runSpacing: 8,
+                  children: [
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 6,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Text(
+                          'Question ${_currentQuestionIndex + 1} of $totalQ',
+                          style: const TextStyle(
                             fontWeight: FontWeight.bold,
-                            color: answeredCount == totalQ
-                                ? AppTheme.catGreen
-                                : AppTheme.catOrange,
+                            fontSize: 14,
                           ),
                         ),
-                      ),
-                    ],
-                  ),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(
-                        Icons.timer_outlined,
-                        size: 18,
-                        color: AppTheme.catOrange,
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        '${_formatTime(_secondsRemaining)} remaining',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
+                        // Answered Badge
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 3,
+                          ),
+                          decoration: BoxDecoration(
+                            color: answeredCount == totalQ
+                                ? AppTheme.catGreen.withValues(alpha: 0.12)
+                                : AppTheme.catOrange.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: answeredCount == totalQ
+                                  ? AppTheme.catGreen.withValues(alpha: 0.3)
+                                  : AppTheme.catOrange.withValues(alpha: 0.3),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.check_circle_outline,
+                                size: 13,
+                                color: answeredCount == totalQ
+                                    ? AppTheme.catGreen
+                                    : AppTheme.catOrange,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                '$answeredCount / $totalQ answered',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: answeredCount == totalQ
+                                      ? AppTheme.catGreen
+                                      : AppTheme.catOrange,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        // Unanswered Badge
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 3,
+                          ),
+                          decoration: BoxDecoration(
+                            color: unansweredCount > 0
+                                ? AppTheme.catOrange.withValues(alpha: 0.12)
+                                : AppTheme.catSlate.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: unansweredCount > 0
+                                  ? AppTheme.catOrange.withValues(alpha: 0.3)
+                                  : AppTheme.catSlate.withValues(alpha: 0.3),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                unansweredCount > 0
+                                    ? Icons.radio_button_unchecked
+                                    : Icons.task_alt,
+                                size: 13,
+                                color: unansweredCount > 0
+                                    ? AppTheme.catOrange
+                                    : AppTheme.catSlate,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                '$unansweredCount unanswered',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: unansweredCount > 0
+                                      ? AppTheme.catOrange
+                                      : AppTheme.catSlate,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.timer_outlined,
+                          size: 16,
                           color: AppTheme.catOrange,
                         ),
-                      ),
-                      const SizedBox(width: 16),
-                      Text(
-                        'Violations: $_violations',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: AppTheme.catRed,
+                        const SizedBox(width: 5),
+                        Text(
+                          '${_formatTime(_secondsRemaining)} remaining',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                            color: AppTheme.catOrange,
+                          ),
                         ),
-                      ),
-                    ],
+                        const SizedBox(width: 14),
+                        Text(
+                          'Violations: $_violations',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                            color: AppTheme.catRed,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                // Horizontal Question Indicator Bar (Scrollable Dot/Pill Navigator)
+                SizedBox(
+                  height: 32,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: totalQ,
+                    separatorBuilder: (_, _) => const SizedBox(width: 6),
+                    itemBuilder: (ctx, idx) {
+                      final itemQ = _orderedQuestions[idx];
+                      final isAnswered =
+                          (_studentAnswers[itemQ.id] ?? '').trim().isNotEmpty;
+                      final isCurrent = idx == _currentQuestionIndex;
+
+                      Color pillBg;
+                      Color pillBorder;
+                      Color pillText;
+
+                      if (isCurrent) {
+                        pillBg = Theme.of(context).colorScheme.primary;
+                        pillBorder = Theme.of(context).colorScheme.primary;
+                        pillText = Theme.of(context).colorScheme.onPrimary;
+                      } else if (isAnswered) {
+                        pillBg = AppTheme.catGreen.withValues(alpha: 0.12);
+                        pillBorder = AppTheme.catGreen.withValues(alpha: 0.4);
+                        pillText = AppTheme.catGreen;
+                      } else {
+                        pillBg = isDark
+                            ? const Color(0xFF0F172A)
+                            : const Color(0xFFFFFFFF);
+                        pillBorder = Theme.of(context).colorScheme.onSurface
+                            .withValues(alpha: 0.18);
+                        pillText = Theme.of(context).colorScheme.onSurface
+                            .withValues(alpha: 0.7);
+                      }
+
+                      return InkWell(
+                        onTap: () {
+                          setState(() => _currentQuestionIndex = idx);
+                          _saveVault();
+                        },
+                        borderRadius: BorderRadius.circular(6),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10),
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: pillBg,
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
+                              color: pillBorder,
+                              width: isCurrent ? 1.8 : 1.0,
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (isAnswered && !isCurrent) ...[
+                                const Icon(
+                                  Icons.check,
+                                  size: 12,
+                                  color: AppTheme.catGreen,
+                                ),
+                                const SizedBox(width: 3),
+                              ],
+                              Text(
+                                'Q${idx + 1}',
+                                style: TextStyle(
+                                  color: pillText,
+                                  fontWeight: isCurrent
+                                      ? FontWeight.w800
+                                      : FontWeight.bold,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
 
@@ -1595,7 +1935,7 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
                 Column(
                   children: [
                     Expanded(
-                      child: Padding(
+                      child: SingleChildScrollView(
                         padding: const EdgeInsets.all(32),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1677,8 +2017,10 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
                               ),
                             ),
                             value: choice,
+                            // ignore: deprecated_member_use
                             groupValue: _studentAnswers[q.id],
                             activeColor: Theme.of(context).colorScheme.primary,
+                            // ignore: deprecated_member_use
                             onChanged: (val) {
                               setState(() {
                                 _studentAnswers[q.id] = val ?? '';
@@ -1738,8 +2080,11 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        Wrap(
+                          alignment: WrapAlignment.spaceBetween,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          spacing: 8,
+                          runSpacing: 8,
                           children: [
                             Text(
                               'Your Answer:',
@@ -1830,10 +2175,11 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
             ),
           ),
 
-          // Question Pagination Bar
+          // Question Bottom Navigation Bar
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
             decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC),
               border: Border(
                 top: BorderSide(
                   color: Theme.of(context).colorScheme.onSurface
@@ -1854,64 +2200,23 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
                         }
                       : null,
                 ),
-                // Number bubbles
-                Expanded(
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: List.generate(totalQ, (idx) {
-                        final isAnswered =
-                            (_studentAnswers[_orderedQuestions[idx].id] ?? '')
-                                .trim()
-                                .isNotEmpty;
-                        final isCurrent = idx == _currentQuestionIndex;
-                        return InkWell(
-                          onTap: () {
-                            setState(() => _currentQuestionIndex = idx);
-                            _saveVault();
-                          },
-                          child: Container(
-                            margin: const EdgeInsets.symmetric(horizontal: 4),
-                            width: 32,
-                            height: 32,
-                            alignment: Alignment.center,
-                            decoration: BoxDecoration(
-                              color: isCurrent
-                                  ? Theme.of(context).colorScheme.primary
-                                  : isAnswered
-                                  ? AppTheme.catGreen.withValues(alpha: 0.12)
-                                  : Theme.of(context).scaffoldBackgroundColor,
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(
-                                color: isCurrent
-                                    ? Theme.of(context).colorScheme.primary
-                                    : isAnswered
-                                    ? AppTheme.catGreen
-                                    : Theme.of(context).colorScheme.onSurface
-                                          .withValues(alpha: 0.2),
-                                width: isCurrent || isAnswered ? 1.5 : 1,
-                              ),
-                            ),
-                            child: Text(
-                              '${idx + 1}',
-                              style: TextStyle(
-                                color: isCurrent
-                                    ? Theme.of(context).colorScheme.onPrimary
-                                    : isAnswered
-                                    ? AppTheme.catGreen
-                                    : Theme.of(context).colorScheme.onSurface,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ),
-                        );
-                      }),
+                Flexible(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    child: Text(
+                      canSubmit
+                          ? 'All $totalQ items answered'
+                          : '$unansweredCount of $totalQ remaining',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: canSubmit ? AppTheme.catGreen : AppTheme.catOrange,
+                      ),
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                 ),
-                const SizedBox(width: 12),
                 if (_currentQuestionIndex < totalQ - 1)
                   AppPrimaryButton(
                     label: 'Next',
@@ -1927,29 +2232,34 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
                   AppPrimaryButton(
                     label: _isSubmitting
                         ? 'Submitting...'
-                        : 'Submit Assessment',
-                    backgroundColor: answeredCount == totalQ
+                        : (canSubmit
+                            ? 'Submit Assessment'
+                            : 'Submit ($unansweredCount Left)'),
+                    backgroundColor: canSubmit
                         ? AppTheme.catGreen
-                        : AppTheme.catOrange,
-                    icon: answeredCount == totalQ
+                        : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.12),
+                    icon: canSubmit
                         ? Icons.check_circle
-                        : Icons.warning_amber_rounded,
+                        : Icons.lock_outline,
                     height: 40,
-                    width: 180,
-                    onPressed: _isSubmitting
-                        ? null
-                        : () => _submitAssessment(autoSubmit: false),
+                    width: canSubmit ? 180 : 195,
+                    onPressed: (canSubmit && !_isSubmitting)
+                        ? () => _submitAssessment(autoSubmit: false)
+                        : null,
                   ),
+              ],
+            ),
+          ),
+                  ],
+                ),
+                if (_isConnectionFrozen)
+                  _buildConnectionFrozenOverlay(),
               ],
             ),
           ),
         ],
       ),
-      if (_isConnectionFrozen)
-        _buildConnectionFrozenOverlay(),
-    ],
-  ),
-);
+    );
   }
 
   Widget _buildConnectionFrozenOverlay() {
@@ -2125,8 +2435,11 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
           isReleased: widget.assessment.resultsReleased,
         );
 
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isReleased = widget.assessment.resultsReleased || result.isReleased;
+
     return Expanded(
-      child: Padding(
+      child: SingleChildScrollView(
         padding: const EdgeInsets.all(32),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -2144,9 +2457,9 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
               ),
             ),
             const SizedBox(height: 20),
-            const Text(
-              'Assessment Submitted Successfully!',
-              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+            Text(
+              '$_assessmentTitleLabel Completed & Submitted!',
+              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
             Text(
@@ -2158,44 +2471,60 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
               ),
             ),
             const SizedBox(height: 24),
-            if (widget.assessment.resultsReleased || result.isReleased) ...[
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).scaffoldBackgroundColor,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: Theme.of(context).colorScheme.onSurface
-                        .withValues(alpha: 0.12),
-                  ),
+
+            // ALWAYS DISPLAY STUDENT'S OFFICIAL SCORE CARD IMMEDIATELY
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+              decoration: BoxDecoration(
+                color: Theme.of(context).scaffoldBackgroundColor,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: const Color(0xFF0F8A48).withValues(alpha: isDark ? 0.4 : 0.25),
+                  width: 1.5,
                 ),
-                child: Column(
-                  children: [
-                    Text(
-                      'Score Obtained: ${result.scoreEarned.round()} / ${result.totalPoints.round()} pts',
-                      style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF0F8A48).withValues(alpha: 0.05),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Column(
+                children: [
+                  Text(
+                    'Score Obtained: ${result.scoreEarned.round()} / ${result.totalPoints.round()} pts',
+                    style: TextStyle(
+                      fontSize: 26,
+                      fontWeight: FontWeight.bold,
+                      color: isDark ? const Color(0xFF4ADE80) : const Color(0xFF0F8A48),
                     ),
-                    const SizedBox(height: 6),
-                    Text(
-                      'Percentage: ${result.percentage.round()}%',
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.bold,
-                        color: AppTheme.catGreen,
-                      ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Percentage: ${result.percentage.round()}%',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                      color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
                     ),
-                    const SizedBox(height: 16),
+                  ),
+                  const SizedBox(height: 20),
+                  const Divider(height: 1),
+                  const SizedBox(height: 16),
+
+                  // ANSWER KEY REVIEW SECTION: CONTROLLED STRICTLY BY TEACHER TOGGLE
+                  if (isReleased) ...[
                     OutlinedButton.icon(
                       style: OutlinedButton.styleFrom(
-                        foregroundColor: const Color(0xFF0F8A48),
-                        side: const BorderSide(color: Color(0xFF0F8A48)),
+                        foregroundColor: isDark ? const Color(0xFF4ADE80) : const Color(0xFF0F8A48),
+                        side: BorderSide(
+                          color: isDark ? const Color(0xFF4ADE80) : const Color(0xFF0F8A48),
+                        ),
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 10,
+                          horizontal: 20,
+                          vertical: 12,
                         ),
                       ),
                       onPressed: () {
@@ -2212,33 +2541,44 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
                         'Review Questions & Answer Key',
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
-                          fontSize: 13,
+                          fontSize: 14,
                         ),
                       ),
                     ),
+                  ] else ...[
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: AppTheme.catOrange.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: AppTheme.catOrange.withValues(alpha: 0.3),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.lock_outline, size: 18, color: AppTheme.catOrange),
+                          const SizedBox(width: 8),
+                          Flexible(
+                            child: Text(
+                              'Answer Key Locked: Your teacher has not released the item-by-item answer key review yet.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.8),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ],
-                ),
+                ],
               ),
-            ] else ...[
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: AppTheme.catOrange.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: AppTheme.catOrange.withValues(alpha: 0.3),
-                  ),
-                ),
-                child: Text(
-                  'Your assessment has been submitted and recorded. Official results and answer breakdowns will be available once the teacher releases the results.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.onSurface,
-                    height: 1.4,
-                  ),
-                ),
-              ),
-            ],
+            ),
+
             const SizedBox(height: 32),
             AppPrimaryButton(
               label: 'Return to Student Portal',

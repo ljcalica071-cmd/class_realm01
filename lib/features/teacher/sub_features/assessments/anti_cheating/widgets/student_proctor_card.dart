@@ -7,12 +7,14 @@ class StudentProctorCard extends StatelessWidget {
   final StudentLiveProctorState state;
   final VoidCallback onKick;
   final VoidCallback onRetake;
+  final VoidCallback? onForceSubmit;
 
   const StudentProctorCard({
     super.key,
     required this.state,
     required this.onKick,
     required this.onRetake,
+    this.onForceSubmit,
   });
 
   @override
@@ -182,11 +184,18 @@ class StudentProctorCard extends StatelessWidget {
             ),
           if (state.status == ProctorSessionStatus.inProgress) ...[
             IconButton(
-              tooltip: 'Reset / Authorize Retake',
-              icon: const Icon(Icons.replay_rounded, size: 20),
+              tooltip: 'Reset Student Attempt',
+              icon: const Icon(Icons.restart_alt_rounded, size: 20),
               color: AppTheme.catBlue,
               onPressed: onRetake,
             ),
+            if (onForceSubmit != null)
+              IconButton(
+                tooltip: 'Force Auto-Submit',
+                icon: const Icon(Icons.file_upload_outlined, size: 20),
+                color: AppTheme.catGreen,
+                onPressed: onForceSubmit,
+              ),
             IconButton(
               tooltip: 'Kick & Disqualify',
               icon: const Icon(Icons.gavel, size: 20),

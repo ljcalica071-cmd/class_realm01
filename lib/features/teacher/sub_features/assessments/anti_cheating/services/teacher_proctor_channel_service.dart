@@ -206,9 +206,13 @@ class TeacherProctorChannelService {
     }
   }
 
-  /// Teacher Action: Authorize retake for student who suffered technical glitch
-  /// Resets violation count and clears kicked state
-  void authorizeRetake(String studentId, {bool writeToDb = true}) {
+  /// Teacher Action: Authorize retake / reset session for student
+  /// Resets violation count and sends reset signal to student device
+  void authorizeRetake(
+    String studentId, {
+    String reason = 'Instructor granted test retake / reset',
+    bool writeToDb = true,
+  }) {
     final current = _studentStates[studentId];
     if (current != null) {
       _studentStates[studentId] = current.copyWith(
@@ -228,10 +232,61 @@ class TeacherProctorChannelService {
             .insert({
               'assessment_id': assessmentId,
               'student_id': studentId,
-              'event_type': 'retake_authorized',
-              'details': 'Instructor granted test retake',
+              'event_type': 'reset',
+              'details': reason,
               'event_at': DateTime.now().toUtc().toIso8601String(),
             })
+            .catchError((_) {});
+
+        SupabaseService().client
+            .from('assessment_attempts')
+            .update({
+              'status': 'in_progress',
+              'score_earned': 0,
+            })
+            .eq('assessment_id', assessmentId)
+            .eq('student_id', studentId)
+            .catchError((_) {});
+      } catch (_) {}
+    }
+  }
+
+  /// Teacher Action: Force auto-submit assessment for a specific student
+  /// Only the targeted student is submitted; others continue normally.
+  void forceSubmitStudent(
+    String studentId, {
+    String reason = 'Instructor triggered auto-submission',
+    bool writeToDb = true,
+  }) {
+    final current = _studentStates[studentId];
+    if (current != null) {
+      _studentStates[studentId] = current.copyWith(
+        status: ProctorSessionStatus.submitted,
+        lastActiveAt: DateTime.now(),
+      );
+      _broadcast();
+    }
+
+    if (writeToDb) {
+      try {
+        SupabaseService().client
+            .from('anti_cheating_logs')
+            .insert({
+              'assessment_id': assessmentId,
+              'student_id': studentId,
+              'event_type': 'force_submit',
+              'details': reason,
+              'event_at': DateTime.now().toUtc().toIso8601String(),
+            })
+            .catchError((_) {});
+
+        SupabaseService().client
+            .from('assessment_attempts')
+            .update({
+              'status': 'auto_submitted',
+            })
+            .eq('assessment_id', assessmentId)
+            .eq('student_id', studentId)
             .catchError((_) {});
       } catch (_) {}
     }

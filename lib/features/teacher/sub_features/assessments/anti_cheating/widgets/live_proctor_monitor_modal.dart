@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'package:flutter/services.dart';
 import 'package:class_realm/core/services/supabase_service.dart';
 import 'package:flutter/material.dart';
 import 'package:class_realm/core/theme/app_theme.dart';
@@ -46,6 +48,8 @@ class _LiveProctorMonitorModalState extends State<LiveProctorMonitorModal> {
   late final TeacherProctorChannelService _channelService;
   List<StudentLiveProctorState> _students = [];
   String _searchQuery = '';
+  bool _soundEnabled = true;
+  StreamSubscription<List<StudentLiveProctorState>>? _channelSub;
 
   @override
   void initState() {
@@ -123,8 +127,14 @@ class _LiveProctorMonitorModalState extends State<LiveProctorMonitorModal> {
       debugPrint('Real proctor roster fetch notice: $e');
     }
 
-    _channelService.studentStatesStream.listen((updated) {
+    _channelSub?.cancel();
+    _channelSub = _channelService.studentStatesStream.listen((updated) {
       if (mounted) {
+        final prevSevereCount = _students.where((s) => s.isSevere).length;
+        final newSevereCount = updated.where((s) => s.isSevere).length;
+        if (_soundEnabled && newSevereCount > prevSevereCount) {
+          SystemSound.play(SystemSoundType.alert);
+        }
         setState(() {
           _students = updated;
         });
@@ -134,6 +144,7 @@ class _LiveProctorMonitorModalState extends State<LiveProctorMonitorModal> {
 
   @override
   void dispose() {
+    _channelSub?.cancel();
     _channelService.dispose();
     super.dispose();
   }
@@ -250,6 +261,23 @@ class _LiveProctorMonitorModalState extends State<LiveProctorMonitorModal> {
                   ),
                 ),
                 IconButton(
+                  tooltip: _soundEnabled
+                      ? 'Proctor Alert Chime: Active'
+                      : 'Proctor Alert Chime: Muted',
+                  icon: Icon(
+                    _soundEnabled
+                        ? Icons.volume_up_rounded
+                        : Icons.volume_off_rounded,
+                    color: _soundEnabled
+                        ? AppTheme.catPurple
+                        : theme.colorScheme.onSurface.withValues(alpha: 0.4),
+                    size: 20,
+                  ),
+                  onPressed: () {
+                    setState(() => _soundEnabled = !_soundEnabled);
+                  },
+                ),
+                IconButton(
                   icon: const Icon(Icons.close),
                   onPressed: () => Navigator.of(context).pop(),
                 ),
@@ -285,6 +313,33 @@ class _LiveProctorMonitorModalState extends State<LiveProctorMonitorModal> {
                 ),
               ],
             ),
+            if (_students.any((s) => s.isSevere)) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                decoration: BoxDecoration(
+                  color: AppTheme.catRed.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppTheme.catRed.withValues(alpha: 0.3)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.warning_amber_rounded, color: AppTheme.catRed, size: 18),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Proctor Security Alert: ${_students.where((s) => s.isSevere).length} student(s) have accumulated 3+ infractions (excessive blur/tab switching). Review flagged student cards below.',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: AppTheme.catRed,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
             const SizedBox(height: 16),
 
             // Search Bar
@@ -344,6 +399,52 @@ class _LiveProctorMonitorModalState extends State<LiveProctorMonitorModal> {
                                   student.studentId,
                                 );
                               },
+                            );
+                          },
+                          onForceSubmit: () {
+                            showDialog(
+                              context: context,
+                              builder: (ctx) => AlertDialog(
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                                title: const Row(
+                                  children: [
+                                    Icon(
+                                      Icons.file_upload_outlined,
+                                      color: AppTheme.catGreen,
+                                    ),
+                                    SizedBox(width: 8),
+                                    Text(
+                                      'Force Auto-Submit',
+                                      style: TextStyle(fontWeight: FontWeight.bold),
+                                    ),
+                                  ],
+                                ),
+                                content: Text(
+                                  'Are you sure you want to force auto-submit the assessment for ${student.studentName}?\n\nThis will finalize their current attempt immediately. Other active learners will not be affected.',
+                                ),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () => Navigator.of(ctx).pop(),
+                                    child: const Text('Cancel'),
+                                  ),
+                                  ElevatedButton(
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: AppTheme.catGreen,
+                                      foregroundColor: Colors.white,
+                                    ),
+                                    onPressed: () {
+                                      Navigator.of(ctx).pop();
+                                      _channelService.forceSubmitStudent(
+                                        student.studentId,
+                                        reason: 'Instructor triggered auto-submission',
+                                      );
+                                    },
+                                    child: const Text('Force Submit'),
+                                  ),
+                                ],
+                              ),
                             );
                           },
                         );
