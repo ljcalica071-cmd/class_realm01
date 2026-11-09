@@ -234,20 +234,15 @@ class EmailService {
     return "Failed to deliver verification code to '$email'. Please verify that the email address exists.";
   }
 
-  /// Send an OTP verification email for first login password change
-  Future<bool> sendPasswordChangeOtpEmail({
-    required String recipientEmail,
-    required String recipientName,
-    required String otpCode,
-  }) async {
-    final String htmlTemplate =
-        '''
+  /// Builds the HTML body for First Login Account Activation OTP
+  static String buildFirstLoginOtpHtml(String recipientName, String otpCode) {
+    return '''
       <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1a1a1a; line-height: 1.6; max-width: 500px; margin: 40px auto; border: 1px solid #eaeaea; border-radius: 16px; padding: 32px; box-shadow: 0 4px 24px rgba(0,0,0,0.04);">
         <div style="text-align: center; margin-bottom: 32px;">
-          <h2 style="color: #0f172a; font-size: 24px; font-weight: 700; margin: 0;">Verify your password change</h2>
+          <h2 style="color: #0f172a; font-size: 24px; font-weight: 700; margin: 0;">Activate Your Account</h2>
         </div>
         <p style="font-size: 15px; color: #475569; margin-bottom: 24px;">Hello <strong>$recipientName</strong>,</p>
-        <p style="font-size: 15px; color: #475569; margin-bottom: 32px;">To complete your first login and secure your account, please enter the 6-digit verification code below to confirm your new password.</p>
+        <p style="font-size: 15px; color: #475569; margin-bottom: 32px;">To complete your first login and activate your account, please enter the 6-digit verification code below to confirm your new personalized password.</p>
         
         <div style="background-color: #f8fafc; border-radius: 12px; padding: 24px; text-align: center; margin-bottom: 32px; border: 1px solid #e2e8f0;">
           <span style="font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 32px; font-weight: 800; letter-spacing: 8px; color: #2563eb;">$otpCode</span>
@@ -256,11 +251,99 @@ class EmailService {
         <p style="font-size: 13px; color: #94a3b8; text-align: center; margin: 0;">This code will expire in 5 minutes. If you did not request this, please contact the administrator immediately.</p>
       </div>
     ''';
+  }
 
+  /// Builds the HTML body for Forgot Password Reset OTP
+  static String buildForgotPasswordOtpHtml(String recipientName, String otpCode) {
+    return '''
+      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1a1a1a; line-height: 1.6; max-width: 500px; margin: 40px auto; border: 1px solid #eaeaea; border-radius: 16px; padding: 32px; box-shadow: 0 4px 24px rgba(0,0,0,0.04);">
+        <div style="text-align: center; margin-bottom: 32px;">
+          <h2 style="color: #0f172a; font-size: 24px; font-weight: 700; margin: 0;">Reset Your Password</h2>
+        </div>
+        <p style="font-size: 15px; color: #475569; margin-bottom: 24px;">Hello <strong>$recipientName</strong>,</p>
+        <p style="font-size: 15px; color: #475569; margin-bottom: 32px;">We received a request to reset the password for your ClassRealm account. Please enter the 6-digit verification code below to proceed with setting up a new password.</p>
+        
+        <div style="background-color: #f8fafc; border-radius: 12px; padding: 24px; text-align: center; margin-bottom: 32px; border: 1px solid #e2e8f0;">
+          <span style="font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 32px; font-weight: 800; letter-spacing: 8px; color: #2563eb;">$otpCode</span>
+        </div>
+        
+        <p style="font-size: 13px; color: #94a3b8; text-align: center; margin: 0;">This code will expire in 5 minutes. If you did not request this password reset, please ignore this email or contact the administrator immediately.</p>
+      </div>
+    ''';
+  }
+
+  /// Builds the HTML body for In-App Change Password OTP
+  static String buildChangePasswordOtpHtml(String recipientName, String otpCode) {
+    return '''
+      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1a1a1a; line-height: 1.6; max-width: 500px; margin: 40px auto; border: 1px solid #eaeaea; border-radius: 16px; padding: 32px; box-shadow: 0 4px 24px rgba(0,0,0,0.04);">
+        <div style="text-align: center; margin-bottom: 32px;">
+          <h2 style="color: #0f172a; font-size: 24px; font-weight: 700; margin: 0;">Verify Password Change</h2>
+        </div>
+        <p style="font-size: 15px; color: #475569; margin-bottom: 24px;">Hello <strong>$recipientName</strong>,</p>
+        <p style="font-size: 15px; color: #475569; margin-bottom: 32px;">You requested to change your account password from your ClassRealm portal settings. Please enter the 6-digit verification code below to authorize this update.</p>
+        
+        <div style="background-color: #f8fafc; border-radius: 12px; padding: 24px; text-align: center; margin-bottom: 32px; border: 1px solid #e2e8f0;">
+          <span style="font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 32px; font-weight: 800; letter-spacing: 8px; color: #2563eb;">$otpCode</span>
+        </div>
+        
+        <p style="font-size: 13px; color: #94a3b8; text-align: center; margin: 0;">This code will expire in 5 minutes. If you did not authorize this password change from your portal, please secure your account immediately or contact your administrator.</p>
+      </div>
+    ''';
+  }
+
+  /// Send an OTP verification email for first login account activation
+  Future<bool> sendFirstLoginOtpEmail({
+    required String recipientEmail,
+    required String recipientName,
+    required String otpCode,
+  }) async {
+    final htmlTemplate = buildFirstLoginOtpHtml(recipientName, otpCode);
     return await sendEmail(
       to: recipientEmail,
-      subject: 'ClassRealm - Security Verification Code',
+      subject: 'ClassRealm - First Login Verification Code',
       html: htmlTemplate,
+    );
+  }
+
+  /// Send an OTP verification email for forgot password recovery
+  Future<bool> sendForgotPasswordOtpEmail({
+    required String recipientEmail,
+    required String recipientName,
+    required String otpCode,
+  }) async {
+    final htmlTemplate = buildForgotPasswordOtpHtml(recipientName, otpCode);
+    return await sendEmail(
+      to: recipientEmail,
+      subject: 'ClassRealm - Password Reset Verification Code',
+      html: htmlTemplate,
+    );
+  }
+
+  /// Send an OTP verification email for in-app change password
+  Future<bool> sendChangePasswordOtpEmail({
+    required String recipientEmail,
+    required String recipientName,
+    required String otpCode,
+  }) async {
+    final htmlTemplate = buildChangePasswordOtpHtml(recipientName, otpCode);
+    return await sendEmail(
+      to: recipientEmail,
+      subject: 'ClassRealm - Change Password Security Code',
+      html: htmlTemplate,
+    );
+  }
+
+  /// Legacy alias: Send an OTP verification email for first login password change
+  @Deprecated('Use sendFirstLoginOtpEmail instead')
+  Future<bool> sendPasswordChangeOtpEmail({
+    required String recipientEmail,
+    required String recipientName,
+    required String otpCode,
+  }) async {
+    return await sendFirstLoginOtpEmail(
+      recipientEmail: recipientEmail,
+      recipientName: recipientName,
+      otpCode: otpCode,
     );
   }
 
