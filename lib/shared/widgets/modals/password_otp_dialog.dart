@@ -58,7 +58,7 @@ class _PasswordOtpDialogState extends State<PasswordOtpDialog>
   OverlayEntry? _toastEntry;
 
   Timer? _inputTimer;
-  int _inputCountdown = 600;
+  int _inputCountdown = 300;
 
   bool _isResending = false;
   late final AnimationController _toastAnimationController;

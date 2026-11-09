@@ -17,6 +17,7 @@ import 'package:class_realm/core/services/firebase_auth_admin_service.dart';
 import 'package:class_realm/core/services/rate_limit_service.dart';
 import 'package:class_realm/core/services/app_data_cache.dart';
 import 'package:class_realm/core/utils/browser_url_helper.dart';
+import 'package:class_realm/data/repositories/supabase_parent_repository.dart';
 
 class FirstLoginOtpVerification {
   const FirstLoginOtpVerification({
@@ -1083,7 +1084,7 @@ class AuthRepository {
     debugPrint('========================================================');
 
     try {
-      await EmailService.instance.sendPasswordChangeOtpEmail(
+      await EmailService.instance.sendFirstLoginOtpEmail(
         recipientEmail: cleanEmail,
         recipientName: user.displayName ?? 'ClassRealm User',
         otpCode: code,
@@ -1398,6 +1399,15 @@ class AuthRepository {
   int _forgotPasswordAttempts = 0;
   bool _forgotPasswordVerified = false;
 
+  // --- IN-APP CHANGE PASSWORD STATE & FLOW ---
+  String? _changePasswordOtpCode;
+  DateTime? _changePasswordOtpExpiry;
+  DateTime? _lastChangePasswordOtpSentAt;
+  int _changePasswordResendCount = 0;
+  String? _changePasswordEmail;
+  int _changePasswordAttempts = 0;
+  bool _changePasswordVerified = false;
+
   /// Look up a user profile by email in Supabase.
   Future<custom.UserModel?> getUserByEmail(String email) async {
     final cleanEmail = email.trim().toLowerCase();
@@ -1599,7 +1609,7 @@ class AuthRepository {
     debugPrint('========================================================');
 
     try {
-      await EmailService.instance.sendPasswordChangeOtpEmail(
+      await EmailService.instance.sendForgotPasswordOtpEmail(
         recipientEmail: cleanEmail,
         recipientName: recipientName ?? user.fullName,
         otpCode: code,
@@ -1871,6 +1881,335 @@ class AuthRepository {
     } catch (e) {
       return e.toString().replaceFirst('Exception: ', '');
     }
+  }
+
+  // =========================================================================
+  // IN-APP CHANGE PASSWORD (Settings & Profile)
+  // =========================================================================
+
+  /// Validates the current password of the logged-in Firebase user.
+  /// Returns null if password is correct, or an error message if incorrect.
+  Future<String?> reauthenticateCurrentPassword(String currentPassword) async {
+    final fbUser = firebase.FirebaseAuth.instance.currentUser;
+    if (fbUser == null) {
+      return 'No active user session found. Please re-login.';
+    }
+    final email = fbUser.email?.trim() ?? currentUser?.email.trim() ?? '';
+    if (email.isEmpty) {
+      return 'Unable to determine user email address.';
+    }
+    try {
+      final cred = firebase.EmailAuthProvider.credential(
+        email: email,
+        password: currentPassword,
+      );
+      await fbUser.reauthenticateWithCredential(cred);
+      return null;
+    } on firebase.FirebaseAuthException catch (e) {
+      if (e.code == 'wrong-password' ||
+          e.code == 'invalid-credential' ||
+          e.code == 'user-mismatch') {
+        return 'Current password is incorrect.';
+      }
+      return e.message ?? 'Could not verify current password.';
+    } catch (e) {
+      return 'Error verifying current password: $e';
+    }
+  }
+
+  /// Sends a secure pure Dart 6-digit OTP code to the logged-in user's email for in-app password change.
+  Future<Map<String, dynamic>> sendChangePasswordOtp({
+    required String email,
+    required String recipientName,
+    bool isResend = false,
+  }) async {
+    final cleanEmail = email.trim().toLowerCase();
+
+    if (ParentCredentialHelper.isParentDomain(cleanEmail)) {
+      throw Exception(
+        'Parent accounts do not use email OTP codes. Please use current password verification.',
+      );
+    }
+
+    // Rate-limit check
+    final lockStatus = await RateLimitService.instance.checkStatus(
+      feature: 'change_password',
+      targetIdentifier: cleanEmail,
+      maxAttempts: 5,
+    );
+    if (lockStatus.isLocked) {
+      throw Exception(
+        'Too many failed attempts. Locked out for ${lockStatus.formattedCountdown}.',
+      );
+    }
+
+    final now = DateTime.now();
+
+    // Check active non-expired challenge within 5 minutes (reuse existing non-expired OTP on initial open)
+    if (!isResend) {
+      if (_changePasswordOtpCode != null &&
+          _changePasswordEmail == cleanEmail &&
+          _changePasswordOtpExpiry != null &&
+          now.isBefore(_changePasswordOtpExpiry!)) {
+        final remainingExpiresIn = _changePasswordOtpExpiry!
+            .difference(now)
+            .inSeconds;
+        return {
+          'sent': true,
+          'reused': true,
+          'email': cleanEmail,
+          'expiresIn': remainingExpiresIn > 0 ? remainingExpiresIn : 300,
+          'resendAfter': 60,
+          'resendCount': _changePasswordResendCount,
+        };
+      }
+    }
+
+    // Anti-spam cooldown check (60 seconds)
+    if (isResend && _lastChangePasswordOtpSentAt != null) {
+      final diff = now.difference(_lastChangePasswordOtpSentAt!).inSeconds;
+      if (diff < 60) {
+        final waitSec = 60 - diff;
+        throw Exception(
+          'Please wait $waitSec second${waitSec == 1 ? '' : 's'} before requesting another code.',
+        );
+      }
+    }
+
+    // Generate fresh 6-digit code
+    final rng = Random.secure();
+    final code = (rng.nextInt(900000) + 100000).toString();
+
+    _lastChangePasswordOtpSentAt = now;
+    _changePasswordOtpCode = code;
+    _changePasswordOtpExpiry = now.add(const Duration(minutes: 5)); // Exactly 5 minutes
+    _changePasswordEmail = cleanEmail;
+    _changePasswordVerified = false;
+    if (isResend) {
+      _changePasswordResendCount++;
+    } else {
+      _changePasswordResendCount = 0;
+      _changePasswordAttempts = 0;
+    }
+
+    debugPrint('========================================================');
+    debugPrint(
+      '[ClassRealm Pure Dart Change Password OTP] Code for $cleanEmail: $code (Valid for 5 mins)',
+    );
+    debugPrint('========================================================');
+
+    try {
+      await EmailService.instance.sendChangePasswordOtpEmail(
+        recipientEmail: cleanEmail,
+        recipientName: recipientName,
+        otpCode: code,
+      );
+    } catch (e) {
+      debugPrint('[AuthRepository] sendChangePasswordOtpEmail error: $e');
+    }
+
+    // Persist OTP challenge in Supabase password_reset_otps table
+    try {
+      await _supabaseClient.from('password_reset_otps').upsert({
+        'email': cleanEmail,
+        'code_hash': code,
+        'expires_at': _changePasswordOtpExpiry!.toUtc().toIso8601String(),
+        'last_sent_at': now.toUtc().toIso8601String(),
+        'resend_count': _changePasswordResendCount,
+        'failed_attempts': _changePasswordAttempts,
+        'is_verified': false,
+        'updated_at': now.toUtc().toIso8601String(),
+      });
+    } catch (e) {
+      debugPrint('[AuthRepository] change_password OTP Supabase error: $e');
+    }
+
+    return {
+      'sent': true,
+      'reused': false,
+      'email': cleanEmail,
+      'expiresIn': 300, // Exactly 5 minutes
+      'resendAfter': 60, // 60 seconds
+      'resendCount': _changePasswordResendCount,
+    };
+  }
+
+  /// Verifies the 6-digit OTP code entered by the user during in-app change password.
+  Future<FirstLoginOtpVerification> verifyChangePasswordOtp(String code) async {
+    final cleanCode = code.trim();
+    final email = _changePasswordEmail ?? '';
+
+    // Check rate limit
+    if (email.isNotEmpty) {
+      final lockStatus = await RateLimitService.instance.checkStatus(
+        feature: 'change_password',
+        targetIdentifier: email,
+        maxAttempts: 5,
+      );
+      if (lockStatus.isLocked) {
+        return FirstLoginOtpVerification(
+          verified: false,
+          reason: 'locked',
+          retryAfter: lockStatus.remainingSeconds,
+        );
+      }
+    }
+
+    if (_changePasswordOtpCode == null || _changePasswordOtpExpiry == null) {
+      return const FirstLoginOtpVerification(
+        verified: false,
+        reason: 'No active verification code found. Please request a new code.',
+      );
+    }
+
+    final now = DateTime.now();
+    if (now.isAfter(_changePasswordOtpExpiry!)) {
+      _changePasswordOtpCode = null;
+      _changePasswordVerified = false;
+      return const FirstLoginOtpVerification(
+        verified: false,
+        reason: 'expired',
+      );
+    }
+
+    if (cleanCode != _changePasswordOtpCode) {
+      if (email.isNotEmpty) {
+        final failStatus = await RateLimitService.instance.recordFailure(
+          feature: 'change_password',
+          targetIdentifier: email,
+          maxAttempts: 5,
+        );
+        _changePasswordAttempts = failStatus.failedAttempts;
+
+        if (failStatus.isLocked) {
+          _changePasswordOtpCode = null;
+          _changePasswordVerified = false;
+          return FirstLoginOtpVerification(
+            verified: false,
+            reason: 'locked',
+            retryAfter: failStatus.remainingSeconds,
+          );
+        }
+      } else {
+        _changePasswordAttempts++;
+        if (_changePasswordAttempts >= 5) {
+          _changePasswordOtpCode = null;
+          _changePasswordVerified = false;
+          return const FirstLoginOtpVerification(
+            verified: false,
+            reason: 'locked',
+            retryAfter: 300,
+          );
+        }
+      }
+
+      return FirstLoginOtpVerification(
+        verified: false,
+        attemptsRemaining: 5 - _changePasswordAttempts,
+      );
+    }
+
+    // Success
+    _changePasswordOtpCode = null;
+    _changePasswordVerified = true;
+    _changePasswordAttempts = 0;
+
+    if (email.isNotEmpty) {
+      await RateLimitService.instance.clearRateLimit(
+        feature: 'change_password',
+        targetIdentifier: email,
+      );
+      try {
+        await _supabaseClient.from('password_reset_otps').update({
+          'is_verified': true,
+          'updated_at': now.toUtc().toIso8601String(),
+        }).eq('email', email);
+      } catch (_) {}
+    }
+
+    return const FirstLoginOtpVerification(verified: true);
+  }
+
+  /// Completes in-app password update after OTP verification.
+  Future<String?> updatePasswordAfterChangeOtp({
+    required String email,
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    final cleanEmail = email.trim().toLowerCase();
+    if (!_changePasswordVerified || _changePasswordEmail != cleanEmail) {
+      return 'Unauthorized: OTP verification must be completed before updating your password.';
+    }
+
+    try {
+      final fbUser = firebase.FirebaseAuth.instance.currentUser;
+      if (fbUser != null) {
+        try {
+          final cred = firebase.EmailAuthProvider.credential(
+            email: cleanEmail,
+            password: currentPassword,
+          );
+          await fbUser.reauthenticateWithCredential(cred);
+        } catch (_) {}
+      }
+
+      bool updated = false;
+      if (fbUser != null) {
+        try {
+          await fbUser.updatePassword(newPassword);
+          updated = true;
+        } catch (clientErr) {
+          debugPrint('[AuthRepository] Client updatePassword notice: $clientErr');
+        }
+      }
+
+      if (!updated && currentUser != null) {
+        updated = await FirebaseAuthAdminService.updateUserPassword(
+          uid: currentUser!.id,
+          newPassword: newPassword,
+        );
+      }
+
+      if (!updated) {
+        return 'Failed to update password in Firebase Auth. Please try again.';
+      }
+
+      // Clear verified OTP record
+      try {
+        await _supabaseClient
+            .from('password_reset_otps')
+            .delete()
+            .eq('email', cleanEmail);
+      } catch (_) {}
+
+      await LocalStorageService.updateSavedPasswordIfRemembered(
+        newPassword,
+        forEmail: cleanEmail,
+      );
+
+      _changePasswordVerified = false;
+      _changePasswordEmail = null;
+      _changePasswordOtpCode = null;
+      _changePasswordOtpExpiry = null;
+      _changePasswordAttempts = 0;
+
+      return null; // Success
+    } catch (e) {
+      return e.toString().replaceFirst('Exception: ', '');
+    }
+  }
+
+  /// Direct in-app password change for parent accounts (using current password re-authentication).
+  Future<Map<String, String>?> changeParentPassword({
+    required custom.UserModel parent,
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    return await SupabaseParentRepository().changeParentPassword(
+      parent: parent,
+      currentPassword: currentPassword,
+      newPassword: newPassword,
+    );
   }
 
   // Admin: Get teacher accounts created by an administrator.
