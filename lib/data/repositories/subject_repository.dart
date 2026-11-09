@@ -625,10 +625,14 @@ class SubjectRepository {
             }
             classworkIds.add(classworkId);
 
+            final effectiveColKey = catKey == 'ex'
+                ? (colIdx == '1' ? 'st1' : (colIdx == '2' ? 'st2' : (colIdx == '3' ? 'te' : colIdx)))
+                : colIdx;
+
             // 1. Sync HPS -> classwork_items.max_score
             final catHps = hps[catKey];
             if (catHps is Map) {
-              final rawNewHps = catHps[colIdx];
+              final rawNewHps = catHps[effectiveColKey] ?? catHps[colIdx];
               if (rawNewHps is num) {
                 final newMaxScore = rawNewHps.toInt();
                 final currentMaxScore = (item['max_score'] as num?)?.toInt();
@@ -651,7 +655,7 @@ class SubjectRepository {
               if (studentScores is! Map) continue;
               final catScores = studentScores[catKey];
               if (catScores is! Map) continue;
-              final scoreVal = catScores[colIdx];
+              final scoreVal = catScores[effectiveColKey] ?? catScores[colIdx];
               if (scoreVal != null && scoreVal is num) {
                 submissionUpserts.add({
                   'classwork_id': classworkId,
@@ -689,9 +693,14 @@ class SubjectRepository {
               }
               final colIdx = matchingItem['gradebook_column_index']?.toString();
               if (colIdx == null) continue;
+              final effectiveColKey = catKey == 'ex'
+                  ? (colIdx == '1' ? 'st1' : (colIdx == '2' ? 'st2' : (colIdx == '3' ? 'te' : colIdx)))
+                  : colIdx;
               final stuMap = scores[stuId];
               final catMap = stuMap is Map ? stuMap[catKey] : null;
-              final currentScore = catMap is Map ? catMap[colIdx] : null;
+              final currentScore = catMap is Map
+                  ? (catMap[effectiveColKey] ?? catMap[colIdx])
+                  : null;
               if (currentScore == null) {
                 await _client
                     .from('student_classwork_submissions')
@@ -832,9 +841,13 @@ class SubjectRepository {
           'max_score': maxPts,
         };
 
+        final effectiveCol = (cat == 'ex')
+            ? (col == '1' ? 'st1' : (col == '2' ? 'st2' : (col == '3' ? 'te' : col)))
+            : col;
+
         final catHps = Map<String, dynamic>.from(hps[cat] as Map? ?? {});
         if (maxPts != null) {
-          catHps[col] = (maxPts as num).toInt();
+          catHps[effectiveCol] = (maxPts as num).toInt();
         }
         hps[cat] = catHps;
       }
@@ -854,6 +867,9 @@ class SubjectRepository {
           if (cw == null) continue;
           final cat = cw['category'] as String;
           final col = cw['column'] as String;
+          final effectiveCol = (cat == 'ex')
+              ? (col == '1' ? 'st1' : (col == '2' ? 'st2' : (col == '3' ? 'te' : col)))
+              : col;
 
           final studentMap = Map<String, dynamic>.from(
             scores[stuId] as Map? ?? {},
@@ -861,7 +877,7 @@ class SubjectRepository {
           final catScores = Map<String, dynamic>.from(
             studentMap[cat] as Map? ?? {},
           );
-          catScores[col] = (scoreVal as num).toDouble();
+          catScores[effectiveCol] = (scoreVal as num).toDouble();
           studentMap[cat] = catScores;
           scores[stuId] = studentMap;
         }

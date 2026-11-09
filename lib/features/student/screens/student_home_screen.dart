@@ -7,6 +7,7 @@ import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/data/repositories/student_dashboard_repository.dart';
 import 'package:class_realm/features/student/shared/widgets/student_classwork_card.dart';
 import 'package:class_realm/features/student/sub_features/academics/screens/student_academic_performance_screen.dart';
+import 'package:class_realm/features/student/sub_features/academics/screens/student_assessment_screen.dart';
 import 'package:class_realm/features/student/sub_features/academics/screens/student_grades_screen.dart';
 import 'package:class_realm/features/student/sub_features/academics/screens/student_learning_materials_screen.dart';
 import 'package:class_realm/features/student/sub_features/profile/screens/student_settings_screen.dart';
@@ -35,6 +36,7 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
   StudentDashboardData? _dashboard;
   Object? _loadError;
   bool _isLoading = true;
+  bool _isAutoResumingAssessment = false;
 
   String _routeForIndex(int index) {
     switch (index) {
@@ -70,7 +72,32 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
     final route = _routeForIndex(_currentIndex);
     LocalStorageService.saveLastActiveRoute(route);
     updateBrowserUrl(route);
+    final initialStudentId =
+        AuthRepository.instance.currentUser?.id ??
+        LocalStorageService.getCachedUser()?.id;
+    if (initialStudentId != null && initialStudentId.isNotEmpty) {
+      _checkAndAutoResumeAssessment(initialStudentId);
+    }
     _loadDashboard();
+  }
+
+  Future<void> _checkAndAutoResumeAssessment(String studentId) async {
+    if (_isAutoResumingAssessment || studentId.isEmpty) return;
+    _isAutoResumingAssessment = true;
+    try {
+      final activeAssessment =
+          await StudentAssessmentScreen.getActiveAssessmentToResume(studentId);
+      if (activeAssessment != null && mounted) {
+        await StudentAssessmentScreen.start(context, activeAssessment);
+        if (mounted) {
+          _loadDashboard(forceRefresh: true, silent: true);
+        }
+      }
+    } catch (e) {
+      debugPrint('Notice checking auto-resume assessment: $e');
+    } finally {
+      _isAutoResumingAssessment = false;
+    }
   }
 
   Future<void> _loadDashboard({
@@ -99,6 +126,7 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
           _dashboard = dashboard;
           _loadError = null;
         });
+        _checkAndAutoResumeAssessment(dashboard.student.id);
       }
     } catch (error) {
       if (mounted && (!silent || _dashboard == null)) {
@@ -1165,16 +1193,16 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
     final wwItems = subjectItems
         .where(
           (i) =>
-              i.type != 'performance_task' &&
-              i.type != 'exam' &&
-              i.type != 'quiz',
+              i.type == 'activity' ||
+              i.type == 'quiz' ||
+              (i.type != 'performance_task' && i.type != 'exam'),
         )
         .toList();
     final ptItems = subjectItems
         .where((i) => i.type == 'performance_task')
         .toList();
     final exItems = subjectItems
-        .where((i) => i.type == 'exam' || i.type == 'quiz')
+        .where((i) => i.type == 'exam')
         .toList();
 
     return DefaultTabController(
@@ -1327,7 +1355,7 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
                   emptyIcon: Icons.quiz_outlined,
                   emptyTitle: 'No examinations yet',
                   emptyMessage:
-                      'Quizzes and examinations scheduled for ${activeEnrollment.subjectName} will appear here.',
+                      'Periodical examinations scheduled for ${activeEnrollment.subjectName} will appear here.',
                 ),
               ],
             ),

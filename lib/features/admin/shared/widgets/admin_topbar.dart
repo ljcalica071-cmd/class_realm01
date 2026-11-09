@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:class_realm/core/theme/app_theme.dart';
 import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/widgets/common/sync_status_badge.dart';
@@ -13,7 +14,7 @@ class AdminTopbar extends StatelessWidget {
 
   const AdminTopbar({
     super.key,
-    required this.isSidebarExpanded,
+    this.isSidebarExpanded = true,
     required this.onToggleSidebar,
     required this.title,
     required this.adminUser,
@@ -25,13 +26,14 @@ class AdminTopbar extends StatelessWidget {
     final isMobile = MediaQuery.of(context).size.width < 900;
 
     return Container(
+      width: double.infinity,
       height: 70,
       padding: EdgeInsets.symmetric(horizontal: isMobile ? 16 : 24),
       decoration: BoxDecoration(
         color: theme.colorScheme.surface,
         border: Border(
           bottom: BorderSide(
-            color: theme.colorScheme.onSurface.withValues(alpha: 0.12),
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.05),
           ),
         ),
       ),
@@ -39,22 +41,22 @@ class AdminTopbar extends StatelessWidget {
         children: [
           if (isMobile)
             Builder(
-              builder: (ctx) => IconButton(
-                icon: const Icon(Icons.menu),
-                onPressed: () => Scaffold.of(ctx).openDrawer(),
+              builder: (ctx) => Padding(
+                padding: const EdgeInsets.only(right: 16),
+                child: IconButton(
+                  icon: Icon(
+                    LucideIcons.menu,
+                    color: theme.colorScheme.onSurface,
+                  ),
+                  onPressed: () => Scaffold.of(ctx).openDrawer(),
+                ),
               ),
-            )
-          else
-            IconButton(
-              icon: Icon(isSidebarExpanded ? Icons.menu_open : Icons.menu),
-              onPressed: onToggleSidebar,
             ),
-          if (!isMobile) const SizedBox(width: 16),
           Expanded(
             child: Text(
               title,
               style: TextStyle(
-                fontSize: isMobile ? 18 : 20,
+                fontSize: 18,
                 fontWeight: FontWeight.bold,
                 color: theme.colorScheme.onSurface,
               ),
@@ -62,6 +64,8 @@ class AdminTopbar extends StatelessWidget {
             ),
           ),
           if (!isMobile) const Spacer(),
+          if (!isMobile) const SyncStatusBadge(),
+          if (!isMobile) const SizedBox(width: 16),
           IconButton(
             tooltip: theme.brightness == Brightness.dark
                 ? 'Switch to Light Mode'
@@ -74,9 +78,10 @@ class AdminTopbar extends StatelessWidget {
               ),
               child: Icon(
                 theme.brightness == Brightness.dark
-                    ? Icons.light_mode
-                    : Icons.dark_mode,
+                    ? LucideIcons.sun
+                    : LucideIcons.moon,
                 key: ValueKey<bool>(theme.brightness == Brightness.dark),
+                color: theme.colorScheme.onSurface,
               ),
             ),
             onPressed: () {
@@ -96,43 +101,50 @@ class AdminTopbar extends StatelessWidget {
               }
             },
           ),
-          if (!isMobile) const SizedBox(width: 8),
-          if (!isMobile) const SyncStatusBadge(),
-          const SizedBox(width: 12),
+          const SizedBox(width: 8),
           CircleAvatar(
             backgroundColor: theme.colorScheme.primary,
-            radius: isMobile ? 16 : 20,
+            radius: 18,
             child: Text(
-              adminUser?.fullName.substring(0, 1) ?? 'A',
-              style: TextStyle(
-                color: theme.colorScheme.onPrimary,
+              adminUser?.fullName.isNotEmpty == true
+                  ? adminUser!.fullName.substring(0, 1).toUpperCase()
+                  : 'A',
+              style: const TextStyle(
+                color: Colors.white,
                 fontWeight: FontWeight.bold,
-                fontSize: isMobile ? 14 : 16,
+                fontSize: 14,
               ),
             ),
           ),
           if (!isMobile) ...[
             const SizedBox(width: 12),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  adminUser?.fullName ?? 'Administrator',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 13,
-                    color: theme.colorScheme.onSurface,
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 160),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    adminUser?.fullName ?? 'Administrator',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                      color: theme.colorScheme.onSurface,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
                   ),
-                ),
-                Text(
-                  'System Administrator',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                  Text(
+                    'System Administrator',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ],
         ],

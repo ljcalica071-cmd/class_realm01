@@ -252,8 +252,12 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
             final scores = Map<String, dynamic>.from(
               termSheet['scores'] as Map? ?? {},
             );
-            final catKey = _activity.isRequirement ? 'pt' : 'ww';
-            final colKey = _activity.gradebookColumnIndex.toString();
+            final catKey = _activity.effectiveGradingCategory;
+            final colKey = catKey == 'ex'
+                ? (_activity.gradebookColumnIndex == 1
+                      ? 'st1'
+                      : (_activity.gradebookColumnIndex == 2 ? 'st2' : 'te'))
+                : _activity.gradebookColumnIndex.toString();
 
             for (final student in filtered) {
               final studentScores = scores[student.id];

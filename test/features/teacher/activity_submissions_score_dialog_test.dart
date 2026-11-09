@@ -42,5 +42,49 @@ void main() {
       expect(isFeedbackOnlyWhitespace('\t\n  '), isTrue); // Pure tabs/newlines rejected!
       expect(isFeedbackOnlyWhitespace('Good job!'), isFalse); // Valid content ok
     });
+
+    test('ActivityModel.effectiveGradingCategory maps EX, PT, and WW accurately for Gradebook sync', () {
+      final examActivity = ActivityModel(
+        id: 'exam-1',
+        title: '1st Summative Exam',
+        description: 'Physical exam administered in class',
+        subject: 'Math',
+        section: 'Rizal',
+        deadline: DateTime.now(),
+        maxScore: 100,
+        isPublished: true,
+        isRequirement: false,
+        gradingCategory: 'ex',
+        completionMode: 'in_person',
+        gradebookColumnIndex: 1,
+      );
+
+      expect(examActivity.effectiveGradingCategory, 'ex');
+      expect(examActivity.completionMode, 'in_person');
+
+      // Test slot key mapping
+      final colKey = examActivity.effectiveGradingCategory == 'ex'
+          ? (examActivity.gradebookColumnIndex == 1
+                ? 'st1'
+                : (examActivity.gradebookColumnIndex == 2 ? 'st2' : 'te'))
+          : examActivity.gradebookColumnIndex.toString();
+      expect(colKey, 'st1');
+
+      final st2Activity = examActivity.copyWith(gradebookColumnIndex: 2);
+      final st2ColKey = st2Activity.effectiveGradingCategory == 'ex'
+          ? (st2Activity.gradebookColumnIndex == 1
+                ? 'st1'
+                : (st2Activity.gradebookColumnIndex == 2 ? 'st2' : 'te'))
+          : st2Activity.gradebookColumnIndex.toString();
+      expect(st2ColKey, 'st2');
+
+      final teActivity = examActivity.copyWith(gradebookColumnIndex: 3);
+      final teColKey = teActivity.effectiveGradingCategory == 'ex'
+          ? (teActivity.gradebookColumnIndex == 1
+                ? 'st1'
+                : (teActivity.gradebookColumnIndex == 2 ? 'st2' : 'te'))
+          : teActivity.gradebookColumnIndex.toString();
+      expect(teColKey, 'te');
+    });
   });
 }

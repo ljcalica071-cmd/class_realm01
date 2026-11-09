@@ -23,6 +23,7 @@ import 'package:class_realm/widgets/common/app_buttons.dart';
 import 'package:class_realm/widgets/common/app_modals.dart';
 import 'package:class_realm/widgets/common/app_date_picker_field.dart';
 import 'package:class_realm/widgets/common/app_time_picker_field.dart';
+import 'package:class_realm/widgets/common/app_duration_picker_field.dart';
 import 'package:class_realm/widgets/common/expandable_instructions_text.dart';
 import 'package:class_realm/features/teacher/sub_features/assessments/widgets/anti_cheating_documentation_modal.dart';
 
@@ -46,17 +47,17 @@ class QuestionDraft {
   }) : choices = choices ?? ['', '', '', ''];
 
   bool get isComplete {
-    if (statement.trim().isEmpty) return false;
+    if (statement.trim().length < 2) return false;
     if (points <= 0) return false;
     if (type == QuestionType.multipleChoice) {
-      if (choices.length < 4 || choices.any((c) => c.trim().isEmpty)) {
+      if (choices.length < 4 || choices.any((c) => c.trim().length < 2)) {
         return false;
       }
       return correctAnswer.isNotEmpty;
     } else if (type == QuestionType.trueFalse) {
       return correctAnswer == 'True' || correctAnswer == 'False';
     } else if (type == QuestionType.identification) {
-      return correctAnswer.trim().isNotEmpty;
+      return correctAnswer.trim().length >= 2;
     }
     return false;
   }
@@ -168,9 +169,9 @@ class _CreateAssessmentFlowDialogState
   String? _distributionError;
 
   // Question distributions (3 types only, max 3 digits)
-  final _mcCountCtrl = TextEditingController(text: '0');
-  final _tfCountCtrl = TextEditingController(text: '0');
-  final _idCountCtrl = TextEditingController(text: '0');
+  final _mcCountCtrl = TextEditingController(text: '');
+  final _tfCountCtrl = TextEditingController(text: '');
+  final _idCountCtrl = TextEditingController(text: '');
 
   // Step 2: Question Builder
   List<QuestionDraft> _plannedQuestions = [];
@@ -221,9 +222,9 @@ class _CreateAssessmentFlowDialogState
       final text = _durationCtrl.text.trim();
       if (text.isNotEmpty) {
         final d = int.tryParse(text);
-        if (d != null && d > 120) {
-          if (_durationError != 'Duration cannot exceed 120 minutes.') {
-            setState(() => _durationError = 'Duration cannot exceed 120 minutes.');
+        if (d != null && d > 180) {
+          if (_durationError != 'Duration cannot exceed 180 minutes.') {
+            setState(() => _durationError = 'Duration cannot exceed 180 minutes.');
           }
         } else if (_durationError != null) {
           setState(() => _durationError = null);
@@ -232,6 +233,18 @@ class _CreateAssessmentFlowDialogState
         setState(() => _durationError = null);
       }
     });
+
+    void syncDraft() {
+      _syncCurrentDraftFromInputs();
+      setState(() {});
+    }
+
+    _qStatementCtrl.addListener(syncDraft);
+    _choiceACtrl.addListener(syncDraft);
+    _choiceBCtrl.addListener(syncDraft);
+    _choiceCCtrl.addListener(syncDraft);
+    _choiceDCtrl.addListener(syncDraft);
+    _qIdAnswerCtrl.addListener(syncDraft);
     if (widget.initialOfferings != null) {
       _teacherSubjects = List<Map<String, dynamic>>.from(
         widget.initialOfferings!,
@@ -504,7 +517,9 @@ class _CreateAssessmentFlowDialogState
       now.month,
       now.day,
     );
-    final minDate = _completionMode == 'online' ? today : DateTime(2026, 1, 1);
+    final minDate = _completionMode == 'online'
+        ? today
+        : DateTime(today.year - 1, 1, 1);
 
     final picked = await showAppDatePickerDialog(
       context,
@@ -608,8 +623,8 @@ class _CreateAssessmentFlowDialogState
       setState(() => _durationError = 'Duration must be at least 1 minute.');
       return;
     }
-    if (duration > 120) {
-      setState(() => _durationError = 'Duration cannot exceed 120 minutes.');
+    if (duration > 180) {
+      setState(() => _durationError = 'Duration cannot exceed 180 minutes.');
       return;
     }
 
@@ -831,13 +846,40 @@ class _CreateAssessmentFlowDialogState
     );
   }
 
+  bool _isLoadingQuestion = false;
+
+  void _syncCurrentDraftFromInputs() {
+    if (_isLoadingQuestion) return;
+    if (_activeQuestionIndex < 0 ||
+        _activeQuestionIndex >= _plannedQuestions.length) {
+      return;
+    }
+    final q = _plannedQuestions[_activeQuestionIndex];
+    q.statement = _qStatementCtrl.text;
+    q.points = 1.0;
+    if (q.type == QuestionType.multipleChoice) {
+      q.choices = [
+        _choiceACtrl.text,
+        _choiceBCtrl.text,
+        _choiceCCtrl.text,
+        _choiceDCtrl.text,
+      ];
+      q.correctAnswer = _selectedMcAnswer ?? '';
+    } else if (q.type == QuestionType.trueFalse) {
+      q.choices = ['True', 'False'];
+      q.correctAnswer = _selectedTfAnswer ?? '';
+    } else if (q.type == QuestionType.identification) {
+      q.correctAnswer = _qIdAnswerCtrl.text;
+    }
+  }
+
   void _loadQuestionIntoEditor(int index) {
     if (index < 0 || index >= _plannedQuestions.length) return;
     final q = _plannedQuestions[index];
+    _isLoadingQuestion = true;
     setState(() {
       _activeQuestionIndex = index;
       _qStatementCtrl.text = q.statement;
-      _qPointsCtrl.text = q.points.toInt().toString();
       _editorError = null;
 
       if (q.type == QuestionType.multipleChoice) {
@@ -852,6 +894,7 @@ class _CreateAssessmentFlowDialogState
         _qIdAnswerCtrl.text = q.correctAnswer;
       }
     });
+    _isLoadingQuestion = false;
   }
 
   bool _saveCurrentEditorState() {
@@ -869,11 +912,7 @@ class _CreateAssessmentFlowDialogState
       return false;
     }
 
-    final points = double.tryParse(_qPointsCtrl.text.trim()) ?? 1.0;
-    if (points <= 0) {
-      setState(() => _editorError = 'Points must be at least 1.');
-      return false;
-    }
+    q.points = 1.0;
 
     if (q.type == QuestionType.multipleChoice) {
       final a = _choiceACtrl.text.trim();
@@ -882,7 +921,8 @@ class _CreateAssessmentFlowDialogState
       final d = _choiceDCtrl.text.trim();
       if (a.length < 2 || b.length < 2 || c.length < 2 || d.length < 2) {
         setState(
-          () => _editorError = 'All 4 choices (A, B, C, D) are required (min 2 characters each).',
+          () => _editorError =
+              'All 4 choices (A, B, C, D) are required (min 2 characters each).',
         );
         return false;
       }
@@ -893,7 +933,6 @@ class _CreateAssessmentFlowDialogState
         return false;
       }
       q.statement = statement;
-      q.points = points;
       q.choices = [a, b, c, d];
       q.correctAnswer = _selectedMcAnswer!;
     } else if (q.type == QuestionType.trueFalse) {
@@ -904,19 +943,18 @@ class _CreateAssessmentFlowDialogState
         return false;
       }
       q.statement = statement;
-      q.points = points;
       q.choices = ['True', 'False'];
       q.correctAnswer = _selectedTfAnswer!;
     } else if (q.type == QuestionType.identification) {
       final key = _qIdAnswerCtrl.text.trim();
       if (key.length < 2) {
         setState(
-          () => _editorError = 'Please specify the official answer key for identification (min 2 characters).',
+          () => _editorError =
+              'Please specify the official answer key for identification (min 2 characters).',
         );
         return false;
       }
       q.statement = statement;
-      q.points = points;
       q.correctAnswer = key;
     }
 
@@ -1307,24 +1345,35 @@ class _CreateAssessmentFlowDialogState
             : '$title has been published for ${_selectedOffering!['section_name']} (${_termLabel(_termNumber)}) under Written Works (WW $_quizSlotIndex). Scheduled for ${_formatDate(_scheduledDate)} at ${AppTimePickerField.format(_startTime)} (${duration}m duration).',
       );
     } catch (e) {
-      // Rollback any partially created records so orphan rows never remain in DB
+      // Rollback any partially created records so orphan rows never remain in DB (child-first cascade)
       if (createdAssessmentId != null) {
+        final client = SupabaseService().client;
         try {
-          final client = SupabaseService().client;
-          await client
-              .from('classwork_items')
-              .delete()
-              .eq('id', createdAssessmentId);
+          final qRows = await client
+              .from('assessment_questions')
+              .select('id')
+              .eq('assessment_id', createdAssessmentId);
+          final qIds = (qRows as List).map((r) => r['id'].toString()).toList();
+          if (qIds.isNotEmpty) {
+            await client
+                .from('assessment_question_options')
+                .delete()
+                .inFilter('question_id', qIds);
+          }
         } catch (_) {}
         try {
-          final client = SupabaseService().client;
           await client
               .from('assessment_questions')
               .delete()
               .eq('assessment_id', createdAssessmentId);
         } catch (_) {}
         try {
-          final client = SupabaseService().client;
+          await client
+              .from('classwork_items')
+              .delete()
+              .eq('id', createdAssessmentId);
+        } catch (_) {}
+        try {
           await client
               .from('digital_assessments')
               .delete()
@@ -1486,7 +1535,9 @@ class _CreateAssessmentFlowDialogState
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
               decoration: BoxDecoration(
-                color: const Color(0xFFF8FAFC),
+                color: theme.brightness == Brightness.dark
+                    ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.25)
+                    : const Color(0xFFF8FAFC),
                 border: Border(
                   top: BorderSide(
                     color: theme.colorScheme.onSurface.withValues(alpha: 0.12),
@@ -1510,20 +1561,20 @@ class _CreateAssessmentFlowDialogState
                     const SizedBox.shrink(),
                   Row(
                     children: [
-                      TextButton(
-                        onPressed: _handleClose,
-                        child: Text(
-                          'Cancel',
-                          style: TextStyle(
-                            color: theme.colorScheme.onSurface.withValues(
-                              alpha: 0.6,
+                      if (_currentStep == 1) ...[
+                        TextButton(
+                          onPressed: _handleClose,
+                          child: Text(
+                            'Cancel',
+                            style: TextStyle(
+                              color: theme.colorScheme.onSurface.withValues(
+                                alpha: 0.6,
+                              ),
+                              fontWeight: FontWeight.w600,
                             ),
-                            fontWeight: FontWeight.w600,
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 12),
-                      if (_currentStep == 1)
+                        const SizedBox(width: 12),
                         AppPrimaryButton(
                           label: _completionMode == 'in_person'
                               ? (_isPublishing
@@ -1545,17 +1596,31 @@ class _CreateAssessmentFlowDialogState
                               ? null
                               : _handleContinueOrPublish,
                         ),
-                      if (_currentStep == 2)
-                        AppPrimaryButton(
-                          label: _isPublishing
-                              ? (_isExam ? 'Publishing Examination...' : 'Publishing Quiz...')
-                              : (_isExam ? 'Save & Publish Examination' : 'Save & Publish Quiz'),
-                          icon: Icons.check_circle_outline,
-                          height: 42,
-                          backgroundColor:
-                              theme.colorScheme.primary, // 30% Primary
-                          onPressed: _isPublishing ? null : _publishOnlineExam,
+                      ],
+                      if (_currentStep == 2) ...[
+                        Builder(
+                          builder: (context) {
+                            final bool areAllQuestionsComplete =
+                                _plannedQuestions.isNotEmpty &&
+                                _plannedQuestions.every((q) => q.isComplete);
+                            return AppPrimaryButton(
+                              label: _isPublishing
+                                  ? (_isExam
+                                      ? 'Publishing Examination...'
+                                      : 'Publishing Quiz...')
+                                  : (_isExam
+                                      ? 'Publish Examination'
+                                      : 'Publish Quiz'),
+                              icon: Icons.check_circle_outline,
+                              height: 42,
+                              backgroundColor: theme.colorScheme.primary,
+                              onPressed: (_isPublishing || !areAllQuestionsComplete)
+                                  ? null
+                                  : _publishOnlineExam,
+                            );
+                          },
                         ),
+                      ],
                     ],
                   ),
                 ],
@@ -1572,6 +1637,7 @@ class _CreateAssessmentFlowDialogState
   // =========================================================================
   Widget _buildStep1BasicDetailsView() {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
@@ -1687,10 +1753,13 @@ class _CreateAssessmentFlowDialogState
           Container(
             padding: const EdgeInsets.all(4),
             decoration: BoxDecoration(
-              color: theme.colorScheme.surfaceContainerHighest.withValues(
-                alpha: 0.4,
-              ),
+              color: isDark
+                  ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3)
+                  : const Color(0xFFF1F5F9),
               borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: theme.colorScheme.outline.withValues(alpha: isDark ? 0.2 : 0.1),
+              ),
             ),
             child: Row(
               children: [
@@ -1701,7 +1770,9 @@ class _CreateAssessmentFlowDialogState
                       padding: const EdgeInsets.symmetric(vertical: 10),
                       decoration: BoxDecoration(
                         color: _completionMode == 'online'
-                            ? Colors.white
+                            ? (isDark
+                                ? theme.colorScheme.surfaceContainerHighest
+                                : Colors.white)
                             : Colors.transparent,
                         borderRadius: BorderRadius.circular(8),
                         boxShadow: _completionMode == 'online'
@@ -1721,8 +1792,8 @@ class _CreateAssessmentFlowDialogState
                             Icons.laptop_chromebook,
                             size: 16,
                             color: _completionMode == 'online'
-                                ? const Color(0xFF0F8A48)
-                                : Colors.grey,
+                                ? (isDark ? const Color(0xFF4ADE80) : const Color(0xFF0F8A48))
+                                : theme.colorScheme.onSurfaceVariant,
                           ),
                           const SizedBox(width: 6),
                           Text(
@@ -1733,8 +1804,8 @@ class _CreateAssessmentFlowDialogState
                                   ? FontWeight.w700
                                   : FontWeight.w500,
                               color: _completionMode == 'online'
-                                  ? const Color(0xFF0F8A48)
-                                  : Colors.grey.shade600,
+                                  ? (isDark ? const Color(0xFF4ADE80) : const Color(0xFF0F8A48))
+                                  : theme.colorScheme.onSurfaceVariant,
                             ),
                           ),
                         ],
@@ -1749,7 +1820,9 @@ class _CreateAssessmentFlowDialogState
                       padding: const EdgeInsets.symmetric(vertical: 10),
                       decoration: BoxDecoration(
                         color: _completionMode == 'in_person'
-                            ? Colors.white
+                            ? (isDark
+                                ? theme.colorScheme.surfaceContainerHighest
+                                : Colors.white)
                             : Colors.transparent,
                         borderRadius: BorderRadius.circular(8),
                         boxShadow: _completionMode == 'in_person'
@@ -1766,11 +1839,11 @@ class _CreateAssessmentFlowDialogState
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Icon(
-                            Icons.people_alt_outlined,
+                            Icons.group,
                             size: 16,
                             color: _completionMode == 'in_person'
-                                ? const Color(0xFF0F8A48)
-                                : Colors.grey,
+                                ? (isDark ? const Color(0xFF4ADE80) : const Color(0xFF0F8A48))
+                                : theme.colorScheme.onSurfaceVariant,
                           ),
                           const SizedBox(width: 6),
                           Text(
@@ -1781,8 +1854,8 @@ class _CreateAssessmentFlowDialogState
                                   ? FontWeight.w700
                                   : FontWeight.w500,
                               color: _completionMode == 'in_person'
-                                  ? const Color(0xFF0F8A48)
-                                  : Colors.grey.shade600,
+                                  ? (isDark ? const Color(0xFF4ADE80) : const Color(0xFF0F8A48))
+                                  : theme.colorScheme.onSurfaceVariant,
                             ),
                           ),
                         ],
@@ -1795,7 +1868,7 @@ class _CreateAssessmentFlowDialogState
           ),
           const SizedBox(height: 16),
 
-          // 2. Target Section Chip
+          // 2. Target Section Chip (Static centered badge, NO dropdown, matching Create PT)
           if (_isLoadingOfferings)
             const Center(
               child: Padding(
@@ -1804,85 +1877,32 @@ class _CreateAssessmentFlowDialogState
               ),
             )
           else if (_selectedOffering != null)
-            _teacherSubjects.length > 1
-                ? Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFE8F5E9),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: const Color(0xFF0F8A48).withValues(alpha: 0.2),
-                      ),
-                    ),
-                    child: DropdownButtonHideUnderline(
-                      child: DropdownButton<Map<String, dynamic>>(
-                        value: _selectedOffering,
-                        isExpanded: true,
-                        icon: const Icon(
-                          Icons.arrow_drop_down,
-                          color: Color(0xFF0F8A48),
-                        ),
-                        items: _teacherSubjects.map((s) {
-                          return DropdownMenuItem<Map<String, dynamic>>(
-                            value: s,
-                            child: Text(
-                              'Grade ${s['grade_level'] ?? 11} • ${s['subject_name'] ?? 'Subject'} • ${s['section_name'] ?? 'Section'}',
-                              style: const TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: Color(0xFF0F8A48),
-                              ),
-                            ),
-                          );
-                        }).toList(),
-                        onChanged: (newOff) {
-                          if (newOff != null) {
-                            final activeTerms = _getAvailableTermsForOffering(
-                              newOff,
-                            );
-                            setState(() {
-                              _selectedOffering = newOff;
-                              if (activeTerms.isNotEmpty &&
-                                  !activeTerms.contains(_termNumber)) {
-                                _termNumber = activeTerms.first;
-                              }
-                            });
-                            final offId = newOff['id']?.toString() ?? '';
-                            if (offId.isNotEmpty) {
-                              _checkSlotStatuses(offId);
-                            }
-                          }
-                        },
-                      ),
-                    ),
-                  )
-                : Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 10,
-                    ),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFE8F5E9),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: const Color(0xFF0F8A48).withValues(alpha: 0.2),
-                      ),
-                    ),
-                    alignment: Alignment.center,
-                    child: Text(
-                      'Grade ${_selectedOffering!['grade_level'] ?? 11} • ${_selectedOffering!['subject_name'] ?? 'Subject'} • ${_selectedOffering!['section_name'] ?? 'Section'}',
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFF0F8A48),
-                      ),
-                    ),
-                  ),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(
+                horizontal: 14,
+                vertical: 10,
+              ),
+              decoration: BoxDecoration(
+                color: isDark
+                    ? const Color(0xFF0F8A48).withValues(alpha: 0.15)
+                    : const Color(0xFFE8F5E9),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: const Color(0xFF0F8A48).withValues(alpha: isDark ? 0.4 : 0.2),
+                ),
+              ),
+              alignment: Alignment.center,
+              child: Text(
+                'Grade ${_selectedOffering!['grade_level'] ?? 11} • ${_selectedOffering!['subject_name'] ?? 'Subject'} • ${_selectedOffering!['section_name'] ?? 'Section'}',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: isDark ? const Color(0xFF4ADE80) : const Color(0xFF0F8A48),
+                ),
+              ),
+            ),
           const SizedBox(height: 16),
 
           // 2b. Gradebook Term Selector / Display
@@ -1992,7 +2012,7 @@ class _CreateAssessmentFlowDialogState
             ),
             const SizedBox(height: 8),
             if (_isCheckingSlots)
-              const LinearProgressIndicator(minHeight: 2)
+              _buildSlotSkeletonRow(theme)
             else
               Row(
                 children: [
@@ -2036,16 +2056,16 @@ class _CreateAssessmentFlowDialogState
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 decoration: BoxDecoration(
-                  color: Colors.amber.shade50,
+                  color: isDark ? AppTheme.catOrange.withValues(alpha: 0.12) : Colors.amber.shade50,
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.amber.shade300),
+                  border: Border.all(color: isDark ? AppTheme.catOrange.withValues(alpha: 0.3) : Colors.amber.shade300),
                 ),
                 child: Row(
                   children: [
                     Icon(
                       Icons.info_outline,
                       size: 16,
-                      color: Colors.amber.shade800,
+                      color: isDark ? AppTheme.catOrange : Colors.amber.shade800,
                     ),
                     const SizedBox(width: 8),
                     Expanded(
@@ -2053,7 +2073,7 @@ class _CreateAssessmentFlowDialogState
                         'All examination slots (ST1, ST2, TE) are already configured for this offering.',
                         style: TextStyle(
                           fontSize: 12,
-                          color: Colors.amber.shade900,
+                          color: isDark ? AppTheme.catOrange : Colors.amber.shade900,
                         ),
                       ),
                     ),
@@ -2164,77 +2184,18 @@ class _CreateAssessmentFlowDialogState
                 ),
                 const SizedBox(width: 12),
 
-                // Duration Box
+                // Duration Box (AppDurationPickerField with max 180m and quick presets)
                 Expanded(
                   flex: 3,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Duration (Mins) *',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: theme.colorScheme.onSurface,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      TextField(
-                        controller: _durationCtrl,
-                        keyboardType: TextInputType.number,
-                        inputFormatters: [
-                          FilteringTextInputFormatter.digitsOnly,
-                          LengthLimitingTextInputFormatter(3),
-                        ],
-                        decoration: InputDecoration(
-                          hintText: 'e.g. 60',
-                          filled: true,
-                          fillColor: theme.colorScheme.surface,
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 12,
-                          ),
-                          errorText: _durationError,
-                          errorStyle: const TextStyle(
-                            color: Color(0xFFDC2626),
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                          ),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10),
-                            borderSide: BorderSide(
-                              color: theme.colorScheme.outline.withValues(
-                                alpha: 0.3,
-                              ),
-                            ),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10),
-                            borderSide: BorderSide(
-                              color: theme.colorScheme.primary,
-                              width: 1.5,
-                            ),
-                          ),
-                          focusedErrorBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10),
-                            borderSide: const BorderSide(
-                              color: Color(0xFFDC2626),
-                              width: 1.5,
-                            ),
-                          ),
-                          errorBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10),
-                            borderSide: const BorderSide(
-                              color: Color(0xFFDC2626),
-                              width: 1.5,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
+                  child: AppDurationPickerField(
+                    label: 'Duration (Mins) *',
+                    initialDurationMinutes: int.tryParse(_durationCtrl.text.trim()) ?? 60,
+                    onDurationSelected: (mins) {
+                      setState(() {
+                        _durationCtrl.text = mins.toString();
+                        _durationError = null;
+                      });
+                    },
                   ),
                 ),
               ],
@@ -2382,25 +2343,27 @@ class _CreateAssessmentFlowDialogState
                 'e.g. Provide test-taking guidelines, no calculators allowed...',
             errorText: _instructionsError,
           ),
-          const SizedBox(height: 4),
-          Align(
-            alignment: Alignment.centerRight,
-            child: TextButton.icon(
-              onPressed: () {
-                AntiCheatingDocumentationModal.show(context);
-              },
-              icon: const Icon(Icons.shield_outlined, size: 16),
-              label: const Text(
-                'View Complete Anti-Cheating & Exam Taking Guidelines',
-                style: TextStyle(fontSize: 12),
-              ),
-              style: TextButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                minimumSize: Size.zero,
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          if (_completionMode == 'online') ...[
+            const SizedBox(height: 4),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: () {
+                  AntiCheatingDocumentationModal.show(context);
+                },
+                icon: const Icon(Icons.shield_outlined, size: 16),
+                label: const Text(
+                  'View Complete Anti-Cheating & Exam Taking Guidelines',
+                  style: TextStyle(fontSize: 12),
+                ),
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
               ),
             ),
-          ),
+          ],
           const SizedBox(height: 18),
 
           // 6. Question Distributions (Only in Online Mode, 3 types max 3 digits)
@@ -2479,6 +2442,49 @@ class _CreateAssessmentFlowDialogState
     );
   }
 
+  Widget _buildSlotSkeletonRow(ThemeData theme) {
+    final isDark = theme.brightness == Brightness.dark;
+    final skeletonColor = isDark
+        ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3)
+        : Colors.grey.shade100;
+    final borderColor = isDark
+        ? theme.colorScheme.outline.withValues(alpha: 0.15)
+        : Colors.grey.shade300;
+
+    return Row(
+      children: List.generate(3, (index) {
+        return Expanded(
+          child: Padding(
+            padding: EdgeInsets.only(
+              left: index > 0 ? 5.0 : 0.0,
+              right: index < 2 ? 5.0 : 0.0,
+            ),
+            child: Container(
+              height: 52,
+              decoration: BoxDecoration(
+                color: skeletonColor,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: borderColor),
+              ),
+              child: Center(
+                child: Container(
+                  width: 44,
+                  height: 12,
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? Colors.white.withValues(alpha: 0.08)
+                        : Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      }),
+    );
+  }
+
   Widget _buildSlotButton({
     required String slot,
     required String label,
@@ -2487,6 +2493,7 @@ class _CreateAssessmentFlowDialogState
     String? tooltip,
   }) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     final isSelected = _examCategory == slot;
 
     return Tooltip(
@@ -2499,20 +2506,20 @@ class _CreateAssessmentFlowDialogState
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
           decoration: BoxDecoration(
             color: isSelected
-                ? theme.colorScheme.primary.withValues(
-                    alpha: 0.1,
-                  ) // 30% Primary Theme applied here
+                ? theme.colorScheme.primary.withValues(alpha: 0.12)
                 : (isCreated
-                      ? Colors.grey.shade100
+                      ? (isDark
+                          ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.2)
+                          : Colors.grey.shade100)
                       : theme.colorScheme.surface),
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
               color: isSelected
-                  ? theme
-                        .colorScheme
-                        .primary // 10% action color border
+                  ? theme.colorScheme.primary
                   : (isCreated
-                        ? Colors.grey.shade300
+                        ? (isDark
+                            ? theme.colorScheme.outline.withValues(alpha: 0.15)
+                            : Colors.grey.shade300)
                         : theme.colorScheme.outline.withValues(alpha: 0.3)),
               width: isSelected ? 1.8 : 1.0,
             ),
@@ -2526,7 +2533,9 @@ class _CreateAssessmentFlowDialogState
                   fontWeight: FontWeight.bold,
                   color: isSelected
                       ? theme.colorScheme.primary
-                      : (isCreated ? Colors.grey : theme.colorScheme.onSurface),
+                      : (isCreated
+                          ? (isDark ? Colors.grey.shade500 : Colors.grey)
+                          : theme.colorScheme.onSurface),
                 ),
               ),
               const SizedBox(height: 2),
@@ -2537,15 +2546,15 @@ class _CreateAssessmentFlowDialogState
                     vertical: 2,
                   ),
                   decoration: BoxDecoration(
-                    color: Colors.grey.shade300,
+                    color: isDark ? Colors.grey.shade800 : Colors.grey.shade300,
                     borderRadius: BorderRadius.circular(4),
                   ),
-                  child: const Text(
+                  child: Text(
                     'Already Created',
                     style: TextStyle(
                       fontSize: 9,
                       fontWeight: FontWeight.bold,
-                      color: Colors.black54,
+                      color: isDark ? Colors.grey.shade300 : Colors.black54,
                     ),
                   ),
                 )
@@ -2680,12 +2689,19 @@ class _CreateAssessmentFlowDialogState
   }
 
   Widget _buildDistributionRow(String title, TextEditingController controller) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
     return Row(
       children: [
         Expanded(
           child: Text(
             title,
-            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: theme.colorScheme.onSurface,
+            ),
           ),
         ),
         SizedBox(
@@ -2695,6 +2711,11 @@ class _CreateAssessmentFlowDialogState
             controller: controller,
             keyboardType: TextInputType.number,
             textAlign: TextAlign.center,
+            style: TextStyle(
+              color: theme.colorScheme.onSurface,
+              fontWeight: FontWeight.w600,
+              fontSize: 13,
+            ),
             inputFormatters: [
               FilteringTextInputFormatter.digitsOnly,
               LengthLimitingTextInputFormatter(3),
@@ -2702,11 +2723,30 @@ class _CreateAssessmentFlowDialogState
             onChanged: (_) => setState(() {}),
             decoration: InputDecoration(
               hintText: '0',
+              hintStyle: TextStyle(
+                color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.4),
+                fontWeight: FontWeight.normal,
+              ),
               filled: true,
-              fillColor: Colors.white,
+              fillColor: isDark
+                  ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.35)
+                  : Colors.white,
               contentPadding: const EdgeInsets.symmetric(vertical: 8),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: BorderSide(
+                  color: theme.colorScheme.outline.withValues(alpha: isDark ? 0.3 : 0.25),
+                ),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: BorderSide(
+                  color: theme.colorScheme.primary,
+                  width: 1.5,
+                ),
               ),
             ),
           ),
@@ -2749,13 +2789,19 @@ class _CreateAssessmentFlowDialogState
                   children: [
                     Row(
                       children: [
-                        CircleAvatar(
-                          radius: 14,
-                          backgroundColor: AppTheme.catRed,
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.primary.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: theme.colorScheme.primary.withValues(alpha: 0.25),
+                            ),
+                          ),
                           child: Text(
-                            '${currentDraft.position}',
-                            style: const TextStyle(
-                              color: Colors.white,
+                            'Q${currentDraft.position}',
+                            style: TextStyle(
+                              color: theme.colorScheme.primary,
                               fontSize: 12,
                               fontWeight: FontWeight.bold,
                             ),
@@ -2764,9 +2810,10 @@ class _CreateAssessmentFlowDialogState
                         const SizedBox(width: 10),
                         Text(
                           'Question ${currentDraft.position} of ${_plannedQuestions.length}',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 15,
+                            color: theme.colorScheme.onSurface,
                           ),
                         ),
                         const SizedBox(width: 8),
@@ -2792,40 +2839,20 @@ class _CreateAssessmentFlowDialogState
                         ),
                       ],
                     ),
-
-                    // Points field
-                    Row(
-                      children: [
-                        const Text(
-                          'Points:',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                          ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        '1 Point',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: theme.colorScheme.onSurfaceVariant,
                         ),
-                        const SizedBox(width: 8),
-                        SizedBox(
-                          width: 55,
-                          height: 36,
-                          child: TextField(
-                            controller: _qPointsCtrl,
-                            keyboardType: TextInputType.number,
-                            textAlign: TextAlign.center,
-                            inputFormatters: [
-                              FilteringTextInputFormatter.digitsOnly,
-                              LengthLimitingTextInputFormatter(2),
-                            ],
-                            decoration: InputDecoration(
-                              contentPadding: const EdgeInsets.symmetric(
-                                vertical: 6,
-                              ),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
                   ],
                 ),
@@ -2835,16 +2862,20 @@ class _CreateAssessmentFlowDialogState
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text(
+                    Text(
                       'Question Statement *',
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
+                        color: theme.colorScheme.onSurface,
                       ),
                     ),
                     Text(
                       '${_qStatementCtrl.text.length} / 500',
-                      style: const TextStyle(fontSize: 11, color: Colors.grey),
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
                     ),
                   ],
                 ),
@@ -2859,14 +2890,41 @@ class _CreateAssessmentFlowDialogState
                     required isFocused,
                     maxLength,
                   }) => const SizedBox.shrink(),
-                  onChanged: (_) => setState(() {}),
+                  onChanged: (_) {
+                    _syncCurrentDraftFromInputs();
+                    setState(() {});
+                  },
+                  style: TextStyle(
+                    color: theme.colorScheme.onSurface,
+                    fontSize: 13,
+                  ),
                   decoration: InputDecoration(
                     hintText: 'Enter question text or problem statement...',
+                    hintStyle: TextStyle(
+                      color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.4),
+                    ),
                     filled: true,
-                    fillColor: Colors.white,
+                    fillColor: theme.brightness == Brightness.dark
+                        ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3)
+                        : Colors.white,
                     contentPadding: const EdgeInsets.all(12),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide(
+                        color: theme.colorScheme.outline.withValues(
+                          alpha: theme.brightness == Brightness.dark ? 0.3 : 0.2,
+                        ),
+                      ),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide(
+                        color: theme.colorScheme.primary,
+                        width: 1.5,
+                      ),
                     ),
                   ),
                 ),
@@ -2874,9 +2932,13 @@ class _CreateAssessmentFlowDialogState
 
                 // Dynamic Choices & Answer Key Setup based on type
                 if (currentDraft.type == QuestionType.multipleChoice) ...[
-                  const Text(
+                  Text(
                     'Options & Answer Key (Fill all 4 and select the correct radio):',
-                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: theme.colorScheme.onSurface,
+                    ),
                   ),
                   const SizedBox(height: 8),
                   _buildMcChoiceRow('A', _choiceACtrl),
@@ -2887,56 +2949,124 @@ class _CreateAssessmentFlowDialogState
                   const SizedBox(height: 8),
                   _buildMcChoiceRow('D', _choiceDCtrl),
                 ] else if (currentDraft.type == QuestionType.trueFalse) ...[
-                  const Text(
+                  Text(
                     'Correct Answer Key (Mandatory):',
-                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: theme.colorScheme.onSurface,
+                    ),
                   ),
                   const SizedBox(height: 8),
                   Row(
                     children: [
                       Expanded(
-                        child: RadioListTile<String>(
-                          title: const Text(
-                            'True',
-                            style: TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                          value: 'True',
-                          groupValue: _selectedTfAnswer,
-                          onChanged: (val) =>
-                              setState(() => _selectedTfAnswer = val),
-                          tileColor: _selectedTfAnswer == 'True'
-                              ? AppTheme.catGreen.withValues(alpha: 0.1)
-                              : Colors.grey.shade50,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            side: BorderSide(
+                        child: InkWell(
+                          onTap: () {
+                            setState(() {
+                              _selectedTfAnswer = 'True';
+                              _syncCurrentDraftFromInputs();
+                            });
+                          },
+                          borderRadius: BorderRadius.circular(8),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 150),
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                            decoration: BoxDecoration(
                               color: _selectedTfAnswer == 'True'
-                                  ? AppTheme.catGreen
-                                  : Colors.grey.shade300,
+                                  ? theme.colorScheme.primary.withValues(alpha: 0.12)
+                                  : (theme.brightness == Brightness.dark
+                                      ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3)
+                                      : theme.colorScheme.surface),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: _selectedTfAnswer == 'True'
+                                    ? theme.colorScheme.primary
+                                    : theme.colorScheme.outline.withValues(alpha: 0.3),
+                                width: _selectedTfAnswer == 'True' ? 1.8 : 1.0,
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                Radio<String>(
+                                  value: 'True',
+                                  groupValue: _selectedTfAnswer,
+                                  activeColor: theme.colorScheme.primary,
+                                  onChanged: (val) {
+                                    setState(() {
+                                      _selectedTfAnswer = val;
+                                      _syncCurrentDraftFromInputs();
+                                    });
+                                  },
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'True',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                    color: _selectedTfAnswer == 'True'
+                                        ? theme.colorScheme.primary
+                                        : theme.colorScheme.onSurface,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
-                        child: RadioListTile<String>(
-                          title: const Text(
-                            'False',
-                            style: TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                          value: 'False',
-                          groupValue: _selectedTfAnswer,
-                          onChanged: (val) =>
-                              setState(() => _selectedTfAnswer = val),
-                          tileColor: _selectedTfAnswer == 'False'
-                              ? AppTheme.catRed.withValues(alpha: 0.1)
-                              : Colors.grey.shade50,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            side: BorderSide(
+                        child: InkWell(
+                          onTap: () {
+                            setState(() {
+                              _selectedTfAnswer = 'False';
+                              _syncCurrentDraftFromInputs();
+                            });
+                          },
+                          borderRadius: BorderRadius.circular(8),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 150),
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                            decoration: BoxDecoration(
                               color: _selectedTfAnswer == 'False'
-                                  ? AppTheme.catRed
-                                  : Colors.grey.shade300,
+                                  ? theme.colorScheme.primary.withValues(alpha: 0.12)
+                                  : (theme.brightness == Brightness.dark
+                                      ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3)
+                                      : theme.colorScheme.surface),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: _selectedTfAnswer == 'False'
+                                    ? theme.colorScheme.primary
+                                    : theme.colorScheme.outline.withValues(alpha: 0.3),
+                                width: _selectedTfAnswer == 'False' ? 1.8 : 1.0,
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                Radio<String>(
+                                  value: 'False',
+                                  groupValue: _selectedTfAnswer,
+                                  activeColor: theme.colorScheme.primary,
+                                  onChanged: (val) {
+                                    setState(() {
+                                      _selectedTfAnswer = val;
+                                      _syncCurrentDraftFromInputs();
+                                    });
+                                  },
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'False',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                    color: _selectedTfAnswer == 'False'
+                                        ? theme.colorScheme.primary
+                                        : theme.colorScheme.onSurface,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ),
@@ -2945,20 +3075,56 @@ class _CreateAssessmentFlowDialogState
                   ),
                 ] else if (currentDraft.type ==
                     QuestionType.identification) ...[
-                  const Text(
+                  Text(
                     'Official Correct Answer Key *',
-                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: theme.colorScheme.onSurface,
+                    ),
                   ),
                   const SizedBox(height: 6),
                   TextField(
                     controller: _qIdAnswerCtrl,
+                    onChanged: (_) {
+                      _syncCurrentDraftFromInputs();
+                      setState(() {});
+                    },
+                    style: TextStyle(
+                      color: theme.colorScheme.onSurface,
+                      fontSize: 13,
+                    ),
                     decoration: InputDecoration(
                       hintText: 'e.g. Mitochondria, Republic Act 10533, etc.',
-                      prefixIcon: const Icon(Icons.vpn_key_outlined, size: 18),
+                      hintStyle: TextStyle(
+                        color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
+                      ),
+                      prefixIcon: Icon(
+                        Icons.vpn_key_outlined,
+                        size: 18,
+                        color: theme.colorScheme.primary,
+                      ),
                       filled: true,
-                      fillColor: Colors.white,
+                      fillColor: theme.brightness == Brightness.dark
+                          ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3)
+                          : Colors.white,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(10),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: BorderSide(
+                          color: theme.colorScheme.outline.withValues(
+                            alpha: theme.brightness == Brightness.dark ? 0.3 : 0.2,
+                          ),
+                        ),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: BorderSide(
+                          color: theme.colorScheme.primary,
+                          width: 1.5,
+                        ),
                       ),
                     ),
                   ),
@@ -3136,6 +3302,7 @@ class _CreateAssessmentFlowDialogState
 
   Widget _buildQuestionNavigatorCategory(String title, QuestionType type) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     final categoryQuestions = <int>[];
     for (int i = 0; i < _plannedQuestions.length; i++) {
       if (_plannedQuestions[i].type == type) {
@@ -3165,6 +3332,28 @@ class _CreateAssessmentFlowDialogState
             final isActive = index == _activeQuestionIndex;
             final isDone = q.isComplete;
 
+            final Color chipBg = isActive
+                ? theme.colorScheme.primary
+                : (isDone
+                    ? AppTheme.catGreen.withValues(alpha: isDark ? 0.2 : 0.12)
+                    : (isDark
+                        ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.35)
+                        : Colors.grey.shade200));
+
+            final Color chipBorder = isActive
+                ? theme.colorScheme.primary
+                : (isDone
+                    ? AppTheme.catGreen
+                    : (isDark
+                        ? theme.colorScheme.outline.withValues(alpha: 0.2)
+                        : Colors.grey.shade300));
+
+            final Color chipTextColor = isActive
+                ? Colors.white
+                : (isDone
+                    ? (isDark ? const Color(0xFF4ADE80) : AppTheme.catGreen)
+                    : theme.colorScheme.onSurfaceVariant);
+
             return InkWell(
               onTap: () {
                 if (_saveCurrentEditorState()) {
@@ -3177,20 +3366,10 @@ class _CreateAssessmentFlowDialogState
                 width: 38,
                 height: 38,
                 decoration: BoxDecoration(
-                  color: isActive
-                      ? theme.colorScheme.primary
-                      : (isDone
-                            ? theme.colorScheme.primary.withValues(
-                                alpha: 0.1,
-                              ) // 30% theme
-                            : Colors.grey.shade100), // 60% theme
+                  color: chipBg,
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
-                    color: isActive
-                        ? theme.colorScheme.primary
-                        : (isDone
-                              ? theme.colorScheme.primary
-                              : Colors.grey.shade300),
+                    color: chipBorder,
                     width: isActive ? 2 : 1,
                   ),
                 ),
@@ -3200,9 +3379,7 @@ class _CreateAssessmentFlowDialogState
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.bold,
-                    color: isActive
-                        ? Colors.white
-                        : (isDone ? theme.colorScheme.primary : Colors.black87),
+                    color: chipTextColor,
                   ),
                 ),
               ),
@@ -3214,6 +3391,8 @@ class _CreateAssessmentFlowDialogState
   }
 
   Widget _buildMcChoiceRow(String label, TextEditingController controller) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     final isCorrect = _selectedMcAnswer == label;
 
     return Row(
@@ -3221,13 +3400,30 @@ class _CreateAssessmentFlowDialogState
         Radio<String>(
           value: label,
           groupValue: _selectedMcAnswer,
-          onChanged: (val) => setState(() => _selectedMcAnswer = val),
+          activeColor: theme.colorScheme.primary,
+          onChanged: (val) {
+            setState(() {
+              _selectedMcAnswer = val;
+              _syncCurrentDraftFromInputs();
+            });
+          },
         ),
         Expanded(
           child: TextField(
             controller: controller,
+            onChanged: (_) {
+              _syncCurrentDraftFromInputs();
+              setState(() {});
+            },
+            style: TextStyle(
+              color: theme.colorScheme.onSurface,
+              fontSize: 13,
+            ),
             decoration: InputDecoration(
               labelText: 'Choice $label',
+              labelStyle: TextStyle(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
               isDense: true,
               contentPadding: const EdgeInsets.symmetric(
                 horizontal: 12,
@@ -3236,9 +3432,30 @@ class _CreateAssessmentFlowDialogState
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
               ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: BorderSide(
+                  color: isCorrect
+                      ? theme.colorScheme.primary
+                      : theme.colorScheme.outline.withValues(
+                          alpha: isDark ? 0.3 : 0.2,
+                        ),
+                ),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: BorderSide(
+                  color: theme.colorScheme.primary,
+                  width: 1.5,
+                ),
+              ),
               fillColor: isCorrect
-                  ? AppTheme.catGreen.withValues(alpha: 0.05)
-                  : Colors.white,
+                  ? theme.colorScheme.primary.withValues(
+                      alpha: isDark ? 0.12 : 0.05,
+                    )
+                  : (isDark
+                      ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3)
+                      : Colors.white),
               filled: true,
             ),
           ),
@@ -3248,15 +3465,23 @@ class _CreateAssessmentFlowDialogState
   }
 
   Widget _buildLegendItem(String label, Color color) {
+    final theme = Theme.of(context);
     return Row(
       children: [
         Container(
-          width: 10,
-          height: 10,
+          width: 9,
+          height: 9,
           decoration: BoxDecoration(color: color, shape: BoxShape.circle),
         ),
-        const SizedBox(width: 4),
-        Text(label, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+        const SizedBox(width: 5),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
       ],
     );
   }

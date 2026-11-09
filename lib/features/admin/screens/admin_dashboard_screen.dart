@@ -212,6 +212,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     final sidebar = AdminSidebar(
       selectedIndex: _selectedIndex,
       isExpanded: isMobile ? true : _isSidebarExpanded,
+      onToggleExpanded: () =>
+          setState(() => _isSidebarExpanded = !_isSidebarExpanded),
       onSelect: (index) {
         if (isMobile && Scaffold.of(context).isDrawerOpen) {
           Navigator.pop(context);

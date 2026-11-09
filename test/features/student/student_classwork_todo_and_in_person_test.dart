@@ -222,5 +222,77 @@ void main() {
 
       expect(openedUrl, 'https://storage.supabase.test/rubric.pdf?token=valid');
     });
+
+    testWidgets('In-Person Exam renders exam in-person banner and suppresses take exam button', (tester) async {
+      final inPersonExam = StudentClassworkModel(
+        id: 'exam-inperson-1',
+        type: 'exam',
+        title: 'First Periodical Examination (ST1)',
+        description: '',
+        instructions: 'Bring pencil and eraser. 50 items paper examination.',
+        subjectName: 'Art Criticism and Creative Markets',
+        sectionName: 'Section 1',
+        gradeLevel: '11',
+        assignedAt: DateTime.now(),
+        deadline: DateTime.now().add(const Duration(days: 1)),
+        maxScore: 50,
+        status: null,
+        score: null,
+        feedback: null,
+        completionMode: 'in_person',
+        gradebookColumnIndex: 1,
+      );
+
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: StudentClassworkCard(
+            classwork: inPersonExam,
+          ),
+        ),
+      ));
+      await tester.pumpAndSettle();
+
+      expect(find.text('First Periodical Examination (ST1)'), findsOneWidget);
+      expect(
+        find.textContaining('In-Person Periodical Examination: Administered in classroom by teacher. Your score will appear here once recorded in the Gradebook.'),
+        findsOneWidget,
+      );
+      expect(find.text('Take Examination'), findsNothing);
+      expect(find.text('Submit Work'), findsNothing);
+    });
+
+    testWidgets('In-Person Exam with recorded score displays Graded status and points', (tester) async {
+      final gradedInPersonExam = StudentClassworkModel(
+        id: 'exam-inperson-2',
+        type: 'exam',
+        title: 'Second Periodical Examination (ST2)',
+        description: '',
+        instructions: '',
+        subjectName: 'Art Criticism and Creative Markets',
+        sectionName: 'Section 1',
+        gradeLevel: '11',
+        assignedAt: DateTime.now().subtract(const Duration(days: 5)),
+        deadline: DateTime.now().subtract(const Duration(days: 2)),
+        maxScore: 60,
+        status: 'graded',
+        score: 54,
+        feedback: 'Great score on the paper test!',
+        completionMode: 'in_person',
+        gradebookColumnIndex: 2,
+      );
+
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: StudentClassworkCard(
+            classwork: gradedInPersonExam,
+          ),
+        ),
+      ));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Graded'), findsOneWidget);
+      expect(find.text('54 / 60 pts'), findsOneWidget);
+      expect(find.text('Take Examination'), findsNothing);
+    });
   });
 }

@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:class_realm/core/utils/validators.dart';
 
-/// Displays classwork/assessment instructions clamped to [collapsedMaxLines] (default 2)
-/// with an interactive "See more" / "See less" toggle when the text exceeds 2 lines.
+/// Displays classwork/assessment instructions clamped to [collapsedMaxLines] (default 3)
+/// with an interactive "See more" / "See less" toggle when the text reaches 4 or more lines.
 /// Used across both Teacher View and Student View (Online & In-Person).
 class ExpandableInstructionsText extends StatefulWidget {
   final String text;
@@ -15,7 +15,7 @@ class ExpandableInstructionsText extends StatefulWidget {
     super.key,
     required this.text,
     this.style,
-    this.collapsedMaxLines = 2,
+    this.collapsedMaxLines = 3,
     this.toggleColor,
   });
 
@@ -58,7 +58,7 @@ class _ExpandableInstructionsTextState
         final exceedsLines =
             textPainter.didExceedMaxLines ||
             '\n'.allMatches(trimmed).length >= widget.collapsedMaxLines ||
-            trimmed.length > 110;
+            trimmed.length > 180;
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -157,7 +157,7 @@ class _ExpandableInstructionsInputFieldState
 
   bool get _canExpand {
     final text = widget.controller.text;
-    return text.length > 85 || '\n'.allMatches(text).length >= 2;
+    return text.length > 180 || '\n'.allMatches(text).length >= 3;
   }
 
   @override
@@ -219,8 +219,8 @@ class _ExpandableInstructionsInputFieldState
         const SizedBox(height: 6),
         TextFormField(
           controller: widget.controller,
-          minLines: 2,
-          maxLines: (_isExpanded && canExpand) ? 6 : 2,
+          minLines: 3,
+          maxLines: (_isExpanded && canExpand) ? 8 : 3,
           maxLength: AppValidators.maxClassworkInstructionsLength,
           autovalidateMode: widget.autovalidateMode,
           inputFormatters: [

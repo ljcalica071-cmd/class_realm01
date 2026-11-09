@@ -562,6 +562,41 @@ class QuestionModel {
     );
   }
 
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'questionText': questionText,
+    'type': type.name,
+    'choices': choices,
+    'correctAnswer': correctAnswer,
+    'points': points,
+    'matchingPairs': matchingPairs,
+  };
+
+  factory QuestionModel.fromJson(Map<String, dynamic> json) {
+    final rawType = json['type']?.toString() ?? '';
+    final qType = QuestionType.values.firstWhere(
+      (e) => e.name == rawType,
+      orElse: () => QuestionType.multipleChoice,
+    );
+    final rawChoices = (json['choices'] as List? ?? [])
+        .map((c) => c.toString())
+        .toList();
+    final rawPairs = Map<String, String>.from(
+      (json['matchingPairs'] as Map? ?? {}).map(
+        (k, v) => MapEntry(k.toString(), v.toString()),
+      ),
+    );
+    return QuestionModel(
+      id: json['id']?.toString() ?? '',
+      questionText: json['questionText']?.toString() ?? '',
+      type: qType,
+      choices: rawChoices,
+      correctAnswer: json['correctAnswer']?.toString() ?? '',
+      points: (json['points'] as num?)?.toDouble() ?? 1.0,
+      matchingPairs: rawPairs,
+    );
+  }
+
   bool matchesStudentAnswer(String rawAnswer) {
     final studentAns = rawAnswer.trim().toLowerCase();
     if (studentAns.isEmpty || studentAns == 'n/a') return false;
@@ -678,6 +713,55 @@ class QuizOrExamModel {
       subjectOfferingId: subjectOfferingId ?? this.subjectOfferingId,
       maxScore: maxScore ?? this.maxScore,
       examType: examType ?? this.examType,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'title': title,
+    'description': description,
+    'subject': subject,
+    'section': section,
+    'isExam': isExam,
+    'durationMinutes': durationMinutes,
+    'scheduleDate': scheduleDate.toIso8601String(),
+    'isPublished': isPublished,
+    'resultsReleased': resultsReleased,
+    'questions': questions.map((q) => q.toJson()).toList(),
+    'completionMode': completionMode,
+    'termNumber': termNumber,
+    'gradebookColumnIndex': gradebookColumnIndex,
+    'subjectOfferingId': subjectOfferingId,
+    'maxScore': maxScore,
+    'examType': examType,
+  };
+
+  factory QuizOrExamModel.fromJson(Map<String, dynamic> json) {
+    final rawQuestions = (json['questions'] as List? ?? [])
+        .map((q) => QuestionModel.fromJson(Map<String, dynamic>.from(q as Map)))
+        .toList();
+    final schedStr = json['scheduleDate']?.toString();
+    final sched = schedStr != null
+        ? (DateTime.tryParse(schedStr) ?? DateTime.now())
+        : DateTime.now();
+    return QuizOrExamModel(
+      id: json['id']?.toString() ?? '',
+      title: json['title']?.toString() ?? '',
+      description: json['description']?.toString() ?? '',
+      subject: json['subject']?.toString() ?? '',
+      section: json['section']?.toString() ?? '',
+      isExam: json['isExam'] == true,
+      durationMinutes: (json['durationMinutes'] as num?)?.toInt() ?? 60,
+      scheduleDate: sched,
+      isPublished: json['isPublished'] != false,
+      resultsReleased: json['resultsReleased'] == true,
+      questions: rawQuestions,
+      completionMode: json['completionMode']?.toString() ?? 'online',
+      termNumber: (json['termNumber'] as num?)?.toInt() ?? 1,
+      gradebookColumnIndex: (json['gradebookColumnIndex'] as num?)?.toInt(),
+      subjectOfferingId: json['subjectOfferingId']?.toString(),
+      maxScore: (json['maxScore'] as num?)?.toDouble(),
+      examType: json['examType']?.toString(),
     );
   }
 }

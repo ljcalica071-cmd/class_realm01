@@ -1186,7 +1186,7 @@ class _TeacherUnifiedAssessmentsTabState
                         ? theme.colorScheme.onSurface.withValues(alpha: 0.38)
                         : AppTheme.catTeal,
                   ),
-                  onPressed: onItemAnalysis,
+                  onPressed: isItemAnalysisLocked ? null : onItemAnalysis,
                 ),
               if (onReschedule != null)
                 IconButton(
@@ -1238,7 +1238,7 @@ class _TeacherUnifiedAssessmentsTabState
           .from('assessment_attempts')
           .select('id, status')
           .eq('assessment_id', item.id)
-          .eq('status', 'submitted');
+          .inFilter('status', ['submitted', 'auto_submitted']);
       final attemptList = List<Map<String, dynamic>>.from(
         attemptsResponse as List? ?? [],
       );

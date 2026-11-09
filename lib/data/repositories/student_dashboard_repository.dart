@@ -369,6 +369,7 @@ class StudentDashboardRepository {
                   time_limit_minutes,
                   available_from,
                   deadline,
+                  results_released,
                   assessment_questions ( points ),
                   subject_offerings (
                     subjects ( subject_name ),
@@ -414,6 +415,8 @@ class StudentDashboardRepository {
                         attempt['score_earned'];
                   }
                 }
+                classworkList[existingIndex]['results_released'] =
+                    m['results_released'] == true;
                 classworkList[existingIndex]['type'] = isQuiz ? 'quiz' : 'exam';
                 if (m['available_from'] != null) {
                   classworkList[existingIndex]['assigned_at'] =
@@ -441,6 +444,7 @@ class StudentDashboardRepository {
                 'deadline': m['deadline']?.toString(),
                 'max_score': computedMax,
                 'completion_mode': 'online',
+                'results_released': m['results_released'] == true,
                 'subject_name': s['subject_name']?.toString() ?? '',
                 'section_name': sec['section_name']?.toString() ?? '',
                 'grade_level': sec['grade_level']?.toString() ?? '',

@@ -768,6 +768,7 @@ class _CreateRequirementFlowDialogState
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     final isEdit = widget.existingTask != null;
     final typeName = widget.isPerformanceTask
         ? 'Performance Task'
@@ -859,11 +860,15 @@ class _CreateRequirementFlowDialogState
                       // A. Mode Slider (Top Navigation)
                       Container(
                         decoration: BoxDecoration(
-                          color: const Color(
-                            0xFFF1F5F9,
-                          ), // 60-30-10: 30% background for field
+                          color: isDark
+                              ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.35)
+                              : const Color(0xFFF1F5F9), // 60-30-10: 30% background for field
                           borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: const Color(0xFFE2E8F0)),
+                          border: Border.all(
+                            color: isDark
+                                ? theme.colorScheme.outline.withValues(alpha: 0.2)
+                                : const Color(0xFFE2E8F0),
+                          ),
                         ),
                         padding: const EdgeInsets.all(4),
                         child: Row(
@@ -879,14 +884,16 @@ class _CreateRequirementFlowDialogState
                                   ),
                                   decoration: BoxDecoration(
                                     color: _completionMode == 'online'
-                                        ? Colors.white
+                                        ? (isDark
+                                            ? theme.colorScheme.surface
+                                            : Colors.white)
                                         : Colors.transparent,
                                     borderRadius: BorderRadius.circular(8),
                                     boxShadow: _completionMode == 'online'
                                         ? [
                                             BoxShadow(
                                               color: Colors.black.withValues(
-                                                alpha: 0.05,
+                                                alpha: isDark ? 0.2 : 0.05,
                                               ),
                                               blurRadius: 4,
                                               offset: const Offset(0, 2),
@@ -901,8 +908,12 @@ class _CreateRequirementFlowDialogState
                                         Icons.computer,
                                         size: 16,
                                         color: _completionMode == 'online'
-                                            ? const Color(0xFF0F8A48)
-                                            : Colors.grey,
+                                            ? (isDark
+                                                ? const Color(0xFF4ADE80)
+                                                : const Color(0xFF0F8A48))
+                                            : (isDark
+                                                ? theme.colorScheme.onSurfaceVariant
+                                                : Colors.grey),
                                       ),
                                       const SizedBox(width: 6),
                                       Flexible(
@@ -916,18 +927,24 @@ class _CreateRequirementFlowDialogState
                                                 ? FontWeight.w700
                                                 : FontWeight.w500,
                                             color: _completionMode == 'online'
-                                                ? const Color(0xFF0F8A48)
-                                                : Colors.grey.shade600,
+                                                ? (isDark
+                                                    ? const Color(0xFF4ADE80)
+                                                    : const Color(0xFF0F8A48))
+                                                : (isDark
+                                                    ? theme.colorScheme.onSurfaceVariant
+                                                    : Colors.grey.shade600),
                                           ),
                                         ),
                                       ),
                                       if (isEdit &&
                                           _completionMode == 'online') ...[
                                         const SizedBox(width: 4),
-                                        const Icon(
+                                        Icon(
                                           Icons.lock_outline,
                                           size: 13,
-                                          color: Color(0xFF0F8A48),
+                                          color: isDark
+                                              ? const Color(0xFF4ADE80)
+                                              : const Color(0xFF0F8A48),
                                         ),
                                       ],
                                     ],
@@ -946,14 +963,16 @@ class _CreateRequirementFlowDialogState
                                   ),
                                   decoration: BoxDecoration(
                                     color: _completionMode == 'in_person'
-                                        ? Colors.white
+                                        ? (isDark
+                                            ? theme.colorScheme.surface
+                                            : Colors.white)
                                         : Colors.transparent,
                                     borderRadius: BorderRadius.circular(8),
                                     boxShadow: _completionMode == 'in_person'
                                         ? [
                                             BoxShadow(
                                               color: Colors.black.withValues(
-                                                alpha: 0.05,
+                                                alpha: isDark ? 0.2 : 0.05,
                                               ),
                                               blurRadius: 4,
                                               offset: const Offset(0, 2),
@@ -968,8 +987,12 @@ class _CreateRequirementFlowDialogState
                                         Icons.group,
                                         size: 16,
                                         color: _completionMode == 'in_person'
-                                            ? const Color(0xFF0F8A48)
-                                            : Colors.grey,
+                                            ? (isDark
+                                                ? const Color(0xFF4ADE80)
+                                                : const Color(0xFF0F8A48))
+                                            : (isDark
+                                                ? theme.colorScheme.onSurfaceVariant
+                                                : Colors.grey),
                                       ),
                                       const SizedBox(width: 6),
                                       Flexible(
@@ -984,18 +1007,24 @@ class _CreateRequirementFlowDialogState
                                                 : FontWeight.w500,
                                             color:
                                                 _completionMode == 'in_person'
-                                                ? const Color(0xFF0F8A48)
-                                                : Colors.grey.shade600,
+                                                ? (isDark
+                                                    ? const Color(0xFF4ADE80)
+                                                    : const Color(0xFF0F8A48))
+                                                : (isDark
+                                                    ? theme.colorScheme.onSurfaceVariant
+                                                    : Colors.grey.shade600),
                                           ),
                                         ),
                                       ),
                                       if (isEdit &&
                                           _completionMode == 'in_person') ...[
                                         const SizedBox(width: 4),
-                                        const Icon(
+                                        Icon(
                                           Icons.lock_outline,
                                           size: 13,
-                                          color: Color(0xFF0F8A48),
+                                          color: isDark
+                                              ? const Color(0xFF4ADE80)
+                                              : const Color(0xFF0F8A48),
                                         ),
                                       ],
                                     ],
@@ -1017,21 +1046,26 @@ class _CreateRequirementFlowDialogState
                             vertical: 10,
                           ),
                           decoration: BoxDecoration(
-                            color: const Color(0xFFE8F5E9), // Light Emerald
+                            color: isDark
+                                ? const Color(0xFF0F8A48).withValues(alpha: 0.15)
+                                : const Color(0xFFE8F5E9), // Light Emerald
                             borderRadius: BorderRadius.circular(8),
                             border: Border.all(
-                              color: const Color(0xFF0F8A48)
-                                  .withValues(alpha: 0.2),
+                              color: const Color(0xFF0F8A48).withValues(
+                                alpha: isDark ? 0.35 : 0.2,
+                              ),
                             ),
                           ),
                           alignment: Alignment.center,
                           child: Text(
                             '$_selectedGrade • $_selectedSubject • ${_offerings.firstWhere((o) => o['id'].toString() == _selectedOfferingId, orElse: () => {'section_name': ''})['section_name']}',
                             textAlign: TextAlign.center,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.w600,
-                              color: Color(0xFF0F8A48),
+                              color: isDark
+                                  ? const Color(0xFF4ADE80)
+                                  : const Color(0xFF0F8A48),
                             ),
                           ),
                         ),
@@ -1097,12 +1131,16 @@ class _CreateRequirementFlowDialogState
                                         ),
                                         alignment: Alignment.centerLeft,
                                         decoration: BoxDecoration(
-                                          color: const Color(0xFFF8FAFC),
+                                          color: isDark
+                                              ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3)
+                                              : const Color(0xFFF8FAFC),
                                           borderRadius: BorderRadius.circular(
                                             8,
                                           ),
                                           border: Border.all(
-                                            color: Colors.grey.shade400,
+                                            color: isDark
+                                                ? theme.colorScheme.outline.withValues(alpha: 0.25)
+                                                : Colors.grey.shade400,
                                           ),
                                         ),
                                         child: Row(
@@ -1111,16 +1149,16 @@ class _CreateRequirementFlowDialogState
                                           children: [
                                             Text(
                                               _termLabel(_termNumber),
-                                              style: const TextStyle(
+                                              style: TextStyle(
                                                 fontSize: 13,
                                                 fontWeight: FontWeight.w600,
-                                                color: Color(0xFF1E293B),
+                                                color: theme.colorScheme.onSurface,
                                               ),
                                             ),
-                                            const Icon(
+                                            Icon(
                                               Icons.lock_outline,
                                               size: 16,
-                                              color: Color(0xFF64748B),
+                                              color: theme.colorScheme.onSurfaceVariant,
                                             ),
                                           ],
                                         ),
@@ -1133,12 +1171,16 @@ class _CreateRequirementFlowDialogState
                                         ),
                                         alignment: Alignment.centerLeft,
                                         decoration: BoxDecoration(
-                                          color: const Color(0xFFF8FAFC),
+                                          color: isDark
+                                              ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3)
+                                              : const Color(0xFFF8FAFC),
                                           borderRadius: BorderRadius.circular(
                                             8,
                                           ),
                                           border: Border.all(
-                                            color: Colors.grey.shade400,
+                                            color: isDark
+                                                ? theme.colorScheme.outline.withValues(alpha: 0.25)
+                                                : Colors.grey.shade400,
                                           ),
                                         ),
                                         child: Text(
@@ -1147,10 +1189,10 @@ class _CreateRequirementFlowDialogState
                                                 ? availableTerms.first
                                                 : 1,
                                           ),
-                                          style: const TextStyle(
+                                          style: TextStyle(
                                             fontSize: 13,
                                             fontWeight: FontWeight.w600,
-                                            color: Color(0xFF1E293B),
+                                            color: theme.colorScheme.onSurface,
                                           ),
                                         ),
                                       )
@@ -1212,12 +1254,16 @@ class _CreateRequirementFlowDialogState
                                         ),
                                         alignment: Alignment.centerLeft,
                                         decoration: BoxDecoration(
-                                          color: const Color(0xFFF8FAFC),
+                                          color: isDark
+                                              ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3)
+                                              : const Color(0xFFF8FAFC),
                                           borderRadius: BorderRadius.circular(
                                             8,
                                           ),
                                           border: Border.all(
-                                            color: Colors.grey.shade400,
+                                            color: isDark
+                                                ? theme.colorScheme.outline.withValues(alpha: 0.25)
+                                                : Colors.grey.shade400,
                                           ),
                                         ),
                                         child: Row(
@@ -1226,16 +1272,16 @@ class _CreateRequirementFlowDialogState
                                           children: [
                                             Text(
                                               '${widget.isPerformanceTask ? 'PT' : 'WW'} ${_gradebookColumnIndex ?? 1}',
-                                              style: const TextStyle(
+                                              style: TextStyle(
                                                 fontSize: 13,
                                                 fontWeight: FontWeight.w600,
-                                                color: Color(0xFF1E293B),
+                                                color: theme.colorScheme.onSurface,
                                               ),
                                             ),
-                                            const Icon(
+                                            Icon(
                                               Icons.lock_outline,
                                               size: 16,
-                                              color: Color(0xFF64748B),
+                                              color: theme.colorScheme.onSurfaceVariant,
                                             ),
                                           ],
                                         ),
@@ -1391,12 +1437,16 @@ class _CreateRequirementFlowDialogState
                                       vertical: 14,
                                     ),
                                     decoration: BoxDecoration(
-                                      color: Colors.white,
+                                      color: isDark
+                                          ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3)
+                                          : Colors.white,
                                       borderRadius: BorderRadius.circular(8),
                                       border: Border.all(
                                         color: _deadlineError != null
                                             ? const Color(0xFFEF4444)
-                                            : Colors.grey.shade400,
+                                            : (isDark
+                                                ? theme.colorScheme.outline.withValues(alpha: 0.25)
+                                                : Colors.grey.shade400),
                                       ),
                                     ),
                                     child: Row(
@@ -1500,16 +1550,22 @@ class _CreateRequirementFlowDialogState
                               vertical: 12,
                             ),
                             decoration: BoxDecoration(
-                              color: const Color(0xFFF8FAFC),
+                              color: isDark
+                                  ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3)
+                                  : const Color(0xFFF8FAFC),
                               borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: Colors.grey.shade300),
+                              border: Border.all(
+                                color: isDark
+                                    ? theme.colorScheme.outline.withValues(alpha: 0.25)
+                                    : Colors.grey.shade300,
+                              ),
                             ),
                             child: Row(
                               children: [
-                                const Icon(
+                                Icon(
                                   Icons.lock_outline,
                                   size: 16,
-                                  color: Color(0xFF64748B),
+                                  color: theme.colorScheme.onSurfaceVariant,
                                 ),
                                 const SizedBox(width: 10),
                                 Expanded(
@@ -1524,8 +1580,8 @@ class _CreateRequirementFlowDialogState
                                       fontSize: 12,
                                       fontWeight: FontWeight.w500,
                                       color: _attachmentName != null
-                                          ? const Color(0xFF334155)
-                                          : Colors.grey.shade500,
+                                          ? theme.colorScheme.onSurface
+                                          : theme.colorScheme.onSurfaceVariant,
                                     ),
                                   ),
                                 ),
@@ -1536,12 +1592,16 @@ class _CreateRequirementFlowDialogState
                           Container(
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
-                              color: Colors.white,
+                              color: isDark
+                                  ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3)
+                                  : Colors.white,
                               borderRadius: BorderRadius.circular(8),
                               border: Border.all(
                                 color: _fileError != null
                                     ? const Color(0xFFEF4444)
-                                    : Colors.grey.shade400,
+                                    : (isDark
+                                        ? theme.colorScheme.outline.withValues(alpha: 0.25)
+                                        : Colors.grey.shade400),
                               ),
                             ),
                             child: Row(
@@ -1623,7 +1683,9 @@ class _CreateRequirementFlowDialogState
                         Container(
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: const Color(0xFFFEF2F2),
+                            color: isDark
+                                ? const Color(0xFFEF4444).withValues(alpha: 0.15)
+                                : const Color(0xFFFEF2F2),
                             borderRadius: BorderRadius.circular(10),
                             border: Border.all(color: const Color(0xFFEF4444)),
                           ),
@@ -1658,7 +1720,9 @@ class _CreateRequirementFlowDialogState
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
               decoration: BoxDecoration(
-                color: const Color(0xFFF8FAFC),
+                color: isDark
+                    ? theme.colorScheme.surface
+                    : const Color(0xFFF8FAFC),
                 border: Border(
                   top: BorderSide(
                     color: theme.colorScheme.onSurface.withValues(alpha: 0.12),

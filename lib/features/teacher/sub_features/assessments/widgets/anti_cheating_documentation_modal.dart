@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:class_realm/core/theme/app_theme.dart';
 import 'package:class_realm/widgets/common/app_buttons.dart';
 
-class AntiCheatingDocumentationModal extends StatefulWidget {
+class AntiCheatingDocumentationModal extends StatelessWidget {
   const AntiCheatingDocumentationModal({super.key});
 
   static Future<void> show(BuildContext context) {
@@ -14,68 +14,51 @@ class AntiCheatingDocumentationModal extends StatefulWidget {
   }
 
   @override
-  State<AntiCheatingDocumentationModal> createState() =>
-      _AntiCheatingDocumentationModalState();
-}
-
-class _AntiCheatingDocumentationModalState
-    extends State<AntiCheatingDocumentationModal> {
-  final PageController _pageController = PageController();
-  int _currentPage = 0;
-
-  @override
-  void dispose() {
-    _pageController.dispose();
-    super.dispose();
-  }
-
-  void _nextPage() {
-    if (_currentPage < 2) {
-      _pageController.nextPage(
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeInOut,
-      );
-    }
-  }
-
-  void _prevPage() {
-    if (_currentPage > 0) {
-      _pageController.previousPage(
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeInOut,
-      );
-    }
-  }
-
-  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
 
-    return AlertDialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      contentPadding: EdgeInsets.zero,
-      content: SizedBox(
-        width: 700,
-        height: 600,
+    return Dialog(
+      backgroundColor: theme.colorScheme.surface,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(
+          maxWidth: 680,
+          maxHeight: 720,
+        ),
         child: Column(
           children: [
-            // Header
+            // Modal Header
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
               decoration: BoxDecoration(
-                color: theme.colorScheme.primary.withValues(alpha: 0.1),
+                color: isDark
+                    ? theme.colorScheme.primary.withValues(alpha: 0.15)
+                    : theme.colorScheme.primary.withValues(alpha: 0.08),
                 borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(20),
+                  top: Radius.circular(16),
+                ),
+                border: Border(
+                  bottom: BorderSide(
+                    color: theme.colorScheme.outline.withValues(alpha: 0.15),
+                  ),
                 ),
               ),
               child: Row(
                 children: [
-                  Icon(
-                    Icons.shield,
-                    color: theme.colorScheme.primary,
-                    size: 24,
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.primary.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(
+                      Icons.shield_rounded,
+                      color: theme.colorScheme.primary,
+                      size: 22,
+                    ),
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 14),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -83,93 +66,133 @@ class _AntiCheatingDocumentationModalState
                         Text(
                           'Anti-Cheating & Exam Integrity System',
                           style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: theme.colorScheme.primary,
+                            fontSize: 17,
+                            fontWeight: FontWeight.w700,
+                            color: theme.colorScheme.onSurface,
                           ),
                         ),
+                        const SizedBox(height: 2),
                         Text(
-                          'Comprehensive guide on how ClassRealm secures digital assessments.',
+                          'Single-page policy reference for assessment delivery and telemetry',
                           style: TextStyle(
                             fontSize: 12,
-                            color: theme.colorScheme.onSurface.withValues(
-                              alpha: 0.7,
-                            ),
+                            color: theme.colorScheme.onSurfaceVariant,
                           ),
                         ),
                       ],
                     ),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.close),
+                    icon: Icon(
+                      Icons.close,
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
                     onPressed: () => Navigator.of(context).pop(),
+                    tooltip: 'Close',
                   ),
                 ],
               ),
             ),
 
-            // Progress Indicator
-            LinearProgressIndicator(
-              value: (_currentPage + 1) / 3,
-              backgroundColor: Colors.transparent,
-              valueColor: AlwaysStoppedAnimation<Color>(AppTheme.catGreen),
-            ),
-
-            // Content Pages
+            // Scrollable Categorized Content
             Expanded(
-              child: PageView(
-                controller: _pageController,
-                physics:
-                    const NeverScrollableScrollPhysics(), // Force using buttons
-                onPageChanged: (i) => setState(() => _currentPage = i),
-                children: [
-                  _buildPage1(theme),
-                  _buildPage2(theme),
-                  _buildPage3(theme),
-                ],
-              ),
-            ),
+              child: Scrollbar(
+                thumbVisibility: true,
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // Category 1: Question Categories & Deterministic Order
+                      _buildCategoryCard(
+                        theme: theme,
+                        isDark: isDark,
+                        categoryNumber: '1',
+                        title: 'Fixed Question Categories & Deterministic Shuffling',
+                        icon: Icons.shuffle_rounded,
+                        color: AppTheme.catBlue,
+                        points: [
+                          'Standard Category Sequence: Part 1 is always Multiple Choice, Part 2 is True or False, and Part 3 is Identification.',
+                          'Isolated Shuffling: Questions and choices are shuffled exclusively within their own part so the structure remains clean.',
+                          'Deterministic Seed: Shuffling is tied to the student\'s unique ID. Reopening the app preserves their exact sequence, but no two students share the same order.',
+                        ],
+                      ),
+                      const SizedBox(height: 16),
 
-            // Footer / Navigation
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-              decoration: BoxDecoration(
-                border: Border(
-                  top: BorderSide(
-                    color: theme.colorScheme.outline.withValues(alpha: 0.2),
+                      // Category 2: Schedule, Duration & Answering Integrity
+                      _buildCategoryCard(
+                        theme: theme,
+                        isDark: isDark,
+                        categoryNumber: '2',
+                        title: 'Schedule Synchronization & Offline Resilience',
+                        icon: Icons.timer_outlined,
+                        color: AppTheme.catPurple,
+                        points: [
+                          'Strict Window Enforcement: The exam opens exactly at the Scheduled Date and Start Time, with a maximum 180-minute duration limit.',
+                          'Mandatory Answering: Students must provide a response to every item before submission can be unlocked.',
+                          'Zero Data Loss Local Vault: Answers are continuously backed up to offline local storage. In case of network drops, students can finish and submit.',
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Category 3: Anti-Cheating Telemetry Matrix
+                      _buildCategoryCard(
+                        theme: theme,
+                        isDark: isDark,
+                        categoryNumber: '3',
+                        title: 'Silent Anti-Cheating Telemetry Matrix',
+                        icon: Icons.security_rounded,
+                        color: AppTheme.catOrange,
+                        points: [
+                          'Screen & App State: Tab switching, window blur, app minimizing, and split-screen triggers are detected and timestamped.',
+                          'Dual-Device Blocking: A student can only test from one device at a time. Simultaneous secondary logins are locked out.',
+                          'Silent Monitoring: The system never interrupts the student with disruptive warning alerts, ensuring natural behavior and zero anxiety.',
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Category 4: Sole Teacher Authority & Judgment
+                      _buildCategoryCard(
+                        theme: theme,
+                        isDark: isDark,
+                        categoryNumber: '4',
+                        title: 'Teacher Exclusive Judgment & Disciplinary Action',
+                        icon: Icons.gavel_rounded,
+                        color: AppTheme.catGreen,
+                        points: [
+                          'No Automated Penalties: The system never auto-invalidates or auto-disqualifies students for harmless app notifications.',
+                          'Live Proctoring Panel: Teachers monitor active students, violations, and remaining duration in real time.',
+                          'Teacher Discretion: The teacher alone holds the authority to Kick & Disqualify, invalidate a test, or authorize a retake.',
+                        ],
+                      ),
+                    ],
                   ),
                 ),
               ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  _currentPage > 0
-                      ? OutlinedButton.icon(
-                          onPressed: _prevPage,
-                          icon: const Icon(Icons.arrow_back, size: 16),
-                          label: const Text('Previous'),
-                        )
-                      : const SizedBox(width: 100),
-                  Text(
-                    'Page ${_currentPage + 1} of 3',
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.bold,
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                    ),
+            ),
+
+            // Modal Footer
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+              decoration: BoxDecoration(
+                border: Border(
+                  top: BorderSide(
+                    color: theme.colorScheme.outline.withValues(alpha: 0.15),
                   ),
-                  _currentPage < 2
-                      ? AppPrimaryButton(
-                          onPressed: _nextPage,
-                          icon: Icons.arrow_forward,
-                          label: 'Next',
-                        )
-                      : AppPrimaryButton(
-                          onPressed: () => Navigator.of(context).pop(),
-                          icon: Icons.check,
-                          label: 'Finish',
-                          backgroundColor: AppTheme.catGreen,
-                        ),
+                ),
+                color: isDark ? Colors.white.withValues(alpha: 0.02) : Colors.grey.shade50,
+                borderRadius: const BorderRadius.vertical(
+                  bottom: Radius.circular(16),
+                ),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  AppPrimaryButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: Icons.check_circle_outline,
+                    label: 'I Understand',
+                  ),
                 ],
               ),
             ),
@@ -179,172 +202,92 @@ class _AntiCheatingDocumentationModalState
     );
   }
 
-  Widget _buildPage1(ThemeData theme) {
-    return Padding(
-      padding: const EdgeInsets.all(32),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.shuffle, color: AppTheme.catBlue, size: 32),
-              const SizedBox(width: 12),
-              const Text(
-                '1. Deterministic Randomization',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
-          const Text(
-            'To prevent students from copying answers from their seatmates, ClassRealm employs a "Deterministic Randomization" algorithm.',
-            style: TextStyle(fontSize: 14, height: 1.6),
-          ),
-          const SizedBox(height: 16),
-          _buildInfoBox(
-            theme,
-            title: 'How It Works:',
-            content:
-                '• Every student receives a completely unique arrangement of questions and choices.\n'
-                '• Questions are strictly isolated per category (Multiple Choice stays in Part 1, True/False in Part 2).\n'
-                '• The randomization seed is tied to the student\'s unique ID. This means even if they close and reopen the app, their specific randomized order stays exactly the same, but it will never match their classmate\'s order.',
-            icon: Icons.extension,
-            color: AppTheme.catBlue,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPage2(ThemeData theme) {
-    return Padding(
-      padding: const EdgeInsets.all(32),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(
-                Icons.visibility_off,
-                color: AppTheme.catPurple,
-                size: 32,
-              ),
-              const SizedBox(width: 12),
-              const Text(
-                '2. Silent Tracking Mechanisms',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
-          const Text(
-            'We record every suspicious activity on the student\'s device while the exam is active. Crucially, this tracking is 100% silent.',
-            style: TextStyle(fontSize: 14, height: 1.6),
-          ),
-          const SizedBox(height: 16),
-          _buildInfoBox(
-            theme,
-            title: 'What is recorded in the Anti-Cheating Logs?',
-            content:
-                '• Switching to another app (e.g. Browser, Messenger).\n'
-                '• Activating Split-Screen mode.\n'
-                '• Triggering Google Assistant or "Circle to Search".\n'
-                '• Pulling down the notification shade for an extended period.',
-            icon: Icons.find_in_page_outlined,
-            color: AppTheme.catPurple,
-          ),
-          const SizedBox(height: 16),
-          const Text(
-            'Why Silent? We do not show pop-ups or warnings on the student\'s screen when a violation occurs. This prevents students from testing the limits of the system or panicking. They will act organically, giving you a true assessment of their integrity.',
-            style: TextStyle(
-              fontSize: 13,
-              fontStyle: FontStyle.italic,
-              color: Colors.black87,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPage3(ThemeData theme) {
-    return Padding(
-      padding: const EdgeInsets.all(32),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.gavel, color: AppTheme.catRed, size: 32),
-              const SizedBox(width: 12),
-              const Text(
-                '3. Consequences & Teacher Authority',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
-          const Text(
-            'The AI and System will NEVER automatically submit a student\'s exam or kick them out due to violations. We believe that technology should assist, not judge.',
-            style: TextStyle(fontSize: 14, height: 1.6),
-          ),
-          const SizedBox(height: 16),
-          _buildInfoBox(
-            theme,
-            title: 'Teacher\'s Sole Authority',
-            content:
-                '• All infractions are securely sent to the Supabase database with precise timestamps.\n'
-                '• After the exam, the Teacher reviews the "Anti-Cheating Logs" on their dashboard.\n'
-                '• Only the Teacher has the authority to decide the consequence:\n'
-                '   1. Accept the grade if the violation was a minor accident.\n'
-                '   2. Invalidate the exam and record a Zero.\n'
-                '   3. Authorize a retake or reset.',
-            icon: Icons.admin_panel_settings,
-            color: AppTheme.catRed,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildInfoBox(
-    ThemeData theme, {
+  Widget _buildCategoryCard({
+    required ThemeData theme,
+    required bool isDark,
+    required String categoryNumber,
     required String title,
-    required String content,
     required IconData icon,
     required Color color,
+    required List<String> points,
   }) {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.05),
+        color: isDark
+            ? color.withValues(alpha: 0.08)
+            : color.withValues(alpha: 0.04),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withValues(alpha: 0.3)),
+        border: Border.all(
+          color: color.withValues(alpha: isDark ? 0.25 : 0.2),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: isDark ? 0.25 : 0.15),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  'PART $categoryNumber',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    color: color,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
               Icon(icon, color: color, size: 18),
               const SizedBox(width: 8),
-              Text(
-                title,
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold,
-                  color: color,
+              Expanded(
+                child: Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: theme.colorScheme.onSurface,
+                  ),
                 ),
               ),
             ],
           ),
           const SizedBox(height: 12),
-          Text(
-            content,
-            style: TextStyle(
-              fontSize: 13,
-              height: 1.8,
-              color: theme.colorScheme.onSurface.withValues(alpha: 0.9),
+          ...points.map(
+            (point) => Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(top: 5, right: 8),
+                    child: Container(
+                      width: 5,
+                      height: 5,
+                      decoration: BoxDecoration(
+                        color: color,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: Text(
+                      point,
+                      style: TextStyle(
+                        fontSize: 13,
+                        height: 1.45,
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ],

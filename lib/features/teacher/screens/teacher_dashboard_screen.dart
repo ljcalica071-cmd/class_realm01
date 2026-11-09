@@ -517,20 +517,6 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                       onPressed: () => Scaffold.of(ctx).openDrawer(),
                     ),
                   ),
-                )
-              else if (!_isSidebarExpanded)
-                Padding(
-                  padding: const EdgeInsets.only(right: 12),
-                  child: IconButton(
-                    icon: Icon(
-                      LucideIcons.panelLeftOpen,
-                      color: theme.colorScheme.onSurface,
-                      size: 20,
-                    ),
-                    tooltip: 'Expand Menu',
-                    onPressed: () =>
-                        setState(() => _isSidebarExpanded = true),
-                  ),
                 ),
               _selectedIndex == 0
                   ? (isMobile

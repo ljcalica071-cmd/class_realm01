@@ -181,7 +181,8 @@ class TeacherProctorChannelService {
 
     if (writeToDb) {
       try {
-        SupabaseService().client
+        final client = SupabaseService().client;
+        client
             .from('anti_cheating_logs')
             .insert({
               'assessment_id': assessmentId,
@@ -190,6 +191,16 @@ class TeacherProctorChannelService {
               'details': reason,
               'event_at': DateTime.now().toUtc().toIso8601String(),
             })
+            .catchError((_) {});
+
+        client
+            .from('assessment_attempts')
+            .update({
+              'status': 'disqualified',
+              'score_earned': 0,
+            })
+            .eq('assessment_id', assessmentId)
+            .eq('student_id', studentId)
             .catchError((_) {});
       } catch (_) {}
     }

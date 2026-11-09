@@ -163,6 +163,16 @@ class AppButton extends StatelessWidget {
         : const EdgeInsets.symmetric(horizontal: 16, vertical: 10);
 
     final borderRadius = BorderRadius.circular(9);
+    final isDark = theme.brightness == Brightness.dark;
+    final bool isDisabled = !isLoading && onPressed == null;
+
+    final Color disabledBg = isDark
+        ? Colors.white.withValues(alpha: 0.08)
+        : const Color(0xFFE2E8F0);
+    final Color disabledFg = isDark
+        ? Colors.white.withValues(alpha: 0.38)
+        : const Color(0xFF94A3B8);
+    final Color effectiveFg = isDisabled ? disabledFg : fg;
 
     final childRow = Row(
       mainAxisSize: MainAxisSize.min,
@@ -173,13 +183,13 @@ class AppButton extends StatelessWidget {
             width: iconSize,
             height: iconSize,
             child: LoadingAnimationWidget.staggeredDotsWave(
-              color: fg,
+              color: effectiveFg,
               size: iconSize * 1.5,
             ),
           )
         else ...[
           if (icon != null) ...[
-            Icon(icon, size: iconSize, color: fg),
+            Icon(icon, size: iconSize, color: effectiveFg),
             const SizedBox(width: 6),
           ],
           Flexible(
@@ -191,7 +201,7 @@ class AppButton extends StatelessWidget {
               style: TextStyle(
                 fontSize: fontSize,
                 fontWeight: FontWeight.w600,
-                color: fg,
+                color: effectiveFg,
               ),
             ),
           ),
@@ -206,8 +216,13 @@ class AppButton extends StatelessWidget {
         child: OutlinedButton(
           style: OutlinedButton.styleFrom(
             foregroundColor: fg,
+            disabledForegroundColor: disabledFg,
             side: BorderSide(
-              color: theme.colorScheme.primary.withValues(alpha: 0.6),
+              color: isDisabled
+                  ? (isDark
+                      ? Colors.white.withValues(alpha: 0.12)
+                      : const Color(0xFFCBD5E1))
+                  : theme.colorScheme.primary.withValues(alpha: 0.6),
               width: 1.5,
             ),
             shape: RoundedRectangleBorder(borderRadius: borderRadius),
@@ -226,6 +241,7 @@ class AppButton extends StatelessWidget {
         child: TextButton(
           style: TextButton.styleFrom(
             foregroundColor: fg,
+            disabledForegroundColor: disabledFg,
             shape: RoundedRectangleBorder(borderRadius: borderRadius),
             padding: padding,
           ),
@@ -242,6 +258,8 @@ class AppButton extends StatelessWidget {
         style: ElevatedButton.styleFrom(
           backgroundColor: bg,
           foregroundColor: fg,
+          disabledBackgroundColor: disabledBg,
+          disabledForegroundColor: disabledFg,
           elevation: 0,
           shadowColor: Colors.transparent,
           shape: RoundedRectangleBorder(borderRadius: borderRadius),

@@ -10,6 +10,7 @@ import 'package:class_realm/features/teacher/sub_features/grading/widgets/teache
 import 'package:class_realm/models/academic_models.dart';
 import 'package:class_realm/widgets/common/app_buttons.dart';
 import 'package:class_realm/widgets/common/app_date_picker_field.dart';
+import 'package:class_realm/widgets/common/app_duration_picker_field.dart';
 import 'package:class_realm/widgets/common/app_modals.dart';
 import 'package:class_realm/widgets/common/app_text_field.dart';
 import 'package:class_realm/widgets/common/app_time_picker_field.dart';
@@ -658,28 +659,16 @@ class _EditAssessmentFlowDialogState extends State<EditAssessmentFlowDialog> {
                             ),
                             const SizedBox(width: 14),
                             Expanded(
-                              flex: 1,
-                              child: AppTextField(
+                              flex: 2,
+                              child: AppDurationPickerField(
                                 label: 'Duration (Mins) *',
-                                controller: _durationCtrl,
-                                keyboardType: TextInputType.number,
-                                inputFormatters: [
-                                  FilteringTextInputFormatter.digitsOnly,
-                                ],
-                                autovalidateMode:
-                                    AutovalidateMode.onUserInteraction,
-                                validator: (val) {
-                                  if (val == null || val.trim().isEmpty) {
-                                    return 'Required';
-                                  }
-                                  final d = int.tryParse(val.trim());
-                                  if (d == null || d < 1) {
-                                    return 'Min 1 min';
-                                  }
-                                  if (d > 120) {
-                                    return 'Max 120 mins';
-                                  }
-                                  return null;
+                                initialDurationMinutes:
+                                    int.tryParse(_durationCtrl.text.trim()) ??
+                                    60,
+                                onDurationSelected: (m) {
+                                  setState(() {
+                                    _durationCtrl.text = m.toString();
+                                  });
                                 },
                               ),
                             ),

@@ -145,7 +145,7 @@ class _LiveProctorMonitorModalState extends State<LiveProctorMonitorModal> {
     final filtered = _students.where((s) {
       if (_searchQuery.isEmpty) return true;
       final q = _searchQuery.toLowerCase();
-      return s.studentName.toLowerCase().contains(q) || s.lrn.contains(q);
+      return s.studentName.toLowerCase().contains(q);
     }).toList();
 
     final activeCount = _students
@@ -291,7 +291,7 @@ class _LiveProctorMonitorModalState extends State<LiveProctorMonitorModal> {
             TextField(
               decoration: InputDecoration(
                 isDense: true,
-                hintText: 'Search learner by name or LRN...',
+                hintText: 'Search learner by name...',
                 prefixIcon: const Icon(Icons.search, size: 20),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),

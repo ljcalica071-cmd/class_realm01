@@ -1,8 +1,13 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:class_realm/core/services/app_data_cache.dart';
+import 'package:class_realm/models/academic_models.dart';
 import 'package:class_realm/models/student_dashboard_models.dart';
 import 'package:class_realm/features/student/shared/widgets/student_classwork_card.dart';
 import 'package:class_realm/features/student/shared/widgets/student_submit_work_dialog.dart';
+import 'package:class_realm/features/student/sub_features/academics/screens/student_assessment_screen.dart';
 
 void main() {
   group('StudentClassworkCard Attachment and Instructions Display', () {
@@ -286,6 +291,153 @@ void main() {
       // No Student Notes / Remarks
       expect(find.text('Student Notes / Remarks (Optional)'), findsNothing);
       expect(find.text('Add an optional note or explanation for your teacher...'), findsNothing);
+    });
+
+    testWidgets('renders disabled Answer Key Locked when resultsReleased is false for submitted exam', (tester) async {
+      final examLocked = StudentClassworkModel(
+        id: 'exam-locked-1',
+        type: 'exam',
+        title: 'Midterm Examination',
+        description: '',
+        instructions: 'Test instructions',
+        subjectName: 'History',
+        sectionName: 'Section 1',
+        gradeLevel: '11',
+        assignedAt: DateTime.now().subtract(const Duration(hours: 2)),
+        deadline: DateTime.now().subtract(const Duration(hours: 1)),
+        maxScore: 100,
+        status: 'submitted',
+        score: null,
+        feedback: null,
+        resultsReleased: false,
+      );
+
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: StudentClassworkCard(
+            classwork: examLocked,
+          ),
+        ),
+      ));
+      await tester.pumpAndSettle();
+
+      // Expect disabled Answer Key Locked button
+      expect(find.text('Answer Key Locked'), findsOneWidget);
+      expect(find.text('Review Answers & Exam Key'), findsNothing);
+    });
+
+    testWidgets('renders enabled Review Answers & Exam Key when resultsReleased is true for submitted exam', (tester) async {
+      final examReleased = StudentClassworkModel(
+        id: 'exam-released-1',
+        type: 'exam',
+        title: 'Midterm Examination',
+        description: '',
+        instructions: 'Test instructions',
+        subjectName: 'History',
+        sectionName: 'Section 1',
+        gradeLevel: '11',
+        assignedAt: DateTime.now().subtract(const Duration(hours: 2)),
+        deadline: DateTime.now().subtract(const Duration(hours: 1)),
+        maxScore: 100,
+        status: 'submitted',
+        score: 95,
+        feedback: null,
+        resultsReleased: true,
+      );
+
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: StudentClassworkCard(
+            classwork: examReleased,
+          ),
+        ),
+      ));
+      await tester.pumpAndSettle();
+
+      // Expect enabled Review Answers & Exam Key button
+      expect(find.text('Review Answers & Exam Key'), findsOneWidget);
+      expect(find.text('Answer Key Locked'), findsNothing);
+    });
+
+    testWidgets('auto-resumes active quiz/exam at saved question index with saved answers and integer points', (tester) async {
+      tester.view.physicalSize = const Size(1280, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final quizModel = QuizOrExamModel(
+        id: 'quiz-resume-101',
+        title: 'Quiz 1: Creative Markets',
+        description: 'Answer all questions carefully.',
+        subject: 'Creative Markets',
+        section: 'Section 1',
+        isExam: false,
+        durationMinutes: 30,
+        scheduleDate: DateTime.now().subtract(const Duration(minutes: 10)),
+        questions: [
+          QuestionModel(
+            id: 'q1',
+            questionText: 'What is the primary market segment?',
+            type: QuestionType.multipleChoice,
+            choices: ['Collectors', 'Suppliers', 'Brokers', 'Auditors'],
+            correctAnswer: 'A',
+            points: 1.0,
+          ),
+          QuestionModel(
+            id: 'q2',
+            questionText: 'Art criticism requires formal analysis.',
+            type: QuestionType.trueFalse,
+            choices: ['True', 'False'],
+            correctAnswer: 'True',
+            points: 1.0,
+          ),
+        ],
+      );
+
+      final vaultPayload = jsonEncode({
+        'assessmentId': quizModel.id,
+        'studentId': 'student',
+        'assessmentJson': quizModel.toJson(),
+        'currentStep': 1,
+        'rulesAccepted': true,
+        'currentQuestionIndex': 1,
+        'questionOrderIds': ['q1', 'q2'],
+        'answers': {'q1': 'Collectors', 'q2': ''},
+        'startedAtIso': DateTime.now().toUtc().subtract(const Duration(minutes: 5)).toIso8601String(),
+        'secondsRemaining': 1500,
+        'violations': 1,
+        'mySessionId': 'sess_test_1',
+        'pendingOfflineSubmission': false,
+      });
+
+      SharedPreferences.setMockInitialValues({
+        StudentAssessmentScreen.vaultKeyFor(quizModel.id, 'student'): vaultPayload,
+        StudentAssessmentScreen.activePointerKeyFor('student'): vaultPayload,
+      });
+      AppDataCache.instance.set<String>(
+        StudentAssessmentScreen.vaultKeyFor(quizModel.id, 'student'),
+        vaultPayload,
+      );
+
+      // Verify getActiveAssessmentToResume returns the active QuizOrExamModel
+      final resumedModel = await StudentAssessmentScreen.getActiveAssessmentToResume('student');
+      expect(resumedModel, isNotNull);
+      expect(resumedModel!.id, 'quiz-resume-101');
+      expect(resumedModel.isExam, isFalse);
+
+      await tester.pumpWidget(MaterialApp(
+        home: StudentAssessmentScreen(assessment: quizModel),
+      ));
+      await tester.pump();
+
+      // Verify it skipped Step 0 (Rules) and went straight to Step 1 at Question 2 of 2
+      expect(find.text('START ASSESSMENT'), findsNothing);
+      expect(find.text('Question 2 of 2'), findsOneWidget);
+      expect(find.text('1 / 2 answered'), findsOneWidget);
+      expect(find.text('Art criticism requires formal analysis.'), findsOneWidget);
+      // Verify whole integer point formatting (no 1.0 Points)
+      expect(find.text('1 Point'), findsOneWidget);
+      expect(find.text('1.0 Points'), findsNothing);
     });
   });
 }

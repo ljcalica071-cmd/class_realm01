@@ -119,7 +119,7 @@ class StudentProctorCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'LRN: ${state.lrn} • ${state.section}',
+                  state.section,
                   style: TextStyle(
                     fontSize: 12,
                     color: theme.colorScheme.onSurface.withValues(alpha: 0.6),

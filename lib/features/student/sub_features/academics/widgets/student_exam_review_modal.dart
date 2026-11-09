@@ -112,7 +112,7 @@ class _StudentExamReviewModalState extends State<StudentExamReviewModal>
 
       if (attemptRes == null) {
         setState(() {
-          _errorMessage = 'No submitted exam record found.';
+          _errorMessage = 'No submitted assessment record found.';
           _isLoading = false;
         });
         return;
@@ -339,7 +339,7 @@ class _StudentExamReviewModalState extends State<StudentExamReviewModal>
                       ),
                     ),
                     child: Text(
-                      'Score: ${_totalScoreEarned.toStringAsFixed(1)} / ${widget.maxScore.toStringAsFixed(0)} pts',
+                      'Score: ${_totalScoreEarned.round()} / ${widget.maxScore.round()} pts',
                       style: const TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 14,
@@ -479,8 +479,8 @@ class _StudentExamReviewModalState extends State<StudentExamReviewModal>
                     const SizedBox(width: 5),
                     Text(
                       item.isCorrect
-                          ? 'Correct (+${item.points.toStringAsFixed(1)} pts)'
-                          : 'Incorrect (0.0 pts)',
+                          ? 'Correct (+${item.points.round()} ${item.points.round() == 1 ? 'pt' : 'pts'})'
+                          : 'Incorrect (0 pts)',
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 12,

@@ -150,6 +150,7 @@ class StudentClassworkModel {
     this.studentSubmission,
     this.submittedAt,
     this.completionMode = 'online',
+    this.resultsReleased = false,
     this.termNumber = 1,
     this.gradebookColumnIndex,
   });
@@ -173,6 +174,7 @@ class StudentClassworkModel {
   final StudentAttachmentModel? studentSubmission;
   final DateTime? submittedAt;
   final String completionMode;
+  final bool resultsReleased;
   final int termNumber;
   final int? gradebookColumnIndex;
 
@@ -252,6 +254,8 @@ class StudentClassworkModel {
           ? null
           : DateTime.tryParse(submittedAtStr),
       completionMode: json['completion_mode']?.toString() ?? 'online',
+      resultsReleased: json['results_released'] == true ||
+          json['resultsReleased'] == true,
       termNumber: json['term_number'] is num
           ? (json['term_number'] as num).toInt()
           : (int.tryParse(json['term_number']?.toString() ?? '') ?? 1),

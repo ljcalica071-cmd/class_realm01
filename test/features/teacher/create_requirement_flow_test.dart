@@ -663,7 +663,7 @@ void main() {
     );
 
     testWidgets(
-      'ExpandableInstructionsText clamps long instructions to 2 lines and toggles See more / See less',
+      'ExpandableInstructionsText clamps long instructions to 3 lines and toggles See more / See less',
       (tester) async {
         final longText =
             'Line 1 of detailed instructions for students.\nLine 2 of detailed instructions.\nLine 3 of detailed instructions that overflows two lines.';
@@ -684,7 +684,7 @@ void main() {
         expect(find.text('See less'), findsNothing);
 
         final collapsedText = tester.widget<Text>(find.text(longText));
-        expect(collapsedText.maxLines, 2);
+        expect(collapsedText.maxLines, 3);
 
         await tester.tap(find.text('See more'));
         await tester.pumpAndSettle();
@@ -698,7 +698,7 @@ void main() {
 
         expect(find.text('See more'), findsOneWidget);
         final recollapsedText = tester.widget<Text>(find.text(longText));
-        expect(recollapsedText.maxLines, 2);
+        expect(recollapsedText.maxLines, 3);
       },
     );
 

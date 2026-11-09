@@ -25,12 +25,18 @@ void main() {
       await tester.pump();
 
       expect(find.text('Scheduled Date *'), findsOneWidget);
+      expect(find.text('Question Distributions (3 Types)'), findsOneWidget);
+      expect(find.text('View Complete Anti-Cheating & Exam Taking Guidelines'), findsOneWidget);
+      expect(find.text('Continue'), findsOneWidget);
 
       await tester.tap(find.text('In-Person (Manual Record)'));
       await tester.pump();
 
       expect(find.text('Set Date *'), findsOneWidget);
       expect(find.text('Date Administered *'), findsNothing);
+      expect(find.text('Question Distributions (3 Types)'), findsNothing);
+      expect(find.text('View Complete Anti-Cheating & Exam Taking Guidelines'), findsNothing);
+      expect(find.text('Publish Examination'), findsOneWidget);
     });
   });
 }

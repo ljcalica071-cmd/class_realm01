@@ -163,6 +163,7 @@ class StudentClassworkCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     final isGraded = classwork.status == 'graded' || classwork.score != null;
     final isSubmitted =
         isGraded || classwork.status == 'submitted';
@@ -365,10 +366,10 @@ class StudentClassworkCard extends StatelessWidget {
                   vertical: 8,
                 ),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF8B5CF6).withValues(alpha: 0.1),
+                  color: const Color(0xFF8B5CF6).withValues(alpha: isDark ? 0.15 : 0.1),
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
-                    color: const Color(0xFF8B5CF6).withValues(alpha: 0.25),
+                    color: const Color(0xFF8B5CF6).withValues(alpha: isDark ? 0.35 : 0.25),
                   ),
                 ),
                 child: Row(
@@ -386,10 +387,10 @@ class StudentClassworkCard extends StatelessWidget {
                             : classwork.type == 'quiz'
                             ? 'In-Person Quiz: Administered in classroom by teacher. Your score will appear here once recorded in the Gradebook.'
                             : 'In-Person ${classwork.type == 'performance_task' ? 'Performance Task' : 'Activity'}: Submit your physical work directly to your teacher in class. Your score and status will appear here once recorded.',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
-                          color: Color(0xFF6D28D9),
+                          color: isDark ? const Color(0xFFA78BFA) : const Color(0xFF6D28D9),
                         ),
                       ),
                     ),
@@ -406,10 +407,10 @@ class StudentClassworkCard extends StatelessWidget {
                     vertical: 8,
                   ),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF0F8A48).withValues(alpha: 0.08),
+                    color: const Color(0xFF0F8A48).withValues(alpha: isDark ? 0.15 : 0.08),
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(
-                      color: const Color(0xFF0F8A48).withValues(alpha: 0.25),
+                      color: const Color(0xFF0F8A48).withValues(alpha: isDark ? 0.35 : 0.25),
                     ),
                   ),
                   child: Row(
@@ -425,10 +426,10 @@ class StudentClassworkCard extends StatelessWidget {
                           classwork.score != null
                               ? '${classwork.type == 'quiz' ? 'Quiz' : 'Examination'} Completed • Score: ${_formatScore(classwork.score!)} / ${_formatScore(classwork.maxScore)} pts'
                               : '${classwork.type == 'quiz' ? 'Quiz' : 'Examination'} Submitted • Recorded in system',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 13,
-                            color: Color(0xFF0F8A48),
+                            color: isDark ? const Color(0xFF4ADE80) : const Color(0xFF0F8A48),
                           ),
                         ),
                       ),
@@ -438,25 +439,55 @@ class StudentClassworkCard extends StatelessWidget {
                 const SizedBox(height: 10),
                 Align(
                   alignment: Alignment.centerRight,
-                  child: OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: const Color(0xFF0F8A48),
-                      side: const BorderSide(color: Color(0xFF0F8A48)),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 8,
-                      ),
-                    ),
-                    onPressed: () => _openExamReview(context),
-                    icon: const Icon(Icons.fact_check_outlined, size: 16),
-                    label: const Text(
-                      'Review Answers & Exam Key',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 13,
-                      ),
-                    ),
-                  ),
+                  child: classwork.resultsReleased
+                      ? OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: isDark ? const Color(0xFF4ADE80) : const Color(0xFF0F8A48),
+                            side: BorderSide(
+                              color: isDark ? const Color(0xFF4ADE80) : const Color(0xFF0F8A48),
+                            ),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 8,
+                            ),
+                          ),
+                          onPressed: () => _openExamReview(context),
+                          icon: const Icon(Icons.fact_check_outlined, size: 16),
+                          label: const Text(
+                            'Review Answers & Exam Key',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                            ),
+                          ),
+                        )
+                      : Tooltip(
+                          message:
+                              'Answer key not yet released by your teacher.',
+                          child: OutlinedButton.icon(
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: theme.colorScheme.onSurface
+                                  .withValues(alpha: 0.38),
+                              side: BorderSide(
+                                color: theme.colorScheme.outline
+                                    .withValues(alpha: 0.25),
+                              ),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 8,
+                              ),
+                            ),
+                            onPressed: null,
+                            icon: const Icon(Icons.lock_outline, size: 16),
+                            label: const Text(
+                              'Answer Key Locked',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ),
+                        ),
                 ),
               ] else if (isOverdue) ...[
                 Container(
@@ -481,7 +512,9 @@ class StudentClassworkCard extends StatelessWidget {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          'Examination Window Closed: The testing schedule has ended.',
+                          classwork.type == 'quiz'
+                              ? 'Quiz Window Closed: The testing schedule has ended.'
+                              : 'Examination Window Closed: The testing schedule has ended.',
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
@@ -871,9 +904,7 @@ class StudentClassworkCard extends StatelessWidget {
     return '${months[local.month - 1]} ${local.day}, $hour:$minute $period';
   }
 
-  static String _formatScore(double score) => score == score.roundToDouble()
-      ? score.toInt().toString()
-      : score.toStringAsFixed(1);
+  static String _formatScore(double score) => score.round().toString();
 
   Future<void> _openExamReview(BuildContext context) async {
     final client = SupabaseService().client;
@@ -896,15 +927,18 @@ class StudentClassworkCard extends StatelessWidget {
             .maybeSingle();
       }
 
-      final isReleased = assessRow?['results_released'] == true;
+      final isReleased =
+          (assessRow?['results_released'] == true) || classwork.resultsReleased;
       final assessmentId = assessRow?['id']?.toString() ?? classwork.id;
 
       if (!isReleased) {
         if (context.mounted) {
+          final label = classwork.type == 'quiz' ? 'quiz' : 'examination';
           AppModals.showWarningDialog(
             context: context,
             title: 'Answer Key Not Yet Released',
-            message: 'Your teacher has not yet released the official answer key and examination review for this test. Please check back once all students have completed their submissions.',
+            message:
+                'Your teacher has not yet released the official answer key and $label review for this test. Please check back once all students have completed their submissions.',
           );
         }
         return;
@@ -931,10 +965,11 @@ class StudentClassworkCard extends StatelessWidget {
       final timeStr = diff.inHours > 0
           ? '${diff.inHours}h ${diff.inMinutes % 60}m'
           : '${diff.inMinutes} minutes';
+      final label = classwork.type == 'quiz' ? 'quiz' : 'examination';
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'This examination is scheduled for ${_formatDate(classwork.assignedAt!)}. Testing window opens in $timeStr.',
+            'This $label is scheduled for ${_formatDate(classwork.assignedAt!)}. Testing window opens in $timeStr.',
           ),
         ),
       );
