@@ -86,6 +86,8 @@ class AuthRepository {
   Future<String?>? _inFlightSessionFuture;
   bool _isLoggingOut = false;
 
+  set currentUser(custom.UserModel? user) => setCurrentUser(user);
+
   void setCurrentUser(custom.UserModel? user) {
     _currentUser = user;
     if (user != null) {
