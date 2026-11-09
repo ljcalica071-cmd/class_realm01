@@ -898,3 +898,335 @@ class ShimmerProfileSkeleton extends StatelessWidget {
     );
   }
 }
+
+/// Preset: Attendance Analytics Skeleton (KPIs, At-Risk alert, and Trend & Status Charts)
+class ShimmerAttendanceAnalyticsSkeleton extends StatelessWidget {
+  const ShimmerAttendanceAnalyticsSkeleton({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final cardBg = theme.colorScheme.surface;
+    final borderColor = theme.colorScheme.onSurface.withValues(
+      alpha: isDark ? 0.16 : 0.12,
+    );
+
+    return ShimmerLoading(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 6 KPI Cards Responsive Grid
+          LayoutBuilder(
+            builder: (ctx, constraints) {
+              final width = constraints.maxWidth;
+              final columns = width >= 1100
+                  ? 6
+                  : width >= 720
+                  ? 3
+                  : width >= 440
+                  ? 2
+                  : 1;
+              const spacing = 12.0;
+              final cardWidth = (width - (spacing * (columns - 1))) / columns;
+
+              return Wrap(
+                spacing: spacing,
+                runSpacing: spacing,
+                children: List.generate(
+                  6,
+                  (index) => SizedBox(
+                    width: cardWidth,
+                    child: Container(
+                      padding: const EdgeInsets.all(15),
+                      decoration: BoxDecoration(
+                        color: cardBg,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: borderColor),
+                      ),
+                      child: const Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              ShimmerBox(width: 34, height: 34, borderRadius: 8),
+                              SizedBox(width: 10),
+                              Expanded(
+                                child: ShimmerBox(
+                                  width: 80,
+                                  height: 12,
+                                  borderRadius: 4,
+                                ),
+                              ),
+                            ],
+                          ),
+                          SizedBox(height: 12),
+                          ShimmerBox(width: 60, height: 24, borderRadius: 6),
+                          SizedBox(height: 6),
+                          ShimmerBox(width: 110, height: 11, borderRadius: 4),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+          const SizedBox(height: 20),
+
+          // Early Warning At-Risk Section Skeleton
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: cardBg,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: borderColor),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: const [
+                    ShimmerBox(width: 18, height: 18, borderRadius: 4),
+                    SizedBox(width: 8),
+                    ShimmerBox(width: 260, height: 15, borderRadius: 4),
+                    Spacer(),
+                    ShimmerBox(width: 64, height: 22, borderRadius: 999),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                const ShimmerBox(width: 320, height: 11, borderRadius: 4),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? Colors.white.withValues(alpha: 0.03)
+                        : const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: isDark ? Colors.white10 : const Color(0xFFE2E8F0),
+                    ),
+                  ),
+                  child: Row(
+                    children: const [
+                      ShimmerBox(width: 18, height: 18, borderRadius: 999),
+                      SizedBox(width: 10),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          ShimmerBox(width: 200, height: 13, borderRadius: 4),
+                          SizedBox(height: 4),
+                          ShimmerBox(width: 250, height: 11, borderRadius: 4),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          // Trend Chart and Status Breakdown Charts Skeleton
+          LayoutBuilder(
+            builder: (ctx, constraints) {
+              final isNarrow = constraints.maxWidth < 750;
+
+              final trendCard = Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: cardBg,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: borderColor),
+                ),
+                child: const Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        ShimmerBox(width: 18, height: 18, borderRadius: 4),
+                        SizedBox(width: 8),
+                        ShimmerBox(width: 130, height: 15, borderRadius: 4),
+                      ],
+                    ),
+                    SizedBox(height: 14),
+                    ShimmerBox(
+                      width: double.infinity,
+                      height: 160,
+                      borderRadius: 8,
+                    ),
+                    SizedBox(height: 12),
+                    ShimmerBox(width: 240, height: 11, borderRadius: 4),
+                  ],
+                ),
+              );
+
+              final breakdownCard = Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: cardBg,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: borderColor),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: const [
+                        ShimmerBox(width: 18, height: 18, borderRadius: 4),
+                        SizedBox(width: 8),
+                        ShimmerBox(width: 130, height: 15, borderRadius: 4),
+                      ],
+                    ),
+                    const SizedBox(height: 18),
+                    ...List.generate(
+                      4,
+                      (index) => Padding(
+                        padding: const EdgeInsets.only(bottom: 14),
+                        child: Column(
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: const [
+                                ShimmerBox(width: 50, height: 12, borderRadius: 4),
+                                ShimmerBox(width: 45, height: 12, borderRadius: 4),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            const ShimmerBox(
+                              width: double.infinity,
+                              height: 8,
+                              borderRadius: 4,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+
+              if (isNarrow) {
+                return Column(
+                  children: [
+                    trendCard,
+                    const SizedBox(height: 16),
+                    breakdownCard,
+                  ],
+                );
+              }
+
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(flex: 3, child: trendCard),
+                  const SizedBox(width: 16),
+                  Expanded(flex: 2, child: breakdownCard),
+                ],
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Preset: Attendance History and Audit Logs Table Skeleton
+class ShimmerAttendanceHistorySkeleton extends StatelessWidget {
+  final int rowCount;
+  const ShimmerAttendanceHistorySkeleton({super.key, this.rowCount = 5});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final dividerColor = theme.colorScheme.onSurface.withValues(
+      alpha: isDark ? 0.14 : 0.09,
+    );
+
+    return ShimmerLoading(
+      child: Column(
+        children: [
+          // Header Bar
+          Container(
+            height: 44,
+            decoration: BoxDecoration(
+              color: theme.colorScheme.primary.withValues(
+                alpha: isDark ? 0.12 : 0.06,
+              ),
+              border: Border(
+                top: BorderSide(color: dividerColor),
+                bottom: BorderSide(color: dividerColor),
+              ),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Row(
+              children: const [
+                ShimmerBox(width: 50, height: 12, borderRadius: 4),
+                SizedBox(width: 40),
+                ShimmerBox(width: 110, height: 12, borderRadius: 4),
+                SizedBox(width: 40),
+                ShimmerBox(width: 60, height: 12, borderRadius: 4),
+                SizedBox(width: 35),
+                ShimmerBox(width: 65, height: 12, borderRadius: 4),
+                SizedBox(width: 35),
+                ShimmerBox(width: 55, height: 12, borderRadius: 4),
+                SizedBox(width: 40),
+                ShimmerBox(width: 75, height: 12, borderRadius: 4),
+                Spacer(),
+                ShimmerBox(width: 60, height: 12, borderRadius: 4),
+              ],
+            ),
+          ),
+          // Data Rows
+          ListView.separated(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: rowCount,
+            separatorBuilder: (_, _) => Divider(height: 1, color: dividerColor),
+            itemBuilder: (_, _) => Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 13),
+              child: Row(
+                children: const [
+                  ShimmerBox(width: 75, height: 13, borderRadius: 4),
+                  SizedBox(width: 40),
+                  ShimmerBox(width: 135, height: 13, borderRadius: 4),
+                  SizedBox(width: 30),
+                  ShimmerBox(width: 55, height: 13, borderRadius: 4),
+                  SizedBox(width: 35),
+                  ShimmerBox(width: 65, height: 22, borderRadius: 6),
+                  SizedBox(width: 30),
+                  ShimmerBox(width: 60, height: 22, borderRadius: 6),
+                  SizedBox(width: 40),
+                  ShimmerBox(width: 90, height: 13, borderRadius: 4),
+                  Spacer(),
+                  ShimmerBox(width: 60, height: 26, borderRadius: 6),
+                ],
+              ),
+            ),
+          ),
+          Divider(height: 1, color: dividerColor),
+          // Footer Pagination Bar
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: const [
+                ShimmerBox(width: 100, height: 14, borderRadius: 4),
+                Row(
+                  children: [
+                    ShimmerBox(width: 28, height: 28, borderRadius: 6),
+                    SizedBox(width: 8),
+                    ShimmerBox(width: 28, height: 28, borderRadius: 6),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

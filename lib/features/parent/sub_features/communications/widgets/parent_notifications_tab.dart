@@ -24,7 +24,7 @@ class _ParentNotificationsTabState extends State<ParentNotificationsTab> {
   bool _isLoadingMore = false;
   bool _hasMore = true;
   int _offset = 0;
-  static const int _pageSize = 20;
+  static const int _pageSize = 10;
 
   RealtimeChannel? _channel;
 

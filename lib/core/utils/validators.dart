@@ -56,7 +56,14 @@ class AppValidators {
   static const int maxClassworkFileSizeBytes =
       15 * 1024 * 1024; // 15 MB (15,728,640 bytes)
   static const List<String> allowedClassworkExtensions = ['pdf', 'doc', 'docx'];
-  static const List<String> allowedAiLectureExtensions = ['pdf', 'ppt', 'pptx'];
+  static const List<String> allowedAiLectureExtensions = [
+    'pdf',
+    'ppt',
+    'pptx',
+    'doc',
+    'docx',
+  ];
+  static const int maxAiLectureFileNameLength = 50;
   static const int minIdentificationAnswerLength = 2;
   static const int maxIdentificationAnswerLength = 50;
   static const int minMcqChoiceLength = 1;
@@ -146,15 +153,18 @@ class AppValidators {
     return null;
   }
 
-  /// Validates AI Lecture Document upload format (.pdf, .ppt, .pptx) and size (Max 15 MB)
+  /// Validates AI Lecture Document upload format (.pdf, .ppt, .pptx, .doc, .docx), filename length (Max 50 chars), and size (Max 15 MB)
   static String? validateAiLectureFile({
     required String fileName,
     required int fileSizeBytes,
   }) {
+    if (fileName.length > maxAiLectureFileNameLength) {
+      return 'Filename exceeds the 50-character limit (${fileName.length} chars). Please rename to 50 characters or less.';
+    }
     final dot = fileName.lastIndexOf('.');
     final ext = dot == -1 ? '' : fileName.substring(dot + 1).toLowerCase();
     if (!allowedAiLectureExtensions.contains(ext)) {
-      return "Unsupported file format '.$ext'. Only PDF (.pdf) and PowerPoint (.ppt, .pptx) lecture files are allowed.";
+      return "Unsupported file format '.$ext'. Only PDF (.pdf), PowerPoint (.ppt, .pptx), and Word (.doc, .docx) lecture files are allowed.";
     }
     if (fileSizeBytes <= 0) {
       return 'The selected file is empty (0 bytes). Please choose a valid lecture document.';

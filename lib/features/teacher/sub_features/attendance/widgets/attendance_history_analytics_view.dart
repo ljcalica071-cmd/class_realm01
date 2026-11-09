@@ -7,6 +7,7 @@ import 'package:class_realm/models/attendance_workspace_models.dart';
 import 'package:class_realm/data/repositories/attendance_repository.dart';
 import 'package:class_realm/data/repositories/supabase_attendance_repository.dart';
 import 'package:class_realm/shared/widgets/shared_widgets.dart';
+import 'package:class_realm/shared/widgets/shimmer_loading.dart';
 import 'package:class_realm/widgets/common/app_date_picker_field.dart';
 import 'package:class_realm/features/teacher/sub_features/attendance/utils/sf2_csv_exporter.dart';
 
@@ -396,10 +397,7 @@ class AttendanceHistoryAnalyticsViewState
           const SizedBox(height: 20),
         ],
         if (_isLoadingAnalytics)
-          const Padding(
-            padding: EdgeInsets.all(32),
-            child: Center(child: CircularProgressIndicator()),
-          )
+          const ShimmerAttendanceAnalyticsSkeleton()
         else ...[
           _buildKpiCards(theme, summary),
           const SizedBox(height: 20),
@@ -1337,15 +1335,16 @@ class AttendanceHistoryAnalyticsViewState
                       fontSize: 12,
                       color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                     ),
+                  )
+                else
+                  const ShimmerLoading(
+                    child: ShimmerBox(width: 80, height: 12, borderRadius: 4),
                   ),
               ],
             ),
           ),
           if (_isLoadingHistory)
-            const Padding(
-              padding: EdgeInsets.all(24),
-              child: Center(child: CircularProgressIndicator()),
-            )
+            const ShimmerAttendanceHistorySkeleton()
           else ...[
             Builder(
               builder: (context) {

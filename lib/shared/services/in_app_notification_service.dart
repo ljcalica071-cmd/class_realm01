@@ -122,11 +122,41 @@ class InAppNotificationService {
               }
 
               if (audienceMatches) {
+                // Detect attendance warning levels & set severity appropriately
+                InAppNotificationSeverity severity = InAppNotificationSeverity.info;
+                String subtitle = 'School Announcement';
+
+                final combined = '$title $message'.toLowerCase();
+                final notificationType = (newRecord['notification_type'] as String? ?? '').toLowerCase();
+                final isAttendance = notificationType == 'attendance' ||
+                    combined.contains('absence') ||
+                    combined.contains('attendance');
+
+                if (isAttendance) {
+                  if (combined.contains('10 absence') ||
+                      combined.contains('critical') ||
+                      combined.contains('final warning') ||
+                      combined.contains('sardo')) {
+                    severity = InAppNotificationSeverity.warningCritical;
+                    subtitle = 'Critical Attendance Notice';
+                  } else if (combined.contains('6 absence') ||
+                      combined.contains('2nd warning')) {
+                    severity = InAppNotificationSeverity.warningLevel2;
+                    subtitle = 'Attendance Warning';
+                  } else if (combined.contains('3 absence') ||
+                      combined.contains('1st warning')) {
+                    severity = InAppNotificationSeverity.warningLevel1;
+                    subtitle = 'Attendance Notice';
+                  } else {
+                    subtitle = 'Attendance Notice';
+                  }
+                }
+
                 showBanner(
                   title: title,
                   message: message,
-                  subtitle: 'School Announcement',
-                  severity: InAppNotificationSeverity.info,
+                  subtitle: subtitle,
+                  severity: severity,
                   duration: const Duration(seconds: 6),
                 );
               }

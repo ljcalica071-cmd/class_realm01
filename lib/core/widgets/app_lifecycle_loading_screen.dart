@@ -421,15 +421,15 @@ class _AppLifecycleLoadingScreenState extends State<AppLifecycleLoadingScreen>
                     vertical: 28,
                   ),
                   child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 440),
+                    constraints: const BoxConstraints(maxWidth: 420),
                     child: ClipRRect(
-                      borderRadius: BorderRadius.circular(28),
+                      borderRadius: BorderRadius.circular(24),
                       child: BackdropFilter(
                         filter: ImageFilter.blur(sigmaX: 26, sigmaY: 26),
                         child: Container(
                           padding: const EdgeInsets.fromLTRB(30, 36, 30, 26),
                           decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(28),
+                            borderRadius: BorderRadius.circular(24),
                             gradient: LinearGradient(
                               begin: Alignment.topLeft,
                               end: Alignment.bottomRight,

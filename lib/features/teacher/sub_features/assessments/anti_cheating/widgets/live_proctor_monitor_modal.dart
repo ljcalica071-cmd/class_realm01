@@ -113,15 +113,19 @@ class _LiveProctorMonitorModalState extends State<LiveProctorMonitorModal> {
   Future<void> _initializeRoster() async {
     try {
       final client = SupabaseService().client;
-      final assessmentRow = await client
-          .from('digital_assessments')
-          .select('subject_offering_id, total_points, results_released')
-          .eq('id', widget.assessmentId)
-          .maybeSingle();
+      Map<String, dynamic>? assessmentRow;
+      try {
+        assessmentRow = await client
+            .from('digital_assessments')
+            .select('subject_offering_id, results_released')
+            .eq('id', widget.assessmentId)
+            .maybeSingle();
+      } catch (e) {
+        debugPrint('live_proctor_monitor_modal digital_assessments notice: $e');
+      }
 
       final offeringId = assessmentRow?['subject_offering_id']?.toString();
-      final totalPoints =
-          (assessmentRow?['total_points'] as num?)?.toDouble() ?? 0.0;
+      final totalPoints = 0.0;
       _resultsReleased = assessmentRow?['results_released'] == true;
 
       var enrollQuery = client

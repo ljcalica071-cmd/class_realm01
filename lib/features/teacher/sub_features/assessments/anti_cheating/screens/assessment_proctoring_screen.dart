@@ -4,6 +4,8 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:class_realm/core/services/supabase_service.dart';
 import 'package:class_realm/core/theme/app_theme.dart';
 import 'package:class_realm/models/academic_models.dart';
+import 'package:class_realm/data/repositories/auth_repository.dart';
+import 'package:class_realm/data/repositories/supabase_student_repository.dart';
 import 'package:class_realm/features/teacher/sub_features/assessments/anti_cheating/models/student_live_proctor_state.dart';
 import 'package:class_realm/features/teacher/sub_features/assessments/anti_cheating/services/teacher_proctor_channel_service.dart';
 import 'package:class_realm/features/teacher/sub_features/assessments/anti_cheating/widgets/proctoring_roster_table.dart';
@@ -27,9 +29,11 @@ class AssessmentProctoringScreen extends StatefulWidget {
 }
 
 class _AssessmentProctoringScreenState
-    extends State<AssessmentProctoringScreen> {
+    extends State<AssessmentProctoringScreen>
+    with SingleTickerProviderStateMixin {
   late final TeacherProctorChannelService _proctorService;
   StreamSubscription<List<StudentLiveProctorState>>? _proctorSub;
+  late final TabController _tabController;
   ProctorViewTab _activeTab = ProctorViewTab.liveMonitor;
   String _searchQuery = '';
   bool _isLoading = true;
@@ -54,6 +58,31 @@ class _AssessmentProctoringScreenState
   void initState() {
     super.initState();
     _resultsReleased = widget.assessment.resultsReleased;
+
+    _tabController = TabController(
+      length: widget.assessment.isExam ? 2 : 1,
+      vsync: this,
+    );
+    _tabController.addListener(() {
+      if (!mounted) return;
+      if (_tabController.index == 1 && !_isTestingFinished) {
+        _tabController.index = 0;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Item Analysis unlocks after the examination time window ends.',
+            ),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      } else {
+        setState(() {
+          _activeTab = _tabController.index == 0
+              ? ProctorViewTab.liveMonitor
+              : ProctorViewTab.itemAnalysis;
+        });
+      }
+    });
 
     _proctorService = TeacherProctorChannelService(
       assessmentId: widget.assessment.id,
@@ -99,6 +128,7 @@ class _AssessmentProctoringScreenState
 
   @override
   void dispose() {
+    _tabController.dispose();
     _lateCheckTimer?.cancel();
     _proctorSub?.cancel();
     _proctorService.dispose();
@@ -110,121 +140,281 @@ class _AssessmentProctoringScreenState
     try {
       final client = SupabaseService().client;
 
-      // 1. Fetch digital assessment metadata
-      final assessmentRow = await client
-          .from('digital_assessments')
-          .select('subject_offering_id, total_points, results_released')
-          .eq('id', widget.assessment.id)
-          .maybeSingle();
+      // 1. Fetch digital assessment metadata safely (omitting total_points which does not exist on digital_assessments)
+      Map<String, dynamic>? assessmentRow;
+      try {
+        assessmentRow = await client
+            .from('digital_assessments')
+            .select('subject_offering_id, results_released')
+            .eq('id', widget.assessment.id)
+            .maybeSingle();
+      } catch (e) {
+        debugPrint('digital_assessments metadata notice: $e');
+      }
 
-      final offeringId = assessmentRow?['subject_offering_id']?.toString() ??
+      String? offeringId = assessmentRow?['subject_offering_id']?.toString() ??
           widget.assessment.subjectOfferingId;
-      final totalPoints =
-          (assessmentRow?['total_points'] as num?)?.toDouble() ??
-              widget.assessment.totalPoints;
+      final totalPoints = widget.assessment.totalPoints;
       _resultsReleased = assessmentRow?['results_released'] == true;
 
-      // 2. Fetch enrollment with 3-tier fallback
+      // 1b. If offeringId is still null/empty, check classwork_items
+      if (offeringId == null || offeringId.isEmpty) {
+        try {
+          final cwRow = await client
+              .from('classwork_items')
+              .select('subject_offering_id')
+              .eq('id', widget.assessment.id)
+              .maybeSingle();
+          offeringId = cwRow?['subject_offering_id']?.toString();
+        } catch (e) {
+          debugPrint('classwork_items subject_offering_id notice: $e');
+        }
+      }
+
+      // 1c. If offeringId is still null/empty, find offering by section name & subject
+      if (offeringId == null || offeringId.isEmpty) {
+        try {
+          final cleanSec =
+              widget.assessment.section.replaceAll('Section', '').trim();
+          final offRes = await client
+              .from('subject_offerings')
+              .select('''
+                id,
+                sections!inner ( section_name ),
+                subjects!inner ( subject_name )
+              ''');
+          for (final off in (offRes as List? ?? [])) {
+            final secMap = off['sections'] as Map<String, dynamic>? ?? {};
+            final subMap = off['subjects'] as Map<String, dynamic>? ?? {};
+            final sName = subMap['subject_name']?.toString() ?? '';
+            final secName = secMap['section_name']?.toString() ?? '';
+            final matchesSec = secName.toLowerCase().contains(cleanSec.toLowerCase()) ||
+                secName.toLowerCase().contains(widget.assessment.section.toLowerCase());
+            final matchesSub = widget.assessment.subject.isEmpty ||
+                sName.toLowerCase() == widget.assessment.subject.toLowerCase();
+            if (matchesSec && matchesSub) {
+              offeringId = off['id']?.toString();
+              break;
+            }
+          }
+          if (offeringId == null && (offRes as List? ?? []).isNotEmpty) {
+            for (final off in (offRes as List)) {
+              final secMap = off['sections'] as Map<String, dynamic>? ?? {};
+              final secName = secMap['section_name']?.toString() ?? '';
+              if (secName.toLowerCase().contains(cleanSec.toLowerCase())) {
+                offeringId = off['id']?.toString();
+                break;
+              }
+            }
+          }
+        } catch (e) {
+          debugPrint('Notice finding offering by section: $e');
+        }
+      }
+
+      // 2. Fetch enrollment with multi-tier fallback so all students in this section appear
       List<dynamic> enrollData = [];
+
+      // Tier 1: Query student_enrollments by offeringId
       if (offeringId != null && offeringId.isNotEmpty) {
         try {
           final res = await client
               .from('student_enrollments')
-              .select("""
+              .select('''
+                id,
                 student_id,
-                student_profiles!inner (
+                status,
+                student_profiles (
                   student_id,
                   lrn,
                   first_name,
                   middle_name,
                   last_name,
-                  gender,
-                  department_or_section
+                  gender
                 )
-              """)
-              .eq('subject_offering_id', offeringId)
-              .ilike('status', 'enrolled');
+              ''')
+              .eq('subject_offering_id', offeringId);
           enrollData = res as List<dynamic>? ?? [];
-        } catch (_) {}
+        } catch (e) {
+          debugPrint('Tier 1 enrollment query notice: $e');
+        }
       }
 
-      // Fallback 1: Query by section name in student_profiles
+      // Tier 2: Query student_enrollments for all offerings matching this section name
       if (enrollData.isEmpty && widget.assessment.section.isNotEmpty) {
         try {
           final cleanSec =
               widget.assessment.section.replaceAll('Section', '').trim();
-          final profileRes = await client
-              .from('student_profiles')
-              .select(
-                'student_id, lrn, first_name, middle_name, last_name, gender, department_or_section',
-              )
-              .or(
-                'department_or_section.ilike.%${widget.assessment.section}%,department_or_section.ilike.%$cleanSec%',
-              );
-          for (final p in (profileRes as List? ?? [])) {
-            enrollData.add({
-              'student_id': p['student_id'],
-              'student_profiles': p,
-            });
+          final secRows = await client
+              .from('sections')
+              .select('id, section_name')
+              .or('section_name.ilike.%${widget.assessment.section}%,section_name.ilike.%$cleanSec%');
+          final secIds = (secRows as List? ?? [])
+              .map((s) => s['id']?.toString())
+              .whereType<String>()
+              .toList();
+
+          if (secIds.isNotEmpty) {
+            final offRes = await client
+                .from('subject_offerings')
+                .select('id')
+                .inFilter('section_id', secIds);
+            final offIds = (offRes as List? ?? [])
+                .map((o) => o['id']?.toString())
+                .whereType<String>()
+                .toList();
+
+            if (offIds.isNotEmpty) {
+              final secEnroll = await client
+                  .from('student_enrollments')
+                  .select('''
+                    id,
+                    student_id,
+                    status,
+                    student_profiles (
+                      student_id,
+                      lrn,
+                      first_name,
+                      middle_name,
+                      last_name,
+                      gender
+                    )
+                  ''')
+                  .inFilter('subject_offering_id', offIds);
+              enrollData = secEnroll as List<dynamic>? ?? [];
+            }
           }
-        } catch (_) {}
+        } catch (e) {
+          debugPrint('Tier 2 section enrollment query notice: $e');
+        }
       }
 
-      // Fallback 2: Query all student_profiles
+      // Tier 3: Query teacher's enrolled students matching this section
+      if (enrollData.isEmpty) {
+        try {
+          final teacherId = AuthRepository.instance.currentUser?.id;
+          if (teacherId != null) {
+            final teacherStudents = await SupabaseStudentRepository()
+                .getStudentsForTeacher(teacherId);
+            final cleanSec = widget.assessment.section
+                .replaceAll('Section', '')
+                .trim()
+                .toLowerCase();
+            final matched = teacherStudents.where((st) {
+              final sSec =
+                  (st.departmentOrSection ?? '').trim().toLowerCase();
+              return sSec.isEmpty ||
+                  sSec.contains(widget.assessment.section.toLowerCase()) ||
+                  sSec.contains(cleanSec);
+            }).toList();
+
+            final targetList = matched.isNotEmpty ? matched : teacherStudents;
+            for (final st in targetList) {
+              enrollData.add({
+                'student_id': st.id,
+                'student_profiles': {
+                  'student_id': st.id,
+                  'first_name': st.firstName,
+                  'middle_name': st.middleName,
+                  'last_name': st.lastName,
+                  'lrn': st.lrn,
+                  'gender': st.gender,
+                },
+              });
+            }
+          }
+        } catch (e) {
+          debugPrint('Tier 3 teacher students fallback notice: $e');
+        }
+      }
+
+      // Tier 4: Universal fallback - query student_profiles directly
       if (enrollData.isEmpty) {
         try {
           final allProfiles = await client
               .from('student_profiles')
-              .select(
-                'student_id, lrn, first_name, middle_name, last_name, gender, department_or_section',
-              )
-              .limit(50);
+              .select('student_id, lrn, first_name, middle_name, last_name, gender')
+              .order('last_name', ascending: true);
           for (final p in (allProfiles as List? ?? [])) {
             enrollData.add({
               'student_id': p['student_id'],
               'student_profiles': p,
             });
           }
-        } catch (_) {}
-      }
-
-      // 3. Fetch existing attempts
-      final attemptsData = await client
-          .from('assessment_attempts')
-          .select('student_id, status, score_earned, current_question_index')
-          .eq('assessment_id', widget.assessment.id);
-      final attemptsMap = <String, Map<String, dynamic>>{};
-      for (final a in (attemptsData as List? ?? [])) {
-        final sId = a['student_id']?.toString() ?? '';
-        if (sId.isNotEmpty) attemptsMap[sId] = Map<String, dynamic>.from(a);
-      }
-
-      // 4. Fetch allow/disallow overrides from anti_cheating_logs
-      final logsData = await client
-          .from('anti_cheating_logs')
-          .select('student_id, event_type, event_at')
-          .eq('assessment_id', widget.assessment.id)
-          .inFilter('event_type', ['entry_allowed', 'entry_disallowed'])
-          .order('event_at', ascending: true);
-      final overridesMap = <String, bool>{};
-      for (final l in (logsData as List? ?? [])) {
-        final sId = l['student_id']?.toString() ?? '';
-        final ev = l['event_type']?.toString() ?? '';
-        if (sId.isNotEmpty) {
-          overridesMap[sId] = ev == 'entry_allowed';
+        } catch (e) {
+          debugPrint('Tier 4 profiles fallback notice: $e');
         }
+      }
+
+      // Deduplicate enrollData by student_id
+      final seenStudentIds = <String>{};
+      final uniqueEnrollData = <Map<String, dynamic>>[];
+      for (final row in enrollData) {
+        final profileRaw = row['student_profiles'];
+        final Map<String, dynamic> profile;
+        if (profileRaw is Map<String, dynamic>) {
+          profile = profileRaw;
+        } else if (profileRaw is Map) {
+          profile = Map<String, dynamic>.from(profileRaw);
+        } else if (profileRaw is List && profileRaw.isNotEmpty && profileRaw.first is Map) {
+          profile = Map<String, dynamic>.from(profileRaw.first as Map);
+        } else {
+          profile = {};
+        }
+
+        final sId = row['student_id']?.toString() ??
+            profile['student_id']?.toString() ??
+            '';
+        if (sId.isNotEmpty && seenStudentIds.add(sId)) {
+          uniqueEnrollData.add({
+            'student_id': sId,
+            'student_profiles': profile,
+          });
+        }
+      }
+
+      // 3. Fetch existing attempts safely
+      final attemptsMap = <String, Map<String, dynamic>>{};
+      try {
+        final attemptsData = await client
+            .from('assessment_attempts')
+            .select('student_id, status, score_earned, current_question_index')
+            .eq('assessment_id', widget.assessment.id);
+        for (final a in (attemptsData as List? ?? [])) {
+          final sId = a['student_id']?.toString() ?? '';
+          if (sId.isNotEmpty) attemptsMap[sId] = Map<String, dynamic>.from(a);
+        }
+      } catch (attErr) {
+        debugPrint('attempts query notice: $attErr');
+      }
+
+      // 4. Fetch allow/disallow overrides from anti_cheating_logs safely
+      final overridesMap = <String, bool>{};
+      try {
+        final logsData = await client
+            .from('anti_cheating_logs')
+            .select('student_id, event_type, event_at')
+            .eq('assessment_id', widget.assessment.id)
+            .inFilter('event_type', ['entry_allowed', 'entry_disallowed'])
+            .order('event_at', ascending: true);
+        for (final l in (logsData as List? ?? [])) {
+          final sId = l['student_id']?.toString() ?? '';
+          final ev = l['event_type']?.toString() ?? '';
+          if (sId.isNotEmpty) {
+            overridesMap[sId] = ev == 'entry_allowed';
+          }
+        }
+      } catch (logErr) {
+        debugPrint('logs query notice: $logErr');
       }
 
       final pastLateCutoff = _isPastLateCutoff;
       final parsedList = <StudentLiveProctorState>[];
 
-      for (final row in enrollData) {
+      for (final row in uniqueEnrollData) {
         final profile =
             row['student_profiles'] as Map<String, dynamic>? ?? {};
-        final sId =
-            row['student_id']?.toString() ??
-            profile['student_id']?.toString() ??
-            '';
+        final sId = row['student_id']?.toString() ?? '';
         final firstName = profile['first_name']?.toString() ?? '';
         final middleName = profile['middle_name']?.toString() ?? '';
         final lastName = profile['last_name']?.toString() ?? '';
@@ -279,6 +469,59 @@ class _AssessmentProctoringScreenState
             middleName: middleName,
           ),
         );
+      }
+
+      // Sort alphabetically by last name, then first name
+      parsedList.sort((a, b) {
+        final aLast = (a.lastName ?? a.studentName).trim().toLowerCase();
+        final bLast = (b.lastName ?? b.studentName).trim().toLowerCase();
+        final lnCmp = aLast.compareTo(bLast);
+        if (lnCmp != 0) return lnCmp;
+        final aFirst = (a.firstName ?? '').trim().toLowerCase();
+        final bFirst = (b.firstName ?? '').trim().toLowerCase();
+        return aFirst.compareTo(bFirst);
+      });
+
+      // Synchronize live proctor service roster
+      _proctorService.initializeRoster(parsedList.map((s) => {
+        'id': s.studentId,
+        'name': s.studentName,
+        'lrn': s.lrn,
+        'section': s.section,
+        'status': s.status,
+        'violation_count': s.violationCount,
+        'gender': s.gender,
+        'last_name': s.lastName,
+        'first_name': s.firstName,
+        'middle_name': s.middleName,
+        'score': s.score,
+        'total_points': s.totalPoints,
+        'is_entry_allowed': s.isEntryAllowed,
+        'is_missing': s.isMissing,
+        'current_question_number': s.currentQuestionNumber,
+      }).toList());
+
+      // Merge any already-present live state from proctor service
+      if (_proctorService.currentStates.isNotEmpty) {
+        final liveMap = {
+          for (final s in _proctorService.currentStates) s.studentId: s,
+        };
+        for (int i = 0; i < parsedList.length; i++) {
+          final live = liveMap[parsedList[i].studentId];
+          if (live != null) {
+            parsedList[i] = parsedList[i].copyWith(
+              status: live.status,
+              violationCount: live.violationCount,
+              violations: live.violations,
+              score: live.score ?? parsedList[i].score,
+              totalPoints: live.totalPoints ?? parsedList[i].totalPoints,
+              isEntryAllowed: live.isEntryAllowed,
+              currentQuestionNumber:
+                  live.currentQuestionNumber ?? parsedList[i].currentQuestionNumber,
+              isMissing: live.isMissing,
+            );
+          }
+        }
       }
 
       if (mounted) {
@@ -681,46 +924,55 @@ class _AssessmentProctoringScreenState
           ),
           const SizedBox(height: 16),
 
-          // ── SEGMENTED VIEW SWITCHER (Exam only) ──
+          // ── SLIDING TAB BAR (Written Works / PT / Exam style) ──
           if (widget.assessment.isExam) ...[
             Container(
-              padding: const EdgeInsets.all(4),
               decoration: BoxDecoration(
-                color: isDark
-                    ? const Color(0xFF1E293B)
-                    : const Color(0xFFE2E8F0).withValues(alpha: 0.6),
+                color: theme.colorScheme.surface,
                 borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.12),
+                ),
               ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: _buildViewSegment(
-                      label: 'Live Proctoring Monitor',
-                      icon: LucideIcons.shieldCheck,
-                      selected: _activeTab == ProctorViewTab.liveMonitor,
-                      onTap: () => setState(
-                        () => _activeTab = ProctorViewTab.liveMonitor,
-                      ),
+              child: TabBar(
+                controller: _tabController,
+                dividerColor: Colors.transparent,
+                labelColor: theme.colorScheme.primary,
+                unselectedLabelColor: theme.colorScheme.onSurface.withValues(
+                  alpha: 0.6,
+                ),
+                indicatorColor: theme.colorScheme.primary,
+                indicatorWeight: 3,
+                tabs: [
+                  const Tab(
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(LucideIcons.shieldCheck, size: 16),
+                        SizedBox(width: 8),
+                        Text(
+                          'Live Proctoring Monitor',
+                          style: TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                      ],
                     ),
                   ),
-                  Expanded(
-                    child: Tooltip(
-                      message: _isTestingFinished
-                          ? 'View DepEd item difficulty indices'
-                          : 'Item Analysis unlocks after the examination time window ends',
-                      child: _buildViewSegment(
-                        label: 'Item Analysis (DepEd Tiers)',
-                        icon: _isTestingFinished
-                            ? LucideIcons.barChart2
-                            : LucideIcons.lock,
-                        selected: _activeTab == ProctorViewTab.itemAnalysis,
-                        disabled: !_isTestingFinished,
-                        onTap: _isTestingFinished
-                            ? () => setState(
-                                () => _activeTab = ProctorViewTab.itemAnalysis,
-                              )
-                            : () {},
-                      ),
+                  Tab(
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          _isTestingFinished
+                              ? LucideIcons.barChart2
+                              : LucideIcons.lock,
+                          size: 16,
+                        ),
+                        const SizedBox(width: 8),
+                        const Text(
+                          'Item Analysis (DepEd Tiers)',
+                          style: TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                      ],
                     ),
                   ),
                 ],
@@ -761,32 +1013,120 @@ class _AssessmentProctoringScreenState
           ),
           const SizedBox(height: 16),
 
-          // ── 4 STAT METRIC BADGES ──
-          Wrap(
-            spacing: 12,
-            runSpacing: 10,
-            children: [
-              _metricBadge(
+          // ── 4 STAT METRIC CARDS (Standardized Clean 60-30-10 Style) ──
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final isNarrow = constraints.maxWidth < 700;
+              final totalEnrolledCount = _rosterStudents.length;
+
+              final cardActive = _buildMetricCard(
+                context: context,
                 label: 'Active Learners',
                 value: '$activeCount',
-                color: AppTheme.catBlue,
-              ),
-              _metricBadge(
+                icon: LucideIcons.users,
+                accentColor: const Color(0xFF2563EB),
+                pillText: activeCount > 0 ? '$activeCount Active' : '0 Active',
+                pillBg: const Color(0xFF2563EB).withValues(alpha: 0.1),
+                pillBorder: const Color(0xFF2563EB).withValues(alpha: 0.22),
+                pillTextColor: const Color(0xFF2563EB),
+                subtitle: 'Real-time test takers',
+                onTap: () => setState(() => _searchQuery = ''),
+              );
+
+              final cardCompleted = _buildMetricCard(
+                context: context,
                 label: 'Completed',
                 value: '$completedCount',
-                color: AppTheme.catGreen,
-              ),
-              _metricBadge(
+                icon: LucideIcons.checkCircle,
+                accentColor: const Color(0xFF059669),
+                pillText: totalEnrolledCount > 0
+                    ? '${((completedCount / totalEnrolledCount) * 100).toInt()}% Done'
+                    : '0 Done',
+                pillBg: const Color(0xFF059669).withValues(alpha: 0.1),
+                pillBorder: const Color(0xFF059669).withValues(alpha: 0.22),
+                pillTextColor: const Color(0xFF059669),
+                subtitle: 'Submitted & graded',
+              );
+
+              final cardViolations = _buildMetricCard(
+                context: context,
                 label: 'Flagged / Violations',
                 value: '$violationsCount',
-                color: Colors.orange.shade700,
-              ),
-              _metricBadge(
+                icon: LucideIcons.alertTriangle,
+                accentColor: const Color(0xFFD97706),
+                pillText: violationsCount > 0
+                    ? '$violationsCount Alerts'
+                    : 'No Flags',
+                pillBg: (violationsCount > 0
+                        ? const Color(0xFFD97706)
+                        : const Color(0xFF059669))
+                    .withValues(alpha: 0.1),
+                pillBorder: (violationsCount > 0
+                        ? const Color(0xFFD97706)
+                        : const Color(0xFF059669))
+                    .withValues(alpha: 0.22),
+                pillTextColor: violationsCount > 0
+                    ? const Color(0xFFD97706)
+                    : const Color(0xFF059669),
+                subtitle: 'Integrity & switch alerts',
+              );
+
+              final cardLocked = _buildMetricCard(
+                context: context,
                 label: 'Late / Locked',
                 value: '$lockedLateCount',
-                color: AppTheme.catRed,
-              ),
-            ],
+                icon: LucideIcons.lock,
+                accentColor: const Color(0xFFDC2626),
+                pillText: lockedLateCount > 0
+                    ? 'Action Required'
+                    : 'All On Time',
+                pillBg: (lockedLateCount > 0
+                        ? const Color(0xFFDC2626)
+                        : const Color(0xFF059669))
+                    .withValues(alpha: 0.1),
+                pillBorder: (lockedLateCount > 0
+                        ? const Color(0xFFDC2626)
+                        : const Color(0xFF059669))
+                    .withValues(alpha: 0.22),
+                pillTextColor: lockedLateCount > 0
+                    ? const Color(0xFFDC2626)
+                    : const Color(0xFF059669),
+                subtitle: 'Beyond 15-min window',
+              );
+
+              if (isNarrow) {
+                return Column(
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(child: cardActive),
+                        const SizedBox(width: 10),
+                        Expanded(child: cardCompleted),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(child: cardViolations),
+                        const SizedBox(width: 10),
+                        Expanded(child: cardLocked),
+                      ],
+                    ),
+                  ],
+                );
+              }
+              return Row(
+                children: [
+                  Expanded(child: cardActive),
+                  const SizedBox(width: 12),
+                  Expanded(child: cardCompleted),
+                  const SizedBox(width: 12),
+                  Expanded(child: cardViolations),
+                  const SizedBox(width: 12),
+                  Expanded(child: cardLocked),
+                ],
+              );
+            },
           ),
           const SizedBox(height: 16),
 
@@ -812,103 +1152,150 @@ class _AssessmentProctoringScreenState
     );
   }
 
-  Widget _buildViewSegment({
+  Widget _buildMetricCard({
+    required BuildContext context,
     required String label,
+    required String value,
     required IconData icon,
-    required bool selected,
-    bool disabled = false,
-    required VoidCallback onTap,
+    required Color accentColor,
+    required String pillText,
+    required Color pillBg,
+    required Color pillBorder,
+    required Color pillTextColor,
+    required String subtitle,
+    VoidCallback? onTap,
+    bool isSelected = false,
   }) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
+    final cardBg = isDark
+        ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.35)
+        : Colors.white;
+    final cardBorder = isSelected
+        ? theme.colorScheme.primary
+        : (isDark
+            ? theme.colorScheme.outline.withValues(alpha: 0.2)
+            : const Color(0xFFE2E8F0));
+
     return InkWell(
-      borderRadius: BorderRadius.circular(8),
-      onTap: disabled ? null : onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 140),
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        alignment: Alignment.center,
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         decoration: BoxDecoration(
-          color: selected
-              ? (isDark ? theme.colorScheme.primary : Colors.white)
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(8),
-          boxShadow: selected && !isDark
+          color: cardBg,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: cardBorder,
+            width: isSelected ? 2 : 1,
+          ),
+          boxShadow: !isDark
               ? [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.06),
-                    blurRadius: 4,
-                    offset: const Offset(0, 1),
+                    color: Colors.black.withValues(alpha: 0.03),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
                   ),
                 ]
               : null,
         ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Icon(
-              icon,
-              size: 15,
-              color: disabled
-                  ? theme.colorScheme.onSurface.withValues(alpha: 0.3)
-                  : selected
-                      ? (isDark ? Colors.white : theme.colorScheme.onSurface)
-                      : theme.colorScheme.onSurface.withValues(alpha: 0.65),
+            // Top Row: Title + Icon Badge
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                      color: isDark
+                          ? theme.colorScheme.onSurface.withValues(alpha: 0.8)
+                          : const Color(0xFF475569),
+                    ),
+                  ),
+                ),
+                Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: accentColor.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Center(
+                    child: Icon(
+                      icon,
+                      size: 16,
+                      color: accentColor,
+                    ),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(width: 7),
+            const SizedBox(height: 10),
+            // Middle Row: Value + Pill Badge
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
+              children: [
+                Text(
+                  value,
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.5,
+                    color: theme.colorScheme.onSurface,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 2.5,
+                    ),
+                    decoration: BoxDecoration(
+                      color: pillBg,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: pillBorder),
+                    ),
+                    child: Text(
+                      pillText,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: pillTextColor,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            // Bottom Row: Helper Subtitle
             Text(
-              label,
+              subtitle,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                fontSize: 13,
-                fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
-                color: disabled
-                    ? theme.colorScheme.onSurface.withValues(alpha: 0.3)
-                    : selected
-                        ? (isDark ? Colors.white : theme.colorScheme.onSurface)
-                        : theme.colorScheme.onSurface.withValues(alpha: 0.65),
+                fontSize: 11.5,
+                fontWeight: FontWeight.w500,
+                color: isDark
+                    ? theme.colorScheme.onSurface.withValues(alpha: 0.45)
+                    : const Color(0xFF64748B),
               ),
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _metricBadge({
-    required String label,
-    required String value,
-    required Color color,
-  }) {
-    return Container(
-      width: 175,
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: color.withValues(alpha: 0.25)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.w800,
-              color: color,
-            ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: color,
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -921,154 +1308,355 @@ class _AssessmentProctoringScreenState
             100
         : 0.0;
 
+    final headerBg = isDark
+        ? theme.colorScheme.primary.withValues(alpha: 0.14)
+        : theme.colorScheme.primary.withValues(alpha: 0.08);
+    final headerBorder = theme.colorScheme.primary.withValues(alpha: 0.25);
+    final rowBorder = theme.colorScheme.onSurface.withValues(
+      alpha: isDark ? 0.1 : 0.07,
+    );
+
     return Container(
-      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: theme.colorScheme.surface,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: theme.colorScheme.onSurface.withValues(alpha: 0.1),
+          color: theme.colorScheme.onSurface.withValues(alpha: 0.12),
         ),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  'Total Items: $totalItems',
-                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  'Mean Accuracy: ${avgP.toStringAsFixed(1)}%',
-                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
-                ),
-              ),
-              const Spacer(),
-              Row(
-                mainAxisSize: MainAxisSize.min,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Top Control Bar
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
                 children: [
-                  const Text(
-                    'Release Answer Key to Students',
-                    style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      'Total Items: $totalItems',
+                      style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+                    ),
                   ),
                   const SizedBox(width: 8),
-                  Switch(
-                    value: _resultsReleased,
-                    onChanged: (_) => _toggleResultsReleased(),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      'Mean Accuracy: ${avgP.toStringAsFixed(1)}%',
+                      style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+                    ),
+                  ),
+                  const Spacer(),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text(
+                        'Release Answer Key to Students',
+                        style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(width: 8),
+                      Switch(
+                        value: _resultsReleased,
+                        onChanged: (_) => _toggleResultsReleased(),
+                      ),
+                    ],
                   ),
                 ],
               ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          if (_itemStats.isEmpty)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 30),
-              child: Center(
-                child: Text(
-                  'No item analysis responses recorded yet.',
-                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+            ),
+            // Item Analysis Table with Permanent Column Headers (Edge-to-Edge)
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final availableWidth = constraints.maxWidth;
+                final tableWidth = availableWidth > 860 ? availableWidth : 860.0;
+
+                return SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: SizedBox(
+                    width: tableWidth,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // Permanent Header Row
+                    Container(
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: headerBg,
+                        border: Border(
+                          top: BorderSide(color: headerBorder),
+                          bottom: BorderSide(color: headerBorder),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          _buildAnalysisHeaderCell(
+                            theme: theme,
+                            width: 44,
+                            label: '#',
+                            alignment: Alignment.center,
+                          ),
+                          Expanded(
+                            child: _buildAnalysisHeaderCell(
+                              theme: theme,
+                              label: 'QUESTION STATEMENT',
+                            ),
+                          ),
+                          _buildAnalysisHeaderCell(
+                            theme: theme,
+                            width: 160,
+                            label: 'CORRECT / ATTEMPTS',
+                            alignment: Alignment.center,
+                          ),
+                          _buildAnalysisHeaderCell(
+                            theme: theme,
+                            width: 160,
+                            label: 'ACCURACY (P-INDEX)',
+                            alignment: Alignment.center,
+                          ),
+                          _buildAnalysisHeaderCell(
+                            theme: theme,
+                            width: 170,
+                            label: 'DEPED DIFFICULTY TIER',
+                            alignment: Alignment.center,
+                            hasRightBorder: false,
+                          ),
+                        ],
+                      ),
+                    ),
+                    // Rows or Polished Full-Width Empty Row
+                    if (_itemStats.isEmpty)
+                      Container(
+                        width: tableWidth,
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 48,
+                          horizontal: 24,
+                        ),
+                        alignment: Alignment.center,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: 56,
+                              height: 56,
+                              decoration: BoxDecoration(
+                                color: theme.colorScheme.primary.withValues(
+                                  alpha: isDark ? 0.14 : 0.08,
+                                ),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Center(
+                                child: Icon(
+                                  LucideIcons.barChart3,
+                                  size: 26,
+                                  color: theme.colorScheme.primary,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 14),
+                            Text(
+                              'No Item Analysis Responses Recorded Yet',
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                                color: theme.colorScheme.onSurface,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 440),
+                              child: Text(
+                                'Individual question difficulty (P-Index) and DepEd tiers will populate automatically as learners submit their responses.',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  height: 1.45,
+                                  color: theme.colorScheme.onSurface.withValues(
+                                    alpha: 0.6,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    else
+                      ListView.builder(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: _itemStats.length,
+                        itemBuilder: (context, idx) {
+                          final stat = _itemStats[idx];
+                          final classification = stat.classification;
+                          Color badgeColor;
+                          switch (classification) {
+                            case 'Very Easy':
+                              badgeColor = Colors.blue;
+                            case 'Easy':
+                              badgeColor = const Color(0xFF0F8A48);
+                            case 'Moderate / Ideal':
+                              badgeColor = Colors.teal;
+                            case 'Difficult':
+                              badgeColor = Colors.orange;
+                            default:
+                              badgeColor = Colors.red;
+                          }
+
+                          final rowBg = idx.isOdd
+                              ? (isDark
+                                  ? theme.colorScheme.onSurface.withValues(alpha: 0.03)
+                                  : theme.colorScheme.primary.withValues(alpha: 0.025))
+                              : theme.colorScheme.surface;
+
+                          return Container(
+                            height: 52,
+                            decoration: BoxDecoration(
+                              color: rowBg,
+                              border: Border(bottom: BorderSide(color: rowBorder)),
+                            ),
+                            child: Row(
+                              children: [
+                                SizedBox(
+                                  width: 44,
+                                  child: Center(
+                                    child: Text(
+                                      '${stat.itemNumber}',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w700,
+                                        color: theme.colorScheme.primary,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                Expanded(
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                                    child: Text(
+                                      stat.questionText,
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w600,
+                                        color: theme.colorScheme.onSurface,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ),
+                                SizedBox(
+                                  width: 160,
+                                  child: Center(
+                                    child: Text(
+                                      '${stat.correctCount} / ${stat.totalAttempts} correct',
+                                      style: TextStyle(
+                                        fontSize: 12.5,
+                                        fontWeight: FontWeight.w600,
+                                        color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                SizedBox(
+                                  width: 160,
+                                  child: Center(
+                                    child: Text(
+                                      '${(stat.pIndex * 100).toStringAsFixed(1)}% (P = ${stat.pIndex.toStringAsFixed(2)})',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w700,
+                                        color: theme.colorScheme.onSurface,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                SizedBox(
+                                  width: 170,
+                                  child: Center(
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 10,
+                                        vertical: 4,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: badgeColor.withValues(alpha: 0.12),
+                                        borderRadius: BorderRadius.circular(6),
+                                        border: Border.all(
+                                          color: badgeColor.withValues(alpha: 0.35),
+                                        ),
+                                      ),
+                                      child: Text(
+                                        classification,
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w700,
+                                          color: badgeColor,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                  ],
                 ),
               ),
-            )
-          else
-            ListView.separated(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: _itemStats.length,
-              separatorBuilder: (_, _) => const Divider(height: 1),
-              itemBuilder: (context, idx) {
-                final stat = _itemStats[idx];
-                final classification = stat.classification;
-                Color badgeColor;
-                switch (classification) {
-                  case 'Very Easy':
-                    badgeColor = Colors.blue;
-                  case 'Easy':
-                    badgeColor = const Color(0xFF0F8A48);
-                  case 'Moderate / Ideal':
-                    badgeColor = Colors.teal;
-                  case 'Difficult':
-                    badgeColor = Colors.orange;
-                  default:
-                    badgeColor = Colors.red;
-                }
+            );
+          },
+        ),
+      ],
+    ),
+  ),
+);
+  }
 
-                return ListTile(
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  leading: CircleAvatar(
-                    radius: 16,
-                    backgroundColor:
-                        theme.colorScheme.primary.withValues(alpha: 0.12),
-                    child: Text(
-                      'Q${stat.itemNumber}',
-                      style: TextStyle(
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w800,
-                        color: theme.colorScheme.primary,
-                      ),
-                    ),
-                  ),
-                  title: Text(
-                    stat.questionText,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  subtitle: Text(
-                    '${stat.correctCount} of ${stat.totalAttempts} correct (${(stat.pIndex * 100).toStringAsFixed(1)}% accuracy • P = ${stat.pIndex.toStringAsFixed(2)})',
-                    style: TextStyle(
-                      fontSize: 11.5,
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                    ),
-                  ),
-                  trailing: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 9,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: badgeColor.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(
-                        color: badgeColor.withValues(alpha: 0.35),
-                      ),
-                    ),
-                    child: Text(
-                      classification,
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: badgeColor,
-                      ),
-                    ),
-                  ),
-                );
-              },
-            ),
-        ],
+  Widget _buildAnalysisHeaderCell({
+    required ThemeData theme,
+    double? width,
+    required String label,
+    Alignment alignment = Alignment.centerLeft,
+    bool hasRightBorder = true,
+  }) {
+    final cell = Container(
+      height: double.infinity,
+      width: width,
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      alignment: alignment,
+      decoration: BoxDecoration(
+        border: hasRightBorder
+            ? Border(
+                right: BorderSide(
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.1),
+                ),
+              )
+            : null,
+      ),
+      child: Text(
+        label,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          fontSize: 11.5,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 0.4,
+          color: theme.colorScheme.onSurface,
+        ),
       ),
     );
+
+    return width != null ? cell : Expanded(child: cell);
   }
 }

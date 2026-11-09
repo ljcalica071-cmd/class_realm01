@@ -392,10 +392,21 @@
           isRemoved = true;
           clearInterval(timerId);
           currentProgress = 100;
-          render(100);
+          lastRenderedPct = 100;
+          if (fill) {
+            fill.style.width = "100%";
+          }
+          if (value) {
+            value.textContent = "100";
+          }
+          if (bar) {
+            bar.setAttribute("aria-valuenow", "100");
+          }
+          if (loader) {
+            loader.dataset.progress = "100";
+            loader.classList.add("is-ready");
+          }
           setStatus("ClassRealm Ready! Welcome.");
-          // Force synchronous layout flush so the 100% bar fill paints before fade-out
-          if (fill) void fill.offsetWidth;
           setTimeout(() => {
             if (!loader) return;
             loader.style.opacity = "0";
@@ -403,7 +414,7 @@
             setTimeout(() => {
               if (loader && loader.parentNode) loader.parentNode.removeChild(loader);
             }, 260);
-          }, 120);
+          }, 180);
         };
 
         const computeTempoSpeed = (p) => {

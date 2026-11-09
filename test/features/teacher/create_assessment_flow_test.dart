@@ -103,7 +103,7 @@ Uint8List _buildSamplePptxBytes() {
 
 void main() {
   group('AppValidators — AI Lecture File & Question Builder Rules', () {
-    test('validates allowed lecture extensions (.pdf, .ppt, .pptx) and 15 MB limit', () {
+    test('validates allowed lecture extensions (.pdf, .ppt, .pptx, .doc, .docx) and 15 MB limit', () {
       expect(
         AppValidators.validateAiLectureFile(
           fileName: 'lecture_notes.pdf',
@@ -125,14 +125,37 @@ void main() {
         ),
         isNull,
       );
+      expect(
+        AppValidators.validateAiLectureFile(
+          fileName: 'syllabus.docx',
+          fileSizeBytes: 1024 * 200,
+        ),
+        isNull,
+      );
+      expect(
+        AppValidators.validateAiLectureFile(
+          fileName: 'handout.doc',
+          fileSizeBytes: 1024 * 150,
+        ),
+        isNull,
+      );
 
       // Disallowed extensions
       expect(
         AppValidators.validateAiLectureFile(
-          fileName: 'handout.docx',
+          fileName: 'handout.txt',
           fileSizeBytes: 1024 * 100,
         ),
-        contains('Only PDF (.pdf) and PowerPoint (.ppt, .pptx)'),
+        contains('Only PDF (.pdf), PowerPoint (.ppt, .pptx), and Word (.doc, .docx)'),
+      );
+
+      // Filename exceeds 50 characters
+      expect(
+        AppValidators.validateAiLectureFile(
+          fileName: 'a_very_long_lecture_presentation_filename_that_exceeds_fifty_characters_limit.pptx',
+          fileSizeBytes: 1024 * 100,
+        ),
+        contains('exceeds the 50-character limit'),
       );
 
       // Exceeds 15 MB
@@ -305,12 +328,11 @@ void main() {
         );
         await tester.pump();
 
-        // Verify AI Question Generator section is displayed with upfront format & size badge
+        // Verify AI Question Generator section is displayed with uploaded lecture file
         expect(
-          find.text('AI Document-Grounded Question Generator (Optional)'),
+          find.text('AI Question Generator (Optional)'),
           findsOneWidget,
         );
-        expect(find.text('Allowed: PDF, PPT, PPTX • Max 15 MB'), findsOneWidget);
         expect(find.text('cell_biology.pptx'), findsOneWidget);
 
         // Select Hard difficulty and Critical Thinking focus

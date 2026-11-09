@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:class_realm/models/academic_models.dart';
 import 'package:class_realm/models/attendance_workspace_models.dart';
 import 'package:class_realm/data/repositories/attendance_repository.dart';
 import 'package:class_realm/features/teacher/sub_features/attendance/widgets/attendance_history_analytics_view.dart';
+import 'package:class_realm/shared/widgets/shimmer_loading.dart';
 
 class MockAttendanceRepository extends AttendanceRepository {
   AttendanceAnalyticsSummary? analyticsSummary;
@@ -139,6 +142,27 @@ class MockAttendanceRepository extends AttendanceRepository {
   Future<void> toggleOfflineSync() async {}
 }
 
+class _DelayedMockAttendanceRepository extends MockAttendanceRepository {
+  final Future<AttendanceAnalyticsSummary> delayedFuture;
+  _DelayedMockAttendanceRepository(this.delayedFuture);
+
+  @override
+  Future<AttendanceAnalyticsSummary> getAttendanceAnalytics({
+    required String subjectOfferingId,
+    required AttendanceDateRange dateRange,
+  }) async {
+    return delayedFuture;
+  }
+
+  @override
+  Future<AttendancePage<AttendanceWorkspaceRecord>> getAttendanceHistory(
+    AttendanceHistoryFilter filter,
+  ) async {
+    await delayedFuture;
+    return super.getAttendanceHistory(filter);
+  }
+}
+
 void main() {
   group('AttendanceHistoryAnalyticsView', () {
     late MockAttendanceRepository repository;
@@ -268,6 +292,58 @@ void main() {
 
       expect(repository.lastCorrectedRecordId, 'rec-1');
       expect(repository.lastCorrectedReason, 'Medical certificate presented');
+    });
+
+    testWidgets('displays skeleton loading shimmer instead of CircularProgressIndicator while loading', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1280, 1000));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      // Use Completer to hold the futures so we can inspect loading state deterministically
+      final completer = Completer<AttendanceAnalyticsSummary>();
+      // We render with a repository that stays in loading state until we complete
+      final delayedRepo = _DelayedMockAttendanceRepository(completer.future);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: AttendanceHistoryAnalyticsView(
+                subjectOfferingId: 'offering-101',
+                repository: delayedRepo,
+              ),
+            ),
+          ),
+        ),
+      );
+
+      // 1 frame pump without completing the future
+      await tester.pump();
+
+      // Verify no circular spinners are present and skeletons are shown
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+      expect(find.byType(ShimmerAttendanceAnalyticsSkeleton), findsOneWidget);
+      expect(find.byType(ShimmerAttendanceHistorySkeleton), findsOneWidget);
+
+      // Now complete
+      completer.complete(
+        const AttendanceAnalyticsSummary(
+          presenceRate: 90.0,
+          absencesAndExcuses: 1,
+          warningCount: 0,
+          presentCount: 18,
+          lateCount: 0,
+          absentCount: 1,
+          excusedCount: 0,
+          trendPoints: [],
+          atRiskStudents: [],
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      // Skeletons are replaced by content
+      expect(find.byType(ShimmerAttendanceAnalyticsSkeleton), findsNothing);
+      expect(find.byType(ShimmerAttendanceHistorySkeleton), findsNothing);
     });
   });
 }

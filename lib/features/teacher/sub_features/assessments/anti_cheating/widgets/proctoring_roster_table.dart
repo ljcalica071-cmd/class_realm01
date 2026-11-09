@@ -2,9 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:class_realm/core/theme/app_theme.dart';
 import 'package:class_realm/features/teacher/sub_features/assessments/anti_cheating/models/student_live_proctor_state.dart';
-import 'package:class_realm/shared/widgets/shared_widgets.dart';
 
-enum ProctorGenderFilter { all, male, female }
+enum ProctorRosterFilter { allActives, male, female, all }
 
 class ProctoringRosterTable extends StatefulWidget {
   final List<StudentLiveProctorState> students;
@@ -32,13 +31,9 @@ class _ProctoringRosterTableState extends State<ProctoringRosterTable> {
   static const double _headerHeight = 44.0;
   static const double _rowHeight = 52.0;
 
-  static const double _colNumWidth = 40.0;
-  static const double _colStatusWidth = 160.0;
-  static const double _colViolationsWidth = 110.0;
-  static const double _colScoreWidth = 110.0;
-  static const double _colActionsWidth = 190.0;
+  static const double _colNumWidth = 44.0;
 
-  ProctorGenderFilter _genderFilter = ProctorGenderFilter.all;
+  ProctorRosterFilter _filter = ProctorRosterFilter.all;
   late final TextEditingController _searchController;
 
   @override
@@ -64,27 +59,31 @@ class _ProctoringRosterTableState extends State<ProctoringRosterTable> {
 
   bool _isMale(StudentLiveProctorState s) {
     final g = (s.gender ?? '').trim().toLowerCase();
-    return g == 'male' || g == 'm';
+    return g == 'male' || g == 'm' || g == 'boy';
   }
 
   bool _isFemale(StudentLiveProctorState s) {
     final g = (s.gender ?? '').trim().toLowerCase();
-    return g == 'female' || g == 'f';
+    return g == 'female' || g == 'f' || g == 'girl';
   }
 
   List<StudentLiveProctorState> _buildFilteredSortedRoster() {
     final q = widget.searchQuery.trim().toLowerCase();
 
     final filtered = widget.students.where((s) {
-      if (_genderFilter == ProctorGenderFilter.male && !_isMale(s)) {
+      if (_filter == ProctorRosterFilter.allActives) {
+        if (s.status != ProctorSessionStatus.inProgress) {
+          return false;
+        }
+      } else if (_filter == ProctorRosterFilter.male && !_isMale(s)) {
         return false;
-      }
-      if (_genderFilter == ProctorGenderFilter.female && !_isFemale(s)) {
+      } else if (_filter == ProctorRosterFilter.female && !_isFemale(s)) {
         return false;
       }
       if (q.isNotEmpty) {
-        final full = '${s.lastName ?? ''} ${s.firstName ?? ''} ${s.studentName}'
-            .toLowerCase();
+        final full =
+            '${s.lastName ?? ''} ${s.firstName ?? ''} ${s.middleName ?? ''} ${s.studentName}'
+                .toLowerCase();
         final lrn = s.lrn.toLowerCase();
         final id = s.studentId.toLowerCase();
         if (!full.contains(q) && !lrn.contains(q) && !id.contains(q)) {
@@ -113,6 +112,9 @@ class _ProctoringRosterTableState extends State<ProctoringRosterTable> {
     final isDark = theme.brightness == Brightness.dark;
 
     final totalCount = widget.students.length;
+    final activeCount = widget.students
+        .where((s) => s.status == ProctorSessionStatus.inProgress)
+        .length;
     final maleCount = widget.students.where(_isMale).length;
     final femaleCount = widget.students.where(_isFemale).length;
     final filtered = _buildFilteredSortedRoster();
@@ -143,33 +145,17 @@ class _ProctoringRosterTableState extends State<ProctoringRosterTable> {
             _buildTopFilterBar(
               theme: theme,
               isDark: isDark,
-              totalCount: totalCount,
+              activeCount: activeCount,
               maleCount: maleCount,
               femaleCount: femaleCount,
+              totalCount: totalCount,
             ),
-            if (filtered.isEmpty && widget.students.isNotEmpty)
-              AppEmptyState(
-                icon: LucideIcons.searchX,
-                title: 'No Matching Learners',
-                message:
-                    'No learners match the selected gender or search filter.',
-                actionLabel: 'Reset Filters',
-                onAction: () {
-                  setState(() {
-                    _genderFilter = ProctorGenderFilter.all;
-                    _searchController.clear();
-                  });
-                  widget.onSearchChanged('');
-                },
-              )
-            else if (widget.students.isEmpty)
-              const AppEmptyState(
-                icon: LucideIcons.users,
-                title: 'No Learners Enrolled',
-                message: 'No learners enrolled in this section.',
-              )
-            else
-              _buildTableBody(theme: theme, isDark: isDark, items: filtered),
+            _buildTableBody(
+              theme: theme,
+              isDark: isDark,
+              items: filtered,
+              totalEnrolled: totalCount,
+            ),
           ],
         ),
       ),
@@ -179,9 +165,10 @@ class _ProctoringRosterTableState extends State<ProctoringRosterTable> {
   Widget _buildTopFilterBar({
     required ThemeData theme,
     required bool isDark,
-    required int totalCount,
+    required int activeCount,
     required int maleCount,
     required int femaleCount,
+    required int totalCount,
   }) {
     final barBg = isDark
         ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.35)
@@ -216,27 +203,34 @@ class _ProctoringRosterTableState extends State<ProctoringRosterTable> {
                 _buildGenderSegment(
                   theme: theme,
                   isDark: isDark,
-                  label: 'All ($totalCount)',
-                  selected: _genderFilter == ProctorGenderFilter.all,
+                  label: 'All Actives ($activeCount)',
+                  selected: _filter == ProctorRosterFilter.allActives,
                   onTap: () =>
-                      setState(() => _genderFilter = ProctorGenderFilter.all),
+                      setState(() => _filter = ProctorRosterFilter.allActives),
                 ),
                 _buildGenderSegment(
                   theme: theme,
                   isDark: isDark,
                   label: 'Male ($maleCount)',
-                  selected: _genderFilter == ProctorGenderFilter.male,
+                  selected: _filter == ProctorRosterFilter.male,
                   onTap: () =>
-                      setState(() => _genderFilter = ProctorGenderFilter.male),
+                      setState(() => _filter = ProctorRosterFilter.male),
                 ),
                 _buildGenderSegment(
                   theme: theme,
                   isDark: isDark,
                   label: 'Female ($femaleCount)',
-                  selected: _genderFilter == ProctorGenderFilter.female,
-                  onTap: () => setState(
-                    () => _genderFilter = ProctorGenderFilter.female,
-                  ),
+                  selected: _filter == ProctorRosterFilter.female,
+                  onTap: () =>
+                      setState(() => _filter = ProctorRosterFilter.female),
+                ),
+                _buildGenderSegment(
+                  theme: theme,
+                  isDark: isDark,
+                  label: 'All ($totalCount)',
+                  selected: _filter == ProctorRosterFilter.all,
+                  onTap: () =>
+                      setState(() => _filter = ProctorRosterFilter.all),
                 ),
               ],
             ),
@@ -346,6 +340,7 @@ class _ProctoringRosterTableState extends State<ProctoringRosterTable> {
     required ThemeData theme,
     required bool isDark,
     required List<StudentLiveProctorState> items,
+    required int totalEnrolled,
   }) {
     final headerBg = isDark
         ? theme.colorScheme.primary.withValues(alpha: 0.14)
@@ -355,110 +350,262 @@ class _ProctoringRosterTableState extends State<ProctoringRosterTable> {
       alpha: isDark ? 0.1 : 0.07,
     );
 
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: SizedBox(
-        width: 860,
-        child: Column(
-          children: [
-            // Header Row
-            Container(
-              height: _headerHeight,
-              decoration: BoxDecoration(
-                color: headerBg,
-                border: Border(bottom: BorderSide(color: headerBorder)),
-              ),
-              child: Row(
-                children: [
-                  _buildHeaderCell(theme: theme, width: _colNumWidth, label: '#', alignment: Alignment.center),
-                  Expanded(
-                    flex: 3,
-                    child: _buildHeaderCell(theme: theme, label: 'STUDENT NAME'),
-                  ),
-                  _buildHeaderCell(theme: theme, width: _colStatusWidth, label: 'STATUS', alignment: Alignment.center),
-                  _buildHeaderCell(theme: theme, width: _colViolationsWidth, label: 'VIOLATIONS', alignment: Alignment.center),
-                  _buildHeaderCell(theme: theme, width: _colScoreWidth, label: 'SCORE', alignment: Alignment.center),
-                  _buildHeaderCell(theme: theme, width: _colActionsWidth, label: 'ACTIONS', alignment: Alignment.center, hasRightBorder: false),
-                ],
-              ),
-            ),
-            // Item Rows
-            ListView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: items.length,
-              itemBuilder: (context, index) {
-                final student = items[index];
-                final rowBg = index.isOdd
-                    ? (isDark
-                        ? theme.colorScheme.onSurface.withValues(alpha: 0.03)
-                        : theme.colorScheme.primary.withValues(alpha: 0.025))
-                    : theme.colorScheme.surface;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final availableWidth = constraints.maxWidth;
+        final tableWidth = availableWidth > 860 ? availableWidth : 860.0;
 
-                return Container(
-                  height: _rowHeight,
+        return SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: SizedBox(
+            width: tableWidth,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Header Row (Always visible & stretches edge-to-edge)
+                Container(
+                  height: _headerHeight,
                   decoration: BoxDecoration(
-                    color: rowBg,
-                    border: Border(bottom: BorderSide(color: rowBorder)),
+                    color: headerBg,
+                    border: Border(bottom: BorderSide(color: headerBorder)),
                   ),
                   child: Row(
                     children: [
-                      // #
-                      SizedBox(
+                      _buildHeaderCell(
+                        theme: theme,
                         width: _colNumWidth,
-                        child: Center(
-                          child: Text(
-                            '${index + 1}',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
-                            ),
-                          ),
-                        ),
+                        label: '#',
+                        alignment: Alignment.center,
                       ),
-                      // Student Name
-                      Expanded(
+                      _buildHeaderCell(
+                        theme: theme,
                         flex: 3,
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                          child: _buildStudentNameCell(theme, student),
-                        ),
+                        label: 'STUDENT NAME',
                       ),
-                      // Status
-                      SizedBox(
-                        width: _colStatusWidth,
-                        child: Center(child: _buildStatusBadge(theme, student)),
+                      _buildHeaderCell(
+                        theme: theme,
+                        flex: 2,
+                        label: 'STATUS',
+                        alignment: Alignment.center,
                       ),
-                      // Violations
-                      SizedBox(
-                        width: _colViolationsWidth,
-                        child: Center(child: _buildViolationsBadge(theme, student)),
+                      _buildHeaderCell(
+                        theme: theme,
+                        flex: 2,
+                        label: 'VIOLATIONS',
+                        alignment: Alignment.center,
                       ),
-                      // Score
-                      SizedBox(
-                        width: _colScoreWidth,
-                        child: Center(child: _buildScoreCell(theme, student)),
+                      _buildHeaderCell(
+                        theme: theme,
+                        flex: 2,
+                        label: 'SCORE',
+                        alignment: Alignment.center,
                       ),
-                      // Actions
-                      SizedBox(
-                        width: _colActionsWidth,
-                        child: _buildActionsCell(theme, isDark, student),
+                      _buildHeaderCell(
+                        theme: theme,
+                        flex: 3,
+                        label: 'ACTIONS',
+                        alignment: Alignment.center,
+                        hasRightBorder: false,
                       ),
                     ],
                   ),
-                );
-              },
+                ),
+                // Item Rows or Polished Full-Width Empty Row
+                if (items.isEmpty)
+                  Container(
+                    width: tableWidth,
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 48,
+                      horizontal: 24,
+                    ),
+                    alignment: Alignment.center,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 56,
+                          height: 56,
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.primary.withValues(
+                              alpha: isDark ? 0.14 : 0.08,
+                            ),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Center(
+                            child: Icon(
+                              totalEnrolled == 0
+                                  ? LucideIcons.users
+                                  : LucideIcons.searchX,
+                              size: 26,
+                              color: theme.colorScheme.primary,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                        Text(
+                          totalEnrolled == 0
+                              ? 'No Learners Enrolled'
+                              : (_filter == ProctorRosterFilter.allActives
+                                  ? 'No Active Learners Currently Answering'
+                                  : 'No Matching Learners Found'),
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                            color: theme.colorScheme.onSurface,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 440),
+                          child: Text(
+                            totalEnrolled == 0
+                                ? 'No learners have been enrolled in this section yet. Students will appear here automatically once enrolled in this subject.'
+                                : (_filter == ProctorRosterFilter.allActives
+                                    ? 'Learners will appear here once they start answering the test. Select "All" to view the complete roster.'
+                                    : 'Try adjusting your search query or gender filter.'),
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 13,
+                              height: 1.45,
+                              color: theme.colorScheme.onSurface.withValues(
+                                alpha: 0.6,
+                              ),
+                            ),
+                          ),
+                        ),
+                        if (totalEnrolled > 0 &&
+                            _filter != ProctorRosterFilter.all) ...[
+                          const SizedBox(height: 14),
+                          OutlinedButton.icon(
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 8,
+                              ),
+                              side: BorderSide(
+                                color: theme.colorScheme.primary.withValues(
+                                  alpha: 0.4,
+                                ),
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                            onPressed: () {
+                              setState(() {
+                                _filter = ProctorRosterFilter.all;
+                                _searchController.clear();
+                              });
+                              widget.onSearchChanged('');
+                            },
+                            icon: const Icon(LucideIcons.users, size: 14),
+                            label: const Text(
+                              'View All Enrolled Learners',
+                              style: TextStyle(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  )
+                else
+                  ListView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: items.length,
+                    itemBuilder: (context, index) {
+                      final student = items[index];
+                      final rowBg = index.isOdd
+                          ? (isDark
+                              ? theme.colorScheme.onSurface.withValues(
+                                  alpha: 0.03,
+                                )
+                              : theme.colorScheme.primary.withValues(
+                                  alpha: 0.025,
+                                ))
+                          : theme.colorScheme.surface;
+
+                      return Container(
+                        height: _rowHeight,
+                        decoration: BoxDecoration(
+                          color: rowBg,
+                          border: Border(bottom: BorderSide(color: rowBorder)),
+                        ),
+                        child: Row(
+                          children: [
+                            // #
+                            SizedBox(
+                              width: _colNumWidth,
+                              child: Center(
+                                child: Text(
+                                  '${index + 1}',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: theme.colorScheme.onSurface
+                                        .withValues(alpha: 0.65),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            // Student Name
+                            Expanded(
+                              flex: 3,
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                ),
+                                child: _buildStudentNameCell(theme, student),
+                              ),
+                            ),
+                            // Status
+                            Expanded(
+                              flex: 2,
+                              child: Center(
+                                child: _buildStatusBadge(theme, student),
+                              ),
+                            ),
+                            // Violations
+                            Expanded(
+                              flex: 2,
+                              child: Center(
+                                child: _buildViolationsBadge(theme, student),
+                              ),
+                            ),
+                            // Score
+                            Expanded(
+                              flex: 2,
+                              child: Center(
+                                child: _buildScoreCell(theme, student),
+                              ),
+                            ),
+                            // Actions
+                            Expanded(
+                              flex: 3,
+                              child: Center(
+                                child: _buildActionsCell(theme, isDark, student),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+              ],
             ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 
   Widget _buildHeaderCell({
     required ThemeData theme,
     double? width,
+    int? flex,
     required String label,
     Alignment alignment = Alignment.centerLeft,
     bool hasRightBorder = true,
@@ -490,7 +637,9 @@ class _ProctoringRosterTableState extends State<ProctoringRosterTable> {
       ),
     );
 
-    return width != null ? cell : Expanded(child: cell);
+    if (width != null) return cell;
+    if (flex != null) return Expanded(flex: flex, child: cell);
+    return Expanded(child: cell);
   }
 
   Widget _buildStudentNameCell(ThemeData theme, StudentLiveProctorState s) {
@@ -564,7 +713,7 @@ class _ProctoringRosterTableState extends State<ProctoringRosterTable> {
             ? ' • Q${s.currentQuestionNumber}'
             : '';
         return _badge(
-          label: 'Taking$qText',
+          label: 'In Progress$qText',
           color: AppTheme.catBlue,
           icon: LucideIcons.loader,
         );

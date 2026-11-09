@@ -234,42 +234,90 @@ class StudentDashboardRepository {
             }
           }
 
-          final items = await client
-              .from('classwork_items')
-              .select('''
-                id,
-                subject_offering_id,
-                classwork_type,
-                grading_category,
-                title,
-                description,
-                instructions,
-                assigned_at,
-                deadline,
-                max_score,
-                completion_mode,
-                storage_path,
-                file_name,
-                file_size_bytes,
-                mime_type,
-                term_number,
-                gradebook_column_index,
-                allow_late_submission,
-                subject_offerings (
-                  subjects ( subject_name ),
-                  sections ( section_name, grade_level )
-                )
-              ''')
-              .filter('subject_offering_id', 'in', offeringIds)
-              .eq('is_published', true)
-              .eq('is_archived', false)
-              .order('deadline', ascending: true);
+          List<dynamic> items = [];
+          try {
+            final res = await client
+                .from('classwork_items')
+                .select('''
+                  id,
+                  subject_offering_id,
+                  classwork_type,
+                  grading_category,
+                  title,
+                  description,
+                  instructions,
+                  assigned_at,
+                  deadline,
+                  max_score,
+                  completion_mode,
+                  storage_path,
+                  file_name,
+                  file_size_bytes,
+                  mime_type,
+                  term_number,
+                  gradebook_column_index,
+                  allow_late_submission,
+                  subject_offerings (
+                    subjects ( subject_name ),
+                    sections ( section_name, grade_level )
+                  )
+                ''')
+                .inFilter('subject_offering_id', offeringIds)
+                .neq('is_archived', true)
+                .order('deadline', ascending: true);
+            items = res as List? ?? [];
+          } catch (cwErr1) {
+            debugPrint(
+              'Primary classwork_items query notice: $cwErr1. Retrying simpler query...',
+            );
+            try {
+              final res = await client
+                  .from('classwork_items')
+                  .select('''
+                    id,
+                    subject_offering_id,
+                    classwork_type,
+                    grading_category,
+                    title,
+                    description,
+                    instructions,
+                    assigned_at,
+                    deadline,
+                    max_score,
+                    completion_mode,
+                    storage_path,
+                    file_name,
+                    file_size_bytes,
+                    mime_type,
+                    term_number,
+                    gradebook_column_index,
+                    allow_late_submission
+                  ''')
+                  .inFilter('subject_offering_id', offeringIds)
+                  .neq('is_archived', true);
+              items = res as List? ?? [];
+            } catch (cwErr2) {
+              debugPrint('Fallback classwork_items query notice: $cwErr2');
+            }
+          }
 
           classworkList = (items as List? ?? []).map<Map<String, dynamic>>((i) {
             final m = Map<String, dynamic>.from(i as Map);
-            final off = m['subject_offerings'] as Map<String, dynamic>? ?? {};
-            final s = off['subjects'] as Map<String, dynamic>? ?? {};
-            final sec = off['sections'] as Map<String, dynamic>? ?? {};
+            var off = m['subject_offerings'] as Map<String, dynamic>? ?? {};
+            var s = off['subjects'] as Map<String, dynamic>? ?? {};
+            var sec = off['sections'] as Map<String, dynamic>? ?? {};
+            if (s.isEmpty) {
+              final offId = m['subject_offering_id']?.toString() ?? '';
+              final enrollMatch = enrollmentsList.firstWhere(
+                (e) => e['subject_id'] == offId,
+                orElse: () => {},
+              );
+              s = {'subject_name': enrollMatch['subject_name'] ?? ''};
+              sec = {
+                'section_name': enrollMatch['section_name'] ?? '',
+                'grade_level': enrollMatch['grade_level'] ?? '',
+              };
+            }
             final submission = submissionsByClassworkId[m['id']?.toString()];
 
             Map<String, dynamic>? studentSubMap;
@@ -357,35 +405,76 @@ class StudentDashboardRepository {
               }
             }
 
-            final assessments = await client
-                .from('digital_assessments')
-                .select("""
-                  id,
-                  subject_offering_id,
-                  assessment_type,
-                  grading_category,
-                  title,
-                  instructions,
-                  time_limit_minutes,
-                  available_from,
-                  deadline,
-                  results_released,
-                  assessment_questions ( points ),
-                  subject_offerings (
-                    subjects ( subject_name ),
-                    sections ( section_name, grade_level )
-                  )
-                """)
-                .filter('subject_offering_id', 'in', offeringIds)
-                .eq('is_published', true)
-                .eq('is_archived', false)
-                .order('deadline', ascending: true);
+            List<dynamic> assessments = [];
+            try {
+              final res = await client
+                  .from('digital_assessments')
+                  .select("""
+                    id,
+                    subject_offering_id,
+                    assessment_type,
+                    grading_category,
+                    title,
+                    instructions,
+                    time_limit_minutes,
+                    available_from,
+                    deadline,
+                    results_released,
+                    assessment_questions ( points ),
+                    subject_offerings (
+                      subjects ( subject_name ),
+                      sections ( section_name, grade_level )
+                    )
+                  """)
+                  .inFilter('subject_offering_id', offeringIds)
+                  .neq('is_archived', true)
+                  .order('deadline', ascending: true);
+              assessments = res as List? ?? [];
+            } catch (assessErr1) {
+              debugPrint(
+                'Primary digital_assessments query notice: $assessErr1. Retrying simpler query...',
+              );
+              try {
+                final res = await client
+                    .from('digital_assessments')
+                    .select("""
+                      id,
+                      subject_offering_id,
+                      assessment_type,
+                      grading_category,
+                      title,
+                      instructions,
+                      time_limit_minutes,
+                      available_from,
+                      deadline,
+                      results_released,
+                      assessment_questions ( points )
+                    """)
+                    .inFilter('subject_offering_id', offeringIds)
+                    .neq('is_archived', true);
+                assessments = res as List? ?? [];
+              } catch (assessErr2) {
+                debugPrint('Fallback digital_assessments query notice: $assessErr2');
+              }
+            }
 
-            for (final item in (assessments as List? ?? [])) {
+            for (final item in assessments) {
               final m = Map<String, dynamic>.from(item as Map);
-              final off = m['subject_offerings'] as Map<String, dynamic>? ?? {};
-              final s = off['subjects'] as Map<String, dynamic>? ?? {};
-              final sec = off['sections'] as Map<String, dynamic>? ?? {};
+              var off = m['subject_offerings'] as Map<String, dynamic>? ?? {};
+              var s = off['subjects'] as Map<String, dynamic>? ?? {};
+              var sec = off['sections'] as Map<String, dynamic>? ?? {};
+              if (s.isEmpty) {
+                final offId = m['subject_offering_id']?.toString() ?? '';
+                final enrollMatch = enrollmentsList.firstWhere(
+                  (e) => e['subject_id'] == offId,
+                  orElse: () => {},
+                );
+                s = {'subject_name': enrollMatch['subject_name'] ?? ''};
+                sec = {
+                  'section_name': enrollMatch['section_name'] ?? '',
+                  'grade_level': enrollMatch['grade_level'] ?? '',
+                };
+              }
               final aId = m['id']?.toString() ?? '';
               final attempt = attemptsByAssessmentId[aId];
               final isSubmitted =

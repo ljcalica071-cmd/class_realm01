@@ -6,11 +6,14 @@
 import 'dart:convert';
 
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import 'package:class_realm/core/theme/app_theme.dart';
 import 'package:class_realm/core/utils/validators.dart';
+import 'package:class_realm/core/utils/browser_url_helper.dart';
 import 'package:class_realm/core/services/supabase_service.dart';
 import 'package:class_realm/core/services/app_data_cache.dart';
 import 'package:class_realm/core/services/gemini_service.dart';
@@ -179,9 +182,12 @@ class _CreateAssessmentFlowDialogState
   // Inline error strings
   String? _instructionsError;
   String? _dateError;
+  String? _timeError;
   String? _durationError;
   String? _hpsPointsError;
   String? _distributionError;
+
+  late final ScrollController _step1ScrollController;
 
   // Document-Grounded AI Question Generator State
   ExtractedLectureDocument? _uploadedLectureDoc;
@@ -240,6 +246,18 @@ class _CreateAssessmentFlowDialogState
   @override
   void initState() {
     super.initState();
+    _step1ScrollController = ScrollController();
+    if (kIsWeb) {
+      registerWebDrop(
+        onFileDropped: (bytes, fileName, size) {
+          if (!mounted || _completionMode != 'online') return;
+          final Uint8List u8 = bytes is Uint8List
+              ? bytes
+              : Uint8List.fromList(bytes as List<int>);
+          _handleAiLectureFileBytes(u8, fileName, size);
+        },
+      );
+    }
     _uploadedLectureDoc = widget.initialLectureDocument;
     _instructionsCtrl.addListener(() {
       if (_instructionsError != null) {
@@ -428,6 +446,10 @@ class _CreateAssessmentFlowDialogState
 
   @override
   void dispose() {
+    if (kIsWeb) {
+      unregisterWebDrop();
+    }
+    _step1ScrollController.dispose();
     _titleCtrl.dispose();
     _instructionsCtrl.dispose();
     _durationCtrl.dispose();
@@ -589,6 +611,7 @@ class _CreateAssessmentFlowDialogState
       setState(() {
         _scheduledDate = picked;
         _dateError = null;
+        _timeError = null;
       });
     }
   }
@@ -597,6 +620,7 @@ class _CreateAssessmentFlowDialogState
     setState(() {
       _instructionsError = null;
       _dateError = null;
+      _timeError = null;
       _durationError = null;
       _distributionError = null;
     });
@@ -621,13 +645,12 @@ class _CreateAssessmentFlowDialogState
       return;
     }
 
+    _instructionsError = null;
     if (_completionMode == 'online') {
-      final instrErr = AppValidators.validateClassworkInstructions(
-        _instructionsCtrl.text,
-      );
-      if (instrErr != null) {
+      final text = _instructionsCtrl.text.trim();
+      if (text.length > 1000) {
         setState(() {
-          _instructionsError = instrErr;
+          _instructionsError = 'Instructions must not exceed 1,000 characters.';
         });
         return;
       }
@@ -669,14 +692,25 @@ class _CreateAssessmentFlowDialogState
       _scheduledDate.month,
       _scheduledDate.day,
     );
-    if (pickedDay.isBefore(today) ||
-        scheduledDateTime.isBefore(now.subtract(const Duration(minutes: 1)))) {
-      setState(
-        () => _dateError =
-            'Scheduled start date and time cannot be in the past.',
-      );
+    if (pickedDay.isBefore(today)) {
+      setState(() {
+        _dateError = 'Scheduled date cannot be in the past.';
+        _timeError = null;
+      });
       return;
     }
+    if (pickedDay.isAtSameMomentAs(today) &&
+        scheduledDateTime.isBefore(now.subtract(const Duration(minutes: 1)))) {
+      setState(() {
+        _dateError = null;
+        _timeError = 'Start time cannot be in the past for today.';
+      });
+      return;
+    }
+    setState(() {
+      _dateError = null;
+      _timeError = null;
+    });
 
     final duration = int.tryParse(_durationCtrl.text.trim());
     if (duration == null || duration < 1) {
@@ -1531,6 +1565,114 @@ class _CreateAssessmentFlowDialogState
     return '${mb.toStringAsFixed(2)} MB';
   }
 
+  Future<void> _handleAiLectureFileBytes(
+    Uint8List bytes,
+    String fileName,
+    int size,
+  ) async {
+    setState(() {
+      _aiFileError = null;
+      _aiGenerationError = null;
+    });
+
+    // 1. Filename length validation (max 50 chars)
+    if (fileName.length > AppValidators.maxAiLectureFileNameLength) {
+      if (mounted) {
+        setState(() {
+          _aiFileError =
+              'Filename exceeds 50 characters (${fileName.length} chars).';
+        });
+        AppModals.showWarningDialog(
+          context: context,
+          title: 'Filename Too Long',
+          message:
+              'The filename exceeds the 50-character limit (${fileName.length} characters). Please shorten the filename and try again.',
+        );
+      }
+      return;
+    }
+
+    // 2. Extension validation (.pdf, .ppt, .pptx, .doc, .docx)
+    final dot = fileName.lastIndexOf('.');
+    final ext = dot == -1 ? '' : fileName.substring(dot + 1).toLowerCase();
+    if (!AppValidators.allowedAiLectureExtensions.contains(ext)) {
+      if (mounted) {
+        setState(() {
+          _aiFileError =
+              "Unsupported file format '.$ext'. Allowed: PDF, PowerPoint, Word.";
+        });
+        AppModals.showWarningDialog(
+          context: context,
+          title: 'Invalid File Format',
+          message:
+              "Unsupported file format '.$ext'. Only PDF (.pdf), PowerPoint (.ppt, .pptx), and Word (.doc, .docx) lecture files are allowed.",
+        );
+      }
+      return;
+    }
+
+    // 3. File size validation (Max 15 MB)
+    if (size > AppValidators.maxClassworkFileSizeBytes) {
+      final mb = (size / (1024 * 1024)).toStringAsFixed(2);
+      if (mounted) {
+        setState(() {
+          _aiFileError = 'File size exceeds 15 MB limit ($mb MB).';
+        });
+        AppModals.showWarningDialog(
+          context: context,
+          title: 'File Size Exceeded',
+          message:
+              'The selected file is $mb MB, which exceeds the maximum limit of 15 MB. Please select a smaller lecture file.',
+        );
+      }
+      return;
+    }
+
+    // 4. Extraction
+    try {
+      final extracted = LectureDocumentExtractor.extract(
+        fileName: fileName,
+        bytes: bytes,
+      );
+      if (mounted) {
+        setState(() {
+          _uploadedLectureDoc = extracted;
+          _aiFileError = null;
+          _aiGenerationError = null;
+        });
+      }
+    } on FormatException catch (e) {
+      if (mounted) {
+        setState(() => _aiFileError = e.message);
+        AppModals.showWarningDialog(
+          context: context,
+          title: 'Unreadable Lecture Document',
+          message: e.message,
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _aiFileError = 'Error reading lecture file: $e');
+        AppModals.showErrorDialog(
+          context: context,
+          title: 'File Read Error',
+          message: 'An error occurred while reading the lecture file: $e',
+        );
+      }
+    }
+  }
+
+  void _scrollToUploadSectionAndPick() {
+    if (_step1ScrollController.hasClients) {
+      _step1ScrollController.animateTo(
+        _step1ScrollController.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 350),
+        curve: Curves.easeOutCubic,
+      );
+    }
+    _pickAiLectureFile();
+  }
+
   Future<void> _pickAiLectureFile() async {
     setState(() {
       _aiFileError = null;
@@ -1549,46 +1691,26 @@ class _CreateAssessmentFlowDialogState
       }
 
       final file = result.files.first;
-      final fileValidationError = AppValidators.validateAiLectureFile(
-        fileName: file.name,
-        fileSizeBytes: file.size,
-      );
-      if (fileValidationError != null) {
-        if (mounted) {
-          setState(() => _aiFileError = fileValidationError);
-        }
-        return;
-      }
-
       if (file.bytes == null) {
         if (mounted) {
-          setState(
-            () => _aiFileError =
-                'Unable to read file bytes. Please select another PDF or PowerPoint file.',
+          AppModals.showWarningDialog(
+            context: context,
+            title: 'File Read Error',
+            message:
+                'Unable to read file content. Please choose another file.',
           );
         }
         return;
       }
 
-      final extracted = LectureDocumentExtractor.extract(
-        fileName: file.name,
-        bytes: file.bytes!,
+      await _handleAiLectureFileBytes(
+        file.bytes!,
+        file.name,
+        file.size,
       );
-
-      if (mounted) {
-        setState(() {
-          _uploadedLectureDoc = extracted;
-          _aiFileError = null;
-          _aiGenerationError = null;
-        });
-      }
-    } on FormatException catch (e) {
-      if (mounted) {
-        setState(() => _aiFileError = e.message);
-      }
     } catch (e) {
       if (mounted) {
-        setState(() => _aiFileError = 'Error reading lecture file: $e');
+        setState(() => _aiFileError = 'Error picking file: $e');
       }
     }
   }
@@ -1615,7 +1737,7 @@ class _CreateAssessmentFlowDialogState
     if (_uploadedLectureDoc == null) {
       setState(() {
         _aiFileError =
-            'Please upload a PDF (.pdf) or PowerPoint (.ppt, .pptx) lecture file first (Max 15 MB).';
+            'Please upload a lecture file (.pdf, .ppt, .pptx, .doc, .docx • Max 15 MB) first.';
       });
       hasValidationErr = true;
     }
@@ -1793,12 +1915,12 @@ class _CreateAssessmentFlowDialogState
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: (_isExam ? AppTheme.catRed : theme.colorScheme.primary).withValues(alpha: 0.1),
+                      color: theme.colorScheme.primary.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Icon(
                       _isExam ? Icons.description_outlined : Icons.quiz_outlined,
-                      color: _isExam ? AppTheme.catRed : theme.colorScheme.primary,
+                      color: theme.colorScheme.primary,
                       size: 22,
                     ),
                   ),
@@ -1957,6 +2079,7 @@ class _CreateAssessmentFlowDialogState
     final isDark = theme.brightness == Brightness.dark;
 
     return SingleChildScrollView(
+      controller: _step1ScrollController,
       padding: const EdgeInsets.all(24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1967,15 +2090,15 @@ class _CreateAssessmentFlowDialogState
               margin: const EdgeInsets.only(bottom: 20),
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    AppTheme.catPurple.withValues(alpha: 0.12),
-                    theme.colorScheme.primary.withValues(alpha: 0.08),
-                  ],
-                ),
+                color: isDark
+                    ? theme.colorScheme.surfaceContainerHighest
+                          .withValues(alpha: 0.3)
+                    : const Color(0xFFF1F5F9),
                 borderRadius: BorderRadius.circular(14),
                 border: Border.all(
-                  color: AppTheme.catPurple.withValues(alpha: 0.28),
+                  color: theme.colorScheme.outline.withValues(
+                    alpha: isDark ? 0.2 : 0.12,
+                  ),
                 ),
               ),
               child: Row(
@@ -1983,12 +2106,12 @@ class _CreateAssessmentFlowDialogState
                   Container(
                     padding: const EdgeInsets.all(9),
                     decoration: BoxDecoration(
-                      color: AppTheme.catPurple.withValues(alpha: 0.15),
+                      color: theme.colorScheme.primary.withValues(alpha: 0.12),
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(
-                      Icons.auto_awesome,
-                      color: AppTheme.catPurple,
+                    child: Icon(
+                      LucideIcons.sparkles,
+                      color: theme.colorScheme.primary,
                       size: 20,
                     ),
                   ),
@@ -1997,46 +2120,19 @@ class _CreateAssessmentFlowDialogState
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Row(
-                          children: [
-                            Flexible(
-                              child: Text(
-                                _isExam
-                                    ? 'Generate Examination with Gemini AI'
-                                    : 'Generate Quiz with Gemini AI',
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 13,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 6,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
-                                color: AppTheme.catPurple.withValues(
-                                  alpha: 0.15,
-                                ),
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: const Text(
-                                'DOCUMENT-GROUNDED',
-                                style: TextStyle(
-                                  fontSize: 9,
-                                  fontWeight: FontWeight.bold,
-                                  color: AppTheme.catPurple,
-                                ),
-                              ),
-                            ),
-                          ],
+                        Text(
+                          _isExam
+                              ? 'Generate Examination with Gemini AI'
+                              : 'Generate Quiz with Gemini AI',
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          'Upload lecture files (.pdf, .ppt, .pptx • Max 15 MB) to auto-generate strictly grounded questions and answer keys.',
+                          'Upload lecture files (.pdf, .ppt, .pptx, .doc, .docx • Max 15 MB) to auto-generate questions and answer keys.',
                           style: TextStyle(
                             fontSize: 11,
                             color: theme.colorScheme.onSurface.withValues(
@@ -2048,20 +2144,17 @@ class _CreateAssessmentFlowDialogState
                     ),
                   ),
                   const SizedBox(width: 12),
-                  ElevatedButton.icon(
-                    icon: Icon(
-                      _uploadedLectureDoc == null
-                          ? Icons.upload_file_outlined
-                          : Icons.auto_awesome,
+                  FilledButton.icon(
+                    icon: const Icon(
+                      LucideIcons.uploadCloud,
                       size: 14,
                     ),
-                    label: Text(
-                      _uploadedLectureDoc == null
-                          ? 'Upload Lecture (.pdf/.pptx)'
-                          : 'Generate with AI',
+                    label: const Text(
+                      'Upload Lecture',
+                      style: TextStyle(fontWeight: FontWeight.w600),
                     ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.catPurple,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: theme.colorScheme.primary,
                       foregroundColor: Colors.white,
                       elevation: 0,
                       padding: const EdgeInsets.symmetric(
@@ -2072,11 +2165,7 @@ class _CreateAssessmentFlowDialogState
                         borderRadius: BorderRadius.circular(10),
                       ),
                     ),
-                    onPressed: _isGeneratingAiQuestions
-                        ? null
-                        : (_uploadedLectureDoc == null
-                              ? _pickAiLectureFile
-                              : _generateQuestionsWithAi),
+                    onPressed: _scrollToUploadSectionAndPick,
                   ),
                 ],
               ),
@@ -2509,10 +2598,35 @@ class _CreateAssessmentFlowDialogState
                 // Start Time Box
                 Expanded(
                   flex: 4,
-                  child: AppTimePickerField(
-                    label: 'Start Time *',
-                    initialTime: _startTime,
-                    onTimeSelected: (t) => setState(() => _startTime = t),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      AppTimePickerField(
+                        label: 'Start Time *',
+                        initialTime: _startTime,
+                        minTime: DateUtils.isSameDay(
+                                  _scheduledDate,
+                                  DateTime.now(),
+                                )
+                            ? TimeOfDay.fromDateTime(DateTime.now())
+                            : null,
+                        onTimeSelected: (t) => setState(() {
+                          _startTime = t;
+                          _timeError = null;
+                        }),
+                      ),
+                      if (_timeError != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4, left: 4),
+                          child: Text(
+                            _timeError!,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Color(0xFFDC2626),
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -2668,11 +2782,11 @@ class _CreateAssessmentFlowDialogState
           ],
           const SizedBox(height: 18),
 
-          // 5. Instructions & Guidelines (Only in Online Mode)
+          // 5. Instructions & Guidelines (Only in Online Mode, Optional)
           if (_completionMode == 'online') ...[
             ExpandableInstructionsInputField(
               controller: _instructionsCtrl,
-              label: 'Instructions & Guidelines *',
+              label: 'Instructions & Guidelines (Optional)',
               hint:
                   'e.g. Provide test-taking guidelines, no calculators allowed...',
               errorText: _instructionsError,
@@ -2793,17 +2907,30 @@ class _CreateAssessmentFlowDialogState
     final hasFileErr = _aiFileError != null;
     final hasGenErr = _aiGenerationError != null;
 
+    final mc = int.tryParse(_mcCountCtrl.text.trim()) ?? 0;
+    final tf = int.tryParse(_tfCountCtrl.text.trim()) ?? 0;
+    final id = int.tryParse(_idCountCtrl.text.trim()) ?? 0;
+    final totalPlanned = mc + tf + id;
+    final bool isCountValid = totalPlanned >= 1 && totalPlanned <= 100;
+    final bool canGenerateAi = _uploadedLectureDoc != null &&
+        isCountValid &&
+        !_isGeneratingAiQuestions &&
+        !_areAllSlotsFilled;
+
     return Container(
-      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.only(top: 8, bottom: 8),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: isDark
-            ? AppTheme.catPurple.withValues(alpha: 0.08)
-            : AppTheme.catPurple.withValues(alpha: 0.04),
-        borderRadius: BorderRadius.circular(14),
+            ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.25)
+            : const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: (hasFileErr || hasGenErr)
               ? const Color(0xFFDC2626)
-              : AppTheme.catPurple.withValues(alpha: 0.3),
+              : theme.colorScheme.outline.withValues(
+                  alpha: isDark ? 0.2 : 0.12,
+                ),
           width: (hasFileErr || hasGenErr) ? 1.5 : 1.0,
         ),
       ),
@@ -2812,15 +2939,15 @@ class _CreateAssessmentFlowDialogState
         children: [
           Row(
             children: [
-              const Icon(
-                Icons.auto_awesome,
+              Icon(
+                LucideIcons.sparkles,
                 size: 18,
-                color: AppTheme.catPurple,
+                color: theme.colorScheme.primary,
               ),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  'AI Document-Grounded Question Generator (Optional)',
+                  'AI Question Generator (Optional)',
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.bold,
@@ -2831,54 +2958,14 @@ class _CreateAssessmentFlowDialogState
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: AppTheme.catPurple.withValues(alpha: 0.14),
+                  color: theme.colorScheme.primary.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(6),
                 ),
-                child: const Text(
+                child: Text(
                   'Strict Grounding',
                   style: TextStyle(
                     fontSize: 10,
                     fontWeight: FontWeight.bold,
-                    color: AppTheme.catPurple,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          Text(
-            'Upload a lecture document (.pdf, .ppt, .pptx • Max 15 MB) to auto-fill Step 2 with questions strictly grounded in the file. No outside knowledge is used.',
-            style: TextStyle(
-              fontSize: 12,
-              color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
-            ),
-          ),
-          const SizedBox(height: 12),
-
-          // 1. Lecture Document Upload Container (Golden Rule: upfront format & size rules)
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Flexible(
-                child: Text(
-                  'Lecture Document (.pdf, .ppt, .pptx)',
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: theme.colorScheme.onSurface,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Flexible(
-                child: Text(
-                  'Allowed: PDF, PPT, PPTX • Max 15 MB',
-                  textAlign: TextAlign.right,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
                     color: theme.colorScheme.primary,
                   ),
                 ),
@@ -2886,120 +2973,151 @@ class _CreateAssessmentFlowDialogState
             ],
           ),
           const SizedBox(height: 6),
-          InkWell(
-            onTap: _isGeneratingAiQuestions ? null : _pickAiLectureFile,
-            borderRadius: BorderRadius.circular(10),
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-              decoration: BoxDecoration(
-                color: isDark
-                    ? theme.colorScheme.surfaceContainerHighest.withValues(
-                        alpha: 0.35,
-                      )
-                    : Colors.white,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: hasFileErr
-                      ? const Color(0xFFDC2626)
-                      : (_uploadedLectureDoc != null
-                            ? AppTheme.catGreen
-                            : theme.colorScheme.outline.withValues(alpha: 0.3)),
-                  width: (hasFileErr || _uploadedLectureDoc != null)
-                      ? 1.5
-                      : 1.0,
-                ),
-              ),
-              child: _uploadedLectureDoc == null
-                  ? Row(
-                      children: [
-                        Icon(
-                          Icons.upload_file_outlined,
-                          size: 20,
-                          color: hasFileErr
-                              ? const Color(0xFFDC2626)
-                              : AppTheme.catPurple,
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Select Lecture File (.pdf, .ppt, .pptx)',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                  color: theme.colorScheme.onSurface,
-                                ),
-                              ),
-                              Text(
-                                'Supports PDF and PowerPoint presentations up to 15 MB',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: theme.colorScheme.onSurfaceVariant,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const Icon(
-                          Icons.folder_open_outlined,
-                          size: 18,
-                          color: AppTheme.catPurple,
-                        ),
-                      ],
-                    )
-                  : Row(
-                      children: [
-                        Icon(
-                          _uploadedLectureDoc!.isPdf
-                              ? Icons.picture_as_pdf_outlined
-                              : Icons.slideshow_outlined,
-                          size: 20,
-                          color: AppTheme.catGreen,
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                _uploadedLectureDoc!.fileName,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.bold,
-                                  color: theme.colorScheme.onSurface,
-                                ),
-                              ),
-                              Text(
-                                '${_formatFileSize(_uploadedLectureDoc!.sizeBytes)} • Ready for strict document grounding',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: isDark
-                                      ? const Color(0xFF4ADE80)
-                                      : AppTheme.catGreen,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        IconButton(
-                          tooltip: 'Remove lecture file',
-                          icon: const Icon(Icons.close, size: 18),
-                          onPressed: _isGeneratingAiQuestions
-                              ? null
-                              : _removeAiLectureFile,
-                        ),
-                      ],
-                    ),
+          Text(
+            'Upload a lecture document (.pdf, .ppt, .pptx, .doc, .docx • Max 15 MB) to auto-fill Step 2 with questions strictly grounded in the file. No outside knowledge is used.',
+            style: TextStyle(
+              fontSize: 12,
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
             ),
           ),
+          const SizedBox(height: 16),
+
+          // 1. Lecture Document Upload Area (Animated Marching Ants & Drag-Drop matching Bulk Import)
+          _AnimatedMarchingAntsBox(
+            onTap: _isGeneratingAiQuestions ? () {} : _pickAiLectureFile,
+            isDark: isDark,
+            child: _uploadedLectureDoc == null
+                ? Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.primary.withValues(
+                            alpha: 0.1,
+                          ),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          LucideIcons.uploadCloud,
+                          size: 34,
+                          color: theme.colorScheme.primary,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      const Text(
+                        'Click to upload or drag & drop lecture file',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Supports PDF, PowerPoint, Word (.pdf, .ppt, .pptx, .doc, .docx) up to 15 MB',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: theme.colorScheme.onSurface.withValues(
+                            alpha: 0.6,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      FilledButton.icon(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: theme.colorScheme.primary,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 10,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                        icon: const Icon(LucideIcons.folderOpen, size: 16),
+                        label: const Text(
+                          'Browse Lecture File',
+                          style: TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        onPressed: _isGeneratingAiQuestions
+                            ? null
+                            : _pickAiLectureFile,
+                      ),
+                    ],
+                  )
+                : Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: AppTheme.catGreen.withValues(alpha: 0.12),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.check_circle_rounded,
+                          size: 32,
+                          color: AppTheme.catGreen,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        _uploadedLectureDoc!.fileName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${_formatFileSize(_uploadedLectureDoc!.sizeBytes)} • Ready for document grounding',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: isDark
+                              ? const Color(0xFF4ADE80)
+                              : AppTheme.catGreen,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          OutlinedButton.icon(
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 8,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                            icon: const Icon(Icons.refresh, size: 14),
+                            label: const Text('Change File'),
+                            onPressed: _isGeneratingAiQuestions
+                                ? null
+                                : _pickAiLectureFile,
+                          ),
+                          const SizedBox(width: 8),
+                          IconButton(
+                            tooltip: 'Remove lecture file',
+                            icon: const Icon(Icons.close, size: 18),
+                            onPressed: _isGeneratingAiQuestions
+                                ? null
+                                : _removeAiLectureFile,
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+          ),
           if (hasFileErr) ...[
-            const SizedBox(height: 5),
+            const SizedBox(height: 6),
             Row(
               children: [
                 const Icon(
@@ -3007,7 +3125,7 @@ class _CreateAssessmentFlowDialogState
                   size: 14,
                   color: Color(0xFFDC2626),
                 ),
-                const SizedBox(width: 4),
+                const SizedBox(width: 6),
                 Expanded(
                   child: Text(
                     _aiFileError!,
@@ -3022,7 +3140,7 @@ class _CreateAssessmentFlowDialogState
             ),
           ],
 
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
 
           // 2. Difficulty Level Selector (Easy, Medium, Hard)
           Text(
@@ -3051,7 +3169,7 @@ class _CreateAssessmentFlowDialogState
                       padding: const EdgeInsets.symmetric(vertical: 8),
                       decoration: BoxDecoration(
                         color: isSelected
-                            ? AppTheme.catPurple.withValues(alpha: 0.15)
+                            ? theme.colorScheme.primary.withValues(alpha: 0.15)
                             : (isDark
                                   ? theme.colorScheme.surfaceContainerHighest
                                         .withValues(alpha: 0.3)
@@ -3059,7 +3177,7 @@ class _CreateAssessmentFlowDialogState
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(
                           color: isSelected
-                              ? AppTheme.catPurple
+                              ? theme.colorScheme.primary
                               : theme.colorScheme.outline.withValues(
                                   alpha: 0.25,
                                 ),
@@ -3075,7 +3193,7 @@ class _CreateAssessmentFlowDialogState
                               ? FontWeight.bold
                               : FontWeight.w500,
                           color: isSelected
-                              ? AppTheme.catPurple
+                              ? theme.colorScheme.primary
                               : theme.colorScheme.onSurface,
                         ),
                       ),
@@ -3086,7 +3204,7 @@ class _CreateAssessmentFlowDialogState
             }).toList(),
           ),
 
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
 
           // 3. Target Focus Selector (Memorization, Comprehensive, Critical Thinking)
           Text(
@@ -3118,7 +3236,7 @@ class _CreateAssessmentFlowDialogState
                       ),
                       decoration: BoxDecoration(
                         color: isSelected
-                            ? AppTheme.catPurple.withValues(alpha: 0.15)
+                            ? theme.colorScheme.primary.withValues(alpha: 0.15)
                             : (isDark
                                   ? theme.colorScheme.surfaceContainerHighest
                                         .withValues(alpha: 0.3)
@@ -3126,7 +3244,7 @@ class _CreateAssessmentFlowDialogState
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(
                           color: isSelected
-                              ? AppTheme.catPurple
+                              ? theme.colorScheme.primary
                               : theme.colorScheme.outline.withValues(
                                   alpha: 0.25,
                                 ),
@@ -3143,7 +3261,7 @@ class _CreateAssessmentFlowDialogState
                               ? FontWeight.bold
                               : FontWeight.w500,
                           color: isSelected
-                              ? AppTheme.catPurple
+                              ? theme.colorScheme.primary
                               : theme.colorScheme.onSurface,
                         ),
                       ),
@@ -3162,53 +3280,86 @@ class _CreateAssessmentFlowDialogState
             ),
           ),
 
-          const SizedBox(height: 14),
+          const SizedBox(height: 20),
 
-          // 4. Generate Questions Button
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
+          // 4. Generate Questions Button (Compact & Disabled if total is 0 or >100)
+          Center(
+            child: FilledButton.icon(
               icon: _isGeneratingAiQuestions
                   ? const SizedBox(
-                      width: 15,
-                      height: 15,
+                      width: 14,
+                      height: 14,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
                         color: Colors.white,
                       ),
                     )
-                  : const Icon(Icons.auto_awesome, size: 16),
+                  : const Icon(LucideIcons.sparkles, size: 16),
               label: Text(
                 _isGeneratingAiQuestions
-                    ? 'Generating Grounded Questions from Document...'
+                    ? 'Generating Questions from Document...'
                     : (_isExam
                           ? 'Generate Exam Questions with AI'
                           : 'Generate Quiz Questions with AI'),
                 style: const TextStyle(
-                  fontWeight: FontWeight.bold,
+                  fontWeight: FontWeight.w600,
                   fontSize: 13,
                 ),
               ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.catPurple,
+              style: FilledButton.styleFrom(
+                backgroundColor: theme.colorScheme.primary,
                 foregroundColor: Colors.white,
                 elevation: 0,
                 padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
+                  horizontal: 24,
                   vertical: 12,
                 ),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(10),
                 ),
               ),
-              onPressed: (_areAllSlotsFilled || _isGeneratingAiQuestions)
-                  ? null
-                  : _generateQuestionsWithAi,
+              onPressed: canGenerateAi ? _generateQuestionsWithAi : null,
             ),
           ),
 
-          if (hasGenErr) ...[
+          if (totalPlanned == 0) ...[
             const SizedBox(height: 6),
+            Center(
+              child: Text(
+                'Set question counts (1 to 100 items) above and upload a lecture file to enable AI generation.',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
+                ),
+              ),
+            ),
+          ] else if (totalPlanned > 100) ...[
+            const SizedBox(height: 6),
+            Center(
+              child: Text(
+                'Total questions cannot exceed 100 items ($totalPlanned / 100). Please reduce question count.',
+                style: const TextStyle(
+                  fontSize: 11,
+                  color: Color(0xFFDC2626),
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          ] else if (_uploadedLectureDoc == null) ...[
+            const SizedBox(height: 6),
+            Center(
+              child: Text(
+                'Upload a lecture file above to enable AI question generation.',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
+                ),
+              ),
+            ),
+          ],
+
+          if (hasGenErr) ...[
+            const SizedBox(height: 8),
             Row(
               children: [
                 const Icon(
@@ -4532,5 +4683,165 @@ class _CreateAssessmentFlowDialogState
         ),
       ],
     );
+  }
+}
+
+class _AnimatedMarchingAntsBox extends StatefulWidget {
+  final VoidCallback onTap;
+  final bool isDark;
+  final Widget child;
+
+  const _AnimatedMarchingAntsBox({
+    required this.onTap,
+    required this.isDark,
+    required this.child,
+  });
+
+  @override
+  State<_AnimatedMarchingAntsBox> createState() =>
+      _AnimatedMarchingAntsBoxState();
+}
+
+class _AnimatedMarchingAntsBoxState extends State<_AnimatedMarchingAntsBox>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  bool _isHovered = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 4),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _onHover(bool hover) {
+    setState(() => _isHovered = hover);
+    if (hover) {
+      _controller.repeat();
+    } else {
+      _controller.stop();
+      _controller.reset();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final borderColor = _isHovered
+        ? theme.colorScheme.primary
+        : theme.colorScheme.primary.withValues(alpha: 0.4);
+
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => _onHover(true),
+      onExit: (_) => _onHover(false),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: widget.onTap,
+        child: AnimatedBuilder(
+          animation: _controller,
+          builder: (context, _) {
+            return CustomPaint(
+              painter: _MarchingAntsPainter(
+                strokeColor: borderColor,
+                phase: _controller.value * 20.0,
+                radius: 14.0,
+                strokeWidth: _isHovered ? 2.0 : 1.5,
+              ),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 28,
+                ),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(14),
+                  color: widget.isDark
+                      ? (_isHovered
+                            ? theme.colorScheme.primary.withValues(alpha: 0.12)
+                            : theme.colorScheme.surfaceContainerHighest
+                                  .withValues(alpha: 0.15))
+                      : (_isHovered
+                            ? theme.colorScheme.primary.withValues(alpha: 0.05)
+                            : const Color(0xFFF8FAFC)),
+                ),
+                child: widget.child,
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+class _MarchingAntsPainter extends CustomPainter {
+  final Color strokeColor;
+  final double phase;
+  final double radius;
+  final double strokeWidth;
+
+  _MarchingAntsPainter({
+    required this.strokeColor,
+    required this.phase,
+    required this.radius,
+    required this.strokeWidth,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = strokeColor
+      ..strokeWidth = strokeWidth
+      ..style = PaintingStyle.stroke;
+
+    final rrect = RRect.fromRectAndRadius(
+      Offset.zero & size,
+      Radius.circular(radius),
+    );
+
+    final path = Path()..addRRect(rrect);
+
+    final dashedPath = _createDashedPath(path, 7.0, 5.0, phase);
+    canvas.drawPath(dashedPath, paint);
+  }
+
+  Path _createDashedPath(
+    Path source,
+    double dashLength,
+    double gapLength,
+    double distanceOffset,
+  ) {
+    final dest = Path();
+    for (final metric in source.computeMetrics()) {
+      double distance = distanceOffset % (dashLength + gapLength);
+      while (distance < metric.length) {
+        final length = (distance + dashLength < metric.length)
+            ? dashLength
+            : metric.length - distance;
+        dest.addPath(
+          metric.extractPath(distance, distance + length),
+          Offset.zero,
+        );
+        distance += dashLength + gapLength;
+      }
+    }
+    return dest;
+  }
+
+  @override
+  bool shouldRepaint(_MarchingAntsPainter oldDelegate) {
+    return oldDelegate.phase != phase ||
+        oldDelegate.strokeColor != strokeColor ||
+        oldDelegate.strokeWidth != strokeWidth;
   }
 }

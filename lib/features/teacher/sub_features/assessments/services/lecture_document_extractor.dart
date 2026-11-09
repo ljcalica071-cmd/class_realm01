@@ -23,10 +23,11 @@ class ExtractedLectureDocument {
 
   bool get isPdf => extension == 'pdf';
   bool get isPowerPoint => extension == 'ppt' || extension == 'pptx';
+  bool get isWord => extension == 'doc' || extension == 'docx';
 }
 
 class LectureDocumentExtractor {
-  /// Validates and extracts text from a `.pdf`, `.ppt`, or `.pptx` lecture file.
+  /// Validates and extracts text from a `.pdf`, `.ppt`, `.pptx`, `.doc`, or `.docx` lecture file.
   /// Throws a [FormatException] with a user-facing inline validation message if invalid.
   static ExtractedLectureDocument extract({
     required String fileName,
@@ -78,6 +79,41 @@ class LectureDocumentExtractor {
       );
     }
 
+    if (ext == 'docx') {
+      final text = _extractDocxText(bytes);
+      if (text.trim().isEmpty) {
+        throw const FormatException(
+          'No readable text could be found in this Word (.docx) file. Please ensure document contains readable text and not only scanned images.',
+        );
+      }
+      return ExtractedLectureDocument(
+        fileName: fileName,
+        extension: ext,
+        mimeType:
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        sizeBytes: bytes.length,
+        rawBytes: bytes,
+        extractedText: text,
+      );
+    }
+
+    if (ext == 'doc') {
+      final text = _extractDocText(bytes);
+      if (text.trim().isEmpty) {
+        throw const FormatException(
+          'No readable text could be extracted from this Word (.doc) file. Please save as .docx or .pdf and try again.',
+        );
+      }
+      return ExtractedLectureDocument(
+        fileName: fileName,
+        extension: ext,
+        mimeType: 'application/msword',
+        sizeBytes: bytes.length,
+        rawBytes: bytes,
+        extractedText: text,
+      );
+    }
+
     if (ext == 'pdf') {
       final text = _extractPdfText(bytes);
       return ExtractedLectureDocument(
@@ -91,7 +127,7 @@ class LectureDocumentExtractor {
     }
 
     throw FormatException(
-      "Unsupported file format '.$ext'. Only PDF (.pdf) and PowerPoint (.ppt, .pptx) lecture files are allowed.",
+      "Unsupported file format '.$ext'. Only PDF (.pdf), PowerPoint (.ppt, .pptx), and Word (.doc, .docx) lecture files are allowed.",
     );
   }
 
@@ -229,6 +265,65 @@ class LectureDocumentExtractor {
         bytes[2] == 0x03 &&
         bytes[3] == 0x04) {
       return _extractPptxText(bytes);
+    }
+
+    final plain = _tryDecodePlainUtf8(bytes);
+    if (plain.isNotEmpty) return plain;
+
+    return _extractReadableStringsFromBinary(bytes);
+  }
+
+  static String _extractDocxText(Uint8List bytes) {
+    try {
+      final archive = ZipDecoder().decodeBytes(bytes, verify: false);
+      ArchiveFile? docFile;
+      for (final f in archive.files) {
+        if (f.name == 'word/document.xml') {
+          docFile = f;
+          break;
+        }
+      }
+      if (docFile == null) {
+        throw const FormatException(
+          'Invalid Word (.docx) archive: no word/document.xml found.',
+        );
+      }
+      final xml = utf8.decode(
+        docFile.content as List<int>,
+        allowMalformed: true,
+      );
+      final pRegex = RegExp(r'<w:p\b[^>]*>([\s\S]*?)</w:p>');
+      final tRegex = RegExp(r'<w:t(?:\s[^>]*)?>([\s\S]*?)</w:t>');
+      final lines = <String>[];
+      for (final p in pRegex.allMatches(xml)) {
+        final pContent = p.group(1) ?? '';
+        final tRuns = tRegex
+            .allMatches(pContent)
+            .map((m) => m.group(1) ?? '')
+            .join();
+        if (tRuns.trim().isNotEmpty) {
+          lines.add(_decodeXmlEntities(tRuns.trim()));
+        }
+      }
+      return lines.join('\n');
+    } on FormatException {
+      rethrow;
+    } catch (_) {
+      final rawAsText = _tryDecodePlainUtf8(bytes);
+      if (rawAsText.isNotEmpty) return rawAsText;
+      throw const FormatException(
+        'Unable to read Word (.docx) file. The file may be corrupted.',
+      );
+    }
+  }
+
+  static String _extractDocText(Uint8List bytes) {
+    if (bytes.length >= 4 &&
+        bytes[0] == 0x50 &&
+        bytes[1] == 0x4B &&
+        bytes[2] == 0x03 &&
+        bytes[3] == 0x04) {
+      return _extractDocxText(bytes);
     }
 
     final plain = _tryDecodePlainUtf8(bytes);
