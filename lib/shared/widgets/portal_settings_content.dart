@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:class_realm/core/services/local_storage_service.dart';
 import 'package:class_realm/shared/services/in_app_notification_service.dart';
-import 'package:class_realm/shared/widgets/modals/app_modals.dart';
+import 'package:class_realm/data/repositories/auth_repository.dart';
+import 'package:class_realm/shared/widgets/modals/change_password_modal.dart';
 import 'package:class_realm/shared/widgets/modals/legal_documents_modal.dart';
 
 /// Unified Settings list shared across Student, Parent, and Teacher portals.
@@ -30,26 +31,6 @@ class _PortalSettingsContentState extends State<PortalSettingsContent> {
     _notificationsEnabled = LocalStorageService.arePushNotificationsEnabled();
   }
 
-  Widget _buildNextUpdateBadge(ThemeData theme) {
-    final color = theme.colorScheme.primary;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: color.withValues(alpha: 0.28)),
-      ),
-      child: Text(
-        'Next Update',
-        style: TextStyle(
-          fontSize: 10.5,
-          fontWeight: FontWeight.w700,
-          color: color,
-        ),
-      ),
-    );
-  }
-
   Widget _buildSectionHeader(ThemeData theme, String title) {
     return Padding(
       padding: const EdgeInsets.only(left: 4, bottom: 8),
@@ -74,12 +55,13 @@ class _PortalSettingsContentState extends State<PortalSettingsContent> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _buildSectionHeader(theme, 'SYSTEM SETTINGS & LEGAL POLICIES'),
-        Container(
-          decoration: BoxDecoration(
-            color: theme.colorScheme.surface,
+        Material(
+          color: theme.colorScheme.surface,
+          shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: borderColor),
+            side: BorderSide(color: borderColor),
           ),
+          clipBehavior: Clip.antiAlias,
           child: Column(
             children: [
               // 1. Enable Notifications
@@ -158,20 +140,12 @@ class _PortalSettingsContentState extends State<PortalSettingsContent> {
                   Icons.lock_outline_rounded,
                   color: theme.colorScheme.primary,
                 ),
-                title: Wrap(
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  spacing: 8,
-                  runSpacing: 4,
-                  children: [
-                    const Text(
-                      'Change Password',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 14,
-                      ),
-                    ),
-                    _buildNextUpdateBadge(theme),
-                  ],
+                title: const Text(
+                  'Change Password',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                  ),
                 ),
                 subtitle: const Text(
                   'Update your account security password',
@@ -179,10 +153,10 @@ class _PortalSettingsContentState extends State<PortalSettingsContent> {
                 ),
                 trailing: const Icon(Icons.chevron_right_rounded),
                 onTap: () {
-                  AppModals.showUpcomingFeatureDialog(
-                    context,
-                    featureName: 'In-App Password Change',
-                  );
+                  final user = AuthRepository.instance.currentUser;
+                  if (user != null) {
+                    ChangePasswordModal.show(context, user: user);
+                  }
                 },
               ),
               Divider(height: 1, color: borderColor),

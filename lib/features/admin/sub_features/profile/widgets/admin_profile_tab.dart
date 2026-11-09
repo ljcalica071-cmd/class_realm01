@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:class_realm/models/user_model.dart';
+import 'package:class_realm/shared/widgets/modals/change_password_modal.dart';
 
 class AdminProfileTab extends StatelessWidget {
   final UserModel? adminUser;
@@ -137,6 +139,20 @@ class AdminProfileTab extends StatelessWidget {
                                 softWrap: true,
                               ),
                             ],
+                          ),
+                        ),
+                        ElevatedButton.icon(
+                          onPressed: () => ChangePasswordModal.show(context, user: user),
+                          icon: const Icon(LucideIcons.lock, size: 16),
+                          label: const Text('Change Password'),
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 12,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
                           ),
                         ),
                       ],
